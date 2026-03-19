@@ -19,5 +19,6 @@ public class HelloEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("Hello World", body);
+        Assert.Contains("Hello World", body);
     }
 }
