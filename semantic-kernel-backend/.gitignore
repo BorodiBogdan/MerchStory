@@ -1,0 +1,35 @@
+# Build output
+bin/
+obj/
+out/
+publish/
+
+# .NET user files
+*.user
+*.suo
+.vs/
+
+# Rider
+.idea/
+
+# Logs
+*.log
+logs/
+
+# Secrets & environment
+appsettings.*.json
+!appsettings.json
+!appsettings.Development.json
+.env
+.env.*
+secrets.json
+
+# NuGet
+*.nupkg
+packages/
+project.lock.json
+project.assets.json
+
+# OS
+.DS_Store
+Thumbs.db

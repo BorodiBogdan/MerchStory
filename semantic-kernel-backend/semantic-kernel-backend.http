@@ -1,0 +1,6 @@
+@semantic_kernel_backend_HostAddress = http://localhost:5257
+
+GET {{semantic_kernel_backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
