@@ -25,3 +25,5 @@ app.MapGet("/hello", () => new { message = "Hello World" })
    .WithName("GetHello");
 
 app.Run();
+
+public partial class Program { }
