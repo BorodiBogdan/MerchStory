@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
+using Xunit;
 
 public class HelloEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -18,6 +19,7 @@ public class HelloEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Hello World", body);
         Assert.Contains("Hello World", body);
     }
 }
