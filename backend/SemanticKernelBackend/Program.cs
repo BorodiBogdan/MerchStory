@@ -148,4 +148,4 @@ public partial class Program
 {
 }
 
-internal record ImageGenerationRequest(string Prompt);
+internal sealed record ImageGenerationRequest(string Prompt);
