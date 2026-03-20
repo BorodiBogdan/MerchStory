@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 
-namespace SemanticKernelBackend.Models;
+namespace MerchStoryAPI.Models;
 
 public class AppUser : IdentityUser
 {

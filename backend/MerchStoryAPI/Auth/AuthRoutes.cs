@@ -1,7 +1,7 @@
+using MerchStoryAPI.Models;
 using Microsoft.AspNetCore.Identity;
-using SemanticKernelBackend.Models;
 
-namespace SemanticKernelBackend.Auth;
+namespace MerchStoryAPI.Auth;
 
 public static class AuthRoutes
 {

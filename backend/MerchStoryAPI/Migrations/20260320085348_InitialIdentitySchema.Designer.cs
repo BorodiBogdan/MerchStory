@@ -5,11 +5,11 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using SemanticKernelBackend.Data;
+using MerchStoryAPI.Data;
 
 #nullable disable
 
-namespace SemanticKernelBackend.Migrations
+namespace MerchStoryAPI.Migrations
 {
     [DbContext(typeof(AppDbContext))]
     [Migration("20260320085348_InitialIdentitySchema")]

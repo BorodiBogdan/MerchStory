@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="..\SemanticKernelBackend\stylecop.json" />
+    <AdditionalFiles Include="..\MerchStoryAPI\stylecop.json" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SemanticKernelBackend\SemanticKernelBackend.csproj" />
+    <ProjectReference Include="..\MerchStoryAPI\MerchStoryAPI.csproj" />
   </ItemGroup>
 
 </Project>

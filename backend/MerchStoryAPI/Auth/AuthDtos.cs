@@ -1,4 +1,4 @@
-namespace SemanticKernelBackend.Auth;
+namespace MerchStoryAPI.Auth;
 
 public record RegisterRequest(string Email, string Password);
 

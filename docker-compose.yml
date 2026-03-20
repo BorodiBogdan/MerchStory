@@ -13,7 +13,8 @@ services:
 
   backend:
     build:
-      context: ./backend/SemanticKernelBackend
+      context: ./backend
+      dockerfile: MerchStoryAPI/Dockerfile
     ports:
       - "5257:8080"
     environment:

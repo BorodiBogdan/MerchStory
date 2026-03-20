@@ -1,8 +1,8 @@
+using MerchStoryAPI.Models;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using SemanticKernelBackend.Models;
 
-namespace SemanticKernelBackend.Data;
+namespace MerchStoryAPI.Data;
 
 public class AppDbContext : IdentityDbContext<AppUser>
 {
