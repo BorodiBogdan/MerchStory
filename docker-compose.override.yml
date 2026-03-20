@@ -1,0 +1,6 @@
+# Local development overrides — not used in production
+# Pins a fixed dev password so you don't need a .env file locally
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: devpassword

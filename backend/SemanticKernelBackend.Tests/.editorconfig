@@ -1,0 +1,12 @@
+# Test project overrides
+[*.cs]
+# SA0001: XML comment analysis is not required in test projects
+dotnet_diagnostic.SA0001.severity = none
+
+# CA1707: Test methods use underscore-based naming (Arrange_Act_Assert convention)
+dotnet_diagnostic.CA1707.severity = none
+
+# SA1633/SA1635/SA1120: File header copyright not required in test projects
+dotnet_diagnostic.SA1633.severity = none
+dotnet_diagnostic.SA1635.severity = none
+dotnet_diagnostic.SA1120.severity = none

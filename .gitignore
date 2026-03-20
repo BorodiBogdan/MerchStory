@@ -8,7 +8,29 @@ desktop.ini
 .idea/
 *.user
 *.suo
+*.swp
 
 # Docker
 .env
 .env.*
+
+# .NET build artifacts
+bin/
+obj/
+*.nupkg
+*.snupkg
+
+# .NET user secrets / local config
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+
+# Node / React Native
+node_modules/
+.expo/
+dist/
+build/
+
+# Expo
+*.orig.*
+web-build/
