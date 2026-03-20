@@ -65,19 +65,20 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
-var googleApiKey = app.Configuration["Google:ApiKey"]
-    ?? throw new InvalidOperationException("Google:ApiKey is not configured.");
-
-app.MapGet("/hello", () => new { message = "Hello World" })
-   .WithName("GetHello");
-
 app.MapAuthEndpoints();
 
-app.MapPost("/generate-image", async (ImageGenerationRequest request, ILogger<Program> logger) =>
+app.MapPost("/generate-image", async (ImageGenerationRequest request, IConfiguration configuration, ILogger<Program> logger) =>
 {
     if (string.IsNullOrWhiteSpace(request.Prompt))
     {
         return Results.BadRequest(new { error = "Prompt must not be empty." });
+    }
+
+    string? googleApiKey = configuration["Google:ApiKey"];
+    if (string.IsNullOrWhiteSpace(googleApiKey))
+    {
+        logger.LogError("Google:ApiKey is not configured.");
+        return Results.Problem("Image generation is not configured.", statusCode: 503);
     }
 
     var client = new Client(apiKey: googleApiKey);
@@ -94,7 +95,7 @@ app.MapPost("/generate-image", async (ImageGenerationRequest request, ILogger<Pr
         },
     };
 
-    var config = new GenerateContentConfig
+    var generateConfig = new GenerateContentConfig
     {
         ResponseModalities = new List<string> { "IMAGE", "TEXT" },
     };
@@ -104,7 +105,7 @@ app.MapPost("/generate-image", async (ImageGenerationRequest request, ILogger<Pr
 
     try
     {
-        await foreach (var chunk in client.Models.GenerateContentStreamAsync("gemini-3-pro-image-preview", contents, config))
+        await foreach (var chunk in client.Models.GenerateContentStreamAsync("gemini-3-pro-image-preview", contents, generateConfig))
         {
             if (chunk.Candidates == null || chunk.Candidates.Count == 0 ||
                 chunk.Candidates[0].Content?.Parts == null)
@@ -112,10 +113,10 @@ app.MapPost("/generate-image", async (ImageGenerationRequest request, ILogger<Pr
                 continue;
             }
 
-            var part = chunk.Candidates[0].Content.Parts[0];
-            if (part.InlineData?.Data != null)
+            Part? part = chunk.Candidates[0].Content?.Parts?[0];
+            if (part?.InlineData?.Data != null)
             {
-                imageData = part.InlineData!.Data;
+                imageData = part.InlineData.Data;
                 mimeType = part.InlineData.MimeType ?? "image/png";
                 break;
             }
