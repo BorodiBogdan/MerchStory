@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 
-namespace semantic_kernel_backend.Models;
+namespace SemanticKernelBackend.Models;
 
 public class AppUser : IdentityUser
 {

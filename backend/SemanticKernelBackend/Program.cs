@@ -5,9 +5,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using semantic_kernel_backend.Auth;
-using semantic_kernel_backend.Data;
-using semantic_kernel_backend.Models;
+using SemanticKernelBackend.Auth;
+using SemanticKernelBackend.Data;
+using SemanticKernelBackend.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -76,7 +76,9 @@ app.MapAuthEndpoints();
 app.MapPost("/generate-image", async (ImageGenerationRequest request, ILogger<Program> logger) =>
 {
     if (string.IsNullOrWhiteSpace(request.Prompt))
+    {
         return Results.BadRequest(new { error = "Prompt must not be empty." });
+    }
 
     var client = new Client(apiKey: googleApiKey);
 
@@ -88,7 +90,7 @@ app.MapPost("/generate-image", async (ImageGenerationRequest request, ILogger<Pr
             Parts = new List<Part>
             {
                 new Part { Text = request.Prompt },
-            }
+            },
         },
     };
 
@@ -106,7 +108,9 @@ app.MapPost("/generate-image", async (ImageGenerationRequest request, ILogger<Pr
         {
             if (chunk.Candidates == null || chunk.Candidates.Count == 0 ||
                 chunk.Candidates[0].Content?.Parts == null)
+            {
                 continue;
+            }
 
             var part = chunk.Candidates[0].Content.Parts[0];
             if (part.InlineData?.Data != null)
@@ -124,12 +128,14 @@ app.MapPost("/generate-image", async (ImageGenerationRequest request, ILogger<Pr
     }
 
     if (imageData is null)
+    {
         return Results.Problem("No image returned from generation service.", statusCode: 502);
+    }
 
     return Results.Ok(new
     {
         imageBase64 = Convert.ToBase64String(imageData),
-        mimeType
+        mimeType,
     });
 })
 .WithName("GenerateImage")
@@ -137,6 +143,8 @@ app.MapPost("/generate-image", async (ImageGenerationRequest request, ILogger<Pr
 
 app.Run();
 
-public partial class Program { }
+public partial class Program
+{
+}
 
-record ImageGenerationRequest(string Prompt);
+internal record ImageGenerationRequest(string Prompt);

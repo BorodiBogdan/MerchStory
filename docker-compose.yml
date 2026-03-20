@@ -13,7 +13,7 @@ services:
 
   backend:
     build:
-      context: ./backend/semantic-kernel-backend
+      context: ./backend/SemanticKernelBackend
     ports:
       - "5257:8080"
     environment:

@@ -1,0 +1,11 @@
+#!/bin/sh
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+echo ">>> Running frontend lint on staged files..."
+cd "$ROOT/frontend" && npx lint-staged --config "$ROOT/package.json"
+
+echo ">>> Running backend format check..."
+cd "$ROOT"
+dotnet format ./backend/SemanticKernelBackend --verify-no-changes
+dotnet format ./backend/SemanticKernelBackend.Tests --verify-no-changes

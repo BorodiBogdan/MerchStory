@@ -44,9 +44,10 @@ export async function register(email: string, password: string): Promise<AuthRes
 
   if (!response.ok) {
     const errors = await response.json().catch(() => []);
-    const message = Array.isArray(errors) && errors.length > 0
-      ? (errors as string[]).join(' ')
-      : 'Registration failed.';
+    const message =
+      Array.isArray(errors) && errors.length > 0
+        ? (errors as string[]).join(' ')
+        : 'Registration failed.';
     throw new Error(message);
   }
 

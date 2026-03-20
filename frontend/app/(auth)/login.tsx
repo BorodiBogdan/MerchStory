@@ -71,9 +71,7 @@ export default function LoginScreen() {
           disabled={loading || !email.trim() || !password}
           accessibilityLabel="Log in"
         >
-          <ThemedText style={styles.buttonText}>
-            {loading ? 'Logging in...' : 'Log in'}
-          </ThemedText>
+          <ThemedText style={styles.buttonText}>{loading ? 'Logging in...' : 'Log in'}</ThemedText>
         </TouchableOpacity>
 
         <Link href="/(auth)/register" style={styles.link}>

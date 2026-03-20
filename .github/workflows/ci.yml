@@ -5,8 +5,10 @@ on:
     branches: [main, master]
 
 jobs:
-  backend-tests:
-    name: Backend Tests (.NET)
+  # ── Lint ────────────────────────────────────────────────────────────────────
+
+  backend-lint:
+    name: Backend Lint (.NET Format)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,14 +20,66 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore
-        working-directory: ./backend/semantic-kernel-backend.Tests
+        working-directory: ./backend/SemanticKernelBackend
+
+      - name: Check formatting (main project)
+        run: dotnet format --verify-no-changes
+        working-directory: ./backend/SemanticKernelBackend
+
+      - name: Check formatting (tests project)
+        run: dotnet format --verify-no-changes
+        working-directory: ./backend/SemanticKernelBackend.Tests
+
+  frontend-lint:
+    name: Frontend Lint (ESLint + Prettier)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./frontend
+
+      - name: ESLint
+        run: npm run lint
+        working-directory: ./frontend
+
+      - name: Prettier check
+        run: npm run format:check
+        working-directory: ./frontend
+
+  # ── Tests (only run after lint passes) ──────────────────────────────────────
+
+  backend-tests:
+    name: Backend Tests (.NET)
+    needs: backend-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+        working-directory: ./backend/SemanticKernelBackend.Tests
 
       - name: Run tests
         run: dotnet test --no-restore --verbosity normal
-        working-directory: ./backend/semantic-kernel-backend.Tests
+        working-directory: ./backend/SemanticKernelBackend.Tests
 
   frontend-tests:
     name: Frontend Tests (Jest)
+    needs: frontend-lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

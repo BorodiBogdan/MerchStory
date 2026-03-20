@@ -41,19 +41,14 @@ export default function HomeScreen() {
     }
   }
 
-  const imageUri = result
-    ? `data:${result.mimeType};base64,${result.imageBase64}`
-    : null;
+  const imageUri = result ? `data:${result.mimeType};base64,${result.imageBase64}` : null;
 
   return (
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <ThemedView style={styles.header}>
           <ThemedText type="subtitle" style={styles.greeting}>
             Hello, {userName ?? 'there'}
@@ -90,9 +85,7 @@ export default function HomeScreen() {
 
         {loading && <ActivityIndicator size="large" style={styles.spinner} />}
 
-        {error && (
-          <ThemedText style={styles.error}>{error}</ThemedText>
-        )}
+        {error && <ThemedText style={styles.error}>{error}</ThemedText>}
 
         {imageUri && (
           <Image

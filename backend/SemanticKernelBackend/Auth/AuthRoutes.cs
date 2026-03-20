@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Identity;
-using semantic_kernel_backend.Models;
+using SemanticKernelBackend.Models;
 
-namespace semantic_kernel_backend.Auth;
+namespace SemanticKernelBackend.Auth;
 
 public static class AuthRoutes
 {
@@ -25,7 +25,9 @@ public static class AuthRoutes
 
             if (!result.Succeeded)
             {
-                logger.LogWarning("Registration failed for {Email}: {Errors}", request.Email,
+                logger.LogWarning(
+                    "Registration failed for {Email}: {Errors}",
+                    request.Email,
                     string.Join(", ", result.Errors.Select(e => e.Description)));
                 return Results.BadRequest(result.Errors.Select(e => e.Description));
             }

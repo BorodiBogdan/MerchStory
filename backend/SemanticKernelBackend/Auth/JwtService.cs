@@ -2,24 +2,24 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
-using semantic_kernel_backend.Models;
+using SemanticKernelBackend.Models;
 
-namespace semantic_kernel_backend.Auth;
+namespace SemanticKernelBackend.Auth;
 
 public class JwtService
 {
-    private readonly IConfiguration _config;
+    private readonly IConfiguration config;
 
     public JwtService(IConfiguration config)
     {
-        _config = config;
+        this.config = config;
     }
 
     public string GenerateToken(AppUser user)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(this.config["Jwt:Key"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var expiry = DateTime.UtcNow.AddMinutes(double.Parse(_config["Jwt:ExpiryMinutes"] ?? "60"));
+        var expiry = DateTime.UtcNow.AddMinutes(double.Parse(this.config["Jwt:ExpiryMinutes"] ?? "60"));
 
         var claims = new[]
         {
@@ -30,12 +30,11 @@ public class JwtService
         };
 
         var token = new JwtSecurityToken(
-            issuer: _config["Jwt:Issuer"],
-            audience: _config["Jwt:Audience"],
+            issuer: this.config["Jwt:Issuer"],
+            audience: this.config["Jwt:Audience"],
             claims: claims,
             expires: expiry,
-            signingCredentials: creds
-        );
+            signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }

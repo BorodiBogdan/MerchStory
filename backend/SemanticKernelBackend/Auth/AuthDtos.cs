@@ -1,4 +1,4 @@
-namespace semantic_kernel_backend.Auth;
+namespace SemanticKernelBackend.Auth;
 
 public record RegisterRequest(string Email, string Password);
 

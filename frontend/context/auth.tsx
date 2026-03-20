@@ -8,11 +8,17 @@ const storage = {
     return SecureStore.getItemAsync(key);
   },
   async setItem(key: string, value: string) {
-    if (Platform.OS === 'web') { localStorage.setItem(key, value); return; }
+    if (Platform.OS === 'web') {
+      localStorage.setItem(key, value);
+      return;
+    }
     return SecureStore.setItemAsync(key, value);
   },
   async deleteItem(key: string) {
-    if (Platform.OS === 'web') { localStorage.removeItem(key); return; }
+    if (Platform.OS === 'web') {
+      localStorage.removeItem(key);
+      return;
+    }
     return SecureStore.deleteItemAsync(key);
   },
 };
