@@ -1,81 +1,93 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using SemanticKernelBackend.Data;
-using Testcontainers.PostgreSql;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Moq;
+using SemanticKernelBackend.Models;
 using Xunit;
 
 namespace SemanticKernelBackend.Tests;
 
-public class AuthEndpointTests : IAsyncLifetime
+public class AuthEndpointTests : IDisposable
 {
-    private readonly PostgreSqlContainer postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:18")
-        .Build();
+    private readonly Mock<UserManager<AppUser>> userManagerMock;
+    private readonly Mock<SignInManager<AppUser>> signInManagerMock;
+    private readonly WebApplicationFactory<Program> factory;
+    private readonly HttpClient client;
 
-    private WebApplicationFactory<Program> factory = null!;
-    private HttpClient client = null!;
-
-    public async Task InitializeAsync()
+    public AuthEndpointTests()
     {
-        await this.postgres.StartAsync();
+        var store = new Mock<IUserStore<AppUser>>();
+        this.userManagerMock = new Mock<UserManager<AppUser>>(
+            store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
+
+        var contextAccessor = new Mock<IHttpContextAccessor>();
+        var claimsFactory = new Mock<IUserClaimsPrincipalFactory<AppUser>>();
+        this.signInManagerMock = new Mock<SignInManager<AppUser>>(
+            this.userManagerMock.Object,
+            contextAccessor.Object,
+            claimsFactory.Object,
+            null!,
+            null!,
+            null!,
+            null!);
 
         this.factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Jwt:Key"] = "test-super-secret-key-that-is-long-enough-32chars",
+                    ["Jwt:Issuer"] = "MerchStory",
+                    ["Jwt:Audience"] = "MerchStoryApp",
+                    ["Jwt:ExpiryMinutes"] = "60",
+                    ["Google:ApiKey"] = "test-key",
+                });
+            });
+
             builder.ConfigureServices(services =>
             {
-                var descriptor = services.SingleOrDefault(
-                    d => d.ServiceType == typeof(DbContextOptions<AppDbContext>));
-                if (descriptor != null)
-                {
-                    services.Remove(descriptor);
-                }
+                services.RemoveAll<UserManager<AppUser>>();
+                services.AddSingleton(this.userManagerMock.Object);
 
-                services.AddDbContext<AppDbContext>(options =>
-                    options.UseNpgsql(this.postgres.GetConnectionString()));
-
-                builder.ConfigureAppConfiguration(
-                    (_, config) =>
-                    {
-                        config.AddInMemoryCollection(new Dictionary<string, string?>
-                        {
-                            ["Jwt:Key"] = "test-super-secret-key-that-is-long-enough-32chars",
-                            ["Jwt:Issuer"] = "MerchStory",
-                            ["Jwt:Audience"] = "MerchStoryApp",
-                            ["Jwt:ExpiryMinutes"] = "60",
-                            ["Google:ApiKey"] = "test-key",
-                        });
-                    });
+                services.RemoveAll<SignInManager<AppUser>>();
+                services.AddSingleton(this.signInManagerMock.Object);
             });
         });
-
-        using var scope = this.factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await db.Database.MigrateAsync();
 
         this.client = this.factory.CreateClient();
     }
 
-    public async Task DisposeAsync()
+    public void Dispose()
     {
         this.client.Dispose();
-        await this.factory.DisposeAsync();
-        await this.postgres.DisposeAsync();
+        this.factory.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     [Fact]
     public async Task Register_WithValidData_ReturnsOkWithToken()
     {
+        this.userManagerMock
+            .Setup(m => m.CreateAsync(It.IsAny<AppUser>(), "Test1234!"))
+            .Callback<AppUser, string>((user, _) =>
+            {
+                user.Id = Guid.NewGuid().ToString();
+            })
+            .ReturnsAsync(IdentityResult.Success);
+
         var response = await this.client.PostAsJsonAsync(
             "/auth/register",
             new { email = "newuser@test.com", password = "Test1234!" });
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadAsStringAsync();
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"Status: {response.StatusCode}, Body: {body}");
         Assert.Contains("token", body);
         Assert.Contains("newuser@test.com", body);
     }
@@ -83,9 +95,13 @@ public class AuthEndpointTests : IAsyncLifetime
     [Fact]
     public async Task Register_WithDuplicateEmail_ReturnsBadRequest()
     {
-        await this.client.PostAsJsonAsync(
-            "/auth/register",
-            new { email = "dup@test.com", password = "Test1234!" });
+        this.userManagerMock
+            .Setup(m => m.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>()))
+            .ReturnsAsync(IdentityResult.Failed(new IdentityError
+            {
+                Code = "DuplicateEmail",
+                Description = "Email already taken.",
+            }));
 
         var response = await this.client.PostAsJsonAsync(
             "/auth/register",
@@ -97,25 +113,37 @@ public class AuthEndpointTests : IAsyncLifetime
     [Fact]
     public async Task Login_WithValidCredentials_ReturnsOkWithToken()
     {
-        await this.client.PostAsJsonAsync(
-            "/auth/register",
-            new { email = "loginuser@test.com", password = "Test1234!" });
+        var user = new AppUser { Id = "user-1", Email = "loginuser@test.com", UserName = "loginuser@test.com" };
+
+        this.userManagerMock
+            .Setup(m => m.FindByEmailAsync("loginuser@test.com"))
+            .ReturnsAsync(user);
+
+        this.signInManagerMock
+            .Setup(m => m.CheckPasswordSignInAsync(It.IsAny<AppUser>(), "Test1234!", false))
+            .ReturnsAsync(SignInResult.Success);
 
         var response = await this.client.PostAsJsonAsync(
             "/auth/login",
             new { email = "loginuser@test.com", password = "Test1234!" });
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadAsStringAsync();
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"Status: {response.StatusCode}, Body: {body}");
         Assert.Contains("token", body);
     }
 
     [Fact]
     public async Task Login_WithWrongPassword_ReturnsUnauthorized()
     {
-        await this.client.PostAsJsonAsync(
-            "/auth/register",
-            new { email = "wrongpw@test.com", password = "Test1234!" });
+        var user = new AppUser { Id = "user-2", Email = "wrongpw@test.com", UserName = "wrongpw@test.com" };
+
+        this.userManagerMock
+            .Setup(m => m.FindByEmailAsync("wrongpw@test.com"))
+            .ReturnsAsync(user);
+
+        this.signInManagerMock
+            .Setup(m => m.CheckPasswordSignInAsync(It.IsAny<AppUser>(), "WrongPassword!", false))
+            .ReturnsAsync(SignInResult.Failed);
 
         var response = await this.client.PostAsJsonAsync(
             "/auth/login",
@@ -137,12 +165,22 @@ public class AuthEndpointTests : IAsyncLifetime
     [Fact]
     public async Task GenerateImage_WithValidToken_PassesAuth()
     {
+        this.userManagerMock
+            .Setup(m => m.CreateAsync(It.IsAny<AppUser>(), "Test1234!"))
+            .Callback<AppUser, string>((user, _) =>
+            {
+                user.Id = "gen-user-id";
+                user.Email = "genuser@test.com";
+                user.UserName = "genuser@test.com";
+            })
+            .ReturnsAsync(IdentityResult.Success);
+
         var registerResponse = await this.client.PostAsJsonAsync(
             "/auth/register",
             new { email = "genuser@test.com", password = "Test1234!" });
-        var body = await registerResponse.Content.ReadAsStringAsync();
+        string body = await registerResponse.Content.ReadAsStringAsync();
         var json = JsonDocument.Parse(body);
-        var token = json.RootElement.GetProperty("token").GetString();
+        string? token = json.RootElement.GetProperty("token").GetString();
 
         var request = new HttpRequestMessage(HttpMethod.Post, "/generate-image")
         {

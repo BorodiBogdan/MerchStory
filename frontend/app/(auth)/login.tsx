@@ -75,7 +75,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <Link href="/(auth)/register" style={styles.link}>
-          <ThemedText style={styles.linkText}>Don't have an account? Sign up</ThemedText>
+          <ThemedText style={styles.linkText}>Don&apos;t have an account? Sign up</ThemedText>
         </Link>
       </ThemedView>
     </KeyboardAvoidingView>

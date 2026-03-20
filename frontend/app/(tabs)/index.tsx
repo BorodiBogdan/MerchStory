@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Image,
-  ScrollView,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
