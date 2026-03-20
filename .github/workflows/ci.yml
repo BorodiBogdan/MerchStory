@@ -5,10 +5,8 @@ on:
     branches: [main, master]
 
 jobs:
-  # ── Lint ────────────────────────────────────────────────────────────────────
-
-  backend-lint:
-    name: Backend Lint (.NET Format)
+  backend:
+    name: Backend (.NET)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,8 +28,16 @@ jobs:
         run: dotnet format --verify-no-changes
         working-directory: ./backend/SemanticKernelBackend.Tests
 
-  frontend-lint:
-    name: Frontend Lint (ESLint + Prettier)
+      - name: Restore test dependencies
+        run: dotnet restore
+        working-directory: ./backend/SemanticKernelBackend.Tests
+
+      - name: Run tests
+        run: dotnet test --no-restore --verbosity normal
+        working-directory: ./backend/SemanticKernelBackend.Tests
+
+  frontend:
+    name: Frontend (Node)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,46 +59,6 @@ jobs:
 
       - name: Prettier check
         run: npm run format:check
-        working-directory: ./frontend
-
-  # ── Tests (only run after lint passes) ──────────────────────────────────────
-
-  backend-tests:
-    name: Backend Tests (.NET)
-    needs: backend-lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Restore dependencies
-        run: dotnet restore
-        working-directory: ./backend/SemanticKernelBackend.Tests
-
-      - name: Run tests
-        run: dotnet test --no-restore --verbosity normal
-        working-directory: ./backend/SemanticKernelBackend.Tests
-
-  frontend-tests:
-    name: Frontend Tests (Jest)
-    needs: frontend-lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
         working-directory: ./frontend
 
       - name: Run tests
