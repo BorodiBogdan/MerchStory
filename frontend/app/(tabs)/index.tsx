@@ -1,42 +1,154 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, ActivityIndicator } from 'react-native';
+import { useState } from 'react';
+import {
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  ScrollView,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5257';
+import { generateImage, type GenerateImageResponse } from '@/utils/api';
+import { formatMessage } from '@/utils/formatMessage';
 
 export default function HomeScreen() {
-  const [message, setMessage] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState('');
+  const [result, setResult] = useState<GenerateImageResponse | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch(`${API_URL}/hello`)
-      .then((res) => res.json())
-      .then((data) => setMessage(data.message))
-      .catch(() => setError('Failed to reach the backend'));
-  }, []);
+  async function handleGenerate() {
+    const trimmed = formatMessage(prompt);
+    if (!trimmed) return;
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const data = await generateImage(trimmed);
+      setResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const imageUri = result
+    ? `data:${result.mimeType};base64,${result.imageBase64}`
+    : null;
 
   return (
-    <ThemedView style={styles.container}>
-      {message ? (
-        <ThemedText type="title">{message}</ThemedText>
-      ) : error ? (
-        <ThemedText style={styles.error}>{error}</ThemedText>
-      ) : (
-        <ActivityIndicator size="large" />
-      )}
-    </ThemedView>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
+        <ThemedText type="title" style={styles.heading}>
+          Generate an Ad Image
+        </ThemedText>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Describe the image you want..."
+          placeholderTextColor="#9BA1A6"
+          value={prompt}
+          onChangeText={setPrompt}
+          multiline
+          editable={!loading}
+        />
+
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleGenerate}
+          disabled={loading || !prompt.trim()}
+          accessibilityLabel="Generate image"
+        >
+          <ThemedText style={styles.buttonText}>
+            {loading ? 'Generating...' : 'Generate'}
+          </ThemedText>
+        </TouchableOpacity>
+
+        {loading && <ActivityIndicator size="large" style={styles.spinner} />}
+
+        {error && (
+          <ThemedText style={styles.error}>{error}</ThemedText>
+        )}
+
+        {imageUri && (
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.image}
+            resizeMode="contain"
+            accessibilityLabel="Generated ad image"
+          />
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  flex: {
     flex: 1,
+  },
+  container: {
+    flexGrow: 1,
+    padding: 20,
+    paddingTop: 60,
+    alignItems: 'stretch',
+  },
+  heading: {
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#687076',
+    borderRadius: 10,
+    padding: 14,
+    fontSize: 16,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    color: '#11181C',
+    backgroundColor: '#fff',
+    marginBottom: 16,
+  },
+  button: {
+    backgroundColor: '#0a7ea4',
+    borderRadius: 10,
+    paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  spinner: {
+    marginVertical: 16,
   },
   error: {
     color: 'red',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  image: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 10,
+    marginTop: 8,
   },
 });

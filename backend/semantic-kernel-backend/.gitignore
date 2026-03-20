@@ -19,7 +19,6 @@ logs/
 # Secrets & environment
 appsettings.*.json
 !appsettings.json
-!appsettings.Development.json
 .env
 .env.*
 secrets.json
