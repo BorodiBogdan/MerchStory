@@ -12,10 +12,12 @@ import {
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAuth } from '@/context/auth';
 import { generateImage, type GenerateImageResponse } from '@/utils/api';
 import { formatMessage } from '@/utils/formatMessage';
 
 export default function HomeScreen() {
+  const { userName, signOut } = useAuth();
   const [prompt, setPrompt] = useState('');
   const [result, setResult] = useState<GenerateImageResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -52,6 +54,15 @@ export default function HomeScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
+        <ThemedView style={styles.header}>
+          <ThemedText type="subtitle" style={styles.greeting}>
+            Hello, {userName ?? 'there'}
+          </ThemedText>
+          <TouchableOpacity onPress={signOut} accessibilityLabel="Log out">
+            <ThemedText style={styles.logoutText}>Log out</ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
+
         <ThemedText type="title" style={styles.heading}>
           Generate an Ad Image
         </ThemedText>
@@ -105,6 +116,19 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 60,
     alignItems: 'stretch',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  greeting: {
+    fontSize: 16,
+  },
+  logoutText: {
+    fontSize: 14,
+    color: '#0a7ea4',
   },
   heading: {
     marginBottom: 24,

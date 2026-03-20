@@ -1,5 +1,13 @@
+using System.Text;
 using Google.GenAI;
 using Google.GenAI.Types;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using semantic_kernel_backend.Auth;
+using semantic_kernel_backend.Data;
+using semantic_kernel_backend.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +22,37 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddIdentity<AppUser, IdentityRole>()
+    .AddEntityFrameworkStores<AppDbContext>()
+    .AddDefaultTokenProviders();
+
+builder.Services.AddScoped<JwtService>();
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)),
+    };
+});
+
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -23,12 +62,16 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors();
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 
 var googleApiKey = app.Configuration["Google:ApiKey"]
     ?? throw new InvalidOperationException("Google:ApiKey is not configured.");
 
 app.MapGet("/hello", () => new { message = "Hello World" })
    .WithName("GetHello");
+
+app.MapAuthEndpoints();
 
 app.MapPost("/generate-image", async (ImageGenerationRequest request, ILogger<Program> logger) =>
 {
@@ -89,7 +132,8 @@ app.MapPost("/generate-image", async (ImageGenerationRequest request, ILogger<Pr
         mimeType
     });
 })
-.WithName("GenerateImage");
+.WithName("GenerateImage")
+.RequireAuthorization();
 
 app.Run();
 

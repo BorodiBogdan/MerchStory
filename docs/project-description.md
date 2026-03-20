@@ -63,7 +63,7 @@ Small and independent retailers (e.g., craft beer shops, clothing boutiques, loc
 | Social APIs | Instagram Graph API, Facebook Marketing API (P1) |
 | Auth | Google OAuth / Email (ASP.NET Identity or Auth0) |
 | Storage | Azure Blob Storage or S3 (images/videos) |
-| Database | Supabase (PostgreSQL + pgvector, via EF Core or Supabase client) |
+| Database | PostgreSQL 18 + pgvector (Docker), via EF Core |
 
 ---
 

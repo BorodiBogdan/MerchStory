@@ -32,7 +32,7 @@ This file gives Claude Code the context needed to make good decisions across all
 - **ORM:** Entity Framework Core (preferred)
 - **Auth:** ASP.NET Identity or Auth0 / Azure AD B2C
 - **Storage:** Azure Blob Storage (images, videos, generated assets)
-- **Database:** Supabase (PostgreSQL + pgvector) — pgvector used for Semantic Kernel memory / vector store
+- **Database:** PostgreSQL 18 (Docker container) + pgvector — pgvector used for Semantic Kernel memory / vector store
 
 ### Frontend
 - **Framework:** React Native via Expo
