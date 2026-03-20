@@ -7,5 +7,6 @@ cd "$ROOT/frontend" && npx lint-staged --config "$ROOT/package.json"
 
 echo ">>> Running backend format check..."
 cd "$ROOT"
-dotnet format ./backend/SemanticKernelBackend --verify-no-changes
-dotnet format ./backend/SemanticKernelBackend.Tests --verify-no-changes
+dotnet format ./backend/MerchStoryAPI/MerchStoryAPI.csproj --verify-no-changes
+dotnet format ./backend/MerchStoryImageGeneration/MerchStoryImageGeneration.csproj --verify-no-changes
+dotnet format ./backend/MerchStory.Tests/MerchStory.Tests.csproj --verify-no-changes

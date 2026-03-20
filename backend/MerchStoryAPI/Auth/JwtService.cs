@@ -1,10 +1,11 @@
+using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using MerchStoryAPI.Models;
 using Microsoft.IdentityModel.Tokens;
-using SemanticKernelBackend.Models;
 
-namespace SemanticKernelBackend.Auth;
+namespace MerchStoryAPI.Auth;
 
 public class JwtService
 {
@@ -19,7 +20,7 @@ public class JwtService
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(this.config["Jwt:Key"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var expiry = DateTime.UtcNow.AddMinutes(double.Parse(this.config["Jwt:ExpiryMinutes"] ?? "60"));
+        var expiry = DateTime.UtcNow.AddMinutes(double.Parse(this.config["Jwt:ExpiryMinutes"] ?? "60", CultureInfo.InvariantCulture));
 
         var claims = new[]
         {

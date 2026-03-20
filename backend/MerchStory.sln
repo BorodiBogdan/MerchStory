@@ -1,13 +1,13 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend", "backend", "{1AE8ACA6-933B-BF2A-3671-3E2EAC007D16}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerchStoryAPI", "MerchStoryAPI\MerchStoryAPI.csproj", "{AB2B67B7-7740-4667-987C-C98E6A662C06}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SemanticKernelBackend", "backend\SemanticKernelBackend\SemanticKernelBackend.csproj", "{AB2B67B7-7740-4667-987C-C98E6A662C06}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerchStoryImageGeneration", "MerchStoryImageGeneration\MerchStoryImageGeneration.csproj", "{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SemanticKernelBackend.Tests", "backend\SemanticKernelBackend.Tests\SemanticKernelBackend.Tests.csproj", "{CD152974-AC48-4C37-AB29-151C8724176B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MerchStory.Tests", "MerchStory.Tests\MerchStory.Tests.csproj", "{CD152974-AC48-4C37-AB29-151C8724176B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -31,6 +31,18 @@ Global
 		{AB2B67B7-7740-4667-987C-C98E6A662C06}.Release|x64.Build.0 = Release|Any CPU
 		{AB2B67B7-7740-4667-987C-C98E6A662C06}.Release|x86.ActiveCfg = Release|Any CPU
 		{AB2B67B7-7740-4667-987C-C98E6A662C06}.Release|x86.Build.0 = Release|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Debug|x64.Build.0 = Debug|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Debug|x86.Build.0 = Debug|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Release|x64.ActiveCfg = Release|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Release|x64.Build.0 = Release|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Release|x86.ActiveCfg = Release|Any CPU
+		{E1F3A2B4-8C52-4D89-B3A1-7F6E2D9C0A15}.Release|x86.Build.0 = Release|Any CPU
 		{CD152974-AC48-4C37-AB29-151C8724176B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{CD152974-AC48-4C37-AB29-151C8724176B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CD152974-AC48-4C37-AB29-151C8724176B}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -46,9 +58,5 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{AB2B67B7-7740-4667-987C-C98E6A662C06} = {1AE8ACA6-933B-BF2A-3671-3E2EAC007D16}
-		{CD152974-AC48-4C37-AB29-151C8724176B} = {1AE8ACA6-933B-BF2A-3671-3E2EAC007D16}
 	EndGlobalSection
 EndGlobal

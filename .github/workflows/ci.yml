@@ -18,23 +18,23 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore
-        working-directory: ./backend/SemanticKernelBackend
+        working-directory: ./backend
 
-      - name: Check formatting (main project)
-        run: dotnet format --verify-no-changes
-        working-directory: ./backend/SemanticKernelBackend
+      - name: Check formatting (MerchStoryAPI)
+        run: dotnet format MerchStoryAPI/MerchStoryAPI.csproj --verify-no-changes
+        working-directory: ./backend
 
-      - name: Check formatting (tests project)
-        run: dotnet format --verify-no-changes
-        working-directory: ./backend/SemanticKernelBackend.Tests
+      - name: Check formatting (MerchStoryImageGeneration)
+        run: dotnet format MerchStoryImageGeneration/MerchStoryImageGeneration.csproj --verify-no-changes
+        working-directory: ./backend
 
-      - name: Restore test dependencies
-        run: dotnet restore
-        working-directory: ./backend/SemanticKernelBackend.Tests
+      - name: Check formatting (MerchStory.Tests)
+        run: dotnet format MerchStory.Tests/MerchStory.Tests.csproj --verify-no-changes
+        working-directory: ./backend
 
       - name: Run tests
-        run: dotnet test --no-restore --verbosity normal
-        working-directory: ./backend/SemanticKernelBackend.Tests
+        run: dotnet test MerchStory.Tests/MerchStory.Tests.csproj --no-restore --verbosity normal
+        working-directory: ./backend
 
   frontend:
     name: Frontend (Node)

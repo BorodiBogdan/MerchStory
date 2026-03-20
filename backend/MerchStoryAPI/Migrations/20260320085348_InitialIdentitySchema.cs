@@ -3,7 +3,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace SemanticKernelBackend.Migrations
+namespace MerchStoryAPI.Migrations
 {
     /// <inheritdoc />
     public partial class InitialIdentitySchema : Migration
