@@ -8,10 +8,10 @@ import { FloatingInput } from '@/components/ui/FloatingInput';
 import { SetupShell } from '@/components/ui/SetupShell';
 import { StepProgress } from '@/components/ui/StepProgress';
 import { D } from '@/constants/design';
-import { useAuth } from '@/context/auth';
 import { useSetup } from '@/context/setup';
 import { useTheme } from '@/context/theme';
-import { submitShopProfile, uploadShopLogo } from '@/utils/api';
+
+const STEP_LABELS = ['Visual Identity', 'Business DNA', 'Contact & Social'];
 
 const DOMAIN_OPTIONS = [
   { value: 'Fashion', label: 'Fashion' },
@@ -38,7 +38,6 @@ export default function Step2Screen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data, updateStep2 } = useSetup();
-  const { completeShopSetup } = useAuth();
 
   const [domain, setDomain] = useState(data.businessDomain);
   const [audience, setAudience] = useState(data.targetAudience);
@@ -47,13 +46,10 @@ export default function Step2Screen() {
   const [competitors, setCompetitors] = useState(data.competitors);
 
   const [audienceError, setAudienceError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const canSubmit =
-    domain.length > 0 && audience.trim().length > 0 && shopType.length > 0 && !isSubmitting;
+  const canProceed = domain.length > 0 && audience.trim().length > 0 && shopType.length > 0;
 
-  async function handleComplete() {
+  function handleNext() {
     if (!audience.trim()) {
       setAudienceError('Please describe your target audience');
       return;
@@ -65,43 +61,15 @@ export default function Step2Screen() {
       shopType,
       competitors,
     });
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    try {
-      let logoBase64: string | null = null;
-      if (data.logoUri) {
-        logoBase64 = await uploadShopLogo(data.logoUri);
-      }
-      await submitShopProfile({
-        brandName: data.brandName,
-        logoBase64,
-        primaryColor: data.primaryColor || null,
-        secondaryColor: data.secondaryColor || null,
-        accentColor: data.accentColor || null,
-        slogan: data.slogan || null,
-        businessDomain: domain,
-        targetAudience: audience.trim(),
-        atmosphere: atmosphere || null,
-        shopType,
-        competitors: competitors || null,
-      });
-      await completeShopSetup();
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      router.replace('/(tabs)');
-    } catch (err) {
-      setSubmitError(
-        err instanceof Error ? err.message : 'Something went wrong. Please try again.'
-      );
-      setIsSubmitting(false);
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+    router.navigate('/(setup)/step3');
   }
 
   return (
     <SetupShell>
-      <StepProgress currentStep={2} stepLabels={['Visual Identity', 'Business DNA']} />
+      <StepProgress currentStep={2} stepLabels={STEP_LABELS} />
 
       <View style={styles.titleBlock}>
         <Text style={styles.title}>Your Business DNA</Text>
@@ -162,12 +130,6 @@ export default function Step2Screen() {
         autoCapitalize="words"
       />
 
-      {submitError && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{submitError}</Text>
-        </View>
-      )}
-
       <View style={styles.buttons}>
         <Pressable
           onPress={() => router.back()}
@@ -178,15 +140,15 @@ export default function Step2Screen() {
           <Text style={styles.backButtonText}>← Back</Text>
         </Pressable>
         <Pressable
-          onPress={handleComplete}
-          disabled={!canSubmit}
-          style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
+          onPress={handleNext}
+          disabled={!canProceed}
+          style={[styles.nextButton, !canProceed && styles.nextButtonDisabled]}
           accessibilityRole="button"
-          accessibilityLabel="Complete setup"
-          accessibilityState={{ disabled: !canSubmit, busy: isSubmitting }}
+          accessibilityLabel="Next step"
+          accessibilityState={{ disabled: !canProceed }}
         >
-          <Text style={[styles.submitButtonText, !canSubmit && styles.submitButtonTextDisabled]}>
-            {isSubmitting ? 'Setting up…' : 'Complete Setup ✓'}
+          <Text style={[styles.nextButtonText, !canProceed && styles.nextButtonTextDisabled]}>
+            Next step →
           </Text>
         </Pressable>
       </View>
@@ -221,17 +183,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       letterSpacing: 0.8,
       marginBottom: D.spacing.sm,
     },
-    errorBox: {
-      backgroundColor: `${colors.destructive}18`,
-      borderRadius: D.radius.sm,
-      padding: D.spacing.sm,
-      marginBottom: D.spacing.md,
-    },
-    errorText: {
-      fontSize: D.fontSize.sm,
-      color: colors.text.error,
-      textAlign: 'center',
-    },
     buttons: {
       flexDirection: 'row',
       gap: D.spacing.sm,
@@ -251,7 +202,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: D.fontWeight.medium,
       color: colors.text.secondary,
     },
-    submitButton: {
+    nextButton: {
       height: 50,
       flex: 2,
       borderRadius: D.radius.md,
@@ -260,17 +211,18 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       justifyContent: 'center',
       ...D.shadow.glow,
     },
-    submitButtonDisabled: {
+    nextButtonDisabled: {
       backgroundColor: colors.bg.elevated,
       shadowOpacity: 0,
       elevation: 0,
     },
-    submitButtonText: {
+    nextButtonText: {
       fontSize: D.fontSize.base,
       fontWeight: D.fontWeight.semibold,
       color: '#FFFFFF',
+      letterSpacing: 0.3,
     },
-    submitButtonTextDisabled: {
+    nextButtonTextDisabled: {
       color: colors.text.muted,
     },
   });

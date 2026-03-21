@@ -6,25 +6,27 @@ import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 
 interface StepProgressProps {
-  currentStep: 1 | 2;
-  totalSteps?: 2;
-  stepLabels: [string, string];
+  currentStep: number;
+  stepLabels: string[];
 }
 
 export function StepProgress({ currentStep, stepLabels }: StepProgressProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const fillWidth = useSharedValue(currentStep === 1 ? 0 : 100);
+  const totalSteps = stepLabels.length;
+  const fillPercent = ((currentStep - 1) / (totalSteps - 1)) * 100;
+  const fillWidth = useSharedValue(fillPercent);
 
   useEffect(() => {
-    fillWidth.value = withTiming(currentStep === 1 ? 0 : 100, { duration: D.duration.slow });
-  }, [currentStep, fillWidth]);
+    fillWidth.value = withTiming(fillPercent, { duration: D.duration.slow });
+  }, [fillPercent, fillWidth]);
 
   return (
     <View style={styles.container}>
       <View style={styles.stepsRow}>
-        {([1, 2] as const).map((step) => {
+        {stepLabels.map((label, index) => {
+          const step = index + 1;
           const isCompleted = step < currentStep;
           const isActive = step === currentStep;
           return (
@@ -46,7 +48,7 @@ export function StepProgress({ currentStep, stepLabels }: StepProgressProps) {
                 style={[styles.label, (isActive || isCompleted) && styles.labelActive]}
                 numberOfLines={1}
               >
-                {stepLabels[step - 1]}
+                {label}
               </Text>
             </View>
           );
@@ -54,7 +56,7 @@ export function StepProgress({ currentStep, stepLabels }: StepProgressProps) {
       </View>
 
       <View style={styles.track}>
-        <Animated.View style={[styles.fill, { width: fillWidth.value === 100 ? '100%' : '0%' }]} />
+        <Animated.View style={[styles.fill, { width: `${fillWidth.value}%` }]} />
       </View>
     </View>
   );

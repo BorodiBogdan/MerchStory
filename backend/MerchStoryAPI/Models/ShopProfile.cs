@@ -32,6 +32,19 @@ public class ShopProfile
 
     public string? Competitors { get; set; }
 
+    // Step 3 — Contact & Social
+    public string PhoneNumber { get; set; } = string.Empty;
+
+    public string Email { get; set; } = string.Empty;
+
+    public string Addresses { get; set; } = string.Empty;
+
+    public string? InstagramHandle { get; set; }
+
+    public string? FacebookHandle { get; set; }
+
+    public string? TikTokHandle { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }

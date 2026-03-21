@@ -35,6 +35,12 @@ export interface ShopProfilePayload {
   atmosphere?: string | null;
   shopType: string;
   competitors?: string | null;
+  phoneNumber: string;
+  email: string;
+  addresses: string[];
+  instagramHandle?: string | null;
+  facebookHandle?: string | null;
+  tikTokHandle?: string | null;
 }
 
 export interface ShopProfileResponse extends ShopProfilePayload {

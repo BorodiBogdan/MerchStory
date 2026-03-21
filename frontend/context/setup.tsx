@@ -17,12 +17,22 @@ export interface SetupStep2Data {
   competitors: string;
 }
 
-export interface SetupData extends SetupStep1Data, SetupStep2Data {}
+export interface SetupStep3Data {
+  phoneNumber: string;
+  email: string;
+  addresses: string[];
+  instagramHandle: string;
+  facebookHandle: string;
+  tikTokHandle: string;
+}
+
+export interface SetupData extends SetupStep1Data, SetupStep2Data, SetupStep3Data {}
 
 interface SetupContextValue {
   data: SetupData;
   updateStep1: (partial: Partial<SetupStep1Data>) => void;
   updateStep2: (partial: Partial<SetupStep2Data>) => void;
+  updateStep3: (partial: Partial<SetupStep3Data>) => void;
   reset: () => void;
 }
 
@@ -38,6 +48,12 @@ const defaultData: SetupData = {
   atmosphere: '',
   shopType: '',
   competitors: '',
+  phoneNumber: '',
+  email: '',
+  addresses: [''],
+  instagramHandle: '',
+  facebookHandle: '',
+  tikTokHandle: '',
 };
 
 const SetupContext = createContext<SetupContextValue | null>(null);
@@ -53,12 +69,16 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
     setData((prev) => ({ ...prev, ...partial }));
   }
 
+  function updateStep3(partial: Partial<SetupStep3Data>) {
+    setData((prev) => ({ ...prev, ...partial }));
+  }
+
   function reset() {
     setData(defaultData);
   }
 
   return (
-    <SetupContext.Provider value={{ data, updateStep1, updateStep2, reset }}>
+    <SetupContext.Provider value={{ data, updateStep1, updateStep2, updateStep3, reset }}>
       {children}
     </SetupContext.Provider>
   );

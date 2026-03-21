@@ -19,7 +19,13 @@ public record ShopProfileRequest(
     string TargetAudience,
     string? Atmosphere,
     string ShopType,
-    string? Competitors);
+    string? Competitors,
+    string PhoneNumber,
+    string Email,
+    string[] Addresses,
+    string? InstagramHandle,
+    string? FacebookHandle,
+    string? TikTokHandle);
 
 public record ShopProfileResponse(
     Guid Id,
@@ -34,5 +40,11 @@ public record ShopProfileResponse(
     string? Atmosphere,
     string ShopType,
     string? Competitors,
+    string PhoneNumber,
+    string Email,
+    string[] Addresses,
+    string? InstagramHandle,
+    string? FacebookHandle,
+    string? TikTokHandle,
     DateTime CreatedAt,
     DateTime UpdatedAt);

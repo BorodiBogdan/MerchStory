@@ -55,12 +55,15 @@ export default function Step1Screen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    router.push('/(setup)/step2');
+    router.navigate('/(setup)/step2');
   }
 
   return (
     <SetupShell>
-      <StepProgress currentStep={1} stepLabels={['Visual Identity', 'Business DNA']} />
+      <StepProgress
+        currentStep={1}
+        stepLabels={['Visual Identity', 'Business DNA', 'Contact & Social']}
+      />
 
       <View style={styles.titleBlock}>
         <Text style={styles.title}>{"Your Brand's Look"}</Text>

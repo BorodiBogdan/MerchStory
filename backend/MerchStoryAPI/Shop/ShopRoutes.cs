@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
@@ -78,6 +79,17 @@ public static class ShopRoutes
                 return Results.BadRequest("AccentColor must be a valid hex color (#RRGGBB).");
             }
 
+            if (!request.Email.Contains('@'))
+            {
+                return Results.BadRequest("Email must be a valid email address.");
+            }
+
+            string[] validAddresses = request.Addresses.Where(a => !string.IsNullOrWhiteSpace(a)).ToArray();
+            if (validAddresses.Length == 0)
+            {
+                return Results.BadRequest("At least one address is required.");
+            }
+
             ShopProfile? existing = await db.ShopProfiles.SingleOrDefaultAsync(s => s.UserId == userId);
             DateTime now = DateTime.UtcNow;
 
@@ -98,6 +110,12 @@ public static class ShopRoutes
                     Atmosphere = request.Atmosphere,
                     ShopType = request.ShopType,
                     Competitors = request.Competitors?.Trim(),
+                    PhoneNumber = request.PhoneNumber.Trim(),
+                    Email = request.Email.Trim(),
+                    Addresses = JsonSerializer.Serialize(validAddresses),
+                    InstagramHandle = request.InstagramHandle?.Trim(),
+                    FacebookHandle = request.FacebookHandle?.Trim(),
+                    TikTokHandle = request.TikTokHandle?.Trim(),
                     CreatedAt = now,
                     UpdatedAt = now,
                 };
@@ -119,6 +137,12 @@ public static class ShopRoutes
             existing.Atmosphere = request.Atmosphere;
             existing.ShopType = request.ShopType;
             existing.Competitors = request.Competitors?.Trim();
+            existing.PhoneNumber = request.PhoneNumber.Trim();
+            existing.Email = request.Email.Trim();
+            existing.Addresses = JsonSerializer.Serialize(validAddresses);
+            existing.InstagramHandle = request.InstagramHandle?.Trim();
+            existing.FacebookHandle = request.FacebookHandle?.Trim();
+            existing.TikTokHandle = request.TikTokHandle?.Trim();
             existing.UpdatedAt = now;
 
             await db.SaveChangesAsync();
@@ -177,8 +201,13 @@ public static class ShopRoutes
         color.Length == 7 && color[0] == '#' &&
         color[1..].All(c => char.IsAsciiHexDigit(c));
 
-    private static ShopProfileResponse MapToResponse(ShopProfile p) =>
-        new(
+    private static ShopProfileResponse MapToResponse(ShopProfile p)
+    {
+        string[] addresses = string.IsNullOrEmpty(p.Addresses)
+            ? []
+            : JsonSerializer.Deserialize<string[]>(p.Addresses) ?? [];
+
+        return new(
             p.Id,
             p.BrandName,
             p.LogoBase64,
@@ -191,6 +220,13 @@ public static class ShopRoutes
             p.Atmosphere,
             p.ShopType,
             p.Competitors,
+            p.PhoneNumber,
+            p.Email,
+            addresses,
+            p.InstagramHandle,
+            p.FacebookHandle,
+            p.TikTokHandle,
             p.CreatedAt,
             p.UpdatedAt);
+    }
 }
