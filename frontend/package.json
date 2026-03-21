@@ -14,11 +14,11 @@
     "test": "jest --watchAll=false"
   },
   "lint-staged": {
-    "*.{ts,tsx}": [
-      "eslint --fix",
+    "**/*.{ts,tsx}": [
+      "expo lint --fix",
       "prettier --write"
     ],
-    "*.{js,json,css,md}": [
+    "**/*.{js,json,css,md}": [
       "prettier --write"
     ]
   },

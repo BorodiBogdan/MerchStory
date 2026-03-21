@@ -74,7 +74,9 @@ export function LogoutModal({ visible, onConfirm, onDismiss }: LogoutModalProps)
           <View style={styles.handle} />
 
           <Text style={styles.title}>Sign out?</Text>
-          <Text style={styles.subtitle}>You&apos;ll need to sign in again to access your account.</Text>
+          <Text style={styles.subtitle}>
+            You&apos;ll need to sign in again to access your account.
+          </Text>
 
           <Pressable
             onPress={handleConfirm}
