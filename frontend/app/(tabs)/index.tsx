@@ -4,10 +4,10 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
-  TouchableOpacity,
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -17,7 +17,7 @@ import { generateImage, type GenerateImageResponse } from '@/utils/api';
 import { formatMessage } from '@/utils/formatMessage';
 
 export default function HomeScreen() {
-  const { userName, signOut } = useAuth();
+  const { userName } = useAuth();
   const [prompt, setPrompt] = useState('');
   const [result, setResult] = useState<GenerateImageResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,9 +53,6 @@ export default function HomeScreen() {
           <ThemedText type="subtitle" style={styles.greeting}>
             Hello, {userName ?? 'there'}
           </ThemedText>
-          <TouchableOpacity onPress={signOut} accessibilityLabel="Log out">
-            <ThemedText style={styles.logoutText}>Log out</ThemedText>
-          </TouchableOpacity>
         </ThemedView>
 
         <ThemedText type="title" style={styles.heading}>
@@ -72,16 +69,21 @@ export default function HomeScreen() {
           editable={!loading}
         />
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+        <Pressable
+          style={({ pressed }) => [
+            styles.button,
+            (loading || !prompt.trim()) && styles.buttonDisabled,
+            pressed && !(loading || !prompt.trim()) && styles.buttonPressed,
+          ]}
           onPress={handleGenerate}
           disabled={loading || !prompt.trim()}
           accessibilityLabel="Generate image"
+          accessibilityRole="button"
         >
           <ThemedText style={styles.buttonText}>
             {loading ? 'Generating...' : 'Generate'}
           </ThemedText>
-        </TouchableOpacity>
+        </Pressable>
 
         {loading && <ActivityIndicator size="large" style={styles.spinner} />}
 
@@ -119,10 +121,6 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: 16,
   },
-  logoutText: {
-    fontSize: 14,
-    color: '#0a7ea4',
-  },
   heading: {
     marginBottom: 24,
     textAlign: 'center',
@@ -148,6 +146,9 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  buttonPressed: {
+    opacity: 0.85,
   },
   buttonText: {
     color: '#fff',
