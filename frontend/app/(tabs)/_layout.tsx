@@ -1,11 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, Tabs } from 'expo-router';
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Redirect, Tabs, useRouter } from 'expo-router';
+import React, { useMemo } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { LogoutModal } from '@/components/ui/LogoutModal';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
@@ -13,8 +11,8 @@ import { useTheme } from '@/context/theme';
 export default function TabLayout() {
   const { token, isLoading, isShopSetupComplete, signOut } = useAuth();
   const { colors, colorScheme, toggleTheme } = useTheme();
-  const [modalVisible, setModalVisible] = useState(false);
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const router = useRouter();
 
   if (isLoading) {
     return <ActivityIndicator style={styles.loading} size="large" color={colors.accent.primary} />;
@@ -28,18 +26,24 @@ export default function TabLayout() {
     return <Redirect href="/(setup)/step1" />;
   }
 
-  async function handleSignOut() {
-    setModalVisible(false);
-    await signOut();
-  }
+  const headerLeft = () => (
+    <Pressable
+      onPress={() => router.navigate('/(tabs)')}
+      style={styles.logoButton}
+      accessibilityRole="button"
+      accessibilityLabel="MerchStory home"
+    >
+      <Text style={styles.logoText}>MerchStory</Text>
+    </Pressable>
+  );
 
   const headerRight = () => (
     <View style={styles.headerActions}>
       <Pressable
         onPress={toggleTheme}
-        style={styles.themeButton}
-        accessibilityLabel={colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        style={styles.iconButton}
         accessibilityRole="button"
+        accessibilityLabel={colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
       >
         <Ionicons
           name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
@@ -47,63 +51,48 @@ export default function TabLayout() {
           color={colors.text.secondary}
         />
       </Pressable>
+
       <Pressable
-        onPress={() => setModalVisible(true)}
-        style={styles.avatarButton}
-        accessibilityLabel="Open account menu"
+        onPress={() => router.navigate('/(tabs)/profile')}
+        style={styles.iconButton}
         accessibilityRole="button"
-        accessibilityHint="Opens sign out options"
+        accessibilityLabel="Go to profile"
       >
         <View style={styles.avatarChip}>
           <Ionicons name="person-circle-outline" size={22} color={colors.text.secondary} />
         </View>
       </Pressable>
+
+      <Pressable
+        onPress={() => void signOut()}
+        style={styles.iconButton}
+        accessibilityRole="button"
+        accessibilityLabel="Sign out"
+      >
+        <Ionicons name="log-out-outline" size={20} color={colors.destructive} />
+      </Pressable>
     </View>
   );
 
   return (
-    <>
-      <Tabs
-        screenOptions={{
-          tabBarActiveTintColor: colors.accent.primary,
-          tabBarInactiveTintColor: colors.text.muted,
-          headerShown: true,
-          headerStyle: { backgroundColor: colors.bg.surface },
-          headerTintColor: colors.text.primary,
-          headerShadowVisible: false,
-          tabBarStyle: {
-            backgroundColor: colors.bg.surface,
-            borderTopColor: colors.border.default,
-            borderTopWidth: 1,
-          },
-          tabBarButton: HapticTab,
-          headerRight,
-        }}
-      >
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: 'Home',
-            tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="explore"
-          options={{
-            title: 'Explore',
-            tabBarIcon: ({ color }) => (
-              <IconSymbol size={28} name="paperplane.fill" color={color} />
-            ),
-          }}
-        />
-      </Tabs>
-
-      <LogoutModal
-        visible={modalVisible}
-        onConfirm={handleSignOut}
-        onDismiss={() => setModalVisible(false)}
-      />
-    </>
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: colors.accent.primary,
+        tabBarInactiveTintColor: colors.text.muted,
+        headerShown: true,
+        headerStyle: { backgroundColor: colors.bg.surface },
+        headerTintColor: colors.text.primary,
+        headerShadowVisible: false,
+        tabBarStyle: { display: 'none' },
+        tabBarButton: HapticTab,
+        headerLeft,
+        headerRight,
+        headerTitle: () => null,
+      }}
+    >
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="profile" />
+    </Tabs>
   );
 }
 
@@ -113,21 +102,28 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flex: 1,
       backgroundColor: colors.bg.base,
     },
+    logoButton: {
+      marginLeft: D.spacing.md,
+      outlineWidth: 0,
+    },
+    logoText: {
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: -0.3,
+    },
     headerActions: {
       flexDirection: 'row',
       alignItems: 'center',
       marginRight: D.spacing.md,
-      gap: D.spacing.sm,
+      gap: D.spacing.xs,
     },
-    themeButton: {
+    iconButton: {
       width: 34,
       height: 34,
       borderRadius: D.radius.pill,
       alignItems: 'center',
       justifyContent: 'center',
-      outlineWidth: 0,
-    },
-    avatarButton: {
       outlineWidth: 0,
     },
     avatarChip: {

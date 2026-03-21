@@ -135,6 +135,25 @@ export async function getShopProfile(): Promise<ShopProfileResponse | null> {
   return response.json() as Promise<ShopProfileResponse>;
 }
 
+export async function updateShopProfile(payload: ShopProfilePayload): Promise<ShopProfileResponse> {
+  const token = await getToken();
+  const response = await fetch(`${API_URL}/shop/profile`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Update failed (${response.status})`);
+  }
+
+  return response.json() as Promise<ShopProfileResponse>;
+}
+
 export async function generateImage(prompt: string): Promise<GenerateImageResponse> {
   const token = await getToken();
 
