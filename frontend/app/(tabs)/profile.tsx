@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
@@ -11,12 +12,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
-import { ChipSelector } from '@/components/ui/ChipSelector';
-import { FloatingInput } from '@/components/ui/FloatingInput';
-import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
@@ -51,6 +50,134 @@ const SHOP_TYPE_OPTIONS = [
 function labelFor(options: { value: string; label: string }[], value: string) {
   return options.find((o) => o.value === value)?.label ?? value;
 }
+
+function hexToRgb(hex: string) {
+  const clean = hex.startsWith('#') ? hex.slice(1) : hex;
+  if (clean.length !== 6) return { r: 128, g: 128, b: 128 };
+  return {
+    r: parseInt(clean.slice(0, 2), 16),
+    g: parseInt(clean.slice(2, 4), 16),
+    b: parseInt(clean.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex(r: number, g: number, b: number) {
+  return `#${[r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+}
+
+type ColorKey = 'primaryColor' | 'secondaryColor' | 'accentColor';
+const COLOR_KEYS: { key: ColorKey; label: string }[] = [
+  { key: 'primaryColor', label: 'Primary' },
+  { key: 'secondaryColor', label: 'Secondary' },
+  { key: 'accentColor', label: 'Accent' },
+];
+
+function ColorEditPanel({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { colors } = useTheme();
+  const init = hexToRgb(value || '#808080');
+  const [r, setR] = useState(init.r);
+  const [g, setG] = useState(init.g);
+  const [b, setB] = useState(init.b);
+
+  const hex = rgbToHex(r, g, b);
+
+  const channels = [
+    {
+      ch: 'R',
+      val: r,
+      trackColor: `rgb(${r},0,0)`,
+      set: (v: number) => {
+        setR(v);
+        onChange(rgbToHex(v, g, b));
+      },
+    },
+    {
+      ch: 'G',
+      val: g,
+      trackColor: `rgb(0,${g},0)`,
+      set: (v: number) => {
+        setG(v);
+        onChange(rgbToHex(r, v, b));
+      },
+    },
+    {
+      ch: 'B',
+      val: b,
+      trackColor: `rgb(0,0,${b})`,
+      set: (v: number) => {
+        setB(v);
+        onChange(rgbToHex(r, g, v));
+      },
+    },
+  ];
+
+  return (
+    <View style={colorPanelStyles.panel}>
+      {channels.map(({ ch, val, trackColor, set }) => (
+        <View key={ch} style={colorPanelStyles.row}>
+          <Text style={[colorPanelStyles.ch, { color: colors.text.muted }]}>{ch}</Text>
+          <Slider
+            style={colorPanelStyles.slider}
+            minimumValue={0}
+            maximumValue={255}
+            step={1}
+            value={val}
+            onValueChange={set}
+            minimumTrackTintColor={trackColor}
+            maximumTrackTintColor={colors.border.default}
+            thumbTintColor={trackColor}
+          />
+          <Text style={[colorPanelStyles.val, { color: colors.text.secondary }]}>
+            {Math.round(val)}
+          </Text>
+        </View>
+      ))}
+      <View style={[colorPanelStyles.preview, { backgroundColor: hex }]}>
+        <Text style={colorPanelStyles.previewHex}>{hex.toUpperCase()}</Text>
+      </View>
+    </View>
+  );
+}
+
+const colorPanelStyles = StyleSheet.create({
+  panel: {
+    paddingHorizontal: D.spacing.sm,
+    paddingBottom: D.spacing.sm,
+    gap: 2,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: D.spacing.xs,
+  },
+  ch: {
+    width: 14,
+    fontSize: D.fontSize.xs,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  slider: {
+    flex: 1,
+    height: 28,
+  },
+  val: {
+    width: 26,
+    fontSize: D.fontSize.xs,
+    textAlign: 'right',
+  },
+  preview: {
+    height: 22,
+    borderRadius: D.radius.sm,
+    marginTop: D.spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewHex: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: '600',
+  },
+});
 
 type DraftState = {
   brandName: string;
@@ -131,6 +258,7 @@ export default function ProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [openColorKey, setOpenColorKey] = useState<ColorKey | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -143,10 +271,6 @@ export default function ProfileScreen() {
     setLoadError(null);
     try {
       const p = await getShopProfile();
-      console.log(
-        '[Profile] GET response:',
-        JSON.stringify({ phone: p?.phoneNumber, email: p?.email, addresses: p?.addresses })
-      );
       setProfile(p);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load profile');
@@ -166,6 +290,7 @@ export default function ProfileScreen() {
     setDraft(null);
     setIsEditing(false);
     setSaveError(null);
+    setOpenColorKey(null);
   }
 
   function updateDraft(patch: Partial<DraftState>) {
@@ -230,17 +355,10 @@ export default function ProfileScreen() {
         facebookHandle: draft.facebookHandle.trim() || null,
         tikTokHandle: draft.tikTokHandle.trim() || null,
       });
-      console.log(
-        '[Profile] POST response:',
-        JSON.stringify({
-          phone: updated?.phoneNumber,
-          email: updated?.email,
-          addresses: updated?.addresses,
-        })
-      );
       setProfile(updated);
       setDraft(null);
       setIsEditing(false);
+      setOpenColorKey(null);
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
@@ -277,6 +395,85 @@ export default function ProfileScreen() {
       </View>
     );
   }
+
+  // Inline chip row — rendered below a row in edit mode
+  function ChipRow({
+    options,
+    selected,
+    onSelect,
+  }: {
+    options: { value: string; label: string }[];
+    selected: string;
+    onSelect: (v: string) => void;
+  }) {
+    return (
+      <View style={styles.chipRow}>
+        {options.map((opt) => {
+          const active = selected === opt.value;
+          return (
+            <Pressable
+              key={opt.value}
+              onPress={() => onSelect(active ? '' : opt.value)}
+              style={[styles.chip, active && styles.chipActive]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
+
+  // A row that shows a label on the left and either a read-only Text or editable TextInput on the right
+  function InfoRow({
+    label,
+    value,
+    draftValue,
+    onChangeText,
+    keyboardType,
+    autoCapitalize,
+    last,
+    leftIcon,
+  }: {
+    label: string;
+    value: string;
+    draftValue?: string;
+    onChangeText?: (v: string) => void;
+    keyboardType?: 'default' | 'phone-pad' | 'email-address';
+    autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+    last?: boolean;
+    leftIcon?: React.ComponentProps<typeof Ionicons>['name'];
+  }) {
+    return (
+      <View style={[styles.infoRow, last && styles.infoRowLast]}>
+        {leftIcon ? (
+          <View style={styles.infoLabelWithIcon}>
+            <Ionicons name={leftIcon} size={13} color={colors.text.muted} />
+            <Text style={styles.infoLabel}>{label}</Text>
+          </View>
+        ) : (
+          <Text style={styles.infoLabel}>{label}</Text>
+        )}
+        {isEditing && draftValue !== undefined && onChangeText ? (
+          <TextInput
+            style={[styles.infoValue, styles.infoInput]}
+            value={draftValue}
+            onChangeText={onChangeText}
+            keyboardType={keyboardType ?? 'default'}
+            autoCapitalize={autoCapitalize ?? 'sentences'}
+            placeholderTextColor={colors.text.muted}
+            placeholder="—"
+          />
+        ) : (
+          <Text style={styles.infoValue}>{value || '—'}</Text>
+        )}
+      </View>
+    );
+  }
+
+  const addresses =
+    isEditing && draft ? draft.addresses : profile.addresses?.length > 0 ? profile.addresses : [''];
 
   return (
     <>
@@ -338,297 +535,244 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Visual Identity</Text>
 
-          {isEditing && draft ? (
-            <>
-              <FloatingInput
-                label="Brand Name"
-                value={draft.brandName}
-                onChangeText={(v) => updateDraft({ brandName: v })}
-                accessibilityLabel="Brand name"
-                autoCapitalize="words"
-              />
-              <FloatingInput
-                label="Slogan / Motto (optional)"
-                value={draft.slogan}
-                onChangeText={(v) => updateDraft({ slogan: v })}
-                accessibilityLabel="Brand slogan"
-                autoCapitalize="sentences"
-              />
-              <Text style={styles.fieldLabel}>Colour Palette</Text>
-              <RgbColorPicker
-                label="Primary"
-                value={draft.primaryColor}
-                onChange={(v) => updateDraft({ primaryColor: v })}
-              />
-              <RgbColorPicker
-                label="Secondary"
-                value={draft.secondaryColor}
-                onChange={(v) => updateDraft({ secondaryColor: v })}
-              />
-              <RgbColorPicker
-                label="Accent"
-                value={draft.accentColor}
-                onChange={(v) => updateDraft({ accentColor: v })}
-              />
-            </>
-          ) : (
-            <>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Brand Name</Text>
-                <Text style={styles.infoValue}>{profile.brandName || '—'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Slogan</Text>
-                <Text style={styles.infoValue}>{profile.slogan || '—'}</Text>
-              </View>
-              <View style={[styles.infoRow, styles.infoRowLast]}>
-                <Text style={styles.infoLabel}>Colours</Text>
-                {[profile.primaryColor, profile.secondaryColor, profile.accentColor].some(
-                  Boolean
-                ) ? (
-                  <View style={styles.colorSwatches}>
-                    {[profile.primaryColor, profile.secondaryColor, profile.accentColor]
-                      .filter(Boolean)
-                      .map((c, i) => (
-                        <View key={i} style={[styles.colorSwatch, { backgroundColor: c! }]} />
-                      ))}
-                  </View>
-                ) : (
-                  <Text style={styles.infoValue}>—</Text>
+          <InfoRow
+            label="Brand Name"
+            value={profile.brandName}
+            draftValue={draft?.brandName}
+            onChangeText={(v) => updateDraft({ brandName: v })}
+            autoCapitalize="words"
+          />
+          <InfoRow
+            label="Slogan"
+            value={profile.slogan ?? ''}
+            draftValue={draft?.slogan}
+            onChangeText={(v) => updateDraft({ slogan: v })}
+          />
+
+          {/* Colours — always stacked rows; edit mode adds tappable swatch + inline panel */}
+          {COLOR_KEYS.map(({ key, label }, i) => {
+            const colorValue = isEditing && draft ? draft[key] : profile[key];
+            const isLast = i === COLOR_KEYS.length - 1;
+            const isPanelOpen = isEditing && openColorKey === key;
+            return (
+              <React.Fragment key={key}>
+                <View style={[styles.infoRow, isLast && !isPanelOpen && styles.infoRowLast]}>
+                  <Text style={styles.infoLabel}>{label}</Text>
+                  {isEditing && draft ? (
+                    <Pressable
+                      onPress={() => setOpenColorKey(isPanelOpen ? null : key)}
+                      style={styles.colorValueRow}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${label} colour`}
+                    >
+                      <View
+                        style={[styles.colorSwatch, { backgroundColor: colorValue || '#808080' }]}
+                      />
+                      <Text style={styles.colorHexText}>{colorValue || '—'}</Text>
+                      <Ionicons
+                        name={isPanelOpen ? 'chevron-up' : 'chevron-down'}
+                        size={12}
+                        color={colors.text.muted}
+                      />
+                    </Pressable>
+                  ) : colorValue ? (
+                    <View style={styles.colorValueRow}>
+                      <View style={[styles.colorSwatch, { backgroundColor: colorValue }]} />
+                      <Text style={styles.colorHexText}>{colorValue}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.infoValue}>—</Text>
+                  )}
+                </View>
+                {isPanelOpen && draft && (
+                  <ColorEditPanel value={draft[key]} onChange={(v) => updateDraft({ [key]: v })} />
                 )}
-              </View>
-            </>
-          )}
+              </React.Fragment>
+            );
+          })}
         </View>
 
         {/* ── Business DNA ── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Business DNA</Text>
 
-          {isEditing && draft ? (
-            <>
-              <Text style={styles.fieldLabel}>Business Domain</Text>
-              <ChipSelector
-                options={DOMAIN_OPTIONS}
-                selected={draft.businessDomain}
-                onSelect={(v) => updateDraft({ businessDomain: v })}
-                accessibilityLabel="Select your business domain"
-              />
-              <FloatingInput
-                label="Target Audience"
-                value={draft.targetAudience}
-                onChangeText={(v) => updateDraft({ targetAudience: v })}
-                accessibilityLabel="Target audience"
-                autoCapitalize="sentences"
-              />
-              <Text style={styles.fieldLabel}>Atmosphere (optional)</Text>
-              <ChipSelector
-                options={ATMOSPHERE_OPTIONS}
-                selected={draft.atmosphere}
-                onSelect={(v) => updateDraft({ atmosphere: v })}
-                accessibilityLabel="Select atmosphere"
-              />
-              <Text style={styles.fieldLabel}>Shop Type</Text>
-              <ChipSelector
-                options={SHOP_TYPE_OPTIONS}
-                selected={draft.shopType}
-                onSelect={(v) => updateDraft({ shopType: v })}
-                accessibilityLabel="Select shop type"
-              />
-              <FloatingInput
-                label="Competitors (optional)"
-                value={draft.competitors}
-                onChangeText={(v) => updateDraft({ competitors: v })}
-                accessibilityLabel="Competitors"
-                autoCapitalize="words"
-              />
-            </>
-          ) : (
-            <>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Domain</Text>
-                {profile.businessDomain ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>
-                      {labelFor(DOMAIN_OPTIONS, profile.businessDomain)}
-                    </Text>
-                  </View>
-                ) : (
-                  <Text style={styles.infoValue}>—</Text>
-                )}
+          <View style={[styles.infoRow, isEditing && styles.infoRowLast]}>
+            <Text style={styles.infoLabel}>Domain</Text>
+            {(isEditing ? draft?.businessDomain : profile.businessDomain) ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {labelFor(
+                    DOMAIN_OPTIONS,
+                    (isEditing ? draft?.businessDomain : profile.businessDomain) ?? ''
+                  )}
+                </Text>
               </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Target Audience</Text>
-                <Text style={styles.infoValue}>{profile.targetAudience || '—'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Atmosphere</Text>
-                {profile.atmosphere ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>
-                      {labelFor(ATMOSPHERE_OPTIONS, profile.atmosphere)}
-                    </Text>
-                  </View>
-                ) : (
-                  <Text style={styles.infoValue}>—</Text>
-                )}
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Shop Type</Text>
-                {profile.shopType ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>
-                      {labelFor(SHOP_TYPE_OPTIONS, profile.shopType)}
-                    </Text>
-                  </View>
-                ) : (
-                  <Text style={styles.infoValue}>—</Text>
-                )}
-              </View>
-              <View style={[styles.infoRow, styles.infoRowLast]}>
-                <Text style={styles.infoLabel}>Competitors</Text>
-                <Text style={styles.infoValue}>{profile.competitors || '—'}</Text>
-              </View>
-            </>
+            ) : (
+              <Text style={styles.infoValue}>—</Text>
+            )}
+          </View>
+          {isEditing && draft && (
+            <ChipRow
+              options={DOMAIN_OPTIONS}
+              selected={draft.businessDomain}
+              onSelect={(v) => updateDraft({ businessDomain: v })}
+            />
           )}
+
+          <InfoRow
+            label="Target Audience"
+            value={profile.targetAudience}
+            draftValue={draft?.targetAudience}
+            onChangeText={(v) => updateDraft({ targetAudience: v })}
+          />
+
+          <View style={[styles.infoRow, isEditing && styles.infoRowLast]}>
+            <Text style={styles.infoLabel}>Atmosphere</Text>
+            {(isEditing ? draft?.atmosphere : profile.atmosphere) ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {labelFor(
+                    ATMOSPHERE_OPTIONS,
+                    (isEditing ? draft?.atmosphere : profile.atmosphere) ?? ''
+                  )}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.infoValue}>—</Text>
+            )}
+          </View>
+          {isEditing && draft && (
+            <ChipRow
+              options={ATMOSPHERE_OPTIONS}
+              selected={draft.atmosphere}
+              onSelect={(v) => updateDraft({ atmosphere: v })}
+            />
+          )}
+
+          <View style={[styles.infoRow, isEditing && styles.infoRowLast]}>
+            <Text style={styles.infoLabel}>Shop Type</Text>
+            {(isEditing ? draft?.shopType : profile.shopType) ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {labelFor(
+                    SHOP_TYPE_OPTIONS,
+                    (isEditing ? draft?.shopType : profile.shopType) ?? ''
+                  )}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.infoValue}>—</Text>
+            )}
+          </View>
+          {isEditing && draft && (
+            <ChipRow
+              options={SHOP_TYPE_OPTIONS}
+              selected={draft.shopType}
+              onSelect={(v) => updateDraft({ shopType: v })}
+            />
+          )}
+
+          <InfoRow
+            label="Competitors"
+            value={profile.competitors ?? ''}
+            draftValue={draft?.competitors}
+            onChangeText={(v) => updateDraft({ competitors: v })}
+            autoCapitalize="words"
+            last
+          />
         </View>
 
         {/* ── Contact & Social ── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact & Social</Text>
 
-          {isEditing && draft ? (
-            <>
-              <FloatingInput
-                label="Phone Number"
-                value={draft.phoneNumber}
-                onChangeText={(v) => updateDraft({ phoneNumber: v })}
-                keyboardType="phone-pad"
-                leftIcon="call-outline"
-                accessibilityLabel="Phone number"
-                autoCapitalize="none"
-              />
-              <FloatingInput
-                label="Email"
-                value={draft.email}
-                onChangeText={(v) => updateDraft({ email: v })}
-                keyboardType="email-address"
-                leftIcon="mail-outline"
-                accessibilityLabel="Business email"
-                autoCapitalize="none"
-              />
-              <Text style={styles.fieldLabel}>
-                {'Address' + (draft.addresses.length > 1 ? 'es' : '')}
+          <InfoRow
+            label="Phone"
+            value={profile.phoneNumber ?? ''}
+            draftValue={draft?.phoneNumber}
+            onChangeText={(v) => updateDraft({ phoneNumber: v })}
+            keyboardType="phone-pad"
+            autoCapitalize="none"
+          />
+          <InfoRow
+            label="Email"
+            value={profile.email ?? ''}
+            draftValue={draft?.email}
+            onChangeText={(v) => updateDraft({ email: v })}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+
+          {/* Addresses */}
+          {addresses.map((addr, i) => (
+            <View key={i} style={[styles.infoRow, isEditing && styles.infoRowEdit]}>
+              <Text style={styles.infoLabel}>
+                {addresses.length > 1 ? `Address ${i + 1}` : 'Address'}
               </Text>
-              {draft.addresses.map((addr, index) => (
-                <View key={index} style={styles.addressRow}>
-                  <View style={styles.addressInput}>
-                    <FloatingInput
-                      label={draft.addresses.length > 1 ? `Address ${index + 1}` : 'Address'}
-                      value={addr}
-                      onChangeText={(v) => updateAddress(index, v)}
-                      accessibilityLabel={`Address ${index + 1}`}
-                      autoCapitalize="words"
-                    />
-                  </View>
+              {isEditing && draft ? (
+                <View style={styles.addressEditRight}>
+                  <TextInput
+                    style={[styles.infoValue, styles.infoInput, styles.addressEditInput]}
+                    value={addr}
+                    onChangeText={(v) => updateAddress(i, v)}
+                    autoCapitalize="words"
+                    placeholder="—"
+                    placeholderTextColor={colors.text.muted}
+                  />
                   {draft.addresses.length > 1 && (
                     <Pressable
-                      onPress={() => removeAddress(index)}
-                      style={styles.removeButton}
+                      onPress={() => removeAddress(i)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Remove address ${index + 1}`}
+                      accessibilityLabel={`Remove address ${i + 1}`}
+                      style={styles.removeAddr}
                     >
-                      <Ionicons name="trash-outline" size={18} color={colors.text.muted} />
+                      <Ionicons name="trash-outline" size={15} color={colors.text.muted} />
                     </Pressable>
                   )}
                 </View>
-              ))}
-              <Pressable
-                onPress={addAddress}
-                style={styles.addButton}
-                accessibilityRole="button"
-                accessibilityLabel="Add another address"
-              >
-                <Ionicons name="add-circle-outline" size={16} color={colors.accent.primary} />
-                <Text style={styles.addButtonText}>Add another address</Text>
-              </Pressable>
-
-              <Text style={[styles.fieldLabel, { marginTop: D.spacing.sm }]}>
-                Social Media (optional)
-              </Text>
-              <FloatingInput
-                label="Instagram"
-                value={draft.instagramHandle}
-                onChangeText={(v) => updateDraft({ instagramHandle: v })}
-                leftIcon="logo-instagram"
-                accessibilityLabel="Instagram handle"
-                autoCapitalize="none"
-              />
-              <FloatingInput
-                label="Facebook"
-                value={draft.facebookHandle}
-                onChangeText={(v) => updateDraft({ facebookHandle: v })}
-                leftIcon="logo-facebook"
-                accessibilityLabel="Facebook page"
-                autoCapitalize="none"
-              />
-              <FloatingInput
-                label="TikTok"
-                value={draft.tikTokHandle}
-                onChangeText={(v) => updateDraft({ tikTokHandle: v })}
-                leftIcon="logo-tiktok"
-                accessibilityLabel="TikTok handle"
-                autoCapitalize="none"
-              />
-            </>
-          ) : (
-            <>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Phone</Text>
-                <Text style={styles.infoValue}>{profile.phoneNumber || '—'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>{profile.email || '—'}</Text>
-              </View>
-              {(profile.addresses?.length ?? 0) > 0 ? (
-                profile.addresses.map((addr, i) => (
-                  <View key={i} style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>
-                      {profile.addresses.length > 1 ? `Address ${i + 1}` : 'Address'}
-                    </Text>
-                    <Text style={styles.infoValue}>{addr || '—'}</Text>
-                  </View>
-                ))
               ) : (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Address</Text>
-                  <Text style={styles.infoValue}>—</Text>
-                </View>
+                <Text style={styles.infoValue}>{addr || '—'}</Text>
               )}
-              <View style={styles.infoRow}>
-                <View style={styles.infoLabelWithIcon}>
-                  <Ionicons name="logo-instagram" size={13} color={colors.text.muted} />
-                  <Text style={styles.infoLabel}>Instagram</Text>
-                </View>
-                <Text style={styles.infoValue}>{profile.instagramHandle || '—'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <View style={styles.infoLabelWithIcon}>
-                  <Ionicons name="logo-facebook" size={13} color={colors.text.muted} />
-                  <Text style={styles.infoLabel}>Facebook</Text>
-                </View>
-                <Text style={styles.infoValue}>{profile.facebookHandle || '—'}</Text>
-              </View>
-              <View style={[styles.infoRow, styles.infoRowLast]}>
-                <View style={styles.infoLabelWithIcon}>
-                  <Ionicons name="logo-tiktok" size={13} color={colors.text.muted} />
-                  <Text style={styles.infoLabel}>TikTok</Text>
-                </View>
-                <Text style={styles.infoValue}>{profile.tikTokHandle || '—'}</Text>
-              </View>
-            </>
+            </View>
+          ))}
+
+          {isEditing && (
+            <Pressable
+              onPress={addAddress}
+              style={styles.addAddrButton}
+              accessibilityRole="button"
+              accessibilityLabel="Add another address"
+            >
+              <Ionicons name="add-circle-outline" size={14} color={colors.accent.primary} />
+              <Text style={styles.addAddrText}>Add address</Text>
+            </Pressable>
           )}
+
+          <InfoRow
+            label="Instagram"
+            value={profile.instagramHandle ?? ''}
+            draftValue={draft?.instagramHandle}
+            onChangeText={(v) => updateDraft({ instagramHandle: v })}
+            autoCapitalize="none"
+            leftIcon="logo-instagram"
+          />
+          <InfoRow
+            label="Facebook"
+            value={profile.facebookHandle ?? ''}
+            draftValue={draft?.facebookHandle}
+            onChangeText={(v) => updateDraft({ facebookHandle: v })}
+            autoCapitalize="none"
+            leftIcon="logo-facebook"
+          />
+          <InfoRow
+            label="TikTok"
+            value={profile.tikTokHandle ?? ''}
+            draftValue={draft?.tikTokHandle}
+            onChangeText={(v) => updateDraft({ tikTokHandle: v })}
+            autoCapitalize="none"
+            leftIcon="logo-tiktok"
+            last
+          />
         </View>
 
         {/* ── Save Changes (edit mode only) ── */}
@@ -781,15 +925,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       letterSpacing: 0.8,
       marginBottom: D.spacing.md,
     },
-    fieldLabel: {
-      fontSize: D.fontSize.xs,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.text.muted,
-      textTransform: 'uppercase',
-      letterSpacing: 0.8,
-      marginBottom: D.spacing.sm,
-    },
-    // Info rows (view mode)
+    // Info rows
     infoRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -797,6 +933,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingVertical: D.spacing.sm,
       borderBottomWidth: 1,
       borderBottomColor: colors.border.default,
+    },
+    infoRowEdit: {
+      alignItems: 'center',
     },
     infoRowLast: {
       borderBottomWidth: 0,
@@ -809,7 +948,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     infoLabel: {
       fontSize: D.fontSize.sm,
-      color: colors.text.muted,
+      color: colors.text.secondary,
       flex: 1,
     },
     infoValue: {
@@ -817,6 +956,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.text.primary,
       flex: 2,
       textAlign: 'right',
+    },
+    infoInput: {
+      borderWidth: 1,
+      borderColor: colors.border.focus,
+      borderRadius: D.radius.sm,
+      paddingHorizontal: D.spacing.xs,
+      paddingVertical: 4,
+      textAlign: 'left',
     },
     badge: {
       backgroundColor: colors.accent.dim,
@@ -829,10 +976,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: D.fontWeight.semibold,
       color: colors.accent.primary,
     },
-    colorSwatches: {
-      flexDirection: 'row',
-      gap: D.spacing.xs,
-    },
     colorSwatch: {
       width: 20,
       height: 20,
@@ -840,31 +983,64 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderWidth: 1,
       borderColor: colors.border.default,
     },
-    // Address (edit mode)
-    addressRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: D.spacing.sm,
-    },
-    addressInput: {
-      flex: 1,
-    },
-    removeButton: {
-      width: 36,
-      height: 36,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: D.spacing.sm,
-    },
-    addButton: {
+    colorValueRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: D.spacing.xs,
-      paddingVertical: D.spacing.xs,
-      marginBottom: D.spacing.sm,
     },
-    addButtonText: {
-      fontSize: D.fontSize.sm,
+    colorHexText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.secondary,
+      fontFamily: 'monospace',
+    },
+    // Chip row (edit mode)
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: D.spacing.xs,
+      paddingBottom: D.spacing.sm,
+    },
+    chip: {
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: 4,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.elevated,
+    },
+    chipActive: {
+      backgroundColor: colors.accent.dim,
+      borderColor: colors.accent.primary,
+    },
+    chipText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+    },
+    chipTextActive: {
+      color: colors.accent.primary,
+      fontWeight: D.fontWeight.semibold,
+    },
+    // Address edit
+    addressEditRight: {
+      flex: 2,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.xs,
+    },
+    addressEditInput: {
+      flex: 1,
+    },
+    removeAddr: {
+      padding: 4,
+    },
+    addAddrButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingVertical: D.spacing.xs,
+    },
+    addAddrText: {
+      fontSize: D.fontSize.xs,
       color: colors.accent.primary,
       fontWeight: D.fontWeight.medium,
     },
@@ -915,44 +1091,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.semibold,
       color: '#fff',
-    },
-    // Bottom actions
-    themeRow: {
-      height: 50,
-      borderRadius: D.radius.md,
-      borderWidth: 1,
-      borderColor: colors.border.default,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: D.spacing.sm,
-      marginBottom: D.spacing.sm,
-    },
-    themeRowText: {
-      fontSize: D.fontSize.base,
-      fontWeight: D.fontWeight.medium,
-      color: colors.text.secondary,
-    },
-    logoutSection: {
-      marginTop: D.spacing.sm,
-      borderTopWidth: 1,
-      borderTopColor: colors.border.default,
-      paddingTop: D.spacing.md,
-    },
-    logoutButton: {
-      height: 50,
-      borderRadius: D.radius.md,
-      borderWidth: 1.5,
-      borderColor: colors.destructive,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: D.spacing.sm,
-    },
-    logoutText: {
-      fontSize: D.fontSize.base,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.destructive,
     },
   });
 }
