@@ -1,9 +1,10 @@
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { D } from '@/constants/design';
+import { useTheme } from '@/context/theme';
 
 type SocialProvider = 'google' | 'apple';
 
@@ -37,7 +38,9 @@ export function SocialButton({
   accessibilityHint,
   style,
 }: SocialButtonProps) {
+  const { colors } = useTheme();
   const config = PROVIDER_CONFIG[provider];
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   function handlePress() {
     if (Platform.OS !== 'web') {
@@ -61,39 +64,41 @@ export function SocialButton({
       accessibilityHint={accessibilityHint}
     >
       <View style={styles.inner}>
-        <Ionicons name={config.icon} size={config.iconSize} color={D.colors.text.primary} />
+        <Ionicons name={config.icon} size={config.iconSize} color={colors.text.primary} />
         <Text style={styles.label}>{config.label}</Text>
       </View>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    height: 52,
-    borderRadius: D.radius.md,
-    borderWidth: 1,
-    borderColor: D.colors.social.border,
-    backgroundColor: D.colors.bg.input,
-    justifyContent: 'center',
-    alignItems: 'center',
-    outlineWidth: 0,
-  },
-  inner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  label: {
-    fontSize: D.fontSize.base,
-    fontWeight: D.fontWeight.medium,
-    color: D.colors.text.primary,
-  },
-  pressed: {
-    opacity: 0.7,
-    backgroundColor: D.colors.accent.dim,
-  },
-  disabled: {
-    opacity: 0.4,
-  },
-});
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    container: {
+      height: 52,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.social.border,
+      backgroundColor: colors.bg.input,
+      justifyContent: 'center',
+      alignItems: 'center',
+      outlineWidth: 0,
+    },
+    inner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    label: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.primary,
+    },
+    pressed: {
+      opacity: 0.7,
+      backgroundColor: colors.accent.dim,
+    },
+    disabled: {
+      opacity: 0.4,
+    },
+  });
+}

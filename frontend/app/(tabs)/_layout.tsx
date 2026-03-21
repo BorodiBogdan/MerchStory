@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
@@ -8,13 +8,16 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { LogoutModal } from '@/components/ui/LogoutModal';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
+import { useTheme } from '@/context/theme';
 
 export default function TabLayout() {
   const { token, isLoading, signOut } = useAuth();
+  const { colors, colorScheme, toggleTheme } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   if (isLoading) {
-    return <ActivityIndicator style={styles.loading} size="large" color={D.colors.accent.primary} />;
+    return <ActivityIndicator style={styles.loading} size="large" color={colors.accent.primary} />;
   }
 
   if (!token) {
@@ -27,32 +30,46 @@ export default function TabLayout() {
   }
 
   const headerRight = () => (
-    <Pressable
-      onPress={() => setModalVisible(true)}
-      style={styles.avatarButton}
-      accessibilityLabel="Open account menu"
-      accessibilityRole="button"
-      accessibilityHint="Opens sign out options"
-    >
-      <View style={styles.avatarChip}>
-        <Ionicons name="person-circle-outline" size={22} color={D.colors.text.secondary} />
-      </View>
-    </Pressable>
+    <View style={styles.headerActions}>
+      <Pressable
+        onPress={toggleTheme}
+        style={styles.themeButton}
+        accessibilityLabel={colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        accessibilityRole="button"
+      >
+        <Ionicons
+          name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
+          size={20}
+          color={colors.text.secondary}
+        />
+      </Pressable>
+      <Pressable
+        onPress={() => setModalVisible(true)}
+        style={styles.avatarButton}
+        accessibilityLabel="Open account menu"
+        accessibilityRole="button"
+        accessibilityHint="Opens sign out options"
+      >
+        <View style={styles.avatarChip}>
+          <Ionicons name="person-circle-outline" size={22} color={colors.text.secondary} />
+        </View>
+      </Pressable>
+    </View>
   );
 
   return (
     <>
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: D.colors.accent.primary,
-          tabBarInactiveTintColor: D.colors.text.muted,
+          tabBarActiveTintColor: colors.accent.primary,
+          tabBarInactiveTintColor: colors.text.muted,
           headerShown: true,
-          headerStyle: { backgroundColor: D.colors.bg.surface },
-          headerTintColor: D.colors.text.primary,
+          headerStyle: { backgroundColor: colors.bg.surface },
+          headerTintColor: colors.text.primary,
           headerShadowVisible: false,
           tabBarStyle: {
-            backgroundColor: D.colors.bg.surface,
-            borderTopColor: D.colors.border.default,
+            backgroundColor: colors.bg.surface,
+            borderTopColor: colors.border.default,
             borderTopWidth: 1,
           },
           tabBarButton: HapticTab,
@@ -84,23 +101,38 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    backgroundColor: D.colors.bg.base,
-  },
-  avatarButton: {
-    marginRight: D.spacing.md,
-    outlineWidth: 0,
-  },
-  avatarChip: {
-    width: 34,
-    height: 34,
-    borderRadius: D.radius.pill,
-    backgroundColor: D.colors.accent.dim,
-    borderWidth: 1,
-    borderColor: D.colors.border.focus,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    loading: {
+      flex: 1,
+      backgroundColor: colors.bg.base,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginRight: D.spacing.md,
+      gap: D.spacing.sm,
+    },
+    themeButton: {
+      width: 34,
+      height: 34,
+      borderRadius: D.radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      outlineWidth: 0,
+    },
+    avatarButton: {
+      outlineWidth: 0,
+    },
+    avatarChip: {
+      width: 34,
+      height: 34,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.border.focus,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });
+}

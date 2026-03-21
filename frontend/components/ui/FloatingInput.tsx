@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import React, { ComponentProps, useEffect, useRef, useState } from 'react';
+import React, { ComponentProps, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, TextInputProps, View } from 'react-native';
 import Animated, {
   Easing,
@@ -12,6 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { D } from '@/constants/design';
+import { useTheme } from '@/context/theme';
 
 const LEFT_ICON_OFFSET = 28; // icon(20) + gap(8)
 
@@ -52,6 +53,7 @@ export function FloatingInput({
   accessibilityLabel,
   accessibilityHint,
 }: FloatingInputProps) {
+  const { colors } = useTheme();
   const inputRef = useRef<TextInput>(null);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -80,12 +82,12 @@ export function FloatingInput({
 
   const containerAnimStyle = useAnimatedStyle(() => {
     const borderColor = error
-      ? D.colors.border.error
-      : interpolateColor(isFocused.value, [0, 1], [D.colors.border.default, D.colors.border.focus]);
+      ? colors.border.error
+      : interpolateColor(isFocused.value, [0, 1], [colors.border.default, colors.border.focus]);
     const backgroundColor = interpolateColor(
       isFocused.value,
       [0, 1],
-      [D.colors.bg.input, D.colors.bg.inputFocus],
+      [colors.bg.input, colors.bg.inputFocus],
     );
     return { borderColor, backgroundColor };
   });
@@ -99,12 +101,10 @@ export function FloatingInput({
     const color = interpolateColor(
       isFocused.value,
       [0, 1],
-      [D.colors.text.muted, D.colors.text.labelActive],
+      [colors.text.muted, colors.text.labelActive],
     );
     return {
-      // Label starts at top:0 of the 58px inputWrapper.
-      // translateY:20 centers it visually; translateY:6 floats it near the top.
-      color: shouldFloat ? D.colors.text.labelActive : color,
+      color: shouldFloat ? colors.text.labelActive : color,
       transform: [
         { translateY: withTiming(floated ? 6 : 19, { duration: D.duration.normal, easing: Easing.out(Easing.cubic) }) },
         { scale: withTiming(floated ? 0.75 : 1, { duration: D.duration.normal, easing: Easing.out(Easing.cubic) }) },
@@ -127,6 +127,8 @@ export function FloatingInput({
     }
   }
 
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   return (
     <View style={styles.wrapper}>
       <Animated.View style={shakeStyle}>
@@ -136,7 +138,7 @@ export function FloatingInput({
               <Ionicons
                 name={leftIcon}
                 size={20}
-                color={D.colors.text.muted}
+                color={colors.text.muted}
                 style={styles.leftIcon}
               />
             )}
@@ -176,7 +178,7 @@ export function FloatingInput({
                 <Ionicons
                   name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                   size={20}
-                  color={D.colors.text.muted}
+                  color={colors.text.muted}
                 />
               </Pressable>
             )}
@@ -185,7 +187,7 @@ export function FloatingInput({
       </Animated.View>
       {!!error && (
         <View style={styles.errorRow}>
-          <Ionicons name="alert-circle-outline" size={12} color={D.colors.text.error} />
+          <Ionicons name="alert-circle-outline" size={12} color={colors.text.error} />
           <Animated.Text style={styles.errorText}>{error}</Animated.Text>
         </View>
       )}
@@ -193,59 +195,59 @@ export function FloatingInput({
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    marginBottom: D.spacing.md,
-  },
-  container: {
-    height: 58,
-    borderWidth: 1.5,
-    borderRadius: D.radius.md,
-    paddingHorizontal: D.spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  leftIcon: {
-    marginRight: D.spacing.md,
-    alignSelf: 'flex-end',
-    marginBottom: 18,
-  },
-  inputWrapper: {
-    flex: 1,
-    alignSelf: 'stretch',
-    justifyContent: 'flex-end',
-    paddingBottom: 16,
-    position: 'relative',
-  },
-  label: {
-    position: 'absolute',
-    top: 0,
-    fontSize: D.fontSize.base,
-    transformOrigin: 'left center',
-  },
-  textInput: {
-    // No flex:1 — let the TextInput be its natural single-line height (~21px),
-    // centered by the wrapper's justifyContent:'center' + paddingTop:16
-    fontSize: D.fontSize.base,
-    color: D.colors.text.primary,
-    backgroundColor: 'transparent',
-    paddingVertical: 0,
-  },
-  eyeButton: {
-    paddingLeft: D.spacing.sm,
-    outlineWidth: 0,
-    alignSelf: 'flex-end',
-    marginBottom: 18,
-  },
-  errorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-    marginLeft: D.spacing.md,
-  },
-  errorText: {
-    fontSize: D.fontSize.xs,
-    color: D.colors.text.error,
-  },
-});
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    wrapper: {
+      marginBottom: D.spacing.md,
+    },
+    container: {
+      height: 58,
+      borderWidth: 1.5,
+      borderRadius: D.radius.md,
+      paddingHorizontal: D.spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    leftIcon: {
+      marginRight: D.spacing.md,
+      alignSelf: 'flex-end',
+      marginBottom: 18,
+    },
+    inputWrapper: {
+      flex: 1,
+      alignSelf: 'stretch',
+      justifyContent: 'flex-end',
+      paddingBottom: 16,
+      position: 'relative',
+    },
+    label: {
+      position: 'absolute',
+      top: 0,
+      fontSize: D.fontSize.base,
+      transformOrigin: 'left center',
+    },
+    textInput: {
+      fontSize: D.fontSize.base,
+      color: colors.text.primary,
+      backgroundColor: 'transparent',
+      paddingVertical: 0,
+    },
+    eyeButton: {
+      paddingLeft: D.spacing.sm,
+      outlineWidth: 0,
+      alignSelf: 'flex-end',
+      marginBottom: 18,
+    },
+    errorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 4,
+      marginLeft: D.spacing.md,
+    },
+    errorText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.error,
+    },
+  });
+}

@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -26,6 +26,7 @@ import { FloatingInput } from '@/components/ui/FloatingInput';
 import { SocialButton } from '@/components/ui/SocialButton';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
+import { useTheme } from '@/context/theme';
 
 function validate(email: string, password: string) {
   const errors: { email?: string; password?: string } = {};
@@ -42,6 +43,7 @@ function validate(email: string, password: string) {
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
+  const { colors, colorScheme, toggleTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,6 +51,8 @@ export default function LoginScreen() {
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const emailErrorKey = useRef(0);
   const passwordErrorKey = useRef(0);
+
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(24);
@@ -113,6 +117,18 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <Pressable
+        onPress={toggleTheme}
+        style={styles.themeToggle}
+        accessibilityLabel={colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        accessibilityRole="button"
+      >
+        <Ionicons
+          name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
+          size={22}
+          color={colors.text.secondary}
+        />
+      </Pressable>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior="padding"
@@ -192,7 +208,7 @@ export default function LoginScreen() {
             {/* API error banner */}
             {!!apiError && (
               <View style={styles.errorBanner}>
-                <Ionicons name="alert-circle-outline" size={16} color={D.colors.text.error} />
+                <Ionicons name="alert-circle-outline" size={16} color={colors.text.error} />
                 <Text style={styles.errorBannerText}>{apiError}</Text>
               </View>
             )}
@@ -239,169 +255,179 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: D.colors.bg.base,
-  },
-  flex: {
-    flex: 1,
-  },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: isWeb ? D.spacing.lg : D.spacing.lg,
-    paddingTop: isWeb ? D.spacing['2xl'] : D.spacing.xl,
-    paddingBottom: D.spacing.lg,
-    justifyContent: 'center',
-    alignItems: isWeb ? 'center' : 'stretch',
-  },
-  card: {
-    width: '100%',
-    ...(isWeb
-      ? {
-          maxWidth: 440,
-          backgroundColor: D.colors.bg.surface,
-          borderRadius: D.radius.xl,
-          borderWidth: 1,
-          borderColor: D.colors.border.default,
-          paddingHorizontal: D.spacing.xl,
-          paddingVertical: D.spacing['2xl'],
-          ...D.shadow.modal,
-        }
-      : {}),
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: D.spacing.xl,
-    gap: D.spacing.sm,
-  },
-  logoMark: {
-    width: 56,
-    height: 56,
-    borderRadius: D.radius.lg,
-    backgroundColor: D.colors.accent.dim,
-    borderWidth: 1.5,
-    borderColor: D.colors.accent.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoGlyph: {
-    fontSize: D.fontSize['2xl'],
-    fontWeight: D.fontWeight.bold,
-    color: D.colors.accent.secondary,
-  },
-  logoText: {
-    fontSize: D.fontSize.sm,
-    fontWeight: D.fontWeight.semibold,
-    color: D.colors.text.muted,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
-  heading: {
-    fontSize: D.fontSize['2xl'],
-    fontWeight: D.fontWeight.bold,
-    color: D.colors.text.primary,
-    textAlign: 'center',
-    marginBottom: D.spacing.xs,
-  },
-  subheading: {
-    fontSize: D.fontSize.sm,
-    color: D.colors.text.secondary,
-    textAlign: 'center',
-    marginBottom: D.spacing.xl,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    gap: D.spacing.sm,
-    marginBottom: D.spacing.lg,
-  },
-  socialFlex: {
-    flex: 1,
-  },
-  orRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: D.spacing.sm,
-    marginBottom: D.spacing.lg,
-  },
-  orLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: D.colors.border.default,
-  },
-  orText: {
-    fontSize: D.fontSize.xs,
-    color: D.colors.text.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: D.spacing.sm,
-    backgroundColor: 'rgba(239,68,68,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.25)',
-    borderRadius: D.radius.sm,
-    paddingHorizontal: D.spacing.md,
-    paddingVertical: D.spacing.sm,
-    marginBottom: D.spacing.md,
-  },
-  errorBannerText: {
-    flex: 1,
-    fontSize: D.fontSize.sm,
-    color: D.colors.text.error,
-    lineHeight: 18,
-  },
-  primaryButton: {
-    height: 54,
-    borderRadius: D.radius.md,
-    backgroundColor: D.colors.accent.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: D.spacing.sm,
-    marginBottom: D.spacing.sm,
-    outlineWidth: 0,
-    ...D.shadow.glow,
-  },
-  primaryButtonDisabled: {
-    opacity: 0.45,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  primaryButtonPressed: {
-    opacity: 0.88,
-    backgroundColor: D.colors.accent.secondary,
-  },
-  primaryButtonText: {
-    fontSize: D.fontSize.base,
-    fontWeight: D.fontWeight.semibold,
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-  },
-  forgotButton: {
-    alignSelf: 'center',
-    paddingVertical: D.spacing.sm,
-    marginBottom: D.spacing.lg,
-    outlineWidth: 0,
-  },
-  forgotText: {
-    fontSize: D.fontSize.sm,
-    color: D.colors.text.secondary,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: D.fontSize.sm,
-    color: D.colors.text.muted,
-  },
-  footerLink: {
-    fontSize: D.fontSize.sm,
-    color: D.colors.accent.secondary,
-    fontWeight: D.fontWeight.semibold,
-    outlineWidth: 0,
-  },
-});
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: colors.bg.base,
+    },
+    themeToggle: {
+      position: 'absolute',
+      top: D.spacing.md,
+      right: D.spacing.md,
+      zIndex: 10,
+      padding: D.spacing.sm,
+      outlineWidth: 0,
+    },
+    flex: {
+      flex: 1,
+    },
+    scroll: {
+      flexGrow: 1,
+      paddingHorizontal: isWeb ? D.spacing.lg : D.spacing.lg,
+      paddingTop: isWeb ? D.spacing['2xl'] : D.spacing.xl,
+      paddingBottom: D.spacing.lg,
+      justifyContent: 'center',
+      alignItems: isWeb ? 'center' : 'stretch',
+    },
+    card: {
+      width: '100%',
+      ...(isWeb
+        ? {
+            maxWidth: 440,
+            backgroundColor: colors.bg.surface,
+            borderRadius: D.radius.xl,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            paddingHorizontal: D.spacing.xl,
+            paddingVertical: D.spacing['2xl'],
+            ...D.shadow.modal,
+          }
+        : {}),
+    },
+    logoContainer: {
+      alignItems: 'center',
+      marginBottom: D.spacing.xl,
+      gap: D.spacing.sm,
+    },
+    logoMark: {
+      width: 56,
+      height: 56,
+      borderRadius: D.radius.lg,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1.5,
+      borderColor: colors.accent.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    logoGlyph: {
+      fontSize: D.fontSize['2xl'],
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.secondary,
+    },
+    logoText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.muted,
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+    },
+    heading: {
+      fontSize: D.fontSize['2xl'],
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      textAlign: 'center',
+      marginBottom: D.spacing.xs,
+    },
+    subheading: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
+      textAlign: 'center',
+      marginBottom: D.spacing.xl,
+    },
+    socialRow: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+      marginBottom: D.spacing.lg,
+    },
+    socialFlex: {
+      flex: 1,
+    },
+    orRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      marginBottom: D.spacing.lg,
+    },
+    orLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: colors.border.default,
+    },
+    orText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 1,
+    },
+    errorBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      backgroundColor: 'rgba(239,68,68,0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(239,68,68,0.25)',
+      borderRadius: D.radius.sm,
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: D.spacing.sm,
+      marginBottom: D.spacing.md,
+    },
+    errorBannerText: {
+      flex: 1,
+      fontSize: D.fontSize.sm,
+      color: colors.text.error,
+      lineHeight: 18,
+    },
+    primaryButton: {
+      height: 54,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: D.spacing.sm,
+      marginBottom: D.spacing.sm,
+      outlineWidth: 0,
+      ...D.shadow.glow,
+    },
+    primaryButtonDisabled: {
+      opacity: 0.45,
+      shadowOpacity: 0,
+      elevation: 0,
+    },
+    primaryButtonPressed: {
+      opacity: 0.88,
+      backgroundColor: colors.accent.secondary,
+    },
+    primaryButtonText: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+      color: '#FFFFFF',
+      letterSpacing: 0.3,
+    },
+    forgotButton: {
+      alignSelf: 'center',
+      paddingVertical: D.spacing.sm,
+      marginBottom: D.spacing.lg,
+      outlineWidth: 0,
+    },
+    forgotText: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
+    },
+    footer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    footerText: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+    },
+    footerLink: {
+      fontSize: D.fontSize.sm,
+      color: colors.accent.secondary,
+      fontWeight: D.fontWeight.semibold,
+      outlineWidth: 0,
+    },
+  });
+}
