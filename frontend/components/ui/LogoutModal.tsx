@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { D } from '@/constants/design';
+import { useTheme } from '@/context/theme';
 
 interface LogoutModalProps {
   visible: boolean;
@@ -18,8 +19,10 @@ interface LogoutModalProps {
 }
 
 export function LogoutModal({ visible, onConfirm, onDismiss }: LogoutModalProps) {
+  const { colors } = useTheme();
   const [internalVisible, setInternalVisible] = useState(false);
   const translateY = useSharedValue(500);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useEffect(() => {
     if (visible) {
@@ -29,17 +32,13 @@ export function LogoutModal({ visible, onConfirm, onDismiss }: LogoutModalProps)
         easing: Easing.out(Easing.cubic),
       });
     } else {
-      translateY.value = withTiming(
-        500,
-        { duration: D.duration.normal },
-        (finished) => {
-          if (finished) {
-            runOnJS(setInternalVisible)(false);
-          }
-        },
-      );
+      translateY.value = withTiming(500, { duration: D.duration.normal }, (finished) => {
+        if (finished) {
+          runOnJS(setInternalVisible)(false);
+        }
+      });
     }
-  }, [visible]);
+  }, [visible, translateY]);
 
   const cardAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -75,7 +74,7 @@ export function LogoutModal({ visible, onConfirm, onDismiss }: LogoutModalProps)
           <View style={styles.handle} />
 
           <Text style={styles.title}>Sign out?</Text>
-          <Text style={styles.subtitle}>You'll need to sign in again to access your account.</Text>
+          <Text style={styles.subtitle}>You&apos;ll need to sign in again to access your account.</Text>
 
           <Pressable
             onPress={handleConfirm}
@@ -100,89 +99,91 @@ export function LogoutModal({ visible, onConfirm, onDismiss }: LogoutModalProps)
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-  },
-  overlayFill: {
-    flex: 1,
-  },
-  sheetAnchor: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  card: {
-    backgroundColor: D.colors.bg.elevated,
-    borderTopLeftRadius: D.radius.xl,
-    borderTopRightRadius: D.radius.xl,
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: D.colors.border.subtle,
-    paddingHorizontal: D.spacing.lg,
-    paddingTop: D.spacing.md,
-    paddingBottom: 40,
-    overflow: 'visible',
-    ...D.shadow.modal,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: D.colors.text.muted,
-    alignSelf: 'center',
-    marginBottom: D.spacing.lg,
-  },
-  title: {
-    fontSize: D.fontSize.xl,
-    fontWeight: D.fontWeight.bold,
-    color: D.colors.text.primary,
-    marginBottom: D.spacing.xs,
-  },
-  subtitle: {
-    fontSize: D.fontSize.sm,
-    color: D.colors.text.secondary,
-    marginBottom: D.spacing.lg,
-    lineHeight: 20,
-  },
-  confirmButton: {
-    height: 52,
-    borderRadius: D.radius.md,
-    backgroundColor: D.colors.destructive,
-    alignItems: 'center',
-    justifyContent: 'center',
-    outlineWidth: 0,
-    ...D.shadow.sm,
-  },
-  confirmPressed: {
-    opacity: 0.85,
-  },
-  confirmText: {
-    fontSize: D.fontSize.base,
-    fontWeight: D.fontWeight.semibold,
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
-  },
-  cancelButton: {
-    height: 52,
-    borderRadius: D.radius.md,
-    backgroundColor: D.colors.bg.input,
-    borderWidth: 1,
-    borderColor: D.colors.border.default,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: D.spacing.sm,
-    outlineWidth: 0,
-  },
-  cancelPressed: {
-    opacity: 0.7,
-  },
-  cancelText: {
-    fontSize: D.fontSize.base,
-    fontWeight: D.fontWeight.medium,
-    color: D.colors.text.secondary,
-  },
-});
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    overlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    overlayFill: {
+      flex: 1,
+    },
+    sheetAnchor: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
+    card: {
+      backgroundColor: colors.bg.elevated,
+      borderTopLeftRadius: D.radius.xl,
+      borderTopRightRadius: D.radius.xl,
+      borderTopWidth: 1,
+      borderLeftWidth: 1,
+      borderRightWidth: 1,
+      borderColor: colors.border.subtle,
+      paddingHorizontal: D.spacing.lg,
+      paddingTop: D.spacing.md,
+      paddingBottom: 40,
+      overflow: 'visible',
+      ...D.shadow.modal,
+    },
+    handle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.text.muted,
+      alignSelf: 'center',
+      marginBottom: D.spacing.lg,
+    },
+    title: {
+      fontSize: D.fontSize.xl,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      marginBottom: D.spacing.xs,
+    },
+    subtitle: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
+      marginBottom: D.spacing.lg,
+      lineHeight: 20,
+    },
+    confirmButton: {
+      height: 52,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.destructive,
+      alignItems: 'center',
+      justifyContent: 'center',
+      outlineWidth: 0,
+      ...D.shadow.sm,
+    },
+    confirmPressed: {
+      opacity: 0.85,
+    },
+    confirmText: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+      color: '#FFFFFF',
+      letterSpacing: 0.2,
+    },
+    cancelButton: {
+      height: 52,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.bg.input,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: D.spacing.sm,
+      outlineWidth: 0,
+    },
+    cancelPressed: {
+      opacity: 0.7,
+    },
+    cancelText: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
+    },
+  });
+}

@@ -10,8 +10,9 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
         {/* Required for expo-router web scroll behaviour */}
         <ScrollViewStyleReset />
-        <style dangerouslySetInnerHTML={{
-          __html: `
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
             /* Override browser autofill background on all inputs.
                #222632 = rgba(255,255,255,0.05) composited over the card surface #161B27. */
             input:-webkit-autofill,
@@ -23,7 +24,8 @@ export default function Root({ children }: { children: React.ReactNode }) {
               transition: background-color 5000s ease-in-out 0s;
             }
           `,
-        }} />
+          }}
+        />
       </head>
       <body>{children}</body>
     </html>
