@@ -1,10 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -47,12 +49,24 @@ public class AuthEndpointTests : IDisposable
                     ["Jwt:Issuer"] = "MerchStory",
                     ["Jwt:Audience"] = "MerchStoryApp",
                     ["Jwt:ExpiryMinutes"] = "60",
+                    ["Jwt:MobileRefreshTokenExpiryDays"] = "30",
+                    ["Jwt:WebRefreshTokenExpiryDays"] = "1",
                     ["Google:ApiKey"] = "test-key",
                 });
             });
 
             builder.ConfigureServices(services =>
             {
+                services.RemoveAll<DbContextOptions<AppDbContext>>();
+                services.RemoveAll<AppDbContext>();
+                var dbName = "TestDb-Auth-" + Guid.NewGuid();
+                var inMemoryProvider = new ServiceCollection()
+                    .AddEntityFrameworkInMemoryDatabase()
+                    .BuildServiceProvider();
+                services.AddDbContext<AppDbContext>(options =>
+                    options.UseInMemoryDatabase(dbName)
+                           .UseInternalServiceProvider(inMemoryProvider));
+
                 services.RemoveAll<UserManager<AppUser>>();
                 services.AddSingleton(this.userManagerMock.Object);
 
