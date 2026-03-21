@@ -52,6 +52,7 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddMerchStoryImageGeneration();
 
 var app = builder.Build();

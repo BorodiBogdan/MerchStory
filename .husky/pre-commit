@@ -3,7 +3,7 @@
 ROOT="$(git rev-parse --show-toplevel)"
 
 echo ">>> Running frontend lint on staged files..."
-cd "$ROOT/frontend" && npx lint-staged --config "$ROOT/package.json"
+cd "$ROOT/frontend" && npx lint-staged
 
 echo ">>> Running backend format check..."
 cd "$ROOT"

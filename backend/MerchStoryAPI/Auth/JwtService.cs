@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using MerchStoryAPI.Models;
 using Microsoft.IdentityModel.Tokens;
@@ -20,7 +21,7 @@ public class JwtService
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(this.config["Jwt:Key"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var expiry = DateTime.UtcNow.AddMinutes(double.Parse(this.config["Jwt:ExpiryMinutes"] ?? "60", CultureInfo.InvariantCulture));
+        var expiry = DateTime.UtcNow.AddMinutes(double.Parse(this.config["Jwt:ExpiryMinutes"] ?? "15", CultureInfo.InvariantCulture));
 
         var claims = new[]
         {
@@ -38,5 +39,32 @@ public class JwtService
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public RefreshToken GenerateRefreshToken(string userId, string clientType)
+    {
+        var configKey = clientType == "web"
+            ? "Jwt:WebRefreshTokenExpiryDays"
+            : "Jwt:MobileRefreshTokenExpiryDays";
+
+        var days = double.Parse(
+            this.config[configKey] ?? (clientType == "web" ? "1" : "30"),
+            CultureInfo.InvariantCulture);
+
+        byte[] tokenBytes = RandomNumberGenerator.GetBytes(32);
+        string tokenValue = Convert.ToBase64String(tokenBytes)
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+
+        return new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            Token = tokenValue,
+            UserId = userId,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(days),
+            IsRevoked = false,
+        };
     }
 }

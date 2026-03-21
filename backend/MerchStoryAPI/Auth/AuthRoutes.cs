@@ -1,5 +1,7 @@
+using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace MerchStoryAPI.Auth;
 
@@ -13,6 +15,7 @@ public static class AuthRoutes
             RegisterRequest request,
             UserManager<AppUser> userManager,
             JwtService jwtService,
+            AppDbContext db,
             ILogger<Program> logger) =>
         {
             var user = new AppUser
@@ -33,8 +36,13 @@ public static class AuthRoutes
             }
 
             logger.LogInformation("User registered: {Email}", request.Email);
-            var token = jwtService.GenerateToken(user);
-            return Results.Ok(new AuthResponse(token, user.Email!, user.UserName!));
+            var accessToken = jwtService.GenerateToken(user);
+            var refreshToken = jwtService.GenerateRefreshToken(user.Id, request.ClientType ?? "mobile");
+
+            db.RefreshTokens.Add(refreshToken);
+            await db.SaveChangesAsync();
+
+            return Results.Ok(new AuthResponse(accessToken, refreshToken.Token, user.Email!, user.UserName!));
         });
 
         group.MapPost("/login", async (
@@ -42,6 +50,7 @@ public static class AuthRoutes
             UserManager<AppUser> userManager,
             SignInManager<AppUser> signInManager,
             JwtService jwtService,
+            AppDbContext db,
             ILogger<Program> logger) =>
         {
             var user = await userManager.FindByEmailAsync(request.Email);
@@ -59,8 +68,46 @@ public static class AuthRoutes
             }
 
             logger.LogInformation("User logged in: {Email}", request.Email);
-            var token = jwtService.GenerateToken(user);
-            return Results.Ok(new AuthResponse(token, user.Email!, user.UserName!));
+            var accessToken = jwtService.GenerateToken(user);
+            var refreshToken = jwtService.GenerateRefreshToken(user.Id, request.ClientType ?? "mobile");
+
+            db.RefreshTokens.Add(refreshToken);
+            await db.SaveChangesAsync();
+
+            return Results.Ok(new AuthResponse(accessToken, refreshToken.Token, user.Email!, user.UserName!));
+        });
+
+        group.MapPost("/refresh", async (
+            RefreshRequest request,
+            JwtService jwtService,
+            AppDbContext db,
+            ILogger<Program> logger) =>
+        {
+            var stored = await db.RefreshTokens
+                .Include(rt => rt.User)
+                .SingleOrDefaultAsync(rt => rt.Token == request.RefreshToken);
+
+            if (stored is null || stored.IsRevoked || stored.ExpiresAt <= DateTime.UtcNow)
+            {
+                logger.LogWarning("Refresh attempt with invalid/expired/revoked token.");
+                return Results.Unauthorized();
+            }
+
+            stored.IsRevoked = true;
+
+            var newAccessToken = jwtService.GenerateToken(stored.User);
+            var newRefreshToken = jwtService.GenerateRefreshToken(stored.UserId, "mobile");
+
+            db.RefreshTokens.Add(newRefreshToken);
+            await db.SaveChangesAsync();
+
+            logger.LogInformation("Token rotated for user {UserId}", stored.UserId);
+
+            return Results.Ok(new AuthResponse(
+                newAccessToken,
+                newRefreshToken.Token,
+                stored.User.Email!,
+                stored.User.UserName!));
         });
     }
 }
