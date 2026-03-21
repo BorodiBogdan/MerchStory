@@ -2,6 +2,7 @@ using System.Text;
 using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Shop;
 using MerchStoryImageGeneration.Extensions;
 using MerchStoryImageGeneration.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -68,6 +69,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapAuthEndpoints();
+app.MapShopEndpoints();
 
 app.MapPost("/generate-image", async (ImageGenerationRequest request, IImageGenerationService imageService, ILogger<Program> logger) =>
 {

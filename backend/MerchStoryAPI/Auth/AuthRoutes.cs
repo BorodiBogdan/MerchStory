@@ -42,7 +42,7 @@ public static class AuthRoutes
             db.RefreshTokens.Add(refreshToken);
             await db.SaveChangesAsync();
 
-            return Results.Ok(new AuthResponse(accessToken, refreshToken.Token, user.Email!, user.UserName!));
+            return Results.Ok(new AuthResponse(accessToken, refreshToken.Token, user.Email!, user.UserName!, false));
         });
 
         group.MapPost("/login", async (
@@ -74,7 +74,8 @@ public static class AuthRoutes
             db.RefreshTokens.Add(refreshToken);
             await db.SaveChangesAsync();
 
-            return Results.Ok(new AuthResponse(accessToken, refreshToken.Token, user.Email!, user.UserName!));
+            bool hasProfile = await db.ShopProfiles.AnyAsync(s => s.UserId == user.Id);
+            return Results.Ok(new AuthResponse(accessToken, refreshToken.Token, user.Email!, user.UserName!, hasProfile));
         });
 
         group.MapPost("/refresh", async (
@@ -103,11 +104,13 @@ public static class AuthRoutes
 
             logger.LogInformation("Token rotated for user {UserId}", stored.UserId);
 
+            bool hasProfile = await db.ShopProfiles.AnyAsync(s => s.UserId == stored.UserId);
             return Results.Ok(new AuthResponse(
                 newAccessToken,
                 newRefreshToken.Token,
                 stored.User.Email!,
-                stored.User.UserName!));
+                stored.User.UserName!,
+                hasProfile));
         });
     }
 }
