@@ -11,7 +11,7 @@ import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 
 export default function TabLayout() {
-  const { token, isLoading, signOut } = useAuth();
+  const { token, isLoading, isShopSetupComplete, signOut } = useAuth();
   const { colors, colorScheme, toggleTheme } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -22,6 +22,10 @@ export default function TabLayout() {
 
   if (!token) {
     return <Redirect href="/(auth)/login" />;
+  }
+
+  if (!isShopSetupComplete) {
+    return <Redirect href="/(setup)/step1" />;
   }
 
   async function handleSignOut() {
