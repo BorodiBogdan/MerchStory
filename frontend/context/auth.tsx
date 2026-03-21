@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 
 const storage = {
   async getItem(key: string): Promise<string | null> {
@@ -29,12 +29,14 @@ const USER_KEY = 'auth_user';
 interface AuthUser {
   email: string;
   userName: string;
+  isShopSetupComplete: boolean;
 }
 
 interface AuthState {
   token: string | null;
   email: string | null;
   userName: string | null;
+  isShopSetupComplete: boolean;
   isLoading: boolean;
 }
 
@@ -42,6 +44,7 @@ interface AuthContextValue extends AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  completeShopSetup: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -51,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     token: null,
     email: null,
     userName: null,
+    isShopSetupComplete: false,
     isLoading: true,
   });
 
@@ -61,7 +65,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userJson = await storage.getItem(USER_KEY);
         if (token && userJson) {
           const user: AuthUser = JSON.parse(userJson);
-          setState({ token, email: user.email, userName: user.userName, isLoading: false });
+          setState({
+            token,
+            email: user.email,
+            userName: user.userName,
+            isShopSetupComplete: user.isShopSetupComplete ?? false,
+            isLoading: false,
+          });
         } else {
           setState((prev) => ({ ...prev, isLoading: false }));
         }
@@ -75,27 +85,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signIn(email: string, password: string) {
     const { login } = await import('@/utils/api');
     const data = await login(email, password);
+    const user: AuthUser = {
+      email: data.email,
+      userName: data.userName,
+      isShopSetupComplete: data.isShopSetupComplete,
+    };
     await storage.setItem(TOKEN_KEY, data.token);
-    await storage.setItem(USER_KEY, JSON.stringify({ email: data.email, userName: data.userName }));
-    setState({ token: data.token, email: data.email, userName: data.userName, isLoading: false });
+    await storage.setItem(USER_KEY, JSON.stringify(user));
+    setState({
+      token: data.token,
+      email: data.email,
+      userName: data.userName,
+      isShopSetupComplete: data.isShopSetupComplete,
+      isLoading: false,
+    });
   }
 
   async function signUp(email: string, password: string) {
     const { register } = await import('@/utils/api');
     const data = await register(email, password);
+    const user: AuthUser = {
+      email: data.email,
+      userName: data.userName,
+      isShopSetupComplete: data.isShopSetupComplete,
+    };
     await storage.setItem(TOKEN_KEY, data.token);
-    await storage.setItem(USER_KEY, JSON.stringify({ email: data.email, userName: data.userName }));
-    setState({ token: data.token, email: data.email, userName: data.userName, isLoading: false });
+    await storage.setItem(USER_KEY, JSON.stringify(user));
+    setState({
+      token: data.token,
+      email: data.email,
+      userName: data.userName,
+      isShopSetupComplete: data.isShopSetupComplete,
+      isLoading: false,
+    });
   }
 
   async function signOut() {
     await storage.deleteItem(TOKEN_KEY);
     await storage.deleteItem(USER_KEY);
-    setState({ token: null, email: null, userName: null, isLoading: false });
+    setState({
+      token: null,
+      email: null,
+      userName: null,
+      isShopSetupComplete: false,
+      isLoading: false,
+    });
+  }
+
+  async function completeShopSetup() {
+    const userJson = await storage.getItem(USER_KEY);
+    if (!userJson) return;
+    const user: AuthUser = JSON.parse(userJson);
+    const updated: AuthUser = { ...user, isShopSetupComplete: true };
+    await storage.setItem(USER_KEY, JSON.stringify(updated));
+    setState((prev) => ({ ...prev, isShopSetupComplete: true }));
   }
 
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ ...state, signIn, signUp, signOut, completeShopSetup }}>
       {children}
     </AuthContext.Provider>
   );
