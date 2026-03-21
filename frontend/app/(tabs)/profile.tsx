@@ -19,12 +19,7 @@ import {
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
-import {
-  getShopProfile,
-  ShopProfileResponse,
-  updateShopProfile,
-  uploadShopLogo,
-} from '@/utils/api';
+import { getShopProfile, ShopProfileResponse, updateShopProfile } from '@/utils/api';
 
 const DOMAIN_OPTIONS = [
   { value: 'Fashion', label: 'Fashion' },
@@ -320,9 +315,15 @@ export default function ProfileScreen() {
       quality: 0.8,
       allowsEditing: true,
       aspect: [1, 1],
+      base64: true,
     });
     if (!result.canceled && result.assets[0]) {
-      updateDraft({ newLogoUri: result.assets[0].uri });
+      const asset = result.assets[0];
+      // Build a data URI so we can send it directly in JSON without multipart upload
+      const dataUri = asset.base64
+        ? `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}`
+        : asset.uri;
+      updateDraft({ newLogoUri: dataUri });
     }
   }
 
@@ -333,7 +334,8 @@ export default function ProfileScreen() {
     try {
       let logoBase64 = profile.logoBase64 ?? null;
       if (draft.newLogoUri) {
-        logoBase64 = await uploadShopLogo(draft.newLogoUri);
+        // Data URI from ImagePicker — send directly; no multipart upload needed
+        logoBase64 = draft.newLogoUri;
       }
       const cleanAddresses = draft.addresses.filter((a) => a.trim().length > 0);
       const updated = await updateShopProfile({
