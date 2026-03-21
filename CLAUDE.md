@@ -14,11 +14,33 @@ This file gives Claude Code the context needed to make good decisions across all
 ```
 /
 ├── backend/
-│   ├── semantic-kernel-backend/        # ASP.NET Core Web API
-│   └── semantic-kernel-backend.Tests/  # xUnit test project
-├── frontend/                           # React Native (Expo) app
+│   ├── MerchStoryAPI/                # ASP.NET Core minimal API (main service)
+│   │   ├── Auth/                     # JWT + refresh token auth (AuthRoutes, JwtService)
+│   │   ├── Data/                     # EF Core DbContext (AppDbContext)
+│   │   ├── Models/                   # AppUser, RefreshToken
+│   │   └── Migrations/               # EF Core migrations
+│   ├── MerchStoryImageGeneration/    # Image generation class library
+│   │   ├── Services/                 # IImageGenerationService, GeminiImageGenerationService
+│   │   └── Extensions/               # ServiceCollectionExtensions (DI registration)
+│   └── MerchStory.Tests/             # xUnit integration test project
+├── frontend/                         # React Native (Expo) app
+│   ├── app/
+│   │   ├── _layout.tsx               # Root layout (AuthProvider, ThemeProvider)
+│   │   ├── (auth)/                   # Login & register screens
+│   │   └── (tabs)/                   # Main tab screens (index, explore)
+│   ├── components/ui/                # FloatingInput, LogoutModal, SocialButton, etc.
+│   ├── context/
+│   │   ├── auth.tsx                  # Auth state (JWT storage, login/logout)
+│   │   └── theme.tsx                 # Dark/light theme state
+│   ├── utils/
+│   │   └── api.ts                    # Centralized API client
+│   └── constants/
+│       ├── design.ts                 # Spacing, duration, layout tokens
+│       └── theme.ts                  # Color palette for dark/light modes
 ├── docs/
-│   └── project-description.md         # Full product spec
+│   └── project-description.md       # Full product spec
+├── .husky/
+│   └── pre-commit                    # Runs lint-staged (frontend) + dotnet format (backend)
 └── docker-compose.yml
 ```
 
@@ -27,38 +49,50 @@ This file gives Claude Code the context needed to make good decisions across all
 ## Tech Stack
 
 ### Backend
-- **Runtime:** .NET (ASP.NET Core minimal API or controller-based)
-- **AI Orchestration:** Microsoft Semantic Kernel — used for multi-model routing, prompt management, plugin system, and memory/RAG
-- **ORM:** Entity Framework Core (preferred)
-- **Auth:** ASP.NET Identity or Auth0 / Azure AD B2C
+- **Runtime:** .NET 10 (ASP.NET Core minimal API)
+- **Auth:** ASP.NET Identity + custom JWT service with refresh tokens (stored in PostgreSQL)
+- **AI Orchestration:** Microsoft Semantic Kernel — multi-model routing, prompt management, plugin system, memory/RAG
+- **Image Generation:** Google Gemini API via `GeminiImageGenerationService`
+- **ORM:** Entity Framework Core
 - **Storage:** Azure Blob Storage (images, videos, generated assets)
-- **Database:** PostgreSQL 18 (Docker container) + pgvector — pgvector used for Semantic Kernel memory / vector store
+- **Database:** PostgreSQL 18 (Docker container) + pgvector for Semantic Kernel vector store
 
 ### Frontend
-- **Framework:** React Native via Expo
-- **Language:** TypeScript
+- **Framework:** React Native via Expo (~54)
+- **Language:** TypeScript (strict mode)
 - **Navigation:** Expo Router (file-based routing under `app/`)
+- **Animation:** React Native Reanimated (shared values, `useAnimatedStyle`)
+- **State:** React Context — `AuthContext` (JWT + refresh tokens), `ThemeContext` (dark/light)
+- **Haptics:** `expo-haptics` for tactile feedback on interactions
 
 ### Infrastructure
-- Docker Compose for local dev (see `docker-compose.yml`)
-- CI/CD pipeline configured (see `.github/workflows/` or equivalent)
+- Docker Compose for local dev (PostgreSQL + backend + frontend)
+- GitHub Actions CI/CD (`.github/workflows/ci.yml`)
+- Husky + lint-staged for pre-commit hooks (root `package.json`)
 
 ---
 
 ## Coding Conventions
 
 ### Backend (.NET)
-- Minimal API style in `Program.cs`; group related endpoints into extension methods or route groups as the API grows
-- Semantic Kernel plugins go in a `Plugins/` folder under the backend project
+- Minimal API style in `Program.cs`; group related endpoints into route groups (e.g. `Auth/AuthRoutes.cs`)
+- Semantic Kernel plugins go in a `Plugins/` folder under `MerchStoryAPI/`
 - Use `ILogger<T>` for logging; no `Console.WriteLine` in production code
-- All AI-related configuration (model names, API keys) goes in `appsettings.json` / environment variables — never hardcoded
-- Test project mirrors backend structure; use xUnit + Moq
+- All secrets (API keys, JWT key, DB connection) go in `appsettings.Development.json` or environment variables — never hardcoded
+- Test project mirrors backend structure; use xUnit (no Moq yet — integration tests hit real DB)
 
 ### Frontend (React Native / Expo)
 - TypeScript strict mode
-- Components in `components/`, screens in `app/` (Expo Router)
-- No inline styles — use StyleSheet or a styling library
-- API calls go through a centralized `utils/api.ts` client
+- Screens in `app/` (Expo Router), reusable components in `components/`
+- No inline styles — use `StyleSheet.create` or the design token constants
+- All API calls go through `utils/api.ts`
+- Design tokens in `constants/design.ts` (spacing, durations) and `constants/theme.ts` (colors)
+- Animated values (`useSharedValue`) must be included in `useEffect` dependency arrays
+
+### Linting & Formatting
+- Frontend: `npx expo lint --fix` (not plain `eslint --fix` — plugin resolution requires the expo wrapper)
+- Backend: `dotnet format <project>.csproj`
+- Pre-commit hooks handle both automatically on staged files
 
 ---
 
@@ -68,6 +102,7 @@ This file gives Claude Code the context needed to make good decisions across all
 - Use SK Memory / Vector Store for storing user asset metadata and retrieval
 - Model routing: default to GPT-4o for reasoning tasks; swap to cheaper models for simple classification/tagging
 - Prompt templates go in `Plugins/<PluginName>/skprompt.txt` following SK conventions
+- Current image generation: Google Gemini (`GeminiImageGenerationService`) — registered via `ServiceCollectionExtensions`
 
 ---
 
@@ -75,7 +110,7 @@ This file gives Claude Code the context needed to make good decisions across all
 Always respect the P0 → P1 → P2 order from the product spec. Do not implement P1/P2 features before P0 is solid.
 
 **P0 (current focus):**
-- Auth
+- Auth — JWT + refresh tokens implemented
 - Context Engine (weather, events, holidays)
 - Smart Object Studio (background removal, upscaling, scene generation)
 - Basic asset library

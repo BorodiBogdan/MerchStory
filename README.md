@@ -20,13 +20,27 @@ Turn raw product photos into professional AI-generated ads for small and local r
 ```
 /
 ├── backend/
-│   ├── SemanticKernelBackend/        # ASP.NET Core minimal API
-│   └── SemanticKernelBackend.Tests/  # xUnit test project
+│   ├── MerchStoryAPI/                # ASP.NET Core minimal API
+│   │   ├── Auth/                     # JWT auth + refresh tokens
+│   │   ├── Data/                     # EF Core DbContext
+│   │   ├── Models/                   # AppUser, RefreshToken
+│   │   └── Migrations/
+│   ├── MerchStoryImageGeneration/    # Gemini image generation library
+│   │   ├── Services/
+│   │   └── Extensions/
+│   └── MerchStory.Tests/             # xUnit integration tests
 ├── frontend/                         # React Native (Expo) app
+│   ├── app/
+│   │   ├── (auth)/                   # Login & register screens
+│   │   └── (tabs)/                   # Main tab screens
+│   ├── components/ui/                # Reusable UI components
+│   ├── context/                      # Auth & theme state
+│   ├── utils/                        # API client
+│   └── constants/                    # Design tokens & theme
 ├── docs/
 │   └── project-description.md        # Full product spec
 ├── docker-compose.yml
-└── .env.example                       # Environment variable template
+└── .env.example                      # Environment variable template
 ```
 
 ---
@@ -45,7 +59,7 @@ cp .env.example .env
 GOOGLE_API_KEY=your_google_genai_api_key_here
 ```
 
-For **local backend development** (without Docker), configure `backend/SemanticKernelBackend/appsettings.Development.json`:
+For **local backend development** (without Docker), configure `backend/MerchStoryAPI/appsettings.Development.json`:
 
 ```json
 {
@@ -98,7 +112,7 @@ docker compose down -v
 ## Backend Setup (Manual)
 
 ```bash
-cd backend/SemanticKernelBackend
+cd backend/MerchStoryAPI
 
 # Restore NuGet packages
 dotnet restore
@@ -152,6 +166,9 @@ cd frontend
 # Run ESLint (check only)
 npm run lint
 
+# Auto-fix ESLint issues
+npx expo lint --fix
+
 # Run Prettier (check only)
 npm run format:check
 
@@ -162,14 +179,13 @@ npm run format
 ### Backend
 
 ```bash
-cd backend
-
 # Check formatting (what CI runs)
-dotnet format --verify-no-changes SemanticKernelBackend/SemanticKernelBackend.csproj
-dotnet format --verify-no-changes SemanticKernelBackend.Tests/SemanticKernelBackend.Tests.csproj
+dotnet format ./backend/MerchStoryAPI/MerchStoryAPI.csproj --verify-no-changes
+dotnet format ./backend/MerchStoryImageGeneration/MerchStoryImageGeneration.csproj --verify-no-changes
+dotnet format ./backend/MerchStory.Tests/MerchStory.Tests.csproj --verify-no-changes
 
 # Auto-fix formatting
-dotnet format SemanticKernelBackend/SemanticKernelBackend.csproj
+dotnet format ./backend/MerchStoryAPI/MerchStoryAPI.csproj
 ```
 
 ---
@@ -183,7 +199,9 @@ Husky runs lint-staged automatically on every commit. To set it up after cloning
 npm install
 ```
 
-This installs Husky and sets up the git hooks. On each commit, ESLint and Prettier will run against staged frontend files.
+This installs Husky and sets up the git hooks. On each commit:
+- **Frontend:** `expo lint --fix` + Prettier run against staged `.ts`/`.tsx` files
+- **Backend:** `dotnet format --verify-no-changes` runs on all three projects
 
 ---
 
@@ -221,7 +239,8 @@ Ensure your code passes locally before opening a PR.
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/auth/register` | Register a new user |
-| `POST` | `/auth/login` | Login, returns JWT |
+| `POST` | `/auth/login` | Login, returns JWT + refresh token |
+| `POST` | `/auth/refresh` | Exchange refresh token for new JWT |
 | `POST` | `/api/generate-image` | Generate AI image (requires auth) |
 
 ---
