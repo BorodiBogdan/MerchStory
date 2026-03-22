@@ -8,17 +8,17 @@ public record AuthResponse(string Token, string RefreshToken, string Email, stri
 
 public record RefreshRequest(string RefreshToken);
 
+public record BrandColorDto(string Hex, int Percentage);
+
 public record ShopProfileRequest(
     string BrandName,
     string? LogoBase64,
-    string? PrimaryColor,
-    string? SecondaryColor,
-    string? AccentColor,
+    IReadOnlyList<BrandColorDto> BrandColors,
     string? Slogan,
     string BusinessDomain,
-    string TargetAudience,
-    string? Atmosphere,
-    string ShopType,
+    string? OtherDomain,
+    string? TargetAudience,
+    string? ShopType,
     string? Competitors,
     string PhoneNumber,
     string Email,
@@ -31,14 +31,12 @@ public record ShopProfileResponse(
     Guid Id,
     string BrandName,
     string? LogoBase64,
-    string? PrimaryColor,
-    string? SecondaryColor,
-    string? AccentColor,
+    IReadOnlyList<BrandColorDto> BrandColors,
     string? Slogan,
     string BusinessDomain,
-    string TargetAudience,
-    string? Atmosphere,
-    string ShopType,
+    string? OtherDomain,
+    string? TargetAudience,
+    string? ShopType,
     string? Competitors,
     string PhoneNumber,
     string Email,

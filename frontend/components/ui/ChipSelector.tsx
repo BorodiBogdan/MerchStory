@@ -16,6 +16,7 @@ interface ChipSelectorProps {
   selected: string;
   onSelect: (value: string) => void;
   accessibilityLabel: string;
+  deselectable?: boolean;
 }
 
 function Chip({
@@ -63,6 +64,7 @@ export function ChipSelector({
   selected,
   onSelect,
   accessibilityLabel,
+  deselectable = false,
 }: ChipSelectorProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -80,7 +82,13 @@ export function ChipSelector({
           key={option.value}
           option={option}
           isSelected={selected === option.value}
-          onSelect={() => onSelect(option.value)}
+          onSelect={() => {
+            if (deselectable && selected === option.value) {
+              onSelect('');
+            } else {
+              onSelect(option.value);
+            }
+          }}
         />
       ))}
     </ScrollView>

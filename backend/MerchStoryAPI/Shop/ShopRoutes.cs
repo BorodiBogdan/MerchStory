@@ -10,9 +10,8 @@ namespace MerchStoryAPI.Shop;
 
 public static class ShopRoutes
 {
-    private static readonly string[] ValidDomains = ["Fashion", "Tech", "Food", "Beauty", "Market", "Other"];
-    private static readonly string[] ValidAtmospheres = ["Urban", "Nature", "MinimalInterior", "ProfessionalStudio"];
-    private static readonly string[] ValidShopTypes = ["Luxury", "DiscountOutlet", "ArtisanalHandmade"];
+    private static readonly string[] ValidDomains = ["Market", "Food", "Retail", "Fashion", "Other"];
+    private static readonly string[] ValidShopTypes = ["Luxury", "MidRange", "Budget"];
 
     public static void MapShopEndpoints(this WebApplication app)
     {
@@ -54,29 +53,43 @@ public static class ShopRoutes
                 return Results.BadRequest("Invalid BusinessDomain.");
             }
 
-            if (request.Atmosphere is not null && !ValidAtmospheres.Contains(request.Atmosphere))
+            if (request.BusinessDomain == "Other" && string.IsNullOrWhiteSpace(request.OtherDomain))
             {
-                return Results.BadRequest("Invalid Atmosphere.");
+                return Results.BadRequest("OtherDomain is required when BusinessDomain is 'Other'.");
             }
 
-            if (!ValidShopTypes.Contains(request.ShopType))
+            if (request.ShopType is not null && request.ShopType.Length > 0 && !ValidShopTypes.Contains(request.ShopType))
             {
                 return Results.BadRequest("Invalid ShopType.");
             }
 
-            if (request.PrimaryColor is not null && !IsValidHex(request.PrimaryColor))
+            if (request.BrandColors is null || request.BrandColors.Count == 0)
             {
-                return Results.BadRequest("PrimaryColor must be a valid hex color (#RRGGBB).");
+                return Results.BadRequest("At least one brand color is required.");
             }
 
-            if (request.SecondaryColor is not null && !IsValidHex(request.SecondaryColor))
+            if (request.BrandColors.Count > 5)
             {
-                return Results.BadRequest("SecondaryColor must be a valid hex color (#RRGGBB).");
+                return Results.BadRequest("A maximum of 5 brand colors is allowed.");
             }
 
-            if (request.AccentColor is not null && !IsValidHex(request.AccentColor))
+            foreach (BrandColorDto bc in request.BrandColors)
             {
-                return Results.BadRequest("AccentColor must be a valid hex color (#RRGGBB).");
+                if (!IsValidHex(bc.Hex))
+                {
+                    return Results.BadRequest($"Brand color '{bc.Hex}' is not a valid hex color (#RRGGBB).");
+                }
+
+                if (bc.Percentage < 0 || bc.Percentage > 100)
+                {
+                    return Results.BadRequest("Each brand color percentage must be between 0 and 100.");
+                }
+            }
+
+            int totalPct = request.BrandColors.Sum(bc => bc.Percentage);
+            if (totalPct != 100)
+            {
+                return Results.BadRequest($"Brand color percentages must sum to 100 (got {totalPct}).");
             }
 
             if (!request.Email.Contains('@'))
@@ -101,13 +114,11 @@ public static class ShopRoutes
                     UserId = userId,
                     BrandName = request.BrandName.Trim(),
                     LogoBase64 = request.LogoBase64,
-                    PrimaryColor = request.PrimaryColor,
-                    SecondaryColor = request.SecondaryColor,
-                    AccentColor = request.AccentColor,
+                    BrandColorsJson = JsonSerializer.Serialize(request.BrandColors),
                     Slogan = request.Slogan?.Trim(),
                     BusinessDomain = request.BusinessDomain,
-                    TargetAudience = request.TargetAudience.Trim(),
-                    Atmosphere = request.Atmosphere,
+                    OtherDomain = request.OtherDomain?.Trim(),
+                    TargetAudience = request.TargetAudience?.Trim(),
                     ShopType = request.ShopType,
                     Competitors = request.Competitors?.Trim(),
                     PhoneNumber = request.PhoneNumber.Trim(),
@@ -127,13 +138,11 @@ public static class ShopRoutes
 
             existing.BrandName = request.BrandName.Trim();
             existing.LogoBase64 = request.LogoBase64;
-            existing.PrimaryColor = request.PrimaryColor;
-            existing.SecondaryColor = request.SecondaryColor;
-            existing.AccentColor = request.AccentColor;
+            existing.BrandColorsJson = JsonSerializer.Serialize(request.BrandColors);
             existing.Slogan = request.Slogan?.Trim();
             existing.BusinessDomain = request.BusinessDomain;
-            existing.TargetAudience = request.TargetAudience.Trim();
-            existing.Atmosphere = request.Atmosphere;
+            existing.OtherDomain = request.OtherDomain?.Trim();
+            existing.TargetAudience = request.TargetAudience?.Trim();
             existing.ShopType = request.ShopType;
             existing.Competitors = request.Competitors?.Trim();
             existing.PhoneNumber = request.PhoneNumber.Trim();
@@ -204,17 +213,19 @@ public static class ShopRoutes
             ? []
             : JsonSerializer.Deserialize<string[]>(p.Addresses) ?? [];
 
+        BrandColorDto[] brandColors = string.IsNullOrEmpty(p.BrandColorsJson)
+            ? []
+            : JsonSerializer.Deserialize<BrandColorDto[]>(p.BrandColorsJson) ?? [];
+
         return new(
             p.Id,
             p.BrandName,
             p.LogoBase64,
-            p.PrimaryColor,
-            p.SecondaryColor,
-            p.AccentColor,
+            brandColors,
             p.Slogan,
             p.BusinessDomain,
+            p.OtherDomain,
             p.TargetAudience,
-            p.Atmosphere,
             p.ShopType,
             p.Competitors,
             p.PhoneNumber,

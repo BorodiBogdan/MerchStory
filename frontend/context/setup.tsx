@@ -1,18 +1,18 @@
 import React, { createContext, useContext, useState } from 'react';
 
+import { type BrandColor } from '../utils/api';
+
 export interface SetupStep1Data {
   brandName: string;
   logoUri: string | null;
-  primaryColor: string;
-  secondaryColor: string;
-  accentColor: string;
+  brandColors: BrandColor[];
   slogan: string;
 }
 
 export interface SetupStep2Data {
   businessDomain: string;
+  otherDomain: string;
   targetAudience: string;
-  atmosphere: string;
   shopType: string;
   competitors: string;
 }
@@ -39,13 +39,11 @@ interface SetupContextValue {
 const defaultData: SetupData = {
   brandName: '',
   logoUri: null,
-  primaryColor: '',
-  secondaryColor: '',
-  accentColor: '',
+  brandColors: [{ hex: '#6366F1', percentage: 100 }],
   slogan: '',
   businessDomain: '',
+  otherDomain: '',
   targetAudience: '',
-  atmosphere: '',
   shopType: '',
   competitors: '',
   phoneNumber: '',

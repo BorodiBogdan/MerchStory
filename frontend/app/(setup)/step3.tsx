@@ -11,7 +11,7 @@ import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useSetup } from '@/context/setup';
 import { useTheme } from '@/context/theme';
-import { submitShopProfile, uploadShopLogo } from '@/utils/api';
+import { submitShopProfile } from '@/utils/api';
 
 const STEP_LABELS = ['Visual Identity', 'Business DNA', 'Contact & Social'];
 
@@ -89,21 +89,17 @@ export default function Step3Screen() {
     setSubmitError(null);
 
     try {
-      let logoBase64: string | null = null;
-      if (data.logoUri) {
-        logoBase64 = await uploadShopLogo(data.logoUri);
-      }
+      // logoUri is already a data URI (base64) captured at pick time — send directly
+      const logoBase64: string | null = data.logoUri ?? null;
       await submitShopProfile({
         brandName: data.brandName,
         logoBase64,
-        primaryColor: data.primaryColor || null,
-        secondaryColor: data.secondaryColor || null,
-        accentColor: data.accentColor || null,
+        brandColors: data.brandColors,
         slogan: data.slogan || null,
         businessDomain: data.businessDomain,
-        targetAudience: data.targetAudience,
-        atmosphere: data.atmosphere || null,
-        shopType: data.shopType,
+        otherDomain: data.otherDomain || null,
+        targetAudience: data.targetAudience || null,
+        shopType: data.shopType || null,
         competitors: data.competitors || null,
         phoneNumber: phoneNumber.trim(),
         email: email.trim(),

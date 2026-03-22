@@ -24,6 +24,7 @@ const storage = {
 };
 
 const TOKEN_KEY = 'auth_token';
+const REFRESH_TOKEN_KEY = 'auth_refresh_token';
 const USER_KEY = 'auth_user';
 
 interface AuthUser {
@@ -91,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isShopSetupComplete: data.isShopSetupComplete,
     };
     await storage.setItem(TOKEN_KEY, data.token);
+    await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
     await storage.setItem(USER_KEY, JSON.stringify(user));
     setState({
       token: data.token,
@@ -110,6 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isShopSetupComplete: data.isShopSetupComplete,
     };
     await storage.setItem(TOKEN_KEY, data.token);
+    await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
     await storage.setItem(USER_KEY, JSON.stringify(user));
     setState({
       token: data.token,
@@ -122,6 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signOut() {
     await storage.deleteItem(TOKEN_KEY);
+    await storage.deleteItem(REFRESH_TOKEN_KEY);
     await storage.deleteItem(USER_KEY);
     setState({
       token: null,

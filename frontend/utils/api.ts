@@ -7,10 +7,69 @@ const API_URL =
     : (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5257');
 
 const TOKEN_KEY = 'auth_token';
+const REFRESH_TOKEN_KEY = 'auth_refresh_token';
 
 async function getToken(): Promise<string | null> {
   if (Platform.OS === 'web') return localStorage.getItem(TOKEN_KEY);
   return SecureStore.getItemAsync(TOKEN_KEY);
+}
+
+async function getRefreshToken(): Promise<string | null> {
+  if (Platform.OS === 'web') return localStorage.getItem(REFRESH_TOKEN_KEY);
+  return SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+}
+
+async function saveToken(token: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    localStorage.setItem(TOKEN_KEY, token);
+    return;
+  }
+  return SecureStore.setItemAsync(TOKEN_KEY, token);
+}
+
+async function saveRefreshToken(token: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+    return;
+  }
+  return SecureStore.setItemAsync(REFRESH_TOKEN_KEY, token);
+}
+
+async function tryRefreshAccessToken(): Promise<string | null> {
+  const refreshToken = await getRefreshToken();
+  if (!refreshToken) return null;
+  try {
+    const response = await fetch(`${API_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as AuthResponse;
+    await saveToken(data.token);
+    await saveRefreshToken(data.refreshToken);
+    return data.token;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchWithAuth(url: string, init: RequestInit): Promise<Response> {
+  const token = await getToken();
+  const headers = {
+    ...(init.headers as Record<string, string>),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+  const response = await fetch(url, { ...init, headers });
+  if (response.status !== 401) return response;
+
+  // Token expired — attempt refresh and retry once
+  const newToken = await tryRefreshAccessToken();
+  if (!newToken) return response;
+  return fetch(url, {
+    ...init,
+    headers: { ...(init.headers as Record<string, string>), Authorization: `Bearer ${newToken}` },
+  });
 }
 
 export interface GenerateImageResponse {
@@ -26,17 +85,20 @@ export interface AuthResponse {
   isShopSetupComplete: boolean;
 }
 
+export interface BrandColor {
+  hex: string;
+  percentage: number;
+}
+
 export interface ShopProfilePayload {
   brandName: string;
   logoBase64?: string | null;
-  primaryColor?: string | null;
-  secondaryColor?: string | null;
-  accentColor?: string | null;
+  brandColors: BrandColor[];
   slogan?: string | null;
   businessDomain: string;
-  targetAudience: string;
-  atmosphere?: string | null;
-  shopType: string;
+  otherDomain?: string | null;
+  targetAudience?: string | null;
+  shopType?: string | null;
   competitors?: string | null;
   phoneNumber: string;
   email: string;
@@ -86,13 +148,9 @@ export async function register(email: string, password: string): Promise<AuthRes
 }
 
 export async function submitShopProfile(payload: ShopProfilePayload): Promise<ShopProfileResponse> {
-  const token = await getToken();
-  const response = await fetch(`${API_URL}/shop/profile`, {
+  const response = await fetchWithAuth(`${API_URL}/shop/profile`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
@@ -105,7 +163,6 @@ export async function submitShopProfile(payload: ShopProfilePayload): Promise<Sh
 }
 
 export async function uploadShopLogo(imageUri: string, mimeType = 'image/jpeg'): Promise<string> {
-  const token = await getToken();
   const formData = new FormData();
   if (Platform.OS === 'web') {
     const res = await fetch(imageUri);
@@ -115,9 +172,8 @@ export async function uploadShopLogo(imageUri: string, mimeType = 'image/jpeg'):
     formData.append('logo', { uri: imageUri, name: 'logo.jpg', type: mimeType } as unknown as Blob);
   }
 
-  const response = await fetch(`${API_URL}/shop/logo`, {
+  const response = await fetchWithAuth(`${API_URL}/shop/logo`, {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,
   });
 
@@ -130,10 +186,7 @@ export async function uploadShopLogo(imageUri: string, mimeType = 'image/jpeg'):
 }
 
 export async function getShopProfile(): Promise<ShopProfileResponse | null> {
-  const token = await getToken();
-  const response = await fetch(`${API_URL}/shop/profile`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const response = await fetchWithAuth(`${API_URL}/shop/profile`, {});
 
   if (response.status === 404) return null;
 
@@ -145,13 +198,9 @@ export async function getShopProfile(): Promise<ShopProfileResponse | null> {
 }
 
 export async function updateShopProfile(payload: ShopProfilePayload): Promise<ShopProfileResponse> {
-  const token = await getToken();
-  const response = await fetch(`${API_URL}/shop/profile`, {
+  const response = await fetchWithAuth(`${API_URL}/shop/profile`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
@@ -164,14 +213,9 @@ export async function updateShopProfile(payload: ShopProfilePayload): Promise<Sh
 }
 
 export async function generateImage(prompt: string): Promise<GenerateImageResponse> {
-  const token = await getToken();
-
-  const response = await fetch(`${API_URL}/generate-image`, {
+  const response = await fetchWithAuth(`${API_URL}/generate-image`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt }),
   });
 

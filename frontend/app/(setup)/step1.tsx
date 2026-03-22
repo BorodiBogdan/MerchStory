@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
@@ -11,6 +12,7 @@ import { StepProgress } from '@/components/ui/StepProgress';
 import { D } from '@/constants/design';
 import { useSetup } from '@/context/setup';
 import { useTheme } from '@/context/theme';
+import { type BrandColor } from '@/utils/api';
 
 export default function Step1Screen() {
   const { colors } = useTheme();
@@ -19,13 +21,24 @@ export default function Step1Screen() {
 
   const [brandName, setBrandName] = useState(data.brandName);
   const [slogan, setSlogan] = useState(data.slogan);
-  const [primaryColor, setPrimaryColor] = useState(data.primaryColor || '#6366F1');
-  const [secondaryColor, setSecondaryColor] = useState(data.secondaryColor || '#818CF8');
-  const [accentColor, setAccentColor] = useState(data.accentColor || '#A5B4FC');
+  const [brandColors, setBrandColors] = useState<BrandColor[]>(data.brandColors);
   const [logoUri, setLogoUri] = useState<string | null>(data.logoUri);
   const [brandNameError, setBrandNameError] = useState<string | null>(null);
 
-  const canProceed = brandName.trim().length > 0;
+  const totalPct = brandColors.reduce((sum, c) => sum + c.percentage, 0);
+  const canProceed = brandName.trim().length > 0 && brandColors.length > 0 && totalPct === 100;
+
+  function addColor() {
+    setBrandColors((prev) => [...prev, { hex: '#6366F1', percentage: 0 }]);
+  }
+
+  function removeColor(index: number) {
+    setBrandColors((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateColor(index: number, patch: Partial<BrandColor>) {
+    setBrandColors((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+  }
 
   async function pickLogo() {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -33,9 +46,14 @@ export default function Step1Screen() {
       quality: 0.8,
       allowsEditing: true,
       aspect: [1, 1],
+      base64: true,
     });
     if (!result.canceled && result.assets[0]) {
-      setLogoUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      const uri = asset.base64
+        ? `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}`
+        : asset.uri;
+      setLogoUri(uri);
     }
   }
 
@@ -47,9 +65,7 @@ export default function Step1Screen() {
     updateStep1({
       brandName: brandName.trim(),
       slogan,
-      primaryColor,
-      secondaryColor,
-      accentColor,
+      brandColors,
       logoUri,
     });
     if (Platform.OS !== 'web') {
@@ -111,12 +127,59 @@ export default function Step1Screen() {
         </Pressable>
       </View>
 
-      {/* RGB colour pickers */}
+      {/* Brand Colors */}
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Colour Palette (optional)</Text>
-        <RgbColorPicker label="Primary" value={primaryColor} onChange={setPrimaryColor} />
-        <RgbColorPicker label="Secondary" value={secondaryColor} onChange={setSecondaryColor} />
-        <RgbColorPicker label="Accent" value={accentColor} onChange={setAccentColor} />
+        <Text style={styles.sectionLabel}>Brand Colors</Text>
+
+        {brandColors.map((color, index) => (
+          <View key={index} style={styles.colorRow}>
+            <View style={styles.colorPickerWrapper}>
+              <RgbColorPicker
+                label={`Color ${index + 1}`}
+                value={color.hex}
+                onChange={(hex) => updateColor(index, { hex })}
+              />
+            </View>
+            <View style={styles.pctInputWrapper}>
+              <FloatingInput
+                label="%"
+                value={String(color.percentage)}
+                onChangeText={(v) => {
+                  const n = parseInt(v, 10);
+                  updateColor(index, { percentage: isNaN(n) ? 0 : Math.min(100, Math.max(0, n)) });
+                }}
+                keyboardType="numeric"
+                accessibilityLabel={`Percentage for color ${index + 1}`}
+              />
+            </View>
+            {brandColors.length > 1 && (
+              <Pressable
+                onPress={() => removeColor(index)}
+                style={styles.removeColorButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove color ${index + 1}`}
+              >
+                <Ionicons name="trash-outline" size={18} color={colors.text.muted} />
+              </Pressable>
+            )}
+          </View>
+        ))}
+
+        <Text style={[styles.totalIndicator, totalPct !== 100 && styles.totalIndicatorError]}>
+          Total: {totalPct}% / 100%
+        </Text>
+
+        {brandColors.length < 5 && (
+          <Pressable
+            onPress={addColor}
+            style={styles.addColorButton}
+            accessibilityRole="button"
+            accessibilityLabel="Add a brand color"
+          >
+            <Ionicons name="add-circle-outline" size={16} color={colors.accent.primary} />
+            <Text style={styles.addColorText}>Add color</Text>
+          </Pressable>
+        )}
       </View>
 
       <Pressable
@@ -200,6 +263,45 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     logoHint: {
       fontSize: D.fontSize.xs,
       color: colors.text.muted,
+    },
+    colorRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: D.spacing.sm,
+      marginBottom: D.spacing.sm,
+    },
+    colorPickerWrapper: {
+      flex: 1,
+    },
+    pctInputWrapper: {
+      width: 72,
+    },
+    removeColorButton: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: D.spacing.sm,
+    },
+    totalIndicator: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
+      textAlign: 'right',
+      marginBottom: D.spacing.xs,
+    },
+    totalIndicatorError: {
+      color: colors.text.error,
+    },
+    addColorButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.xs,
+      paddingVertical: D.spacing.xs,
+    },
+    addColorText: {
+      fontSize: D.fontSize.sm,
+      color: colors.accent.primary,
+      fontWeight: D.fontWeight.medium,
     },
     nextButton: {
       marginTop: D.spacing.sm,

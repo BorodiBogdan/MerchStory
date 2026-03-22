@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
@@ -7,6 +6,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -16,174 +16,38 @@ import {
   View,
 } from 'react-native';
 
+import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
-import { getShopProfile, ShopProfileResponse, updateShopProfile } from '@/utils/api';
+import { BrandColor, getShopProfile, ShopProfileResponse, updateShopProfile } from '@/utils/api';
 
 const DOMAIN_OPTIONS = [
-  { value: 'Fashion', label: 'Fashion' },
-  { value: 'Tech', label: 'Tech' },
+  { value: 'Market', label: 'Market' },
   { value: 'Food', label: 'Food' },
-  { value: 'Beauty', label: 'Beauty' },
+  { value: 'Retail', label: 'Retail' },
+  { value: 'Fashion', label: 'Fashion' },
   { value: 'Other', label: 'Other' },
-];
-
-const ATMOSPHERE_OPTIONS = [
-  { value: 'Urban', label: 'Urban' },
-  { value: 'Nature', label: 'Nature' },
-  { value: 'MinimalInterior', label: 'Minimal Interior' },
-  { value: 'ProfessionalStudio', label: 'Studio' },
 ];
 
 const SHOP_TYPE_OPTIONS = [
   { value: 'Luxury', label: 'Luxury' },
-  { value: 'DiscountOutlet', label: 'Discount / Outlet' },
-  { value: 'ArtisanalHandmade', label: 'Artisanal / Handmade' },
+  { value: 'MidRange', label: 'Mid-range' },
+  { value: 'Budget', label: 'Budget' },
 ];
 
 function labelFor(options: { value: string; label: string }[], value: string) {
   return options.find((o) => o.value === value)?.label ?? value;
 }
 
-function hexToRgb(hex: string) {
-  const clean = hex.startsWith('#') ? hex.slice(1) : hex;
-  if (clean.length !== 6) return { r: 128, g: 128, b: 128 };
-  return {
-    r: parseInt(clean.slice(0, 2), 16),
-    g: parseInt(clean.slice(2, 4), 16),
-    b: parseInt(clean.slice(4, 6), 16),
-  };
-}
-
-function rgbToHex(r: number, g: number, b: number) {
-  return `#${[r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
-}
-
-type ColorKey = 'primaryColor' | 'secondaryColor' | 'accentColor';
-const COLOR_KEYS: { key: ColorKey; label: string }[] = [
-  { key: 'primaryColor', label: 'Primary' },
-  { key: 'secondaryColor', label: 'Secondary' },
-  { key: 'accentColor', label: 'Accent' },
-];
-
-function ColorEditPanel({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { colors } = useTheme();
-  const init = hexToRgb(value || '#808080');
-  const [r, setR] = useState(init.r);
-  const [g, setG] = useState(init.g);
-  const [b, setB] = useState(init.b);
-
-  const hex = rgbToHex(r, g, b);
-
-  const channels = [
-    {
-      ch: 'R',
-      val: r,
-      trackColor: `rgb(${r},0,0)`,
-      set: (v: number) => {
-        setR(v);
-        onChange(rgbToHex(v, g, b));
-      },
-    },
-    {
-      ch: 'G',
-      val: g,
-      trackColor: `rgb(0,${g},0)`,
-      set: (v: number) => {
-        setG(v);
-        onChange(rgbToHex(r, v, b));
-      },
-    },
-    {
-      ch: 'B',
-      val: b,
-      trackColor: `rgb(0,0,${b})`,
-      set: (v: number) => {
-        setB(v);
-        onChange(rgbToHex(r, g, v));
-      },
-    },
-  ];
-
-  return (
-    <View style={colorPanelStyles.panel}>
-      {channels.map(({ ch, val, trackColor, set }) => (
-        <View key={ch} style={colorPanelStyles.row}>
-          <Text style={[colorPanelStyles.ch, { color: colors.text.muted }]}>{ch}</Text>
-          <Slider
-            style={colorPanelStyles.slider}
-            minimumValue={0}
-            maximumValue={255}
-            step={1}
-            value={val}
-            onValueChange={set}
-            minimumTrackTintColor={trackColor}
-            maximumTrackTintColor={colors.border.default}
-            thumbTintColor={trackColor}
-          />
-          <Text style={[colorPanelStyles.val, { color: colors.text.secondary }]}>
-            {Math.round(val)}
-          </Text>
-        </View>
-      ))}
-      <View style={[colorPanelStyles.preview, { backgroundColor: hex }]}>
-        <Text style={colorPanelStyles.previewHex}>{hex.toUpperCase()}</Text>
-      </View>
-    </View>
-  );
-}
-
-const colorPanelStyles = StyleSheet.create({
-  panel: {
-    paddingHorizontal: D.spacing.sm,
-    paddingBottom: D.spacing.sm,
-    gap: 2,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: D.spacing.xs,
-  },
-  ch: {
-    width: 14,
-    fontSize: D.fontSize.xs,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  slider: {
-    flex: 1,
-    height: 28,
-  },
-  val: {
-    width: 26,
-    fontSize: D.fontSize.xs,
-    textAlign: 'right',
-  },
-  preview: {
-    height: 22,
-    borderRadius: D.radius.sm,
-    marginTop: D.spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewHex: {
-    fontSize: 10,
-    color: '#fff',
-    fontWeight: '600',
-  },
-});
-
 type DraftState = {
   brandName: string;
   slogan: string;
-  primaryColor: string;
-  secondaryColor: string;
-  accentColor: string;
+  brandColors: BrandColor[];
   newLogoUri: string | null;
   businessDomain: string;
+  otherDomain: string;
   targetAudience: string;
-  atmosphere: string;
   shopType: string;
   competitors: string;
   phoneNumber: string;
@@ -198,13 +62,14 @@ function profileToDraft(p: ShopProfileResponse): DraftState {
   return {
     brandName: p.brandName ?? '',
     slogan: p.slogan ?? '',
-    primaryColor: p.primaryColor ?? '#6366F1',
-    secondaryColor: p.secondaryColor ?? '#818CF8',
-    accentColor: p.accentColor ?? '#A5B4FC',
+    brandColors:
+      p.brandColors && p.brandColors.length > 0
+        ? [...p.brandColors]
+        : [{ hex: '#6366F1', percentage: 100 }],
     newLogoUri: null,
     businessDomain: p.businessDomain ?? '',
+    otherDomain: p.otherDomain ?? '',
     targetAudience: p.targetAudience ?? '',
-    atmosphere: p.atmosphere ?? '',
     shopType: p.shopType ?? '',
     competitors: p.competitors ?? '',
     phoneNumber: p.phoneNumber ?? '',
@@ -220,15 +85,12 @@ function computeIsDirty(draft: DraftState | null, profile: ShopProfileResponse |
   if (!draft || !profile) return false;
   if (draft.newLogoUri !== null) return true;
   const orig = profileToDraft(profile);
-  const scalar: (keyof Omit<DraftState, 'newLogoUri' | 'addresses'>)[] = [
+  const scalar: (keyof Omit<DraftState, 'newLogoUri' | 'addresses' | 'brandColors'>)[] = [
     'brandName',
     'slogan',
-    'primaryColor',
-    'secondaryColor',
-    'accentColor',
     'businessDomain',
+    'otherDomain',
     'targetAudience',
-    'atmosphere',
     'shopType',
     'competitors',
     'phoneNumber',
@@ -238,6 +100,7 @@ function computeIsDirty(draft: DraftState | null, profile: ShopProfileResponse |
     'tikTokHandle',
   ];
   if (scalar.some((k) => draft[k] !== orig[k])) return true;
+  if (JSON.stringify(draft.brandColors) !== JSON.stringify(orig.brandColors)) return true;
   return JSON.stringify(draft.addresses) !== JSON.stringify(orig.addresses);
 }
 
@@ -253,7 +116,9 @@ export default function ProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [openColorKey, setOpenColorKey] = useState<ColorKey | null>(null);
+  const [colorPickerModal, setColorPickerModal] = useState<{ index: number; hex: string } | null>(
+    null
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -285,11 +150,35 @@ export default function ProfileScreen() {
     setDraft(null);
     setIsEditing(false);
     setSaveError(null);
-    setOpenColorKey(null);
   }
 
   function updateDraft(patch: Partial<DraftState>) {
     setDraft((prev) => (prev ? { ...prev, ...patch } : prev));
+  }
+
+  function addBrandColor() {
+    setDraft((prev) =>
+      prev
+        ? { ...prev, brandColors: [...prev.brandColors, { hex: '#6366F1', percentage: 0 }] }
+        : prev
+    );
+  }
+
+  function removeBrandColor(index: number) {
+    setDraft((prev) =>
+      prev ? { ...prev, brandColors: prev.brandColors.filter((_, i) => i !== index) } : prev
+    );
+  }
+
+  function updateBrandColor(index: number, patch: Partial<BrandColor>) {
+    setDraft((prev) =>
+      prev
+        ? {
+            ...prev,
+            brandColors: prev.brandColors.map((c, i) => (i === index ? { ...c, ...patch } : c)),
+          }
+        : prev
+    );
   }
 
   function updateAddress(index: number, value: string) {
@@ -319,7 +208,6 @@ export default function ProfileScreen() {
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      // Build a data URI so we can send it directly in JSON without multipart upload
       const dataUri = asset.base64
         ? `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}`
         : asset.uri;
@@ -334,21 +222,18 @@ export default function ProfileScreen() {
     try {
       let logoBase64 = profile.logoBase64 ?? null;
       if (draft.newLogoUri) {
-        // Data URI from ImagePicker — send directly; no multipart upload needed
         logoBase64 = draft.newLogoUri;
       }
       const cleanAddresses = draft.addresses.filter((a) => a.trim().length > 0);
       const updated = await updateShopProfile({
         brandName: draft.brandName.trim(),
         logoBase64,
-        primaryColor: draft.primaryColor || null,
-        secondaryColor: draft.secondaryColor || null,
-        accentColor: draft.accentColor || null,
+        brandColors: draft.brandColors,
         slogan: draft.slogan || null,
         businessDomain: draft.businessDomain,
-        targetAudience: draft.targetAudience,
-        atmosphere: draft.atmosphere || null,
-        shopType: draft.shopType,
+        otherDomain: draft.otherDomain || null,
+        targetAudience: draft.targetAudience || null,
+        shopType: draft.shopType || null,
         competitors: draft.competitors || null,
         phoneNumber: draft.phoneNumber.trim(),
         email: draft.email.trim(),
@@ -360,7 +245,6 @@ export default function ProfileScreen() {
       setProfile(updated);
       setDraft(null);
       setIsEditing(false);
-      setOpenColorKey(null);
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
@@ -378,6 +262,7 @@ export default function ProfileScreen() {
   })();
 
   const isDirty = computeIsDirty(draft, profile);
+  const draftTotalPct = draft?.brandColors.reduce((s, c) => s + c.percentage, 0) ?? 0;
 
   if (isLoading) {
     return (
@@ -477,6 +362,8 @@ export default function ProfileScreen() {
   const addresses =
     isEditing && draft ? draft.addresses : profile.addresses?.length > 0 ? profile.addresses : [''];
 
+  const displayColors = isEditing && draft ? draft.brandColors : (profile.brandColors ?? []);
+
   return (
     <>
       <ScrollView
@@ -551,47 +438,92 @@ export default function ProfileScreen() {
             onChangeText={(v) => updateDraft({ slogan: v })}
           />
 
-          {/* Colours — always stacked rows; edit mode adds tappable swatch + inline panel */}
-          {COLOR_KEYS.map(({ key, label }, i) => {
-            const colorValue = isEditing && draft ? draft[key] : profile[key];
-            const isLast = i === COLOR_KEYS.length - 1;
-            const isPanelOpen = isEditing && openColorKey === key;
-            return (
-              <React.Fragment key={key}>
-                <View style={[styles.infoRow, isLast && !isPanelOpen && styles.infoRowLast]}>
-                  <Text style={styles.infoLabel}>{label}</Text>
-                  {isEditing && draft ? (
+          {/* Brand Colors */}
+          {!isEditing && (
+            <View style={[styles.infoRow, styles.infoRowLast]}>
+              <Text style={styles.infoLabel}>Brand Colors</Text>
+              <View style={styles.colorSwatchRow}>
+                {displayColors.map((c, i) => (
+                  <View key={i} style={styles.colorChip}>
+                    <View style={[styles.colorSwatch, { backgroundColor: c.hex }]} />
+                    <Text style={styles.colorHexText}>{c.hex}</Text>
+                    <Text style={styles.colorPctText}>{c.percentage}%</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {isEditing && draft && (
+            <View style={styles.brandColorsEditSection}>
+              {draft.brandColors.map((color, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.infoRow,
+                    index === draft.brandColors.length - 1 && styles.infoRowLast,
+                  ]}
+                >
+                  <Pressable
+                    onPress={() => setColorPickerModal({ index, hex: color.hex })}
+                    style={styles.colorSwatchBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Pick color ${index + 1}`}
+                  >
+                    <View style={[styles.colorSwatchEdit, { backgroundColor: color.hex }]} />
+                    <Text style={styles.colorHexEdit}>{color.hex.toUpperCase()}</Text>
+                  </Pressable>
+                  <View style={styles.colorPctRow}>
+                    <TextInput
+                      style={[styles.infoInput, styles.colorPctInput]}
+                      value={String(color.percentage)}
+                      onChangeText={(v: string) => {
+                        const n = parseInt(v, 10);
+                        updateBrandColor(index, {
+                          percentage: isNaN(n) ? 0 : Math.min(100, Math.max(0, n)),
+                        });
+                      }}
+                      keyboardType="numeric"
+                      accessibilityLabel={`Percentage for color ${index + 1}`}
+                    />
+                    <Text style={styles.pctSymbol}>%</Text>
+                  </View>
+                  {draft.brandColors.length > 1 && (
                     <Pressable
-                      onPress={() => setOpenColorKey(isPanelOpen ? null : key)}
-                      style={styles.colorValueRow}
+                      onPress={() => removeBrandColor(index)}
+                      style={styles.removeColorButton}
                       accessibilityRole="button"
-                      accessibilityLabel={`Edit ${label} colour`}
+                      accessibilityLabel={`Remove color ${index + 1}`}
                     >
-                      <View
-                        style={[styles.colorSwatch, { backgroundColor: colorValue || '#808080' }]}
-                      />
-                      <Text style={styles.colorHexText}>{colorValue || '—'}</Text>
-                      <Ionicons
-                        name={isPanelOpen ? 'chevron-up' : 'chevron-down'}
-                        size={12}
-                        color={colors.text.muted}
-                      />
+                      <Ionicons name="trash-outline" size={14} color={colors.text.muted} />
                     </Pressable>
-                  ) : colorValue ? (
-                    <View style={styles.colorValueRow}>
-                      <View style={[styles.colorSwatch, { backgroundColor: colorValue }]} />
-                      <Text style={styles.colorHexText}>{colorValue}</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.infoValue}>—</Text>
                   )}
                 </View>
-                {isPanelOpen && draft && (
-                  <ColorEditPanel value={draft[key]} onChange={(v) => updateDraft({ [key]: v })} />
+              ))}
+
+              <View style={styles.colorFooterRow}>
+                <Text
+                  style={[
+                    styles.totalIndicator,
+                    draftTotalPct !== 100 && styles.totalIndicatorError,
+                  ]}
+                >
+                  Total: {draftTotalPct}% / 100%
+                </Text>
+                {draft.brandColors.length < 5 && (
+                  <Pressable
+                    onPress={addBrandColor}
+                    style={styles.addColorButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add a brand color"
+                  >
+                    <Ionicons name="add-circle-outline" size={14} color={colors.accent.primary} />
+                    <Text style={styles.addColorText}>Add color</Text>
+                  </Pressable>
                 )}
-              </React.Fragment>
-            );
-          })}
+              </View>
+            </View>
+          )}
         </View>
 
         {/* ── Business DNA ── */}
@@ -614,41 +546,28 @@ export default function ProfileScreen() {
             )}
           </View>
           {isEditing && draft && (
-            <ChipRow
-              options={DOMAIN_OPTIONS}
-              selected={draft.businessDomain}
-              onSelect={(v) => updateDraft({ businessDomain: v })}
-            />
+            <>
+              <ChipRow
+                options={DOMAIN_OPTIONS}
+                selected={draft.businessDomain}
+                onSelect={(v) => updateDraft({ businessDomain: v })}
+              />
+              {draft.businessDomain === 'Other' && (
+                <TextInput
+                  style={[styles.infoValue, styles.infoInput, styles.otherDomainInput]}
+                  value={draft.otherDomain}
+                  onChangeText={(v) => updateDraft({ otherDomain: v })}
+                  placeholder="Please specify"
+                  placeholderTextColor={colors.text.muted}
+                  autoCapitalize="sentences"
+                  accessibilityLabel="Specify domain"
+                />
+              )}
+            </>
           )}
 
-          <InfoRow
-            label="Target Audience"
-            value={profile.targetAudience}
-            draftValue={draft?.targetAudience}
-            onChangeText={(v) => updateDraft({ targetAudience: v })}
-          />
-
-          <View style={[styles.infoRow, isEditing && styles.infoRowLast]}>
-            <Text style={styles.infoLabel}>Atmosphere</Text>
-            {(isEditing ? draft?.atmosphere : profile.atmosphere) ? (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {labelFor(
-                    ATMOSPHERE_OPTIONS,
-                    (isEditing ? draft?.atmosphere : profile.atmosphere) ?? ''
-                  )}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.infoValue}>—</Text>
-            )}
-          </View>
-          {isEditing && draft && (
-            <ChipRow
-              options={ATMOSPHERE_OPTIONS}
-              selected={draft.atmosphere}
-              onSelect={(v) => updateDraft({ atmosphere: v })}
-            />
+          {!isEditing && profile.businessDomain === 'Other' && profile.otherDomain && (
+            <InfoRow label="Domain (Other)" value={profile.otherDomain} />
           )}
 
           <View style={[styles.infoRow, isEditing && styles.infoRowLast]}>
@@ -673,6 +592,13 @@ export default function ProfileScreen() {
               onSelect={(v) => updateDraft({ shopType: v })}
             />
           )}
+
+          <InfoRow
+            label="Target Audience"
+            value={profile.targetAudience ?? ''}
+            draftValue={draft?.targetAudience}
+            onChangeText={(v) => updateDraft({ targetAudience: v })}
+          />
 
           <InfoRow
             label="Competitors"
@@ -809,6 +735,37 @@ export default function ProfileScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Color picker modal */}
+      <Modal
+        visible={colorPickerModal !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setColorPickerModal(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setColorPickerModal(null)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            {colorPickerModal !== null && (
+              <RgbColorPicker
+                label={`Color ${colorPickerModal.index + 1}`}
+                value={colorPickerModal.hex}
+                onChange={(hex) => {
+                  updateBrandColor(colorPickerModal.index, { hex });
+                  setColorPickerModal((prev) => (prev ? { ...prev, hex } : null));
+                }}
+              />
+            )}
+            <Pressable
+              style={styles.modalDoneButton}
+              onPress={() => setColorPickerModal(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Done"
+            >
+              <Text style={styles.modalDoneText}>Done</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </>
   );
 }
@@ -978,22 +935,135 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: D.fontWeight.semibold,
       color: colors.accent.primary,
     },
+    // Brand colors — read mode
+    colorSwatchRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: D.spacing.xs,
+      flex: 2,
+      justifyContent: 'flex-end',
+    },
+    colorChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
     colorSwatch: {
-      width: 20,
-      height: 20,
+      width: 16,
+      height: 16,
       borderRadius: D.radius.pill,
       borderWidth: 1,
       borderColor: colors.border.default,
-    },
-    colorValueRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: D.spacing.xs,
     },
     colorHexText: {
       fontSize: D.fontSize.xs,
       color: colors.text.secondary,
       fontFamily: 'monospace',
+    },
+    colorPctText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+    },
+    // Brand colors — edit mode
+    brandColorsEditSection: {
+      paddingTop: 0,
+    },
+    colorSwatchBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.xs,
+      flex: 1,
+    },
+    colorSwatchEdit: {
+      width: 20,
+      height: 20,
+      borderRadius: D.radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+    colorHexEdit: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.secondary,
+      fontFamily: 'monospace',
+    },
+    colorPctRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+    },
+    colorPctInput: {
+      width: 36,
+      textAlign: 'center',
+      paddingHorizontal: 4,
+    },
+    pctSymbol: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+    },
+    removeColorButton: {
+      width: 28,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    colorFooterRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingTop: D.spacing.xs,
+    },
+    totalIndicator: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.secondary,
+    },
+    totalIndicatorError: {
+      color: colors.text.error,
+    },
+    addColorButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingVertical: D.spacing.xs,
+    },
+    addColorText: {
+      fontSize: D.fontSize.xs,
+      color: colors.accent.primary,
+      fontWeight: D.fontWeight.medium,
+    },
+    // Color picker modal
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: D.spacing.lg,
+    },
+    modalCard: {
+      width: '100%',
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.lg,
+      padding: D.spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+    modalDoneButton: {
+      marginTop: D.spacing.sm,
+      height: 42,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modalDoneText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: '#FFFFFF',
+    },
+    // Other domain input
+    otherDomainInput: {
+      flex: undefined,
+      textAlign: 'left',
+      marginBottom: D.spacing.sm,
     },
     // Chip row (edit mode)
     chipRow: {

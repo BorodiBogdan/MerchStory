@@ -14,24 +14,17 @@ import { useTheme } from '@/context/theme';
 const STEP_LABELS = ['Visual Identity', 'Business DNA', 'Contact & Social'];
 
 const DOMAIN_OPTIONS = [
-  { value: 'Fashion', label: 'Fashion' },
-  { value: 'Tech', label: 'Tech' },
+  { value: 'Market', label: 'Market' },
   { value: 'Food', label: 'Food' },
-  { value: 'Beauty', label: 'Beauty' },
+  { value: 'Retail', label: 'Retail' },
+  { value: 'Fashion', label: 'Fashion' },
   { value: 'Other', label: 'Other' },
-];
-
-const ATMOSPHERE_OPTIONS = [
-  { value: 'Urban', label: 'Urban' },
-  { value: 'Nature', label: 'Nature' },
-  { value: 'MinimalInterior', label: 'Minimal Interior' },
-  { value: 'ProfessionalStudio', label: 'Studio' },
 ];
 
 const SHOP_TYPE_OPTIONS = [
   { value: 'Luxury', label: 'Luxury' },
-  { value: 'DiscountOutlet', label: 'Discount / Outlet' },
-  { value: 'ArtisanalHandmade', label: 'Artisanal / Handmade' },
+  { value: 'MidRange', label: 'Mid-range' },
+  { value: 'Budget', label: 'Budget' },
 ];
 
 export default function Step2Screen() {
@@ -40,24 +33,18 @@ export default function Step2Screen() {
   const { data, updateStep2 } = useSetup();
 
   const [domain, setDomain] = useState(data.businessDomain);
+  const [otherDomain, setOtherDomain] = useState(data.otherDomain);
   const [audience, setAudience] = useState(data.targetAudience);
-  const [atmosphere, setAtmosphere] = useState(data.atmosphere);
   const [shopType, setShopType] = useState(data.shopType);
   const [competitors, setCompetitors] = useState(data.competitors);
 
-  const [audienceError, setAudienceError] = useState<string | null>(null);
-
-  const canProceed = domain.length > 0 && audience.trim().length > 0 && shopType.length > 0;
+  const canProceed = domain.length > 0 && (domain !== 'Other' || otherDomain.trim().length > 0);
 
   function handleNext() {
-    if (!audience.trim()) {
-      setAudienceError('Please describe your target audience');
-      return;
-    }
     updateStep2({
       businessDomain: domain,
+      otherDomain,
       targetAudience: audience,
-      atmosphere,
       shopType,
       competitors,
     });
@@ -86,40 +73,38 @@ export default function Step2Screen() {
           onSelect={setDomain}
           accessibilityLabel="Select your business domain"
         />
-      </View>
-
-      <FloatingInput
-        label="Target Audience"
-        value={audience}
-        onChangeText={(v) => {
-          setAudience(v);
-          if (v.trim()) setAudienceError(null);
-        }}
-        error={audienceError}
-        accessibilityLabel="Target audience"
-        accessibilityHint="e.g. Women 25-40 interested in wellness"
-        autoCapitalize="sentences"
-      />
-
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Atmosphere (optional)</Text>
-        <ChipSelector
-          options={ATMOSPHERE_OPTIONS}
-          selected={atmosphere}
-          onSelect={setAtmosphere}
-          accessibilityLabel="Select location atmosphere"
-        />
+        {domain === 'Other' && (
+          <View style={styles.otherInput}>
+            <FloatingInput
+              label="Please specify"
+              value={otherDomain}
+              onChangeText={setOtherDomain}
+              accessibilityLabel="Specify your business domain"
+              autoCapitalize="sentences"
+            />
+          </View>
+        )}
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Shop Type</Text>
+        <Text style={styles.sectionLabel}>Shop Type (optional)</Text>
         <ChipSelector
           options={SHOP_TYPE_OPTIONS}
           selected={shopType}
           onSelect={setShopType}
           accessibilityLabel="Select shop type"
+          deselectable
         />
       </View>
+
+      <FloatingInput
+        label="Target Audience (optional)"
+        value={audience}
+        onChangeText={setAudience}
+        accessibilityLabel="Target audience"
+        accessibilityHint="e.g. Women 25-40 interested in wellness"
+        autoCapitalize="sentences"
+      />
 
       <FloatingInput
         label="Competitors (optional)"
@@ -182,6 +167,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       textTransform: 'uppercase',
       letterSpacing: 0.8,
       marginBottom: D.spacing.sm,
+    },
+    otherInput: {
+      marginTop: D.spacing.sm,
     },
     buttons: {
       flexDirection: 'row',

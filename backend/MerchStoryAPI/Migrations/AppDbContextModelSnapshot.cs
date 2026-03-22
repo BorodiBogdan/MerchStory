@@ -126,17 +126,13 @@ namespace MerchStoryAPI.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("AccentColor")
-                        .HasMaxLength(7)
-                        .HasColumnType("character varying(7)");
-
                     b.Property<string>("Addresses")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("Atmosphere")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                    b.Property<string>("BrandColorsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("BrandName")
                         .IsRequired()
@@ -168,20 +164,15 @@ namespace MerchStoryAPI.Migrations
                     b.Property<string>("LogoBase64")
                         .HasColumnType("text");
 
+                    b.Property<string>("OtherDomain")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("PrimaryColor")
-                        .HasMaxLength(7)
-                        .HasColumnType("character varying(7)");
-
-                    b.Property<string>("SecondaryColor")
-                        .HasMaxLength(7)
-                        .HasColumnType("character varying(7)");
-
                     b.Property<string>("ShopType")
-                        .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
@@ -190,7 +181,6 @@ namespace MerchStoryAPI.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.Property<string>("TargetAudience")
-                        .IsRequired()
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
