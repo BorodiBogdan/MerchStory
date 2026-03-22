@@ -6,6 +6,7 @@ import {
   Animated,
   FlatList,
   Image,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -42,6 +43,8 @@ export default function GalleryScreen() {
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lightboxItem, setLightboxItem] = useState<GalleryItem | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Responsive column count
   const numColumns = isWeb ? (screenWidth < 600 ? 2 : screenWidth < 1024 ? 3 : 4) : 2;
@@ -82,6 +85,8 @@ export default function GalleryScreen() {
   }
 
   async function handleDelete(id: string) {
+    // Close lightbox if the deleted item is currently open
+    if (lightboxItem?.id === id) setLightboxItem(null);
     setItems((prev) => prev.filter((item) => item.id !== id));
     try {
       await deleteGalleryItem(id);
@@ -98,7 +103,16 @@ export default function GalleryScreen() {
   });
 
   const renderPhoto = ({ item }: { item: GalleryItem }) => (
-    <View style={[styles.photoCard, { width: cardWidth }]}>
+    <Pressable
+      style={({ pressed }) => [
+        styles.photoCard,
+        { width: cardWidth },
+        pressed && styles.photoCardPressed,
+      ]}
+      onPress={() => setLightboxItem(item)}
+      accessibilityRole="button"
+      accessibilityLabel="View image"
+    >
       <View style={[styles.photoImageArea, { height: cardWidth }]}>
         <Image
           source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
@@ -107,7 +121,10 @@ export default function GalleryScreen() {
         />
         <Pressable
           style={({ pressed }) => [styles.deleteButton, pressed && { opacity: 0.7 }]}
-          onPress={() => void handleDelete(item.id)}
+          onPress={(e) => {
+            e.stopPropagation?.();
+            setConfirmDeleteId(item.id);
+          }}
           accessibilityRole="button"
           accessibilityLabel="Delete image"
           hitSlop={8}
@@ -118,7 +135,7 @@ export default function GalleryScreen() {
       <View style={styles.photoMeta}>
         <Text style={styles.photoDate}>{formatDate(item.createdAt)}</Text>
       </View>
-    </View>
+    </Pressable>
   );
 
   const photosEmptyState = (
@@ -261,6 +278,92 @@ export default function GalleryScreen() {
         {/* Content */}
         {activeTab === 'photos' ? photosContent() : videosComingSoon}
       </View>
+
+      {/* Delete confirmation */}
+      <Modal
+        visible={confirmDeleteId !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmDeleteId(null)}
+      >
+        <Pressable style={styles.confirmOverlay} onPress={() => setConfirmDeleteId(null)}>
+          <Pressable style={styles.confirmDialog} onPress={() => {}}>
+            <View style={styles.confirmIconWrap}>
+              <Ionicons name="trash-outline" size={28} color="#EF4444" />
+            </View>
+            <Text style={styles.confirmTitle}>Delete image?</Text>
+            <Text style={styles.confirmBody}>
+              This image will be permanently removed from your gallery.
+            </Text>
+            <View style={styles.confirmActions}>
+              <Pressable
+                style={({ pressed }) => [styles.confirmCancel, pressed && { opacity: 0.7 }]}
+                onPress={() => setConfirmDeleteId(null)}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.confirmDelete, pressed && { opacity: 0.8 }]}
+                onPress={() => {
+                  const id = confirmDeleteId;
+                  setConfirmDeleteId(null);
+                  if (id) void handleDelete(id);
+                }}
+              >
+                <Text style={styles.confirmDeleteText}>Delete</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Lightbox */}
+      <Modal
+        visible={lightboxItem !== null}
+        transparent
+        animationType={isWeb ? 'fade' : 'fade'}
+        onRequestClose={() => setLightboxItem(null)}
+      >
+        <Pressable style={styles.lightboxOverlay} onPress={() => setLightboxItem(null)}>
+          {/* Stop propagation so tapping the image/controls doesn't close */}
+          <Pressable style={styles.lightboxContent} onPress={() => {}}>
+            {/* Top bar */}
+            <View style={styles.lightboxHeader}>
+              <Text style={styles.lightboxDate}>
+                {lightboxItem ? formatDate(lightboxItem.createdAt) : ''}
+              </Text>
+              <View style={styles.lightboxActions}>
+                <Pressable
+                  style={({ pressed }) => [styles.lightboxIconBtn, pressed && { opacity: 0.7 }]}
+                  onPress={() => lightboxItem && setConfirmDeleteId(lightboxItem.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete image"
+                >
+                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.lightboxIconBtn, pressed && { opacity: 0.7 }]}
+                  onPress={() => setLightboxItem(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
+                >
+                  <Ionicons name="close" size={22} color="#fff" />
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Image */}
+            {lightboxItem && (
+              <Image
+                source={{ uri: `data:${lightboxItem.mimeType};base64,${lightboxItem.imageBase64}` }}
+                style={styles.lightboxImage}
+                resizeMode="contain"
+                accessibilityLabel="Full size image"
+              />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -346,6 +449,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderColor: colors.border.default,
       overflow: 'hidden',
       ...D.shadow.sm,
+    },
+    photoCardPressed: {
+      opacity: 0.85,
+      transform: [{ scale: 0.98 }],
     },
     photoImageArea: {
       backgroundColor: colors.bg.elevated,
@@ -453,6 +560,116 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: D.fontWeight.semibold,
       color: colors.accent.secondary,
       letterSpacing: 0.5,
+    },
+    // ── Lightbox ─────────────────────────────────────────────────────────────
+    lightboxOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.92)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    lightboxContent: {
+      width: '100%',
+      maxWidth: isWeb ? 880 : undefined,
+      flex: isWeb ? undefined : 1,
+      paddingHorizontal: isWeb ? D.spacing.lg : 0,
+    },
+    lightboxHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: isWeb ? 0 : D.spacing.md,
+      paddingVertical: D.spacing.sm,
+    },
+    lightboxDate: {
+      fontSize: D.fontSize.sm,
+      color: 'rgba(255,255,255,0.6)',
+    },
+    lightboxActions: {
+      flexDirection: 'row',
+      gap: D.spacing.xs,
+    },
+    lightboxIconBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: D.radius.pill,
+      backgroundColor: 'rgba(255,255,255,0.1)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    lightboxImage: {
+      width: '100%',
+      aspectRatio: 1,
+      borderRadius: isWeb ? D.radius.lg : 0,
+    },
+    // ── Confirm delete dialog ─────────────────────────────────────────────
+    confirmOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: D.spacing.lg,
+    },
+    confirmDialog: {
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.xl,
+      padding: D.spacing.lg,
+      width: '100%',
+      maxWidth: 360,
+      alignItems: 'center',
+      ...D.shadow.modal,
+    },
+    confirmIconWrap: {
+      width: 56,
+      height: 56,
+      borderRadius: D.radius.pill,
+      backgroundColor: 'rgba(239,68,68,0.12)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: D.spacing.md,
+    },
+    confirmTitle: {
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      marginBottom: D.spacing.sm,
+    },
+    confirmBody: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      textAlign: 'center',
+      lineHeight: 20,
+      marginBottom: D.spacing.lg,
+    },
+    confirmActions: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+      width: '100%',
+    },
+    confirmCancel: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      alignItems: 'center',
+    },
+    confirmCancelText: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
+    },
+    confirmDelete: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: D.radius.pill,
+      backgroundColor: '#EF4444',
+      alignItems: 'center',
+    },
+    confirmDeleteText: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+      color: '#fff',
     },
   });
 }
