@@ -122,7 +122,6 @@ public static class ShopRoutes
 
                 db.ShopProfiles.Add(profile);
                 await db.SaveChangesAsync();
-                logger.LogInformation("ShopProfile created for user {UserId}", userId);
                 return Results.Created("/shop/profile", MapToResponse(profile));
             }
 
@@ -146,7 +145,6 @@ public static class ShopRoutes
             existing.UpdatedAt = now;
 
             await db.SaveChangesAsync();
-            logger.LogInformation("ShopProfile updated for user {UserId}", userId);
             return Results.Ok(MapToResponse(existing));
         });
 
@@ -188,7 +186,6 @@ public static class ShopRoutes
                 await db.SaveChangesAsync();
             }
 
-            logger.LogInformation("Logo uploaded for user {UserId}", userId);
             return Results.Ok(new { logoBase64 = dataUri });
         });
     }

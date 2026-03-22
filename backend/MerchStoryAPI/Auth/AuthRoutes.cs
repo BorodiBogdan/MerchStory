@@ -35,7 +35,6 @@ public static class AuthRoutes
                 return Results.BadRequest(result.Errors.Select(e => e.Description));
             }
 
-            logger.LogInformation("User registered: {Email}", request.Email);
             var accessToken = jwtService.GenerateToken(user);
             var refreshToken = jwtService.GenerateRefreshToken(user.Id, request.ClientType ?? "mobile");
 
@@ -67,7 +66,6 @@ public static class AuthRoutes
                 return Results.Unauthorized();
             }
 
-            logger.LogInformation("User logged in: {Email}", request.Email);
             var accessToken = jwtService.GenerateToken(user);
             var refreshToken = jwtService.GenerateRefreshToken(user.Id, request.ClientType ?? "mobile");
 
@@ -101,8 +99,6 @@ public static class AuthRoutes
 
             db.RefreshTokens.Add(newRefreshToken);
             await db.SaveChangesAsync();
-
-            logger.LogInformation("Token rotated for user {UserId}", stored.UserId);
 
             bool hasProfile = await db.ShopProfiles.AnyAsync(s => s.UserId == stored.UserId);
             return Results.Ok(new AuthResponse(

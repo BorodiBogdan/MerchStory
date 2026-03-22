@@ -1,7 +1,10 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5257';
+const API_URL =
+  Platform.OS === 'web'
+    ? 'http://localhost:5257'
+    : (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5257');
 
 const TOKEN_KEY = 'auth_token';
 
@@ -104,7 +107,13 @@ export async function submitShopProfile(payload: ShopProfilePayload): Promise<Sh
 export async function uploadShopLogo(imageUri: string, mimeType = 'image/jpeg'): Promise<string> {
   const token = await getToken();
   const formData = new FormData();
-  formData.append('logo', { uri: imageUri, name: 'logo.jpg', type: mimeType } as unknown as Blob);
+  if (Platform.OS === 'web') {
+    const res = await fetch(imageUri);
+    const blob = await res.blob();
+    formData.append('logo', blob, 'logo.jpg');
+  } else {
+    formData.append('logo', { uri: imageUri, name: 'logo.jpg', type: mimeType } as unknown as Blob);
+  }
 
   const response = await fetch(`${API_URL}/shop/logo`, {
     method: 'POST',

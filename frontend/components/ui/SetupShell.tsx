@@ -1,16 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { LogoutModal } from '@/components/ui/LogoutModal';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
@@ -23,12 +22,6 @@ export function SetupShell({ children }: SetupShellProps) {
   const { colors, colorScheme, toggleTheme } = useTheme();
   const { signOut } = useAuth();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [modalVisible, setModalVisible] = useState(false);
-
-  async function handleSignOut() {
-    setModalVisible(false);
-    await signOut();
-  }
 
   if (Platform.OS === 'web') {
     const isDark = colorScheme === 'dark';
@@ -82,20 +75,6 @@ export function SetupShell({ children }: SetupShellProps) {
       color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
     };
 
-    const avatarButtonStyle: React.CSSProperties = {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      cursor: 'pointer',
-      background: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.1)',
-      border: `1px solid ${isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.3)'}`,
-      padding: 0,
-      color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
-    };
-
     const scrollerStyle: React.CSSProperties = {
       flex: 1,
       display: 'flex',
@@ -118,94 +97,70 @@ export function SetupShell({ children }: SetupShellProps) {
     };
 
     return (
-      <>
-        <div style={pageStyle}>
-          <div style={topBarStyle}>
-            <span style={brandStyle}>MerchStory</span>
-            <div style={actionsStyle}>
-              <button
-                style={iconButtonStyle}
-                onClick={toggleTheme}
-                aria-label={colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                <Ionicons
-                  name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
-                  size={18}
-                  color={isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)'}
-                />
-              </button>
-              <button
-                style={avatarButtonStyle}
-                onClick={() => setModalVisible(true)}
-                aria-label="Open account menu"
-              >
-                <Ionicons
-                  name="person-circle-outline"
-                  size={20}
-                  color={isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)'}
-                />
-              </button>
-            </div>
-          </div>
-          <div style={scrollerStyle}>
-            <div style={cardStyle}>{children}</div>
+      <div style={pageStyle}>
+        <div style={topBarStyle}>
+          <span style={brandStyle}>MerchStory</span>
+          <div style={actionsStyle}>
+            <button
+              style={iconButtonStyle}
+              onClick={toggleTheme}
+              aria-label={colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              <Ionicons
+                name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
+                size={18}
+                color={isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)'}
+              />
+            </button>
+            <button style={iconButtonStyle} onClick={() => signOut()} aria-label="Sign out">
+              <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+            </button>
           </div>
         </div>
-        <LogoutModal
-          visible={modalVisible}
-          onConfirm={handleSignOut}
-          onDismiss={() => setModalVisible(false)}
-        />
-      </>
+        <div style={scrollerStyle}>
+          <div style={cardStyle}>{children}</div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <>
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.nativeHeader}>
-          <Pressable
-            onPress={toggleTheme}
-            style={styles.iconButton}
-            accessibilityLabel={
-              colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
-            }
-            accessibilityRole="button"
-          >
-            <Ionicons
-              name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
-              size={20}
-              color={colors.text.secondary}
-            />
-          </Pressable>
-          <Pressable
-            onPress={() => setModalVisible(true)}
-            style={styles.avatarButton}
-            accessibilityLabel="Open account menu"
-            accessibilityRole="button"
-          >
-            <View style={styles.avatarChip}>
-              <Ionicons name="person-circle-outline" size={22} color={colors.text.secondary} />
-            </View>
-          </Pressable>
-        </View>
-        <KeyboardAvoidingView style={styles.flex} behavior="padding">
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {children}
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-      <LogoutModal
-        visible={modalVisible}
-        onConfirm={handleSignOut}
-        onDismiss={() => setModalVisible(false)}
-      />
-    </>
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.nativeHeader}>
+        <Pressable
+          onPress={toggleTheme}
+          style={styles.iconButton}
+          accessibilityLabel={
+            colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
+          }
+          accessibilityRole="button"
+        >
+          <Ionicons
+            name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
+            size={20}
+            color={colors.text.secondary}
+          />
+        </Pressable>
+        <Pressable
+          onPress={() => signOut()}
+          style={styles.iconButton}
+          accessibilityLabel="Sign out"
+          accessibilityRole="button"
+        >
+          <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+        </Pressable>
+      </View>
+      <KeyboardAvoidingView style={styles.flex} behavior="padding">
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -240,19 +195,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       width: 34,
       height: 34,
       borderRadius: D.radius.pill,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    avatarButton: {
-      outlineWidth: 0,
-    },
-    avatarChip: {
-      width: 34,
-      height: 34,
-      borderRadius: D.radius.pill,
-      backgroundColor: colors.accent.dim,
-      borderWidth: 1,
-      borderColor: colors.border.focus,
       alignItems: 'center',
       justifyContent: 'center',
     },

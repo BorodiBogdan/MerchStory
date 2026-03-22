@@ -29,8 +29,6 @@ public class RefreshTokenCleanupService : BackgroundService
             var deleted = await db.RefreshTokens
                 .Where(rt => rt.ExpiresAt <= cutoff || rt.IsRevoked)
                 .ExecuteDeleteAsync(stoppingToken);
-
-            this.logger.LogInformation("Cleaned up {Count} expired/revoked refresh tokens.", deleted);
         }
     }
 }
