@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { D } from '@/constants/design';
@@ -83,15 +83,47 @@ export default function TabLayout() {
         headerStyle: { backgroundColor: colors.bg.surface },
         headerTintColor: colors.text.primary,
         headerShadowVisible: false,
-        tabBarStyle: { display: 'none' },
+        tabBarStyle: styles.tabBar,
         tabBarButton: HapticTab,
+        tabBarLabelStyle: styles.tabBarLabel,
         headerLeft,
         headerRight,
         headerTitle: () => null,
       }}
     >
-      <Tabs.Screen name="index" />
-      <Tabs.Screen name="profile" />
+      <Tabs.Screen
+        name="index"
+        options={{
+          tabBarLabel: 'Studio',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="gallery"
+        options={{
+          tabBarLabel: 'Gallery',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'images' : 'images-outline'} size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="products"
+        options={{
+          tabBarLabel: 'Products',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'pricetag' : 'pricetag-outline'} size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          tabBarItemStyle: { display: 'none' },
+        }}
+      />
     </Tabs>
   );
 }
@@ -135,6 +167,19 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderColor: colors.border.focus,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    tabBar: {
+      backgroundColor: colors.bg.surface,
+      borderTopWidth: 1,
+      borderTopColor: colors.border.subtle,
+      height: Platform.OS === 'ios' ? 84 : 64,
+      paddingTop: D.spacing.sm,
+      paddingBottom: Platform.OS === 'ios' ? D.spacing.lg : D.spacing.sm,
+    },
+    tabBarLabel: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.medium,
+      marginTop: 2,
     },
   });
 }

@@ -15,6 +15,10 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
     public DbSet<ShopProfile> ShopProfiles => this.Set<ShopProfile>();
 
+    public DbSet<GeneratedImage> GeneratedImages => this.Set<GeneratedImage>();
+
+    public DbSet<Product> Products => this.Set<Product>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -57,6 +61,37 @@ public class AppDbContext : IdentityDbContext<AppUser>
             entity.HasOne(s => s.User)
                   .WithOne(u => u.ShopProfile)
                   .HasForeignKey<ShopProfile>(s => s.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<GeneratedImage>(entity =>
+        {
+            entity.HasKey(g => g.Id);
+
+            entity.Property(g => g.ImageBase64).HasColumnType("text").IsRequired();
+            entity.Property(g => g.MimeType).HasMaxLength(50).IsRequired();
+
+            entity.HasIndex(g => g.UserId);
+
+            entity.HasOne(g => g.User)
+                  .WithMany()
+                  .HasForeignKey(g => g.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Product>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+
+            entity.Property(p => p.Name).HasMaxLength(200).IsRequired();
+            entity.Property(p => p.Price).HasColumnType("numeric(18,2)").IsRequired();
+            entity.Property(p => p.ImageBase64).HasColumnType("text");
+
+            entity.HasIndex(p => p.UserId);
+
+            entity.HasOne(p => p.User)
+                  .WithMany()
+                  .HasForeignKey(p => p.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
     }
