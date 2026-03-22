@@ -1,10 +1,26 @@
+import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-const API_URL =
-  Platform.OS === 'web'
-    ? 'http://localhost:5257'
-    : (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5257');
+function getApiUrl(): string {
+  // Web always runs on the same machine as the dev server
+  if (Platform.OS === 'web') return 'http://localhost:5257';
+
+  // In development on a physical device, derive the host from Expo's dev server
+  // so the phone hits the same machine it loaded the JS bundle from — no manual IP needed
+  if (__DEV__) {
+    const hostUri = Constants.expoConfig?.hostUri;
+    if (hostUri) {
+      const host = hostUri.split(':')[0];
+      return `http://${host}:5257`;
+    }
+  }
+
+  // Production (or dev fallback): use explicit env var
+  return process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5257';
+}
+
+const API_URL = getApiUrl();
 
 const TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'auth_refresh_token';
@@ -227,4 +243,100 @@ export async function generateImage(prompt: string): Promise<GenerateImageRespon
   }
 
   return response.json() as Promise<GenerateImageResponse>;
+}
+
+// ── Gallery ──────────────────────────────────────────────────────────────────
+
+export interface GalleryItem {
+  id: string;
+  imageBase64: string;
+  mimeType: string;
+  createdAt: string;
+}
+
+export async function fetchGallery(): Promise<GalleryItem[]> {
+  const response = await fetchWithAuth(`${API_URL}/gallery`, {});
+
+  if (!response.ok) {
+    throw new Error(`Failed to load gallery (${response.status})`);
+  }
+
+  return response.json() as Promise<GalleryItem[]>;
+}
+
+export async function deleteGalleryItem(id: string): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/gallery/${id}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Failed to delete image (${response.status})`);
+  }
+}
+
+// ── Products ─────────────────────────────────────────────────────────────────
+
+export interface ProductItem {
+  id: string;
+  name: string;
+  price: number;
+  imageBase64: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductPayload {
+  name: string;
+  price: number;
+  imageBase64: string | null;
+}
+
+export async function fetchProducts(): Promise<ProductItem[]> {
+  const response = await fetchWithAuth(`${API_URL}/products`, {});
+
+  if (!response.ok) {
+    throw new Error(`Failed to load products (${response.status})`);
+  }
+
+  return response.json() as Promise<ProductItem[]>;
+}
+
+export async function createProduct(payload: ProductPayload): Promise<ProductItem> {
+  const response = await fetchWithAuth(`${API_URL}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to create product (${response.status})`);
+  }
+
+  return response.json() as Promise<ProductItem>;
+}
+
+export async function updateProduct(id: string, payload: ProductPayload): Promise<ProductItem> {
+  const response = await fetchWithAuth(`${API_URL}/products/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to update product (${response.status})`);
+  }
+
+  return response.json() as Promise<ProductItem>;
+}
+
+export async function deleteProduct(id: string): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/products/${id}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Failed to delete product (${response.status})`);
+  }
 }
