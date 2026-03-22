@@ -18,6 +18,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
@@ -39,6 +40,8 @@ export default function ProductsScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width: screenWidth } = useWindowDimensions();
+
+  const insets = useSafeAreaInsets();
 
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -361,21 +364,28 @@ export default function ProductsScreen() {
       </Modal>
 
       {/* Add / Edit Modal */}
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType={isWeb ? 'fade' : 'slide'}
-        onRequestClose={closeModal}
-      >
+      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={closeModal}>
         {/* Overlay — always centered on web, bottom sheet on native */}
         <Pressable style={styles.modalOverlay} onPress={closeModal}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.modalKAV}
           >
-            <Pressable style={styles.modalSheet} onPress={() => {}}>
-              <View style={styles.modalHandle} />
-              <ScrollView showsVerticalScrollIndicator={false}>
+            <Pressable
+              style={[
+                styles.modalSheet,
+                !isWeb && {
+                  paddingTop: insets.top + D.spacing.sm,
+                  paddingBottom: insets.bottom + D.spacing.md,
+                },
+              ]}
+              onPress={() => {}}
+            >
+              {isWeb && <View style={styles.modalHandle} />}
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={!isWeb && styles.modalScrollContent}
+              >
                 <Text style={styles.modalTitle}>
                   {editingProduct ? 'Edit Product' : 'New Product'}
                 </Text>
@@ -650,29 +660,31 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       lineHeight: 20,
       marginBottom: D.spacing.lg,
     },
+    modalScrollContent: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      paddingVertical: D.spacing.lg,
+    },
     // ── Modal ────────────────────────────────────────────────────────────────
     modalOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.55)',
-      // Always center on web; bottom-align on native
-      justifyContent: isWeb ? 'center' : 'flex-end',
+      backgroundColor: isWeb ? 'rgba(0,0,0,0.55)' : colors.bg.base,
+      justifyContent: isWeb ? 'center' : 'flex-start',
       alignItems: 'center',
       padding: isWeb ? D.spacing.md : 0,
     },
     modalKAV: {
       width: '100%',
       maxWidth: isWeb ? 520 : undefined,
-      justifyContent: isWeb ? undefined : 'flex-end',
+      flex: isWeb ? undefined : 1,
     },
     modalSheet: {
       backgroundColor: colors.bg.surface,
       borderRadius: isWeb ? D.radius.xl : undefined,
-      borderTopLeftRadius: isWeb ? undefined : D.radius.xl,
-      borderTopRightRadius: isWeb ? undefined : D.radius.xl,
       paddingHorizontal: D.spacing.md,
-      paddingBottom: Platform.OS === 'ios' ? 40 : D.spacing.lg,
       paddingTop: D.spacing.sm,
-      maxHeight: '90%',
+      flex: isWeb ? undefined : 1,
+      maxHeight: isWeb ? '90%' : undefined,
       width: '100%',
       ...D.shadow.modal,
     },

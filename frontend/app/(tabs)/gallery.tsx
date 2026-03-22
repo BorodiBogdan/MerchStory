@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
@@ -39,6 +40,8 @@ export default function GalleryScreen() {
   const [activeTab, setActiveTab] = useState<GalleryTab>('photos');
   const slideAnim = useRef(new Animated.Value(0)).current;
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const insets = useSafeAreaInsets();
 
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -328,7 +331,9 @@ export default function GalleryScreen() {
           {/* Stop propagation so tapping the image/controls doesn't close */}
           <Pressable style={styles.lightboxContent} onPress={() => {}}>
             {/* Top bar */}
-            <View style={styles.lightboxHeader}>
+            <View
+              style={[styles.lightboxHeader, !isWeb && { paddingTop: insets.top + D.spacing.sm }]}
+            >
               <Text style={styles.lightboxDate}>
                 {lightboxItem ? formatDate(lightboxItem.createdAt) : ''}
               </Text>
@@ -354,12 +359,16 @@ export default function GalleryScreen() {
 
             {/* Image */}
             {lightboxItem && (
-              <Image
-                source={{ uri: `data:${lightboxItem.mimeType};base64,${lightboxItem.imageBase64}` }}
-                style={styles.lightboxImage}
-                resizeMode="contain"
-                accessibilityLabel="Full size image"
-              />
+              <View style={styles.lightboxImageWrapper}>
+                <Image
+                  source={{
+                    uri: `data:${lightboxItem.mimeType};base64,${lightboxItem.imageBase64}`,
+                  }}
+                  style={styles.lightboxImage}
+                  resizeMode="contain"
+                  accessibilityLabel="Full size image"
+                />
+              </View>
             )}
           </Pressable>
         </Pressable>
@@ -573,6 +582,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       maxWidth: isWeb ? 880 : undefined,
       flex: isWeb ? undefined : 1,
       paddingHorizontal: isWeb ? D.spacing.lg : 0,
+    },
+    lightboxImageWrapper: {
+      flex: isWeb ? undefined : 1,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     lightboxHeader: {
       flexDirection: 'row',

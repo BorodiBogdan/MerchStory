@@ -1,10 +1,26 @@
+import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-const API_URL =
-  Platform.OS === 'web'
-    ? 'http://localhost:5257'
-    : (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5257');
+function getApiUrl(): string {
+  // Web always runs on the same machine as the dev server
+  if (Platform.OS === 'web') return 'http://localhost:5257';
+
+  // In development on a physical device, derive the host from Expo's dev server
+  // so the phone hits the same machine it loaded the JS bundle from — no manual IP needed
+  if (__DEV__) {
+    const hostUri = Constants.expoConfig?.hostUri;
+    if (hostUri) {
+      const host = hostUri.split(':')[0];
+      return `http://${host}:5257`;
+    }
+  }
+
+  // Production (or dev fallback): use explicit env var
+  return process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5257';
+}
+
+const API_URL = getApiUrl();
 
 const TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'auth_refresh_token';
