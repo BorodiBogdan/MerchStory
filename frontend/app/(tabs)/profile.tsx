@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import * as WebBrowser from 'expo-web-browser';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -20,7 +21,14 @@ import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
-import { BrandColor, getShopProfile, ShopProfileResponse, updateShopProfile } from '@/utils/api';
+import {
+  BrandColor,
+  getFacebookConnectUrl,
+  getInstagramConnectUrl,
+  getShopProfile,
+  ShopProfileResponse,
+  updateShopProfile,
+} from '@/utils/api';
 
 const DOMAIN_OPTIONS = [
   { value: 'Market', label: 'Market' },
@@ -119,6 +127,28 @@ export default function ProfileScreen() {
   const [colorPickerModal, setColorPickerModal] = useState<{ index: number; hex: string } | null>(
     null
   );
+  const [socialStatus, setSocialStatus] = useState<{ instagram?: string; facebook?: string }>({});
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    function handleMessage(event: MessageEvent) {
+      const data = event.data as { type?: string; url?: string };
+      if (data?.type !== 'social-callback' || !data.url) return;
+      if (data.url.includes('status=linked')) {
+        if (data.url.includes('provider=facebook'))
+          setSocialStatus((s) => ({ ...s, facebook: 'connected' }));
+        else if (data.url.includes('provider=instagram'))
+          setSocialStatus((s) => ({ ...s, instagram: 'connected' }));
+      } else {
+        if (data.url.includes('provider=facebook'))
+          setSocialStatus((s) => ({ ...s, facebook: 'error' }));
+        else if (data.url.includes('provider=instagram'))
+          setSocialStatus((s) => ({ ...s, instagram: 'error' }));
+      }
+    }
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -196,6 +226,60 @@ export default function ProfileScreen() {
     setDraft((prev) =>
       prev ? { ...prev, addresses: prev.addresses.filter((_, i) => i !== index) } : prev
     );
+  }
+
+  async function connectInstagram() {
+    try {
+      setSocialStatus((s) => ({ ...s, instagram: 'connecting' }));
+      const url = await getInstagramConnectUrl();
+      if (Platform.OS === 'web') {
+        window.open(url, '_blank', 'width=600,height=700');
+      } else {
+        const callbackBase = process.env.EXPO_PUBLIC_FRONTEND_URL ?? 'http://localhost:8081';
+        const result = await WebBrowser.openAuthSessionAsync(
+          url,
+          `${callbackBase}/social-callback`
+        );
+        if (result.type === 'success' && result.url.includes('status=linked')) {
+          setSocialStatus((s) => ({ ...s, instagram: 'connected' }));
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } else if (result.type === 'dismiss') {
+          setSocialStatus((s) => ({ ...s, instagram: undefined }));
+        } else {
+          setSocialStatus((s) => ({ ...s, instagram: 'error' }));
+        }
+      }
+    } catch (err) {
+      console.error('Instagram connect error:', err);
+      setSocialStatus((s) => ({ ...s, instagram: 'error' }));
+    }
+  }
+
+  async function connectFacebook() {
+    try {
+      setSocialStatus((s) => ({ ...s, facebook: 'connecting' }));
+      const url = await getFacebookConnectUrl();
+      if (Platform.OS === 'web') {
+        window.open(url, '_blank', 'width=600,height=700');
+      } else {
+        const callbackBase = process.env.EXPO_PUBLIC_FRONTEND_URL ?? 'http://localhost:8081';
+        const result = await WebBrowser.openAuthSessionAsync(
+          url,
+          `${callbackBase}/social-callback`
+        );
+        if (result.type === 'success' && result.url.includes('status=linked')) {
+          setSocialStatus((s) => ({ ...s, facebook: 'connected' }));
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } else if (result.type === 'dismiss') {
+          setSocialStatus((s) => ({ ...s, facebook: undefined }));
+        } else {
+          setSocialStatus((s) => ({ ...s, facebook: 'error' }));
+        }
+      }
+    } catch (err) {
+      console.error('Facebook connect error:', err);
+      setSocialStatus((s) => ({ ...s, facebook: 'error' }));
+    }
   }
 
   async function pickLogo() {
@@ -703,6 +787,57 @@ export default function ProfileScreen() {
           />
         </View>
 
+        {/* ── Connected Accounts ── */}
+        {!isEditing && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Connected Accounts</Text>
+
+            <Pressable
+              onPress={connectInstagram}
+              disabled={socialStatus.instagram === 'connecting'}
+              style={[styles.socialConnectRow, styles.infoRowLast]}
+              accessibilityRole="button"
+              accessibilityLabel="Connect Instagram"
+            >
+              <View style={styles.socialConnectLeft}>
+                <Ionicons name="logo-instagram" size={20} color={colors.text.primary} />
+                <Text style={styles.socialConnectLabel}>Instagram</Text>
+              </View>
+              <Text style={styles.socialConnectStatus}>
+                {socialStatus.instagram === 'connected'
+                  ? '✓ Connected'
+                  : socialStatus.instagram === 'connecting'
+                    ? 'Opening…'
+                    : socialStatus.instagram === 'error'
+                      ? 'Failed — retry'
+                      : 'Connect'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={connectFacebook}
+              disabled={socialStatus.facebook === 'connecting'}
+              style={[styles.socialConnectRow, styles.infoRowLast]}
+              accessibilityRole="button"
+              accessibilityLabel="Connect Facebook"
+            >
+              <View style={styles.socialConnectLeft}>
+                <Ionicons name="logo-facebook" size={20} color={colors.text.primary} />
+                <Text style={styles.socialConnectLabel}>Facebook</Text>
+              </View>
+              <Text style={styles.socialConnectStatus}>
+                {socialStatus.facebook === 'connected'
+                  ? '✓ Connected'
+                  : socialStatus.facebook === 'connecting'
+                    ? 'Opening…'
+                    : socialStatus.facebook === 'error'
+                      ? 'Failed — retry'
+                      : 'Connect'}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
         {/* ── Save Changes (edit mode only) ── */}
         {isEditing && (
           <>
@@ -1163,6 +1298,29 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.semibold,
       color: '#fff',
+    },
+    socialConnectRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: D.spacing.md,
+      paddingHorizontal: D.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.default,
+    },
+    socialConnectLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+    },
+    socialConnectLabel: {
+      fontSize: D.fontSize.base,
+      color: colors.text.primary,
+    },
+    socialConnectStatus: {
+      fontSize: D.fontSize.sm,
+      color: colors.accent.secondary,
+      fontWeight: D.fontWeight.medium,
     },
   });
 }

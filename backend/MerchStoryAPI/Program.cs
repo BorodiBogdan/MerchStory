@@ -2,7 +2,9 @@ using System.Security.Claims;
 using System.Text;
 using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
+using MerchStoryAPI.Facebook;
 using MerchStoryAPI.Gallery;
+using MerchStoryAPI.Instagram;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Products;
 using MerchStoryAPI.Shop;
@@ -56,6 +58,7 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+builder.Services.AddHttpClient();
 builder.Services.AddAuthorization();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddMerchStoryImageGeneration();
@@ -80,6 +83,8 @@ app.MapAuthEndpoints();
 app.MapShopEndpoints();
 app.MapGalleryEndpoints();
 app.MapProductEndpoints();
+app.MapInstagramEndpoints();
+app.MapFacebookEndpoints();
 
 app.MapPost("/generate-image", async (
     ImageGenerationRequest request,

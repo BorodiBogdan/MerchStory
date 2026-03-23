@@ -6,7 +6,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 
-type SocialProvider = 'google' | 'apple';
+type SocialProvider = 'google' | 'apple' | 'instagram' | 'facebook';
 
 interface SocialButtonProps {
   provider: SocialProvider;
@@ -27,6 +27,16 @@ const PROVIDER_CONFIG = {
     icon: 'logo-apple' as const,
     iconSize: 20,
     label: 'Apple',
+  },
+  instagram: {
+    icon: 'logo-instagram' as const,
+    iconSize: 20,
+    label: 'Instagram',
+  },
+  facebook: {
+    icon: 'logo-facebook' as const,
+    iconSize: 20,
+    label: 'Facebook',
   },
 };
 

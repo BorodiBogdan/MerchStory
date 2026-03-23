@@ -130,6 +130,53 @@ export interface ShopProfileResponse extends ShopProfilePayload {
   updatedAt: string;
 }
 
+export async function getInstagramConnectUrl(): Promise<string> {
+  const response = await fetchWithAuth(`${API_URL}/instagram/connect-url`, {});
+  if (!response.ok) throw new Error('Could not get Instagram connect URL.');
+  const data = (await response.json()) as { url: string };
+  return data.url;
+}
+
+export async function getFacebookConnectUrl(): Promise<string> {
+  const response = await fetchWithAuth(`${API_URL}/facebook/connect-url`, {});
+  if (!response.ok) throw new Error('Could not get Facebook connect URL.');
+  const data = (await response.json()) as { url: string };
+  return data.url;
+}
+
+export interface InstagramMediaItem {
+  id: string;
+  mediaType: string;
+  mediaUrl: string | null;
+  thumbnailUrl: string | null;
+  caption: string | null;
+}
+
+export async function fetchInstagramMedia(): Promise<InstagramMediaItem[]> {
+  const response = await fetchWithAuth(`${API_URL}/instagram/media`, {});
+  if (!response.ok) throw new Error(`Failed to fetch Instagram media (${response.status})`);
+  return response.json() as Promise<InstagramMediaItem[]>;
+}
+
+export interface FacebookMediaItem {
+  id: string;
+  source: string | null;
+  name: string | null;
+}
+
+export async function fetchFacebookMedia(): Promise<FacebookMediaItem[]> {
+  const response = await fetchWithAuth(`${API_URL}/facebook/media`, {});
+  if (!response.ok) throw new Error(`Failed to fetch Facebook photos (${response.status})`);
+  return response.json() as Promise<FacebookMediaItem[]>;
+}
+
+export async function fetchFacebookInstagramMedia(): Promise<InstagramMediaItem[]> {
+  const response = await fetchWithAuth(`${API_URL}/facebook/instagram-media`, {});
+  if (!response.ok)
+    throw new Error(`Failed to fetch Instagram Business media (${response.status})`);
+  return response.json() as Promise<InstagramMediaItem[]>;
+}
+
 export async function login(email: string, password: string): Promise<AuthResponse> {
   const response = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
