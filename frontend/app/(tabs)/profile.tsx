@@ -26,6 +26,7 @@ import {
   getFacebookConnectUrl,
   getInstagramConnectUrl,
   getShopProfile,
+  getSocialStatus,
   ShopProfileResponse,
   updateShopProfile,
 } from '@/utils/api';
@@ -160,8 +161,12 @@ export default function ProfileScreen() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const p = await getShopProfile();
+      const [p, social] = await Promise.all([getShopProfile(), getSocialStatus()]);
       setProfile(p);
+      setSocialStatus({
+        facebook: social.facebookConnected ? 'connected' : undefined,
+        instagram: social.instagramConnected ? 'connected' : undefined,
+      });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load profile');
     } finally {

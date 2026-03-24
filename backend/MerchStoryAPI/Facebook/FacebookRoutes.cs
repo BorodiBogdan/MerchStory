@@ -46,6 +46,32 @@ public static class FacebookRoutes
         })
         .RequireAuthorization();
 
+        // ── Social Connection Status ──────────────────────────────────────────
+        app.MapGet("/social/status", async (
+            ClaimsPrincipal principal,
+            AppDbContext db) =>
+        {
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var user = await db.Users.FindAsync(userId);
+            if (user is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            return Results.Ok(new
+            {
+                facebookConnected = !string.IsNullOrEmpty(user.FacebookAccessToken),
+                instagramConnected = !string.IsNullOrEmpty(user.InstagramAccessToken),
+            });
+        })
+        .RequireAuthorization();
+
         // ── OAuth Callback ────────────────────────────────────────────────────
         app.MapGet("/auth/facebook/callback", async (
             string? code,

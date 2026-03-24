@@ -130,6 +130,17 @@ export interface ShopProfileResponse extends ShopProfilePayload {
   updatedAt: string;
 }
 
+export interface SocialStatus {
+  facebookConnected: boolean;
+  instagramConnected: boolean;
+}
+
+export async function getSocialStatus(): Promise<SocialStatus> {
+  const response = await fetchWithAuth(`${API_URL}/social/status`, {});
+  if (!response.ok) throw new Error(`Failed to load social status (${response.status})`);
+  return response.json() as Promise<SocialStatus>;
+}
+
 export async function getInstagramConnectUrl(): Promise<string> {
   const response = await fetchWithAuth(`${API_URL}/instagram/connect-url`, {});
   if (!response.ok) throw new Error('Could not get Instagram connect URL.');
