@@ -32,7 +32,7 @@ Small and independent retailers (e.g., craft beer shops, clothing boutiques, loc
 **Goal:** Turn images into active sales tools; automate "When" and "Where."
 
 - **Competitor Heatmaps:** Web-scraping / API monitoring of local competitor pricing/promos → suggest a "Counter-Promo"
-- **One-Touch Social Posting:** Direct API integration with Instagram and Facebook
+- **One-Touch Social Posting:** Direct API integration with Facebook (Instagram under construction)
 - **Promo Text Overlays:** Dynamic text (e.g., "Flash Sale: 20% OFF") + store logo over generated images
 - **Dynamic Video Generation:** Turn static product shots into short cinematic video ads (e.g., 5-second rotating product clip using models like Veo)
 - **Inventory Sync:** CSV upload so AI skips promos for sold-out products
@@ -60,7 +60,7 @@ Small and independent retailers (e.g., craft beer shops, clothing boutiques, loc
 | Image AI | Background removal API (e.g., Remove.bg), generative scene API (e.g., DALL-E, Stability AI) |
 | Video AI | Veo or similar (P1) |
 | Audio AI | Lyria or similar (P2) |
-| Social APIs | Instagram Graph API, Facebook Marketing API (P1) |
+| Social APIs | Facebook Marketing API (P1), Instagram (under construction) |
 | Auth | Google OAuth / Email (ASP.NET Identity or Auth0) |
 | Storage | Azure Blob Storage or S3 (images/videos) |
 | Database | PostgreSQL 18 + pgvector (Docker), via EF Core |

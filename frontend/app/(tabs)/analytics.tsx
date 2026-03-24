@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   FlatList,
   Image,
   Modal,
@@ -24,12 +23,8 @@ import {
   type FacebookPhotoDetails,
   fetchFacebookMedia,
   fetchFacebookPhotoDetails,
-  fetchInstagramMedia,
   getSocialStatus,
-  type InstagramMediaItem,
 } from '@/utils/api';
-
-type SocialTab = 'instagram' | 'facebook';
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1200;
@@ -43,12 +38,7 @@ export default function AnalyticsScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [activeTab, setActiveTab] = useState<SocialTab>('instagram');
-  const slideAnim = useRef(new Animated.Value(0)).current;
-
-  const [igPosts, setIgPosts] = useState<InstagramMediaItem[]>([]);
   const [fbPosts, setFbPosts] = useState<FacebookMediaItem[]>([]);
-  const [igConnected, setIgConnected] = useState<boolean | null>(null);
   const [fbConnected, setFbConnected] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,19 +61,9 @@ export default function AnalyticsScreen() {
       getSocialStatus()
         .then(async (status) => {
           if (!active) return;
-          setIgConnected(status.instagramConnected);
           setFbConnected(status.facebookConnected);
 
           const fetches: Promise<void>[] = [];
-          if (status.instagramConnected) {
-            fetches.push(
-              fetchInstagramMedia()
-                .then((data) => {
-                  if (active) setIgPosts(data);
-                })
-                .catch(() => {})
-            );
-          }
           if (status.facebookConnected) {
             fetches.push(
               fetchFacebookMedia()
@@ -107,15 +87,6 @@ export default function AnalyticsScreen() {
       };
     }, [])
   );
-
-  function switchTab(tab: SocialTab) {
-    setActiveTab(tab);
-    Animated.timing(slideAnim, {
-      toValue: tab === 'instagram' ? 0 : 1,
-      duration: D.duration.normal,
-      useNativeDriver: false,
-    }).start();
-  }
 
   function renderComments() {
     if (detailsLoading) {
@@ -169,42 +140,6 @@ export default function AnalyticsScreen() {
     setSelectedPost(null);
     setPostDetails(null);
   }
-
-  const indicatorLeft = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['2%', '52%'],
-  });
-
-  const renderInstagramPost = ({ item }: { item: InstagramMediaItem }) => {
-    const imageUri = item.thumbnailUrl ?? item.mediaUrl;
-    return (
-      <View style={[styles.postCard, { width: cardWidth }]}>
-        <View style={[styles.postImageArea, { height: cardWidth }]}>
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-          ) : (
-            <View style={styles.noImagePlaceholder}>
-              <Ionicons name="videocam-outline" size={28} color={colors.text.muted} />
-            </View>
-          )}
-          <View style={styles.mediaTypeBadge}>
-            <Ionicons
-              name={item.mediaType === 'VIDEO' ? 'play-circle' : 'logo-instagram'}
-              size={12}
-              color="#fff"
-            />
-          </View>
-        </View>
-        {item.caption ? (
-          <View style={styles.postMeta}>
-            <Text style={styles.postCaption} numberOfLines={2}>
-              {item.caption}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-    );
-  };
 
   const renderFacebookPost = ({ item }: { item: FacebookMediaItem }) => (
     <Pressable
@@ -279,33 +214,6 @@ export default function AnalyticsScreen() {
         </View>
       );
     }
-    if (activeTab === 'instagram') {
-      if (!igConnected) return renderNotConnected('Instagram');
-      if (igPosts.length === 0) {
-        return (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="logo-instagram" size={40} color={colors.accent.primary} />
-            </View>
-            <Text style={styles.emptyTitle}>No Instagram posts yet</Text>
-          </View>
-        );
-      }
-      return (
-        <FlatList
-          data={igPosts}
-          keyExtractor={(item) => item.id}
-          numColumns={numColumns}
-          key={numColumns}
-          renderItem={renderInstagramPost}
-          contentContainerStyle={styles.grid}
-          columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
-          showsVerticalScrollIndicator={false}
-        />
-      );
-    }
-
-    // Facebook tab
     if (!fbConnected) return renderNotConnected('Facebook');
     if (fbPosts.length === 0) {
       return (
@@ -341,47 +249,25 @@ export default function AnalyticsScreen() {
           </View>
         </View>
 
-        {/* Segmented control */}
         <View style={styles.segmentWrapper}>
           <View style={styles.segmentTrack}>
-            <Animated.View style={[styles.segmentIndicator, { left: indicatorLeft }]} />
-            <Pressable
-              style={styles.segmentButton}
-              onPress={() => switchTab('instagram')}
-              accessibilityRole="button"
-            >
+            <View style={styles.segmentIndicator} />
+            <Pressable style={styles.segmentButton} accessibilityRole="button">
+              <Ionicons name="logo-facebook" size={15} color="#fff" style={{ marginRight: 5 }} />
+              <Text style={[styles.segmentLabel, styles.segmentLabelActive]}>Facebook</Text>
+            </Pressable>
+            <View style={[styles.segmentButton, styles.segmentButtonDisabled]}>
               <Ionicons
                 name="logo-instagram"
                 size={15}
-                color={activeTab === 'instagram' ? '#fff' : colors.text.secondary}
+                color={colors.text.muted}
                 style={{ marginRight: 5 }}
               />
-              <Text
-                style={[
-                  styles.segmentLabel,
-                  activeTab === 'instagram' && styles.segmentLabelActive,
-                ]}
-              >
-                Instagram
-              </Text>
-            </Pressable>
-            <Pressable
-              style={styles.segmentButton}
-              onPress={() => switchTab('facebook')}
-              accessibilityRole="button"
-            >
-              <Ionicons
-                name="logo-facebook"
-                size={15}
-                color={activeTab === 'facebook' ? '#fff' : colors.text.secondary}
-                style={{ marginRight: 5 }}
-              />
-              <Text
-                style={[styles.segmentLabel, activeTab === 'facebook' && styles.segmentLabelActive]}
-              >
-                Facebook
-              </Text>
-            </Pressable>
+              <Text style={[styles.segmentLabel, styles.segmentLabelDisabled]}>Instagram</Text>
+              <View style={styles.underConstructionBadge}>
+                <Text style={styles.underConstructionBadgeText}>Under Construction</Text>
+              </View>
+            </View>
           </View>
         </View>
 
@@ -549,6 +435,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     segmentIndicator: {
       position: 'absolute',
       top: 3,
+      left: '2%',
       width: '46%',
       height: 34,
       borderRadius: D.radius.pill,
@@ -570,6 +457,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     segmentLabelActive: {
       color: '#fff',
       fontWeight: D.fontWeight.semibold,
+    },
+    segmentButtonDisabled: {
+      opacity: 0.75,
+    },
+    segmentLabelDisabled: {
+      color: colors.text.muted,
     },
     grid: {
       paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
@@ -859,6 +752,20 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.xs,
       color: colors.text.muted,
       lineHeight: 16,
+    },
+    underConstructionBadge: {
+      position: 'absolute',
+      top: -5,
+      right: -10,
+      backgroundColor: colors.accent.secondary,
+      borderRadius: D.radius.pill,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    underConstructionBadgeText: {
+      fontSize: 8,
+      fontWeight: 'bold',
+      color: '#fff',
     },
   });
 }

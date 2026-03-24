@@ -132,7 +132,6 @@ export interface ShopProfileResponse extends ShopProfilePayload {
 
 export interface SocialStatus {
   facebookConnected: boolean;
-  instagramConnected: boolean;
 }
 
 export async function getSocialStatus(): Promise<SocialStatus> {
@@ -141,18 +140,11 @@ export async function getSocialStatus(): Promise<SocialStatus> {
   return response.json() as Promise<SocialStatus>;
 }
 
-export async function disconnectSocial(provider: 'facebook' | 'instagram'): Promise<void> {
+export async function disconnectSocial(provider: 'facebook'): Promise<void> {
   const response = await fetchWithAuth(`${API_URL}/social/disconnect?provider=${provider}`, {
     method: 'POST',
   });
   if (!response.ok) throw new Error(`Failed to disconnect ${provider} (${response.status})`);
-}
-
-export async function getInstagramConnectUrl(): Promise<string> {
-  const response = await fetchWithAuth(`${API_URL}/instagram/connect-url`, {});
-  if (!response.ok) throw new Error('Could not get Instagram connect URL.');
-  const data = (await response.json()) as { url: string };
-  return data.url;
 }
 
 export async function getFacebookConnectUrl(): Promise<string> {
@@ -160,20 +152,6 @@ export async function getFacebookConnectUrl(): Promise<string> {
   if (!response.ok) throw new Error('Could not get Facebook connect URL.');
   const data = (await response.json()) as { url: string };
   return data.url;
-}
-
-export interface InstagramMediaItem {
-  id: string;
-  mediaType: string;
-  mediaUrl: string | null;
-  thumbnailUrl: string | null;
-  caption: string | null;
-}
-
-export async function fetchInstagramMedia(): Promise<InstagramMediaItem[]> {
-  const response = await fetchWithAuth(`${API_URL}/instagram/media`, {});
-  if (!response.ok) throw new Error(`Failed to fetch Instagram media (${response.status})`);
-  return response.json() as Promise<InstagramMediaItem[]>;
 }
 
 export interface FacebookMediaItem {
@@ -205,13 +183,6 @@ export async function fetchFacebookPhotoDetails(photoId: string): Promise<Facebo
   const response = await fetchWithAuth(`${API_URL}/facebook/photo/${photoId}`, {});
   if (!response.ok) throw new Error(`Failed to fetch photo details (${response.status})`);
   return response.json() as Promise<FacebookPhotoDetails>;
-}
-
-export async function fetchFacebookInstagramMedia(): Promise<InstagramMediaItem[]> {
-  const response = await fetchWithAuth(`${API_URL}/facebook/instagram-media`, {});
-  if (!response.ok)
-    throw new Error(`Failed to fetch Instagram Business media (${response.status})`);
-  return response.json() as Promise<InstagramMediaItem[]>;
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {

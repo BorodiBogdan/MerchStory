@@ -44,8 +44,6 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
-  signInWithInstagram: (code: string, redirectUri: string) => Promise<void>;
-  signInWithFacebook: (code: string, redirectUri: string) => Promise<void>;
   signOut: () => Promise<void>;
   completeShopSetup: () => Promise<void>;
 }
@@ -88,46 +86,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signIn(email: string, password: string) {
     const { login } = await import('@/utils/api');
     const data = await login(email, password);
-    const user: AuthUser = {
-      email: data.email,
-      userName: data.userName,
-      isShopSetupComplete: data.isShopSetupComplete,
-    };
-    await storage.setItem(TOKEN_KEY, data.token);
-    await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
-    await storage.setItem(USER_KEY, JSON.stringify(user));
-    setState({
-      token: data.token,
-      email: data.email,
-      userName: data.userName,
-      isShopSetupComplete: data.isShopSetupComplete,
-      isLoading: false,
-    });
-  }
-
-  async function signInWithInstagram(code: string, redirectUri: string) {
-    const { loginWithInstagram } = await import('@/utils/api');
-    const data = await loginWithInstagram(code, redirectUri);
-    const user: AuthUser = {
-      email: data.email,
-      userName: data.userName,
-      isShopSetupComplete: data.isShopSetupComplete,
-    };
-    await storage.setItem(TOKEN_KEY, data.token);
-    await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
-    await storage.setItem(USER_KEY, JSON.stringify(user));
-    setState({
-      token: data.token,
-      email: data.email,
-      userName: data.userName,
-      isShopSetupComplete: data.isShopSetupComplete,
-      isLoading: false,
-    });
-  }
-
-  async function signInWithFacebook(code: string, redirectUri: string) {
-    const { loginWithFacebook } = await import('@/utils/api');
-    const data = await loginWithFacebook(code, redirectUri);
     const user: AuthUser = {
       email: data.email,
       userName: data.userName,
@@ -193,8 +151,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ...state,
         signIn,
         signUp,
-        signInWithInstagram,
-        signInWithFacebook,
         signOut,
         completeShopSetup,
       }}

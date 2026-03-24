@@ -67,7 +67,6 @@ public static class FacebookRoutes
             return Results.Ok(new
             {
                 facebookConnected = !string.IsNullOrEmpty(user.FacebookAccessToken),
-                instagramConnected = !string.IsNullOrEmpty(user.InstagramAccessToken),
             });
         })
         .RequireAuthorization();
@@ -95,11 +94,6 @@ public static class FacebookRoutes
             {
                 user.FacebookAccessToken = null;
                 user.FacebookUserId = null;
-            }
-            else if (provider == "instagram")
-            {
-                user.InstagramAccessToken = null;
-                user.InstagramUserId = null;
             }
             else
             {

@@ -4,7 +4,6 @@ using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Facebook;
 using MerchStoryAPI.Gallery;
-using MerchStoryAPI.Instagram;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Products;
 using MerchStoryAPI.Shop;
@@ -83,7 +82,6 @@ app.MapAuthEndpoints();
 app.MapShopEndpoints();
 app.MapGalleryEndpoints();
 app.MapProductEndpoints();
-app.MapInstagramEndpoints();
 app.MapFacebookEndpoints();
 
 app.MapPost("/generate-image", async (
