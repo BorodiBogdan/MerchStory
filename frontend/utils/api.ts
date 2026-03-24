@@ -130,6 +130,61 @@ export interface ShopProfileResponse extends ShopProfilePayload {
   updatedAt: string;
 }
 
+export interface SocialStatus {
+  facebookConnected: boolean;
+}
+
+export async function getSocialStatus(): Promise<SocialStatus> {
+  const response = await fetchWithAuth(`${API_URL}/social/status`, {});
+  if (!response.ok) throw new Error(`Failed to load social status (${response.status})`);
+  return response.json() as Promise<SocialStatus>;
+}
+
+export async function disconnectSocial(provider: 'facebook'): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/social/disconnect?provider=${provider}`, {
+    method: 'POST',
+  });
+  if (!response.ok) throw new Error(`Failed to disconnect ${provider} (${response.status})`);
+}
+
+export async function getFacebookConnectUrl(): Promise<string> {
+  const response = await fetchWithAuth(`${API_URL}/facebook/connect-url`, {});
+  if (!response.ok) throw new Error('Could not get Facebook connect URL.');
+  const data = (await response.json()) as { url: string };
+  return data.url;
+}
+
+export interface FacebookMediaItem {
+  id: string;
+  source: string | null;
+  name: string | null;
+  likesCount: number;
+}
+
+export async function fetchFacebookMedia(): Promise<FacebookMediaItem[]> {
+  const response = await fetchWithAuth(`${API_URL}/facebook/media`, {});
+  if (!response.ok) throw new Error(`Failed to fetch Facebook photos (${response.status})`);
+  return response.json() as Promise<FacebookMediaItem[]>;
+}
+
+export interface FacebookCommentItem {
+  id: string;
+  message: string;
+  fromName: string | null;
+}
+
+export interface FacebookPhotoDetails {
+  likesCount: number;
+  commentsCount: number;
+  comments: FacebookCommentItem[];
+}
+
+export async function fetchFacebookPhotoDetails(photoId: string): Promise<FacebookPhotoDetails> {
+  const response = await fetchWithAuth(`${API_URL}/facebook/photo/${photoId}`, {});
+  if (!response.ok) throw new Error(`Failed to fetch photo details (${response.status})`);
+  return response.json() as Promise<FacebookPhotoDetails>;
+}
+
 export async function login(email: string, password: string): Promise<AuthResponse> {
   const response = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',

@@ -3,6 +3,7 @@ using System;
 using MerchStoryAPI.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MerchStoryAPI.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260323221911_AddSocialTokens")]
+    partial class AddSocialTokens
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -45,6 +48,12 @@ namespace MerchStoryAPI.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("FacebookUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InstagramAccessToken")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InstagramUserId")
                         .HasColumnType("text");
 
                     b.Property<bool>("LockoutEnabled")
