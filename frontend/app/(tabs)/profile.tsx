@@ -23,6 +23,7 @@ import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import {
   BrandColor,
+  disconnectSocial,
   getFacebookConnectUrl,
   getInstagramConnectUrl,
   getShopProfile,
@@ -284,6 +285,15 @@ export default function ProfileScreen() {
     } catch (err) {
       console.error('Facebook connect error:', err);
       setSocialStatus((s) => ({ ...s, facebook: 'error' }));
+    }
+  }
+
+  async function handleDisconnect(provider: 'facebook' | 'instagram') {
+    try {
+      await disconnectSocial(provider);
+      setSocialStatus((s) => ({ ...s, [provider]: undefined }));
+    } catch {
+      // silent — status stays as-is
     }
   }
 
@@ -797,49 +807,73 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Connected Accounts</Text>
 
-            <Pressable
-              onPress={connectInstagram}
-              disabled={socialStatus.instagram === 'connecting'}
-              style={[styles.socialConnectRow, styles.infoRowLast]}
-              accessibilityRole="button"
-              accessibilityLabel="Connect Instagram"
-            >
+            <View style={[styles.socialConnectRow, styles.infoRowLast]}>
               <View style={styles.socialConnectLeft}>
                 <Ionicons name="logo-instagram" size={20} color={colors.text.primary} />
                 <Text style={styles.socialConnectLabel}>Instagram</Text>
               </View>
-              <Text style={styles.socialConnectStatus}>
-                {socialStatus.instagram === 'connected'
-                  ? '✓ Connected'
-                  : socialStatus.instagram === 'connecting'
-                    ? 'Opening…'
-                    : socialStatus.instagram === 'error'
-                      ? 'Failed — retry'
-                      : 'Connect'}
-              </Text>
-            </Pressable>
+              {socialStatus.instagram === 'connected' ? (
+                <View style={styles.socialConnectActions}>
+                  <Text style={styles.socialConnectStatus}>✓ Connected</Text>
+                  <Pressable
+                    onPress={() => void handleDisconnect('instagram')}
+                    style={({ pressed }) => [styles.disconnectBtn, pressed && { opacity: 0.7 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Disconnect Instagram"
+                  >
+                    <Text style={styles.disconnectBtnText}>Disconnect</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={connectInstagram}
+                  disabled={socialStatus.instagram === 'connecting'}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.socialConnectStatus}>
+                    {socialStatus.instagram === 'connecting'
+                      ? 'Opening…'
+                      : socialStatus.instagram === 'error'
+                        ? 'Failed — retry'
+                        : 'Connect'}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
 
-            <Pressable
-              onPress={connectFacebook}
-              disabled={socialStatus.facebook === 'connecting'}
-              style={[styles.socialConnectRow, styles.infoRowLast]}
-              accessibilityRole="button"
-              accessibilityLabel="Connect Facebook"
-            >
+            <View style={[styles.socialConnectRow, styles.infoRowLast]}>
               <View style={styles.socialConnectLeft}>
                 <Ionicons name="logo-facebook" size={20} color={colors.text.primary} />
                 <Text style={styles.socialConnectLabel}>Facebook</Text>
               </View>
-              <Text style={styles.socialConnectStatus}>
-                {socialStatus.facebook === 'connected'
-                  ? '✓ Connected'
-                  : socialStatus.facebook === 'connecting'
-                    ? 'Opening…'
-                    : socialStatus.facebook === 'error'
-                      ? 'Failed — retry'
-                      : 'Connect'}
-              </Text>
-            </Pressable>
+              {socialStatus.facebook === 'connected' ? (
+                <View style={styles.socialConnectActions}>
+                  <Text style={styles.socialConnectStatus}>✓ Connected</Text>
+                  <Pressable
+                    onPress={() => void handleDisconnect('facebook')}
+                    style={({ pressed }) => [styles.disconnectBtn, pressed && { opacity: 0.7 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Disconnect Facebook"
+                  >
+                    <Text style={styles.disconnectBtnText}>Disconnect</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={connectFacebook}
+                  disabled={socialStatus.facebook === 'connecting'}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.socialConnectStatus}>
+                    {socialStatus.facebook === 'connecting'
+                      ? 'Opening…'
+                      : socialStatus.facebook === 'error'
+                        ? 'Failed — retry'
+                        : 'Connect'}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           </View>
         )}
 
@@ -1326,6 +1360,23 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.sm,
       color: colors.accent.secondary,
       fontWeight: D.fontWeight.medium,
+    },
+    socialConnectActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+    },
+    disconnectBtn: {
+      paddingVertical: 4,
+      paddingHorizontal: D.spacing.sm,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border.error,
+    },
+    disconnectBtnText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.error,
     },
   });
 }

@@ -38,7 +38,7 @@ public static class FacebookRoutes
             var url = $"https://www.facebook.com/v21.0/dialog/oauth" +
                       $"?client_id={Uri.EscapeDataString(appId)}" +
                       $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
-                      $"&scope=public_profile,email" +
+                      $"&scope=public_profile,email,user_photos,user_posts" +
                       $"&response_type=code" +
                       $"&state={Uri.EscapeDataString(state)}";
 
@@ -69,6 +69,45 @@ public static class FacebookRoutes
                 facebookConnected = !string.IsNullOrEmpty(user.FacebookAccessToken),
                 instagramConnected = !string.IsNullOrEmpty(user.InstagramAccessToken),
             });
+        })
+        .RequireAuthorization();
+
+        // ── Disconnect ────────────────────────────────────────────────────────
+        app.MapPost("/social/disconnect", async (
+            ClaimsPrincipal principal,
+            AppDbContext db,
+            string provider) =>
+        {
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var user = await db.Users.FindAsync(userId);
+            if (user is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            if (provider == "facebook")
+            {
+                user.FacebookAccessToken = null;
+                user.FacebookUserId = null;
+            }
+            else if (provider == "instagram")
+            {
+                user.InstagramAccessToken = null;
+                user.InstagramUserId = null;
+            }
+            else
+            {
+                return Results.BadRequest("Unknown provider.");
+            }
+
+            await db.SaveChangesAsync();
+            return Results.Ok();
         })
         .RequireAuthorization();
 
@@ -179,7 +218,7 @@ public static class FacebookRoutes
             }
 
             using var http = httpFactory.CreateClient();
-            var url = $"{GraphBase}/me/photos?fields=id,source,name&type=uploaded&access_token={user.FacebookAccessToken}";
+            var url = $"{GraphBase}/me/photos?fields=id,source,name,likes.summary(true)&type=uploaded&access_token={user.FacebookAccessToken}";
             var response = await http.GetAsync(url);
 
             if (!response.IsSuccessStatusCode)
@@ -189,8 +228,93 @@ public static class FacebookRoutes
             }
 
             var json = await response.Content.ReadAsStringAsync();
-            var list = JsonSerializer.Deserialize<FacebookMediaList>(json);
-            return Results.Ok(list?.Data ?? []);
+            var raw = JsonSerializer.Deserialize<FbMediaListRaw>(json);
+            var result = raw?.Data.Select(p => new FacebookMediaItem
+            {
+                Id = p.Id,
+                Source = p.Source,
+                Name = p.Name,
+                LikesCount = p.Likes?.Summary?.TotalCount ?? 0,
+            }).ToList() ?? [];
+            return Results.Ok(result);
+        })
+        .RequireAuthorization();
+
+        // ── Facebook Photo Details (likes + comments) ────────────────────────
+        app.MapGet("/facebook/photo/{photoId}", async (
+            string photoId,
+            ClaimsPrincipal principal,
+            IHttpClientFactory httpFactory,
+            AppDbContext db,
+            ILogger<Program> logger) =>
+        {
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var user = await db.Users.FindAsync(userId);
+            if (user is null || string.IsNullOrEmpty(user.FacebookAccessToken))
+            {
+                return Results.Problem("No Facebook account connected.", statusCode: 400);
+            }
+
+            using var http = httpFactory.CreateClient();
+            var token = user.FacebookAccessToken;
+
+            // Fetch likes for this photo
+            var photoResponse = await http.GetAsync(
+                $"{GraphBase}/{Uri.EscapeDataString(photoId)}?fields=likes.summary(true)&access_token={token}");
+            var photoJson = await photoResponse.Content.ReadAsStringAsync();
+            var photoData = JsonSerializer.Deserialize<FbPhotoDetailsResponse>(photoJson);
+
+            // Comments live on the timeline post that shared the photo, not on the photo object.
+            // Find that post by scanning /me/posts for the one whose object_id == photoId.
+            // Note: Facebook Graph API v3.3+ blocks comment content for personal profiles;
+            // only the summary count is available.
+            List<FacebookCommentItem> comments = [];
+            var commentsCount = 0;
+            var postsUrl = $"{GraphBase}/me/posts?fields=id,object_id&limit=100&access_token={token}";
+            while (postsUrl is not null)
+            {
+                var postsResponse = await http.GetAsync(postsUrl);
+                var postsJson = await postsResponse.Content.ReadAsStringAsync();
+                var postsData = JsonSerializer.Deserialize<FbPostsListResponse>(postsJson);
+
+                var match = postsData?.Data?.FirstOrDefault(p => p.ObjectId == photoId);
+                if (match is not null)
+                {
+                    // Facebook Graph API v3.3+ does not return comment content for personal profiles.
+                    // We can only retrieve the count from the summary.
+                    var commentsResponse = await http.GetAsync(
+                        $"{GraphBase}/{Uri.EscapeDataString(match.Id)}?fields=comments.filter(stream).summary(true){{message,from{{name}}}}&access_token={token}");
+                    var commentsJson = await commentsResponse.Content.ReadAsStringAsync();
+                    var postWithComments = JsonSerializer.Deserialize<FbPostWithComments>(commentsJson);
+                    var commentsData = postWithComments?.Comments;
+                    commentsCount = commentsData?.Summary?.TotalCount ?? 0;
+                    comments = commentsData?.Data.Select(c => new FacebookCommentItem
+                    {
+                        Id = c.Id,
+                        Message = c.Message,
+                        FromName = c.From?.Name,
+                    }).ToList() ?? [];
+                    break;
+                }
+
+                // Follow pagination cursor until we find it or run out of posts
+                postsUrl = postsData?.Paging?.Next;
+            }
+
+            var result = new FacebookPhotoDetails
+            {
+                LikesCount = photoData?.Likes?.Summary?.TotalCount ?? 0,
+                CommentsCount = commentsCount,
+                Comments = comments,
+            };
+
+            return Results.Ok(result);
         })
         .RequireAuthorization();
 
@@ -277,6 +401,9 @@ public sealed class FacebookMediaItem
 
     [JsonPropertyName("name")]
     public string? Name { get; set; }
+
+    [JsonPropertyName("likesCount")]
+    public int LikesCount { get; set; }
 }
 
 public sealed class IgBusinessMediaItem
@@ -295,6 +422,30 @@ public sealed class IgBusinessMediaItem
 
     [JsonPropertyName("thumbnail_url")]
     public string? ThumbnailUrl { get; set; }
+}
+
+public sealed class FacebookPhotoDetails
+{
+    [JsonPropertyName("likesCount")]
+    public int LikesCount { get; set; }
+
+    [JsonPropertyName("commentsCount")]
+    public int CommentsCount { get; set; }
+
+    [JsonPropertyName("comments")]
+    public List<FacebookCommentItem> Comments { get; set; } = [];
+}
+
+public sealed class FacebookCommentItem
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("fromName")]
+    public string? FromName { get; set; }
 }
 
 internal sealed class FacebookTokenResponse
@@ -316,6 +467,27 @@ internal sealed class FacebookMediaList
 {
     [JsonPropertyName("data")]
     public List<FacebookMediaItem> Data { get; set; } = [];
+}
+
+internal sealed class FbMediaListRaw
+{
+    [JsonPropertyName("data")]
+    public List<FbMediaItemRaw> Data { get; set; } = [];
+}
+
+internal sealed class FbMediaItemRaw
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("source")]
+    public string? Source { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("likes")]
+    public FbLikesField? Likes { get; set; }
 }
 
 internal sealed class FacebookPageList
@@ -349,4 +521,91 @@ internal sealed class IgBusinessMediaList
 {
     [JsonPropertyName("data")]
     public List<IgBusinessMediaItem> Data { get; set; } = [];
+}
+
+internal sealed class FbPhotoDetailsResponse
+{
+    [JsonPropertyName("likes")]
+    public FbLikesField? Likes { get; set; }
+
+    [JsonPropertyName("comments")]
+    public FbCommentsField? Comments { get; set; }
+
+    [JsonPropertyName("link")]
+    public string? Link { get; set; }
+}
+
+internal sealed class FbPostWithComments
+{
+    [JsonPropertyName("comments")]
+    public FbCommentsField? Comments { get; set; }
+}
+
+internal sealed class FbPostsListResponse
+{
+    [JsonPropertyName("data")]
+    public List<FbPostItem> Data { get; set; } = [];
+
+    [JsonPropertyName("paging")]
+    public FbPaging? Paging { get; set; }
+}
+
+internal sealed class FbPostItem
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("object_id")]
+    public string? ObjectId { get; set; }
+}
+
+internal sealed class FbPaging
+{
+    [JsonPropertyName("next")]
+    public string? Next { get; set; }
+}
+
+internal sealed class FbLikesField
+{
+    [JsonPropertyName("summary")]
+    public FbLikesSummary? Summary { get; set; }
+}
+
+internal sealed class FbLikesSummary
+{
+    [JsonPropertyName("total_count")]
+    public int TotalCount { get; set; }
+}
+
+internal sealed class FbCommentsField
+{
+    [JsonPropertyName("data")]
+    public List<FbCommentData> Data { get; set; } = [];
+
+    [JsonPropertyName("summary")]
+    public FbCommentsSummary? Summary { get; set; }
+}
+
+internal sealed class FbCommentsSummary
+{
+    [JsonPropertyName("total_count")]
+    public int TotalCount { get; set; }
+}
+
+internal sealed class FbCommentData
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("from")]
+    public FbCommentFrom? From { get; set; }
+}
+
+internal sealed class FbCommentFrom
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
 }

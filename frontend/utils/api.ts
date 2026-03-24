@@ -141,6 +141,13 @@ export async function getSocialStatus(): Promise<SocialStatus> {
   return response.json() as Promise<SocialStatus>;
 }
 
+export async function disconnectSocial(provider: 'facebook' | 'instagram'): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/social/disconnect?provider=${provider}`, {
+    method: 'POST',
+  });
+  if (!response.ok) throw new Error(`Failed to disconnect ${provider} (${response.status})`);
+}
+
 export async function getInstagramConnectUrl(): Promise<string> {
   const response = await fetchWithAuth(`${API_URL}/instagram/connect-url`, {});
   if (!response.ok) throw new Error('Could not get Instagram connect URL.');
@@ -173,12 +180,31 @@ export interface FacebookMediaItem {
   id: string;
   source: string | null;
   name: string | null;
+  likesCount: number;
 }
 
 export async function fetchFacebookMedia(): Promise<FacebookMediaItem[]> {
   const response = await fetchWithAuth(`${API_URL}/facebook/media`, {});
   if (!response.ok) throw new Error(`Failed to fetch Facebook photos (${response.status})`);
   return response.json() as Promise<FacebookMediaItem[]>;
+}
+
+export interface FacebookCommentItem {
+  id: string;
+  message: string;
+  fromName: string | null;
+}
+
+export interface FacebookPhotoDetails {
+  likesCount: number;
+  commentsCount: number;
+  comments: FacebookCommentItem[];
+}
+
+export async function fetchFacebookPhotoDetails(photoId: string): Promise<FacebookPhotoDetails> {
+  const response = await fetchWithAuth(`${API_URL}/facebook/photo/${photoId}`, {});
+  if (!response.ok) throw new Error(`Failed to fetch photo details (${response.status})`);
+  return response.json() as Promise<FacebookPhotoDetails>;
 }
 
 export async function fetchFacebookInstagramMedia(): Promise<InstagramMediaItem[]> {

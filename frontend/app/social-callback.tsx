@@ -9,7 +9,18 @@ export default function SocialCallbackScreen() {
     WebBrowser.maybeCompleteAuthSession();
 
     if (typeof window !== 'undefined' && window.opener) {
-      window.opener.postMessage({ type: 'social-callback', url: window.location.href }, '*');
+      // Facebook appends #_=_ which pushes query params into the hash.
+      // Reconstruct a clean URL with the params in the right place.
+      let callbackUrl = window.location.href;
+      if (window.location.hash.startsWith('#_=_')) {
+        const afterFragment = window.location.hash.slice(4); // e.g. "?status=linked&provider=facebook"
+        callbackUrl =
+          window.location.origin +
+          window.location.pathname +
+          window.location.search +
+          afterFragment;
+      }
+      window.opener.postMessage({ type: 'social-callback', url: callbackUrl }, '*');
       window.close();
     }
   }, []);
