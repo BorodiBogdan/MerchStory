@@ -43,7 +43,13 @@ export default function TabLayout() {
       accessibilityRole="button"
       accessibilityLabel="MerchStory home"
     >
-      <Text style={styles.logoText}>MerchStory</Text>
+      <View style={styles.logoMark}>
+        <Ionicons name="color-wand" size={13} color="#fff" />
+      </View>
+      <Text style={styles.logoWordmark}>
+        <Text style={styles.logoWordmarkBold}>Merch</Text>
+        <Text style={styles.logoWordmarkAccent}>Story</Text>
+      </Text>
     </Pressable>
   );
 
@@ -160,12 +166,29 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     logoButton: {
       marginLeft: D.spacing.md,
       outlineWidth: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.xs,
     },
-    logoText: {
+    logoMark: {
+      width: 26,
+      height: 26,
+      borderRadius: D.radius.sm,
+      backgroundColor: colors.accent.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    logoWordmark: {
       fontSize: D.fontSize.lg,
+      letterSpacing: -0.5,
+    },
+    logoWordmarkBold: {
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+    },
+    logoWordmarkAccent: {
       fontWeight: D.fontWeight.bold,
       color: colors.accent.primary,
-      letterSpacing: -0.3,
     },
     headerActions: {
       flexDirection: 'row',
