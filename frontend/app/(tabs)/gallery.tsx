@@ -580,11 +580,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     lightboxContent: {
       width: '100%',
       maxWidth: isWeb ? 880 : undefined,
-      flex: isWeb ? undefined : 1,
+      flex: 1,
       paddingHorizontal: isWeb ? D.spacing.lg : 0,
+      paddingBottom: isWeb ? D.spacing.md : 0,
     },
     lightboxImageWrapper: {
-      flex: isWeb ? undefined : 1,
+      flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -613,7 +614,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     lightboxImage: {
       width: '100%',
-      aspectRatio: 1,
+      aspectRatio: isWeb ? undefined : 1,
+      flex: isWeb ? 1 : undefined,
       borderRadius: isWeb ? D.radius.lg : 0,
     },
     // ── Confirm delete dialog ─────────────────────────────────────────────

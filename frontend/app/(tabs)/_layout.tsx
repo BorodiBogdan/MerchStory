@@ -1,16 +1,26 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
+import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
 
 export default function TabLayout() {
   const { token, isLoading, isShopSetupComplete, signOut } = useAuth();
   const { colors, colorScheme, toggleTheme } = useTheme();
+  const { shopLogoUri } = useShop();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
 
@@ -59,7 +69,11 @@ export default function TabLayout() {
         accessibilityLabel="Go to profile"
       >
         <View style={styles.avatarChip}>
-          <Ionicons name="person-circle-outline" size={22} color={colors.text.secondary} />
+          {shopLogoUri ? (
+            <Image source={{ uri: shopLogoUri }} style={styles.avatarLogo} />
+          ) : (
+            <Ionicons name="person-circle-outline" size={22} color={colors.text.secondary} />
+          )}
         </View>
       </Pressable>
 
@@ -176,6 +190,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderColor: colors.border.focus,
       alignItems: 'center',
       justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    avatarLogo: {
+      width: '100%',
+      height: '100%',
+      resizeMode: 'contain',
     },
     tabBar: {
       backgroundColor: colors.bg.surface,

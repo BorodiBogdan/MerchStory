@@ -9,6 +9,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { AuthProvider } from '@/context/auth';
+import { ShopProvider } from '@/context/shop';
 import { ThemeProvider, useTheme } from '@/context/theme';
 
 export const unstable_settings = {
@@ -34,7 +35,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <RootLayoutNav />
+        <ShopProvider>
+          <RootLayoutNav />
+        </ShopProvider>
       </AuthProvider>
     </ThemeProvider>
   );

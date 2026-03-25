@@ -20,6 +20,7 @@ import {
 import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
+import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
 import {
   BrandColor,
@@ -116,6 +117,7 @@ function computeIsDirty(draft: DraftState | null, profile: ShopProfileResponse |
 export default function ProfileScreen() {
   const { colors } = useTheme();
   const { email: accountEmail } = useAuth();
+  const { setShopLogoUri } = useShop();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [profile, setProfile] = useState<ShopProfileResponse | null>(null);
@@ -159,6 +161,7 @@ export default function ProfileScreen() {
     try {
       const [p, social] = await Promise.all([getShopProfile(), getSocialStatus()]);
       setProfile(p);
+      setShopLogoUri(p?.logoBase64 ?? null);
       setSocialStatus({
         facebook: social.facebookConnected ? 'connected' : undefined,
       });
@@ -309,6 +312,7 @@ export default function ProfileScreen() {
         tikTokHandle: draft.tikTokHandle.trim() || null,
       });
       setProfile(updated);
+      setShopLogoUri(updated.logoBase64 ?? null);
       setDraft(null);
       setIsEditing(false);
       if (Platform.OS !== 'web') {
@@ -440,27 +444,30 @@ export default function ProfileScreen() {
         {/* ── Profile Header ── */}
         <View style={styles.headerCard}>
           <View style={styles.headerLeft}>
-            <Pressable
-              onPress={isEditing ? pickLogo : undefined}
-              style={[styles.logoThumb, isEditing && styles.logoThumbEditable]}
-              accessibilityRole={isEditing ? 'button' : 'image'}
-              accessibilityLabel={isEditing ? 'Change logo' : 'Shop logo'}
-            >
-              {logoSource ? (
-                <Image source={logoSource} style={styles.logoImage} />
-              ) : (
-                <Ionicons
-                  name={isEditing ? 'camera-outline' : 'storefront-outline'}
-                  size={26}
-                  color={colors.text.muted}
-                />
-              )}
-              {isEditing && (
-                <View style={styles.logoEditBadge}>
-                  <Ionicons name="pencil" size={10} color="#fff" />
-                </View>
-              )}
-            </Pressable>
+            <View style={styles.logoContainer}>
+              <Pressable
+                onPress={isEditing ? pickLogo : undefined}
+                style={[styles.logoThumb, isEditing && styles.logoThumbEditable]}
+                accessibilityRole={isEditing ? 'button' : 'image'}
+                accessibilityLabel={isEditing ? 'Change logo' : 'Shop logo'}
+              >
+                {logoSource ? (
+                  <Image source={logoSource} style={styles.logoImage} />
+                ) : (
+                  <Ionicons
+                    name={isEditing ? 'camera-outline' : 'storefront-outline'}
+                    size={26}
+                    color={colors.text.muted}
+                  />
+                )}
+                {isEditing && (
+                  <View style={styles.logoEditBadge}>
+                    <Ionicons name="pencil" size={10} color="#fff" />
+                  </View>
+                )}
+              </Pressable>
+              <Text style={styles.logoLabel}>Company Logo</Text>
+            </View>
 
             <View style={styles.headerText}>
               <Text style={styles.brandName} numberOfLines={1}>
@@ -918,6 +925,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       alignItems: 'center',
       gap: D.spacing.md,
       flex: 1,
+    },
+    logoContainer: {
+      alignItems: 'center',
+      gap: 4,
+    },
+    logoLabel: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
     },
     logoThumb: {
       width: 56,
