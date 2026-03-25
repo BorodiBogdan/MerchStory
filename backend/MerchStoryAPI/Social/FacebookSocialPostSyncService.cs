@@ -119,7 +119,7 @@ public class FacebookSocialPostSyncService : ISocialPostSyncService
     /// Fetches comment count and serialized comments for a given Facebook photo.
     /// Scans /me/posts to find the post that shared this photo, then fetches its comments.
     /// </summary>
-    private async Task<(int count, string json)> FetchPhotoComments(
+    private async Task<(int Count, string Json)> FetchPhotoComments(
         HttpClient http,
         string photoId,
         string accessToken,

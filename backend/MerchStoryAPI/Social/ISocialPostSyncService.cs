@@ -9,7 +9,7 @@ public interface ISocialPostSyncService
     /// <param name="platform">Platform string, e.g. "facebook".</param>
     /// <param name="externalAccountId">The platform's native user/account ID.</param>
     /// <param name="accessToken">A valid access token for the platform account.</param>
-    /// <param name="ct"></param>
+    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of posts upserted.</returns>
     Task<int> SyncAsync(
         string userId,

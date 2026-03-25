@@ -24,6 +24,7 @@ import {
   fetchFacebookMedia,
   fetchFacebookPhotoDetails,
   getSocialStatus,
+  syncSocialPosts,
 } from '@/utils/api';
 
 const isWeb = Platform.OS === 'web';
@@ -41,6 +42,7 @@ export default function AnalyticsScreen() {
   const [fbPosts, setFbPosts] = useState<FacebookMediaItem[]>([]);
   const [fbConnected, setFbConnected] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedPost, setSelectedPost] = useState<FacebookMediaItem | null>(null);
@@ -63,17 +65,13 @@ export default function AnalyticsScreen() {
           if (!active) return;
           setFbConnected(status.facebookConnected);
 
-          const fetches: Promise<void>[] = [];
-          if (status.facebookConnected) {
-            fetches.push(
-              fetchFacebookMedia()
-                .then((data) => {
-                  if (active) setFbPosts(data);
-                })
-                .catch(() => {})
-            );
-          }
-          await Promise.all(fetches);
+          // Always attempt to load cached posts — backend serves from DB
+          // even when the token is expired/disconnected (uses FacebookUserId).
+          await fetchFacebookMedia()
+            .then((data) => {
+              if (active) setFbPosts(data);
+            })
+            .catch(() => {});
         })
         .catch((err: unknown) => {
           if (active) setError(err instanceof Error ? err.message : 'Failed to load posts.');
@@ -87,6 +85,20 @@ export default function AnalyticsScreen() {
       };
     }, [])
   );
+
+  async function handleRefresh() {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await syncSocialPosts('facebook');
+      const data = await fetchFacebookMedia();
+      setFbPosts(data);
+    } catch {
+      // Retain stale data on failure
+    } finally {
+      setIsSyncing(false);
+    }
+  }
 
   function renderComments() {
     if (detailsLoading) {
@@ -214,7 +226,7 @@ export default function AnalyticsScreen() {
         </View>
       );
     }
-    if (!fbConnected) return renderNotConnected('Facebook');
+    if (!fbConnected && fbPosts.length === 0) return renderNotConnected('Facebook');
     if (fbPosts.length === 0) {
       return (
         <View style={styles.emptyState}>
@@ -243,10 +255,31 @@ export default function AnalyticsScreen() {
     <View style={styles.root}>
       <View style={styles.pageContainer}>
         <View style={styles.pageHeader}>
-          <View>
+          <View style={styles.pageHeaderText}>
             <Text style={styles.pageTitle}>Analytics</Text>
             <Text style={styles.pageSubtitle}>Your social media posts</Text>
+            {fbConnected === false && fbPosts.length > 0 ? (
+              <Text style={styles.cachedDataNote}>Showing cached data — reconnect to refresh.</Text>
+            ) : null}
           </View>
+          {fbConnected ? (
+            <Pressable
+              onPress={() => void handleRefresh()}
+              disabled={isSyncing || isLoading}
+              style={({ pressed }) => [
+                styles.refreshButton,
+                (isSyncing || isLoading || pressed) && { opacity: 0.6 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh posts"
+            >
+              {isSyncing ? (
+                <ActivityIndicator size="small" color={colors.accent.primary} />
+              ) : (
+                <Ionicons name="refresh-outline" size={20} color={colors.accent.primary} />
+              )}
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={styles.segmentWrapper}>
@@ -407,6 +440,27 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
       paddingTop: D.spacing.lg,
       paddingBottom: D.spacing.md,
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+    },
+    pageHeaderText: {
+      flex: 1,
+    },
+    cachedDataNote: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginTop: 4,
+    },
+    refreshButton: {
+      width: 36,
+      height: 36,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: D.spacing.sm,
+      marginTop: 2,
     },
     pageTitle: {
       fontSize: D.fontSize['2xl'],
