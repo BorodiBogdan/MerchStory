@@ -7,6 +7,7 @@ using MerchStoryAPI.Gallery;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Products;
 using MerchStoryAPI.Shop;
+using MerchStoryAPI.Social;
 using MerchStoryImageGeneration.Extensions;
 using MerchStoryImageGeneration.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -60,6 +61,7 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddHttpClient();
 builder.Services.AddAuthorization();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
+builder.Services.AddScoped<FacebookSocialPostSyncService>();
 builder.Services.AddMerchStoryImageGeneration();
 
 var app = builder.Build();
@@ -83,6 +85,7 @@ app.MapShopEndpoints();
 app.MapGalleryEndpoints();
 app.MapProductEndpoints();
 app.MapFacebookEndpoints();
+app.MapSocialEndpoints();
 
 app.MapPost("/generate-image", async (
     ImageGenerationRequest request,

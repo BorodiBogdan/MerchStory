@@ -9,4 +9,6 @@ public class AppUser : IdentityUser
     public string? FacebookUserId { get; set; }
 
     public string? FacebookAccessToken { get; set; }
+
+    public DateTime? FacebookLastSyncedAt { get; set; }
 }

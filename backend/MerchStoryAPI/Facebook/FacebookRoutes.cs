@@ -3,7 +3,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Social;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace MerchStoryAPI.Facebook;
@@ -67,6 +69,7 @@ public static class FacebookRoutes
             return Results.Ok(new
             {
                 facebookConnected = !string.IsNullOrEmpty(user.FacebookAccessToken),
+                facebookLastSyncedAt = user.FacebookLastSyncedAt,
             });
         })
         .RequireAuthorization();
@@ -92,8 +95,9 @@ public static class FacebookRoutes
 
             if (provider == "facebook")
             {
+                // Clear the token so the account appears disconnected,
+                // but keep FacebookUserId so cached posts remain visible.
                 user.FacebookAccessToken = null;
-                user.FacebookUserId = null;
             }
             else
             {
@@ -114,6 +118,7 @@ public static class FacebookRoutes
             IHttpClientFactory httpFactory,
             UserManager<AppUser> userManager,
             AppDbContext db,
+            FacebookSocialPostSyncService syncService,
             ILogger<Program> logger) =>
         {
             var frontendUrl = config["Frontend:WebUrl"] ?? "frontend://";
@@ -187,16 +192,28 @@ public static class FacebookRoutes
             user.FacebookAccessToken = tokenData.AccessToken;
             await userManager.UpdateAsync(user);
 
+            // Sync posts in the background so the analytics screen is populated immediately
+            if (!string.IsNullOrEmpty(user.FacebookUserId))
+            {
+                try
+                {
+                    await syncService.SyncAsync(userId, "facebook", user.FacebookUserId, tokenData.AccessToken);
+                }
+                catch (Exception ex)
+                {
+                    // Sync failure must not break the OAuth flow
+                    logger.LogWarning(ex, "Post-connect sync failed for user {UserId}", userId);
+                }
+            }
+
             logger.LogInformation("Facebook connected for user {UserId}", userId);
             return Results.Redirect(successUrl);
         });
 
-        // ── Facebook Photos ───────────────────────────────────────────────────
+        // ── Facebook Photos (served from DB cache) ────────────────────────────
         app.MapGet("/facebook/media", async (
             ClaimsPrincipal principal,
-            IHttpClientFactory httpFactory,
-            AppDbContext db,
-            ILogger<Program> logger) =>
+            AppDbContext db) =>
         {
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)
                       ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
@@ -206,41 +223,35 @@ public static class FacebookRoutes
             }
 
             var user = await db.Users.FindAsync(userId);
-            if (user is null || string.IsNullOrEmpty(user.FacebookAccessToken))
+            if (user is null || string.IsNullOrEmpty(user.FacebookUserId))
             {
                 return Results.Problem("No Facebook account connected.", statusCode: 400);
             }
 
-            using var http = httpFactory.CreateClient();
-            var url = $"{GraphBase}/me/photos?fields=id,source,name,likes.summary(true)&type=uploaded&access_token={user.FacebookAccessToken}";
-            var response = await http.GetAsync(url);
+            var posts = await db.SocialPosts
+                .Where(p => p.UserId == userId
+                         && p.Platform == "facebook"
+                         && p.ExternalAccountId == user.FacebookUserId)
+                .OrderByDescending(p => p.SyncedAt)
+                .ToListAsync();
 
-            if (!response.IsSuccessStatusCode)
+            var result = posts.Select(p => new FacebookMediaItem
             {
-                logger.LogWarning("Facebook media fetch failed for user {UserId}", userId);
-                return Results.Problem("Failed to fetch Facebook photos.", statusCode: 502);
-            }
+                Id = p.PlatformPostId,
+                Source = p.SourceUrl,
+                Name = p.Caption,
+                LikesCount = p.LikesCount,
+            }).ToList();
 
-            var json = await response.Content.ReadAsStringAsync();
-            var raw = JsonSerializer.Deserialize<FbMediaListRaw>(json);
-            var result = raw?.Data.Select(p => new FacebookMediaItem
-            {
-                Id = p.Id,
-                Source = p.Source,
-                Name = p.Name,
-                LikesCount = p.Likes?.Summary?.TotalCount ?? 0,
-            }).ToList() ?? [];
             return Results.Ok(result);
         })
         .RequireAuthorization();
 
-        // ── Facebook Photo Details (likes + comments) ────────────────────────
+        // ── Facebook Photo Details (served from DB cache) ────────────────────
         app.MapGet("/facebook/photo/{photoId}", async (
             string photoId,
             ClaimsPrincipal principal,
-            IHttpClientFactory httpFactory,
-            AppDbContext db,
-            ILogger<Program> logger) =>
+            AppDbContext db) =>
         {
             var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)
                       ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
@@ -250,61 +261,35 @@ public static class FacebookRoutes
             }
 
             var user = await db.Users.FindAsync(userId);
-            if (user is null || string.IsNullOrEmpty(user.FacebookAccessToken))
+            if (user is null || string.IsNullOrEmpty(user.FacebookUserId))
             {
                 return Results.Problem("No Facebook account connected.", statusCode: 400);
             }
 
-            using var http = httpFactory.CreateClient();
-            var token = user.FacebookAccessToken;
+            var post = await db.SocialPosts.FirstOrDefaultAsync(p =>
+                p.UserId == userId
+             && p.Platform == "facebook"
+             && p.ExternalAccountId == user.FacebookUserId
+             && p.PlatformPostId == photoId);
 
-            // Fetch likes for this photo
-            var photoResponse = await http.GetAsync(
-                $"{GraphBase}/{Uri.EscapeDataString(photoId)}?fields=likes.summary(true)&access_token={token}");
-            var photoJson = await photoResponse.Content.ReadAsStringAsync();
-            var photoData = JsonSerializer.Deserialize<FbPhotoDetailsResponse>(photoJson);
-
-            // Comments live on the timeline post that shared the photo, not on the photo object.
-            // Find that post by scanning /me/posts for the one whose object_id == photoId.
-            // Note: Facebook Graph API v3.3+ blocks comment content for personal profiles;
-            // only the summary count is available.
-            List<FacebookCommentItem> comments = [];
-            var commentsCount = 0;
-            var postsUrl = $"{GraphBase}/me/posts?fields=id,object_id&limit=100&access_token={token}";
-            while (postsUrl is not null)
+            if (post is null)
             {
-                var postsResponse = await http.GetAsync(postsUrl);
-                var postsJson = await postsResponse.Content.ReadAsStringAsync();
-                var postsData = JsonSerializer.Deserialize<FbPostsListResponse>(postsJson);
+                return Results.NotFound();
+            }
 
-                var match = postsData?.Data?.FirstOrDefault(p => p.ObjectId == photoId);
-                if (match is not null)
-                {
-                    // Facebook Graph API v3.3+ does not return comment content for personal profiles.
-                    // We can only retrieve the count from the summary.
-                    var commentsResponse = await http.GetAsync(
-                        $"{GraphBase}/{Uri.EscapeDataString(match.Id)}?fields=comments.filter(stream).summary(true){{message,from{{name}}}}&access_token={token}");
-                    var commentsJson = await commentsResponse.Content.ReadAsStringAsync();
-                    var postWithComments = JsonSerializer.Deserialize<FbPostWithComments>(commentsJson);
-                    var commentsData = postWithComments?.Comments;
-                    commentsCount = commentsData?.Summary?.TotalCount ?? 0;
-                    comments = commentsData?.Data.Select(c => new FacebookCommentItem
-                    {
-                        Id = c.Id,
-                        Message = c.Message,
-                        FromName = c.From?.Name,
-                    }).ToList() ?? [];
-                    break;
-                }
-
-                // Follow pagination cursor until we find it or run out of posts
-                postsUrl = postsData?.Paging?.Next;
+            List<FacebookCommentItem> comments = [];
+            try
+            {
+                comments = JsonSerializer.Deserialize<List<FacebookCommentItem>>(post.CommentsJson) ?? [];
+            }
+            catch
+            { /* malformed JSON — return empty list */
             }
 
             var result = new FacebookPhotoDetails
             {
-                LikesCount = photoData?.Likes?.Summary?.TotalCount ?? 0,
-                CommentsCount = commentsCount,
+                LikesCount = post.LikesCount,
+                CommentsCount = post.CommentsCount,
                 Comments = comments,
             };
 
