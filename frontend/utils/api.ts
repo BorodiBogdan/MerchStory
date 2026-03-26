@@ -132,6 +132,7 @@ export interface ShopProfileResponse extends ShopProfilePayload {
 
 export interface SocialStatus {
   facebookConnected: boolean;
+  facebookLastSyncedAt?: string | null;
 }
 
 export async function getSocialStatus(): Promise<SocialStatus> {
@@ -183,6 +184,12 @@ export async function fetchFacebookPhotoDetails(photoId: string): Promise<Facebo
   const response = await fetchWithAuth(`${API_URL}/facebook/photo/${photoId}`, {});
   if (!response.ok) throw new Error(`Failed to fetch photo details (${response.status})`);
   return response.json() as Promise<FacebookPhotoDetails>;
+}
+
+export async function syncSocialPosts(platform: 'facebook'): Promise<{ synced: number }> {
+  const response = await fetchWithAuth(`${API_URL}/social/sync/${platform}`, { method: 'POST' });
+  if (!response.ok) throw new Error(`Sync failed (${response.status})`);
+  return response.json() as Promise<{ synced: number }>;
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
