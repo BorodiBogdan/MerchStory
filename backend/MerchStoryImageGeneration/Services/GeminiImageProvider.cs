@@ -1,22 +1,23 @@
 using Google.GenAI;
 using Google.GenAI.Types;
+using MerchStoryImageGeneration.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace MerchStoryImageGeneration.Services;
 
-internal sealed class GeminiImageGenerationService : IImageGenerationService
+internal sealed class GeminiImageProvider : IImageProvider
 {
     private readonly IConfiguration configuration;
-    private readonly ILogger<GeminiImageGenerationService> logger;
+    private readonly ILogger<GeminiImageProvider> logger;
 
-    public GeminiImageGenerationService(IConfiguration configuration, ILogger<GeminiImageGenerationService> logger)
+    public GeminiImageProvider(IConfiguration configuration, ILogger<GeminiImageProvider> logger)
     {
         this.configuration = configuration;
         this.logger = logger;
     }
 
-    public async Task<ImageGenerationResult> GenerateImageAsync(string prompt, CancellationToken cancellationToken = default)
+    public async Task<ImageGenerationResult> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
     {
         string? googleApiKey = this.configuration["Google:ApiKey"];
         if (string.IsNullOrWhiteSpace(googleApiKey))
