@@ -29,7 +29,8 @@ import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import {
   fetchProducts,
-  generateImage,
+  generateAnnouncementImage,
+  generateCatalogImage,
   type GenerateImageResponse,
   type ProductItem,
 } from '@/utils/api';
@@ -122,36 +123,6 @@ const TAB_META: {
     comingSoon: true,
   },
 ];
-
-// ─── Prompt builders ───────────────────────────────────────────────────────────
-function buildCatalogPrompt(
-  products: ProductItem[],
-  layout: string,
-  colorTheme: string,
-  format: string,
-  showPrices: boolean
-): string {
-  const names = products.map((p) => `${p.name} ($${p.price.toFixed(2)})`).join(', ');
-  return (
-    `Create a professional product catalog ad image in ${format} format. ` +
-    `Layout style: ${layout}. Color theme: ${colorTheme}. Products: ${names}. ` +
-    (showPrices ? 'Display prices prominently.' : 'Do not show prices.') +
-    ' Make it look like a high-quality retail advertisement.'
-  );
-}
-function buildAnnouncementPrompt(
-  postType: PostType,
-  content: string,
-  tone: string,
-  format: string
-): string {
-  return (
-    `Create a ${tone.toLowerCase()} ${postType.toLowerCase()} social media graphic ` +
-    `in ${format} format. Content: "${content}". ` +
-    `Style: clean, modern, suitable for a small retail shop. ` +
-    `Make it visually striking and easy to read at a glance.`
-  );
-}
 
 // ─── Shared sub-components ─────────────────────────────────────────────────────
 function SectionLabel({ label }: { label: string }) {
@@ -483,9 +454,13 @@ export default function StudioScreen() {
     setCatalogResult(null);
     try {
       setCatalogResult(
-        await generateImage(
-          buildCatalogPrompt(chosen, layout, colorTheme, catalogFormat, showPrices)
-        )
+        await generateCatalogImage({
+          products: chosen.map((p) => ({ name: p.name, price: p.price })),
+          layout,
+          colorTheme,
+          format: catalogFormat,
+          showPrices,
+        })
       );
     } catch (err) {
       setCatalogError(err instanceof Error ? err.message : 'Something went wrong.');
@@ -510,7 +485,12 @@ export default function StudioScreen() {
     setAnnoResult(null);
     try {
       setAnnoResult(
-        await generateImage(buildAnnouncementPrompt(postType, content.trim(), tone, annoFormat))
+        await generateAnnouncementImage({
+          postType,
+          content: content.trim(),
+          tone,
+          format: annoFormat,
+        })
       );
     } catch (err) {
       setAnnoError(err instanceof Error ? err.message : 'Something went wrong.');
