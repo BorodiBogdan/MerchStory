@@ -161,7 +161,6 @@ export default function ProfileScreen() {
     try {
       const [p, social] = await Promise.all([getShopProfile(), getSocialStatus()]);
       setProfile(p);
-      setShopLogoUri(p?.logoBase64 ?? null);
       setSocialStatus({
         facebook: social.facebookConnected ? 'connected' : undefined,
       });
