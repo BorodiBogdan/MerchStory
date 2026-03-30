@@ -1,6 +1,6 @@
 namespace MerchStoryImageGeneration.Models;
 
-public sealed record CatalogProductItem(string Name, decimal Price);
+public sealed record CatalogProductItem(string Name, decimal Price, string? ImageBase64);
 
 public sealed record CatalogImageRequest(
     IReadOnlyList<CatalogProductItem> Products,

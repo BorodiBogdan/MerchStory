@@ -102,7 +102,7 @@ public static class ImageGenerationRoutes
 }
 
 // ── API-layer DTOs ────────────────────────────────────────────────────────────
-internal sealed record CatalogProductApiItem(string Name, decimal Price);
+internal sealed record CatalogProductApiItem(string Name, decimal Price, string? ImageBase64);
 
 internal sealed record CatalogImageApiRequest(
     List<CatalogProductApiItem>? Products,
@@ -113,7 +113,7 @@ internal sealed record CatalogImageApiRequest(
 {
     public CatalogImageRequest ToServiceRequest() =>
         new(
-            this.Products!.Select(p => new CatalogProductItem(p.Name, p.Price)).ToList(),
+            this.Products!.Select(p => new CatalogProductItem(p.Name, p.Price, p.ImageBase64)).ToList(),
             this.Layout,
             this.ColorTheme,
             this.Format,

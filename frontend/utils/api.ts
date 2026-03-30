@@ -295,6 +295,7 @@ export async function updateShopProfile(payload: ShopProfilePayload): Promise<Sh
 export interface CatalogImageProduct {
   name: string;
   price: number;
+  imageBase64: string | null;
 }
 
 export interface GenerateCatalogImageParams {

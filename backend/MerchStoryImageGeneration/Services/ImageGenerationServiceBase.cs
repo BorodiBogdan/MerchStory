@@ -11,6 +11,9 @@ public abstract class ImageGenerationServiceBase
         this.provider = provider;
     }
 
-    protected Task<ImageGenerationResult> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
-        => this.provider.GenerateAsync(prompt, cancellationToken);
+    protected Task<ImageGenerationResult> GenerateAsync(
+        string prompt,
+        IReadOnlyList<string?>? inlineImages = null,
+        CancellationToken cancellationToken = default)
+        => this.provider.GenerateAsync(prompt, inlineImages, cancellationToken);
 }

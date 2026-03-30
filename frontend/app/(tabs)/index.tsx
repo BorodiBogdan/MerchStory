@@ -455,7 +455,11 @@ export default function StudioScreen() {
     try {
       setCatalogResult(
         await generateCatalogImage({
-          products: chosen.map((p) => ({ name: p.name, price: p.price })),
+          products: chosen.map((p) => ({
+            name: p.name,
+            price: p.price,
+            imageBase64: p.imageBase64,
+          })),
           layout,
           colorTheme,
           format: catalogFormat,

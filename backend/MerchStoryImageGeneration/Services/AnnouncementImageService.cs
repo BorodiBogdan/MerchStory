@@ -17,7 +17,7 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
     public Task<ImageGenerationResult> GenerateAnnouncementImageAsync(
         AnnouncementImageRequest request,
         CancellationToken cancellationToken = default)
-        => this.GenerateAsync(BuildPrompt(request), cancellationToken);
+        => this.GenerateAsync(BuildPrompt(request), null, cancellationToken);
 
     private static string BuildPrompt(AnnouncementImageRequest r) =>
         $"{SystemContext}\n\n" +

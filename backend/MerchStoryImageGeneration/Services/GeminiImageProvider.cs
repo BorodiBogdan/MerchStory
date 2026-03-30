@@ -17,7 +17,10 @@ internal sealed class GeminiImageProvider : IImageProvider
         this.logger = logger;
     }
 
-    public async Task<ImageGenerationResult> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
+    public async Task<ImageGenerationResult> GenerateAsync(
+        string prompt,
+        IReadOnlyList<string?>? inlineImages = null,
+        CancellationToken cancellationToken = default)
     {
         string? googleApiKey = this.configuration["Google:ApiKey"];
         if (string.IsNullOrWhiteSpace(googleApiKey))
@@ -27,15 +30,28 @@ internal sealed class GeminiImageProvider : IImageProvider
 
         var client = new Client(apiKey: googleApiKey);
 
+        var parts = new List<Part> { new Part { Text = prompt } };
+
+        if (inlineImages != null)
+        {
+            foreach (string? raw in inlineImages)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    continue;
+                }
+
+                var (data, mime) = DecodeInlineImage(raw);
+                parts.Add(new Part { InlineData = new Blob { Data = data, MimeType = mime } });
+            }
+        }
+
         var contents = new List<Content>
         {
             new Content
             {
                 Role = "user",
-                Parts = new List<Part>
-                {
-                    new Part { Text = prompt },
-                },
+                Parts = parts,
             },
         };
 
@@ -71,5 +87,23 @@ internal sealed class GeminiImageProvider : IImageProvider
         }
 
         return new ImageGenerationResult(imageData, mimeType);
+    }
+
+    // Handles both raw base64 and data URLs (data:image/jpeg;base64,...)
+    private static (byte[] Data, string MimeType) DecodeInlineImage(string raw)
+    {
+        const string prefix = "data:";
+        if (raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            int semicolon = raw.IndexOf(';', StringComparison.Ordinal);
+            int comma = raw.IndexOf(',', StringComparison.Ordinal);
+            string mime = semicolon > 0 && comma > semicolon
+                ? raw[prefix.Length..semicolon]
+                : "image/jpeg";
+            byte[] data = Convert.FromBase64String(raw[(comma + 1)..]);
+            return (data, mime);
+        }
+
+        return (Convert.FromBase64String(raw), "image/jpeg");
     }
 }
