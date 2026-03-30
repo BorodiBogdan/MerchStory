@@ -1,4 +1,5 @@
 using MerchStoryAPI.Models;
+using MerchStoryAPI.PromptHistory;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,6 +21,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<Product> Products => this.Set<Product>();
 
     public DbSet<SocialPost> SocialPosts => this.Set<SocialPost>();
+
+    public DbSet<PromptHistoryItem> PromptHistoryItems => this.Set<PromptHistoryItem>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -95,6 +98,13 @@ public class AppDbContext : IdentityDbContext<AppUser>
                   .WithMany()
                   .HasForeignKey(p => p.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<PromptHistoryItem>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.Text).HasColumnType("text").IsRequired();
+            entity.HasIndex(p => p.UserId);
         });
 
         builder.Entity<SocialPost>(entity =>
