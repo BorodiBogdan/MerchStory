@@ -170,8 +170,15 @@ public class AuthEndpointTests : IDisposable
     public async Task GenerateImage_WithoutToken_ReturnsUnauthorized()
     {
         var response = await this.client.PostAsJsonAsync(
-            "/generate-image",
-            new { prompt = "a red apple" });
+            "/generate-image/catalog",
+            new
+            {
+                products = new[] { new { name = "Test Product", price = 9.99, imageBase64 = (string?)null } },
+                layout = "Grid",
+                colorTheme = "Vibrant",
+                format = "Square 1:1",
+                showPrices = true,
+            });
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -196,9 +203,16 @@ public class AuthEndpointTests : IDisposable
         var json = JsonDocument.Parse(body);
         string? token = json.RootElement.GetProperty("token").GetString();
 
-        var request = new HttpRequestMessage(HttpMethod.Post, "/generate-image")
+        var request = new HttpRequestMessage(HttpMethod.Post, "/generate-image/catalog")
         {
-            Content = JsonContent.Create(new { prompt = "a red apple" }),
+            Content = JsonContent.Create(new
+            {
+                products = new[] { new { name = "Test Product", price = 9.99, imageBase64 = (string?)null } },
+                layout = "Grid",
+                colorTheme = "Vibrant",
+                format = "Square 1:1",
+                showPrices = true,
+            }),
             Headers = { { "Authorization", $"Bearer {token}" } },
         };
         var response = await this.client.SendAsync(request);

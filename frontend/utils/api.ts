@@ -290,11 +290,57 @@ export async function updateShopProfile(payload: ShopProfilePayload): Promise<Sh
   return response.json() as Promise<ShopProfileResponse>;
 }
 
-export async function generateImage(prompt: string): Promise<GenerateImageResponse> {
-  const response = await fetchWithAuth(`${API_URL}/generate-image`, {
+// ── Image generation ─────────────────────────────────────────────────────────
+
+export interface CatalogImageProduct {
+  name: string;
+  price: number;
+  imageBase64: string | null;
+}
+
+export interface GenerateCatalogImageParams {
+  products: CatalogImageProduct[];
+  layout: string;
+  colorTheme: string;
+  format: string;
+  showPrices: boolean;
+  brandContextFields?: string[];
+}
+
+export interface GenerateAnnouncementImageParams {
+  postType: string;
+  content: string;
+  tone: string;
+  format: string;
+  brandContextFields?: string[];
+}
+
+export async function generateCatalogImage(
+  params: GenerateCatalogImageParams
+): Promise<GenerateImageResponse> {
+  const response = await fetchWithAuth(`${API_URL}/generate-image/catalog`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as { detail?: string }).detail ?? `Request failed with status ${response.status}`
+    );
+  }
+
+  return response.json() as Promise<GenerateImageResponse>;
+}
+
+export async function generateAnnouncementImage(
+  params: GenerateAnnouncementImageParams
+): Promise<GenerateImageResponse> {
+  const response = await fetchWithAuth(`${API_URL}/generate-image/announcement`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
   });
 
   if (!response.ok) {
