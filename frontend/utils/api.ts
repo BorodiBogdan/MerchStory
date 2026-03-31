@@ -304,6 +304,7 @@ export interface GenerateCatalogImageParams {
   colorTheme: string;
   format: string;
   showPrices: boolean;
+  brandContextFields?: string[];
 }
 
 export interface GenerateAnnouncementImageParams {
@@ -311,6 +312,7 @@ export interface GenerateAnnouncementImageParams {
   content: string;
   tone: string;
   format: string;
+  brandContextFields?: string[];
 }
 
 export async function generateCatalogImage(

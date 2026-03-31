@@ -1,8 +1,11 @@
 using System.Security.Claims;
+using System.Text.Json;
+using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using MerchStoryImageGeneration.Models;
 using MerchStoryImageGeneration.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace MerchStoryAPI.ImageGeneration;
@@ -23,8 +26,11 @@ public static class ImageGenerationRoutes
                 return Results.BadRequest(new { error = "At least one product is required." });
             }
 
+            string? userId = GetUserId(principal);
+            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, request.BrandContextFields);
+
             return await HandleGeneration(
-                () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest()),
+                () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext)),
                 principal,
                 db,
                 logger,
@@ -45,8 +51,11 @@ public static class ImageGenerationRoutes
                 return Results.BadRequest(new { error = "Content must not be empty." });
             }
 
+            string? userId = GetUserId(principal);
+            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, request.BrandContextFields);
+
             return await HandleGeneration(
-                () => announcementService.GenerateAnnouncementImageAsync(request.ToServiceRequest()),
+                () => announcementService.GenerateAnnouncementImageAsync(request.ToServiceRequest(brandContext)),
                 principal,
                 db,
                 logger,
@@ -54,6 +63,67 @@ public static class ImageGenerationRoutes
         })
         .WithName("GenerateAnnouncementImage")
         .RequireAuthorization();
+    }
+
+    private static string? GetUserId(ClaimsPrincipal principal) =>
+        principal.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+    private static async Task<BrandContext?> BuildBrandContextAsync(
+        AppDbContext db,
+        string? userId,
+        List<string>? selectedFields)
+    {
+        if (userId is null || selectedFields is null || selectedFields.Count == 0)
+        {
+            return null;
+        }
+
+        ShopProfile? profile = await db.ShopProfiles
+            .AsNoTracking()
+            .SingleOrDefaultAsync(s => s.UserId == userId);
+
+        if (profile is null)
+        {
+            return null;
+        }
+
+        var fields = new HashSet<string>(selectedFields, StringComparer.OrdinalIgnoreCase);
+
+        string? brandColors = null;
+        if (fields.Contains("brandColors") && !string.IsNullOrEmpty(profile.BrandColorsJson))
+        {
+            BrandColorDto[]? colors = JsonSerializer.Deserialize<BrandColorDto[]>(profile.BrandColorsJson);
+            if (colors is { Length: > 0 })
+            {
+                brandColors = string.Join(", ", colors.Select(c => $"{c.Hex} ({c.Percentage}%)"));
+            }
+        }
+
+        string? addresses = null;
+        if (fields.Contains("addresses") && !string.IsNullOrEmpty(profile.Addresses))
+        {
+            string[]? addrs = JsonSerializer.Deserialize<string[]>(profile.Addresses);
+            if (addrs is { Length: > 0 })
+            {
+                addresses = string.Join("; ", addrs);
+            }
+        }
+
+        return new BrandContext(
+            BrandName: fields.Contains("brandName") ? profile.BrandName : null,
+            Slogan: fields.Contains("slogan") ? profile.Slogan : null,
+            BrandColors: brandColors,
+            BusinessDomain: fields.Contains("businessDomain") ? profile.BusinessDomain : null,
+            ShopType: fields.Contains("shopType") ? profile.ShopType : null,
+            TargetAudience: fields.Contains("targetAudience") ? profile.TargetAudience : null,
+            Competitors: fields.Contains("competitors") ? profile.Competitors : null,
+            PhoneNumber: fields.Contains("phoneNumber") ? profile.PhoneNumber : null,
+            Email: fields.Contains("email") ? profile.Email : null,
+            Addresses: addresses,
+            InstagramHandle: fields.Contains("instagramHandle") ? profile.InstagramHandle : null,
+            FacebookHandle: fields.Contains("facebookHandle") ? profile.FacebookHandle : null,
+            TikTokHandle: fields.Contains("tikTokHandle") ? profile.TikTokHandle : null);
     }
 
     private static async Task<IResult> HandleGeneration(
@@ -109,23 +179,26 @@ internal sealed record CatalogImageApiRequest(
     string Layout,
     string ColorTheme,
     string Format,
-    bool ShowPrices)
+    bool ShowPrices,
+    List<string>? BrandContextFields)
 {
-    public CatalogImageRequest ToServiceRequest() =>
+    public CatalogImageRequest ToServiceRequest(BrandContext? brandContext) =>
         new(
             this.Products!.Select(p => new CatalogProductItem(p.Name, p.Price, p.ImageBase64)).ToList(),
             this.Layout,
             this.ColorTheme,
             this.Format,
-            this.ShowPrices);
+            this.ShowPrices,
+            brandContext);
 }
 
 internal sealed record AnnouncementImageApiRequest(
     string PostType,
     string Content,
     string Tone,
-    string Format)
+    string Format,
+    List<string>? BrandContextFields)
 {
-    public AnnouncementImageRequest ToServiceRequest() =>
-        new(this.PostType, this.Content, this.Tone, this.Format);
+    public AnnouncementImageRequest ToServiceRequest(BrandContext? brandContext) =>
+        new(this.PostType, this.Content, this.Tone, this.Format, brandContext);
 }

@@ -32,7 +32,9 @@ import {
   generateAnnouncementImage,
   generateCatalogImage,
   type GenerateImageResponse,
+  getShopProfile,
   type ProductItem,
+  type ShopProfileResponse,
 } from '@/utils/api';
 
 const isWeb = Platform.OS === 'web';
@@ -41,6 +43,7 @@ const DESKTOP_BREAKPOINT = 860;
 
 type StudioTab = 'catalog' | 'announcements' | 'video';
 type PostType = 'Announcement' | 'Job Post' | 'Info' | 'Promotion';
+type ContextItem = { key: string; label: string };
 
 // ─── Static data ───────────────────────────────────────────────────────────────
 const LAYOUT_OPTIONS = [
@@ -123,6 +126,95 @@ const TAB_META: {
     comingSoon: true,
   },
 ];
+
+// ─── Brand context helpers ──────────────────────────────────────────────────────
+function deriveContextItems(profile: ShopProfileResponse): ContextItem[] {
+  const items: ContextItem[] = [];
+  if (profile.brandName) items.push({ key: 'brandName', label: 'Brand Name' });
+  if (profile.slogan) items.push({ key: 'slogan', label: 'Slogan' });
+  if (profile.brandColors?.length > 0) items.push({ key: 'brandColors', label: 'Brand Colors' });
+  if (profile.businessDomain) items.push({ key: 'businessDomain', label: 'Business Domain' });
+  if (profile.shopType) items.push({ key: 'shopType', label: 'Shop Type' });
+  if (profile.targetAudience) items.push({ key: 'targetAudience', label: 'Target Audience' });
+  if (profile.competitors) items.push({ key: 'competitors', label: 'Competitors' });
+  if (profile.phoneNumber) items.push({ key: 'phoneNumber', label: 'Phone' });
+  if (profile.email) items.push({ key: 'email', label: 'Email' });
+  if (profile.addresses?.length > 0) items.push({ key: 'addresses', label: 'Address' });
+  if (profile.instagramHandle) items.push({ key: 'instagramHandle', label: 'Instagram' });
+  if (profile.facebookHandle) items.push({ key: 'facebookHandle', label: 'Facebook' });
+  if (profile.tikTokHandle) items.push({ key: 'tikTokHandle', label: 'TikTok' });
+  return items;
+}
+
+function BrandContextSection({
+  items,
+  selected,
+  onToggle,
+}: {
+  items: ContextItem[];
+  selected: string[];
+  onToggle: (key: string) => void;
+}) {
+  const { colors } = useTheme();
+  if (items.length === 0) return null;
+  return (
+    <>
+      <SectionLabel label="Brand Context" />
+      <Text
+        style={{
+          fontSize: D.fontSize.xs,
+          color: colors.text.muted,
+          marginBottom: D.spacing.sm,
+        }}
+      >
+        Choose which brand info to include in the AI prompt
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: D.spacing.xs }}>
+        {items.map((item) => {
+          const active = selected.includes(item.key);
+          return (
+            <Pressable
+              key={item.key}
+              onPress={() => onToggle(item.key)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: active }}
+              style={({ pressed }) => ({
+                flexDirection: 'row' as const,
+                alignItems: 'center' as const,
+                gap: 4,
+                paddingVertical: 5,
+                paddingHorizontal: D.spacing.sm,
+                borderRadius: D.radius.pill,
+                borderWidth: 1,
+                borderColor: active ? colors.accent.primary : colors.border.default,
+                backgroundColor: active
+                  ? colors.accent.dim
+                  : pressed
+                    ? colors.bg.elevated
+                    : 'transparent',
+              })}
+            >
+              <Ionicons
+                name={active ? 'checkmark-circle' : 'ellipse-outline'}
+                size={13}
+                color={active ? colors.accent.primary : colors.text.muted}
+              />
+              <Text
+                style={{
+                  fontSize: D.fontSize.xs,
+                  color: active ? colors.accent.primary : colors.text.secondary,
+                  fontWeight: active ? D.fontWeight.medium : D.fontWeight.regular,
+                }}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </>
+  );
+}
 
 // ─── Shared sub-components ─────────────────────────────────────────────────────
 function SectionLabel({ label }: { label: string }) {
@@ -431,6 +523,17 @@ export default function StudioScreen() {
         .then(setProducts)
         .catch(() => {})
         .finally(() => setLoadingProducts(false));
+
+      getShopProfile()
+        .then((profile) => {
+          setShopProfile(profile);
+          if (profile) {
+            const allKeys = deriveContextItems(profile).map((i) => i.key);
+            setCatalogContextFields(allKeys);
+            setAnnoContextFields(allKeys);
+          }
+        })
+        .catch(() => {});
     }, [])
   );
 
@@ -464,6 +567,7 @@ export default function StudioScreen() {
           colorTheme,
           format: catalogFormat,
           showPrices,
+          brandContextFields: catalogContextFields.length > 0 ? catalogContextFields : undefined,
         })
       );
     } catch (err) {
@@ -482,6 +586,28 @@ export default function StudioScreen() {
   const [annoResult, setAnnoResult] = useState<GenerateImageResponse | null>(null);
   const [annoError, setAnnoError] = useState<string | null>(null);
 
+  // ── Brand context state ──────────────────────────────────────────────────────
+  const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
+  const [catalogContextFields, setCatalogContextFields] = useState<string[]>([]);
+  const [annoContextFields, setAnnoContextFields] = useState<string[]>([]);
+
+  const contextItems = useMemo(
+    () => (shopProfile ? deriveContextItems(shopProfile) : []),
+    [shopProfile]
+  );
+
+  const toggleCatalogField = useCallback((key: string) => {
+    setCatalogContextFields((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }, []);
+
+  const toggleAnnoField = useCallback((key: string) => {
+    setAnnoContextFields((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }, []);
+
   async function handleAnnoGenerate() {
     if (!content.trim()) return;
     setAnnoGenerating(true);
@@ -494,6 +620,7 @@ export default function StudioScreen() {
           content: content.trim(),
           tone,
           format: annoFormat,
+          brandContextFields: annoContextFields.length > 0 ? annoContextFields : undefined,
         })
       );
     } catch (err) {
@@ -555,6 +682,11 @@ export default function StudioScreen() {
               trackColor={{ false: colors.border.default, true: colors.accent.dim }}
             />
           </View>
+          <BrandContextSection
+            items={contextItems}
+            selected={catalogContextFields}
+            onToggle={toggleCatalogField}
+          />
         </>
       ) : activeTab === 'announcements' ? (
         <>
@@ -566,6 +698,11 @@ export default function StudioScreen() {
             options={FORMAT_OPTIONS}
             selected={annoFormat}
             onSelect={setAnnoFormat}
+          />
+          <BrandContextSection
+            items={contextItems}
+            selected={annoContextFields}
+            onToggle={toggleAnnoField}
           />
         </>
       ) : null;
@@ -947,6 +1084,16 @@ export default function StudioScreen() {
                 </View>
               </View>
 
+              {contextItems.length > 0 && (
+                <View style={styles.mobileSection}>
+                  <BrandContextSection
+                    items={contextItems}
+                    selected={catalogContextFields}
+                    onToggle={toggleCatalogField}
+                  />
+                </View>
+              )}
+
               <GenerateButton
                 loading={catalogGenerating}
                 disabled={selectedCount === 0}
@@ -1029,6 +1176,16 @@ export default function StudioScreen() {
                   accessibilityLabel="Format"
                 />
               </View>
+
+              {contextItems.length > 0 && (
+                <View style={styles.mobileSection}>
+                  <BrandContextSection
+                    items={contextItems}
+                    selected={annoContextFields}
+                    onToggle={toggleAnnoField}
+                  />
+                </View>
+              )}
 
               <GenerateButton
                 loading={annoGenerating}

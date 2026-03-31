@@ -7,4 +7,5 @@ public sealed record CatalogImageRequest(
     string Layout,      // "Grid" | "Showcase" | "Minimal" | "Story"
     string ColorTheme,  // "Brand Colors" | "Vibrant" | "Monochrome" | "Dark"
     string Format,      // "Square 1:1" | "Portrait 4:5" | "Story 9:16"
-    bool ShowPrices);
+    bool ShowPrices,
+    BrandContext? BrandContext = null);
