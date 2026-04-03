@@ -18,9 +18,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
-import { deleteGalleryItem, fetchGallery, type GalleryItem } from '@/utils/api';
+import {
+  deleteGalleryItem,
+  deleteWallpaper,
+  fetchGallery,
+  fetchWallpapers,
+  type GalleryItem,
+} from '@/utils/api';
 
-type GalleryTab = 'photos' | 'videos';
+type GalleryTab = 'photos' | 'videos' | 'wallpapers';
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1200;
@@ -46,6 +52,9 @@ export default function GalleryScreen() {
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [wallpaperItems, setWallpaperItems] = useState<GalleryItem[]>([]);
+  const [wallpaperLoading, setWallpaperLoading] = useState(false);
+  const [wallpaperError, setWallpaperError] = useState<string | null>(null);
   const [lightboxItem, setLightboxItem] = useState<GalleryItem | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -78,31 +87,54 @@ export default function GalleryScreen() {
     }, [])
   );
 
+  function loadWallpapers() {
+    setWallpaperLoading(true);
+    setWallpaperError(null);
+    fetchWallpapers()
+      .then(setWallpaperItems)
+      .catch((err: unknown) =>
+        setWallpaperError(err instanceof Error ? err.message : 'Failed to load wallpapers.')
+      )
+      .finally(() => setWallpaperLoading(false));
+  }
+
   function switchTab(tab: GalleryTab) {
     setActiveTab(tab);
+    const toValue = tab === 'photos' ? 0 : tab === 'wallpapers' ? 1 : 2;
     Animated.timing(slideAnim, {
-      toValue: tab === 'photos' ? 0 : 1,
+      toValue,
       duration: D.duration.normal,
       useNativeDriver: false,
     }).start();
+    if (tab === 'wallpapers') loadWallpapers();
   }
 
   async function handleDelete(id: string) {
-    // Close lightbox if the deleted item is currently open
     if (lightboxItem?.id === id) setLightboxItem(null);
-    setItems((prev) => prev.filter((item) => item.id !== id));
-    try {
-      await deleteGalleryItem(id);
-    } catch {
-      fetchGallery()
-        .then(setItems)
-        .catch(() => {});
+    if (activeTab === 'wallpapers') {
+      setWallpaperItems((prev) => prev.filter((item) => item.id !== id));
+      try {
+        await deleteWallpaper(id);
+      } catch {
+        fetchWallpapers()
+          .then(setWallpaperItems)
+          .catch(() => {});
+      }
+    } else {
+      setItems((prev) => prev.filter((item) => item.id !== id));
+      try {
+        await deleteGalleryItem(id);
+      } catch {
+        fetchGallery()
+          .then(setItems)
+          .catch(() => {});
+      }
     }
   }
 
   const indicatorLeft = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['2%', '52%'],
+    inputRange: [0, 1, 2],
+    outputRange: ['1%', '34%', '67%'],
   });
 
   const renderPhoto = ({ item }: { item: GalleryItem }) => (
@@ -159,6 +191,58 @@ export default function GalleryScreen() {
       </Pressable>
     </View>
   );
+
+  const wallpapersContent = () => {
+    if (wallpaperLoading) {
+      return (
+        <View style={styles.centerFill}>
+          <ActivityIndicator size="large" color={colors.accent.primary} />
+        </View>
+      );
+    }
+    if (wallpaperError) {
+      return (
+        <View style={styles.centerFill}>
+          <Ionicons
+            name="cloud-offline-outline"
+            size={40}
+            color={colors.text.muted}
+            style={{ marginBottom: D.spacing.sm }}
+          />
+          <Text style={styles.errorText}>{wallpaperError}</Text>
+          <Pressable
+            style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
+            onPress={loadWallpapers}
+          >
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    if (wallpaperItems.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <View style={styles.emptyIconCircle}>
+            <Ionicons name="albums-outline" size={48} color={colors.accent.primary} />
+          </View>
+          <Text style={styles.emptyTitle}>No wallpapers yet</Text>
+          <Text style={styles.emptySubtitle}>Generate a background from Studio to see it here</Text>
+        </View>
+      );
+    }
+    return (
+      <FlatList
+        data={wallpaperItems}
+        keyExtractor={(item) => item.id}
+        numColumns={numColumns}
+        key={numColumns}
+        renderItem={renderPhoto}
+        contentContainerStyle={styles.grid}
+        columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
+        showsVerticalScrollIndicator={false}
+      />
+    );
+  };
 
   const videosComingSoon = (
     <View style={styles.emptyState}>
@@ -259,6 +343,27 @@ export default function GalleryScreen() {
             </Pressable>
             <Pressable
               style={styles.segmentButton}
+              onPress={() => switchTab('wallpapers')}
+              accessibilityRole="button"
+              accessibilityLabel="Wallpapers tab"
+            >
+              <Ionicons
+                name={activeTab === 'wallpapers' ? 'albums' : 'albums-outline'}
+                size={15}
+                color={activeTab === 'wallpapers' ? '#fff' : colors.text.secondary}
+                style={{ marginRight: 5 }}
+              />
+              <Text
+                style={[
+                  styles.segmentLabel,
+                  activeTab === 'wallpapers' && styles.segmentLabelActive,
+                ]}
+              >
+                Wallpapers
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.segmentButton}
               onPress={() => switchTab('videos')}
               accessibilityRole="button"
               accessibilityLabel="Videos tab"
@@ -279,7 +384,11 @@ export default function GalleryScreen() {
         </View>
 
         {/* Content */}
-        {activeTab === 'photos' ? photosContent() : videosComingSoon}
+        {activeTab === 'photos'
+          ? photosContent()
+          : activeTab === 'videos'
+            ? videosComingSoon
+            : wallpapersContent()}
       </View>
 
       {/* Delete confirmation */}
@@ -416,12 +525,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       padding: 3,
       position: 'relative',
       height: 40,
-      maxWidth: isWeb ? 320 : undefined,
+      maxWidth: isWeb ? 480 : undefined,
     },
     segmentIndicator: {
       position: 'absolute',
       top: 3,
-      width: '46%',
+      width: '32%',
       height: 34,
       borderRadius: D.radius.pill,
       backgroundColor: colors.accent.primary,

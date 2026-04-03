@@ -131,10 +131,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="wallpapers"
         options={{
-          tabBarLabel: 'Wallpapers',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'albums' : 'albums-outline'} size={22} color={color} />
-          ),
+          tabBarItemStyle: { display: 'none' },
         }}
       />
       <Tabs.Screen
