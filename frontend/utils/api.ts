@@ -531,3 +531,23 @@ export async function deleteProduct(id: string): Promise<void> {
     throw new Error(`Failed to delete product (${response.status})`);
   }
 }
+
+export interface RemoveBackgroundResponse {
+  imageBase64: string;
+  mimeType: string;
+}
+
+export async function removeBackground(imageBase64: string): Promise<RemoveBackgroundResponse> {
+  const response = await fetchWithAuth(`${API_URL}/products/remove-background`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64 }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Background removal failed (${response.status})`);
+  }
+
+  return response.json() as Promise<RemoveBackgroundResponse>;
+}

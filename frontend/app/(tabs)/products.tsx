@@ -27,6 +27,7 @@ import {
   deleteProduct,
   fetchProducts,
   type ProductItem,
+  removeBackground,
   updateProduct,
 } from '@/utils/api';
 
@@ -55,6 +56,14 @@ export default function ProductsScreen() {
   const [draftImageUri, setDraftImageUri] = useState<string | null>(null);
   const [draftImageBase64, setDraftImageBase64] = useState<string | null>(null);
   const [nameError, setNameError] = useState('');
+
+  // Image preview / background-removal step
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewOriginalUri, setPreviewOriginalUri] = useState<string | null>(null);
+  const [previewOriginalB64, setPreviewOriginalB64] = useState<string | null>(null);
+  const [previewProcessedB64, setPreviewProcessedB64] = useState<string | null>(null);
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [removeBgError, setRemoveBgError] = useState<string | null>(null);
   const [priceError, setPriceError] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -98,7 +107,7 @@ export default function ProductsScreen() {
     setEditingProduct(product);
     setDraftName(product.name);
     setDraftPrice(String(product.price));
-    setDraftImageUri(product.imageBase64 ? `data:image/jpeg;base64,${product.imageBase64}` : null);
+    setDraftImageUri(product.imageBase64 ? `data:image/png;base64,${product.imageBase64}` : null);
     setDraftImageBase64(product.imageBase64);
     setNameError('');
     setPriceError('');
@@ -120,23 +129,55 @@ export default function ProductsScreen() {
     if (result.canceled || !result.assets[0]) return;
 
     const uri = result.assets[0].uri;
-    setDraftImageUri(uri);
+    let base64: string | null = null;
 
     if (Platform.OS === 'web') {
       const res = await fetch(uri);
       const blob = await res.blob();
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        setDraftImageBase64(dataUrl.split(',')[1] ?? null);
-      };
-      reader.readAsDataURL(blob);
-    } else {
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: 'base64',
+      base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result as string;
+          resolve(dataUrl.split(',')[1] ?? '');
+        };
+        reader.readAsDataURL(blob);
       });
-      setDraftImageBase64(base64);
+    } else {
+      base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
     }
+
+    setPreviewOriginalUri(uri);
+    setPreviewOriginalB64(base64);
+    setPreviewProcessedB64(null);
+    setRemoveBgError(null);
+    setModalVisible(false);
+    setPreviewVisible(true);
+  }
+
+  async function handleRemoveBackground() {
+    if (!previewOriginalB64) return;
+    setIsRemovingBg(true);
+    setRemoveBgError(null);
+    try {
+      const result = await removeBackground(previewOriginalB64);
+      setPreviewProcessedB64(result.imageBase64);
+    } catch (err: unknown) {
+      setRemoveBgError(err instanceof Error ? err.message : 'Background removal failed.');
+    } finally {
+      setIsRemovingBg(false);
+    }
+  }
+
+  function confirmImageChoice(useProcessed: boolean) {
+    if (useProcessed && previewProcessedB64) {
+      setDraftImageUri(`data:image/png;base64,${previewProcessedB64}`);
+      setDraftImageBase64(previewProcessedB64);
+    } else {
+      setDraftImageUri(previewOriginalUri);
+      setDraftImageBase64(previewOriginalB64);
+    }
+    setPreviewVisible(false);
+    setModalVisible(true);
   }
 
   function validate(): boolean {
@@ -206,7 +247,7 @@ export default function ProductsScreen() {
       <View style={[styles.productImageArea, { height: cardWidth }]}>
         {item.imageBase64 ? (
           <Image
-            source={{ uri: `data:image/jpeg;base64,${item.imageBase64}` }}
+            source={{ uri: `data:image/png;base64,${item.imageBase64}` }}
             style={StyleSheet.absoluteFill}
             resizeMode="cover"
           />
@@ -324,6 +365,104 @@ export default function ProductsScreen() {
 
         {listContent()}
       </View>
+
+      {/* Image Preview / Background Removal Modal */}
+      <Modal
+        visible={previewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setPreviewVisible(false);
+          setModalVisible(true);
+        }}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => {
+            setPreviewVisible(false);
+            setModalVisible(true);
+          }}
+        >
+          <Pressable style={[styles.modalSheet, styles.previewSheet]} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Preview Photo</Text>
+
+            <View style={styles.previewImageWrap}>
+              <Image
+                source={{
+                  uri: previewProcessedB64
+                    ? `data:image/png;base64,${previewProcessedB64}`
+                    : (previewOriginalUri ?? undefined),
+                }}
+                style={styles.previewImage}
+                resizeMode="contain"
+              />
+            </View>
+
+            {previewProcessedB64 && (
+              <Text style={styles.previewToggleLabel}>Showing: background removed</Text>
+            )}
+
+            {removeBgError && (
+              <Text
+                style={[styles.fieldError, { textAlign: 'center', marginBottom: D.spacing.sm }]}
+              >
+                {removeBgError}
+              </Text>
+            )}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.removeBgButton,
+                isRemovingBg && { opacity: 0.7 },
+                pressed && !isRemovingBg && { opacity: 0.85 },
+              ]}
+              onPress={() => void handleRemoveBackground()}
+              disabled={isRemovingBg}
+              accessibilityRole="button"
+              accessibilityLabel="Remove background"
+            >
+              {isRemovingBg ? (
+                <ActivityIndicator size="small" color={colors.accent.primary} />
+              ) : (
+                <>
+                  <Ionicons
+                    name="cut-outline"
+                    size={16}
+                    color={colors.accent.primary}
+                    style={{ marginRight: D.spacing.xs }}
+                  />
+                  <Text style={styles.removeBgButtonText}>
+                    {previewProcessedB64 ? 'Remove Background Again' : 'Remove Background'}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+
+            <View style={styles.modalActions}>
+              <Pressable
+                style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.7 }]}
+                onPress={() => confirmImageChoice(false)}
+                accessibilityRole="button"
+              >
+                <Text style={styles.cancelButtonText}>Use Original</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.saveButton,
+                  !previewProcessedB64 && styles.saveButtonDisabled,
+                  pressed && !!previewProcessedB64 && { opacity: 0.85 },
+                ]}
+                onPress={() => confirmImageChoice(true)}
+                disabled={!previewProcessedB64}
+                accessibilityRole="button"
+                accessibilityLabel="Use background-removed image"
+              >
+                <Text style={styles.saveButtonText}>Use Processed</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Delete confirmation */}
       <Modal
@@ -888,6 +1027,50 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.base,
       fontWeight: D.fontWeight.semibold,
       color: '#fff',
+    },
+    // ── Image preview / background removal ───────────────────────────────
+    previewSheet: {
+      paddingVertical: D.spacing.lg,
+      maxWidth: isWeb ? 480 : undefined,
+    },
+    previewImageWrap: {
+      width: '100%',
+      aspectRatio: 1,
+      borderRadius: D.radius.lg,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      overflow: 'hidden',
+      marginBottom: D.spacing.md,
+    },
+    previewImage: {
+      width: '100%',
+      height: '100%',
+    },
+    previewToggleLabel: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      textAlign: 'center',
+      marginBottom: D.spacing.sm,
+    },
+    removeBgButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 11,
+      paddingHorizontal: D.spacing.md,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.accent.primary,
+      marginBottom: D.spacing.md,
+    },
+    removeBgButtonText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.accent.primary,
+    },
+    saveButtonDisabled: {
+      opacity: 0.4,
     },
   });
 }

@@ -136,6 +136,55 @@ public static class ProductRoutes
 
             return Results.NoContent();
         });
+
+        group.MapPost("/remove-background", async (
+            RemoveBackgroundRequest request,
+            IConfiguration configuration,
+            IHttpClientFactory httpClientFactory,
+            ILogger<Program> logger) =>
+        {
+            string? apiKey = configuration["RemoveBg:ApiKey"];
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                return Results.Problem("Background removal is not configured.", statusCode: 503);
+            }
+
+            if (string.IsNullOrWhiteSpace(request.ImageBase64))
+            {
+                return Results.BadRequest("imageBase64 is required.");
+            }
+
+            try
+            {
+                HttpClient client = httpClientFactory.CreateClient();
+
+                using var form = new MultipartFormDataContent();
+                form.Add(new StringContent(request.ImageBase64), "image_file_b64");
+                form.Add(new StringContent("auto"), "size");
+
+                using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.remove.bg/v1.0/removebg");
+                req.Headers.Add("X-Api-Key", apiKey);
+                req.Content = form;
+
+                HttpResponseMessage response = await client.SendAsync(req);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    string errorBody = await response.Content.ReadAsStringAsync();
+                    logger.LogWarning("Remove.bg returned {Status}: {Body}", response.StatusCode, errorBody);
+                    return Results.Problem($"Background removal service failed ({(int)response.StatusCode}).", statusCode: 502);
+                }
+
+                byte[] pngBytes = await response.Content.ReadAsByteArrayAsync();
+                string resultBase64 = Convert.ToBase64String(pngBytes);
+                return Results.Ok(new RemoveBackgroundResponse(resultBase64, "image/png"));
+            }
+            catch (HttpRequestException ex)
+            {
+                logger.LogError(ex, "Failed to reach Remove.bg.");
+                return Results.Problem("Could not reach background removal service.", statusCode: 502);
+            }
+        });
     }
 
     private static string? GetUserId(ClaimsPrincipal principal) =>
@@ -146,3 +195,7 @@ public static class ProductRoutes
 internal sealed record ProductRequest(string Name, decimal Price, string? ImageBase64);
 
 internal sealed record ProductResponse(Guid Id, string Name, decimal Price, string? ImageBase64, DateTime CreatedAt, DateTime UpdatedAt);
+
+internal sealed record RemoveBackgroundRequest(string ImageBase64);
+
+internal sealed record RemoveBackgroundResponse(string ImageBase64, string MimeType);
