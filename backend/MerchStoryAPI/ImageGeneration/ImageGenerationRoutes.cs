@@ -39,6 +39,54 @@ public static class ImageGenerationRoutes
         .WithName("GenerateCatalogImage")
         .RequireAuthorization();
 
+        app.MapPost("/generate-image/wallpaper", async (
+            WallpaperApiRequest request,
+            ClaimsPrincipal principal,
+            IWallpaperImageService wallpaperService,
+            AppDbContext db,
+            ILogger<Program> logger) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Prompt))
+            {
+                return Results.BadRequest(new { error = "Prompt must not be empty." });
+            }
+
+            return await HandleGeneration(
+                () => wallpaperService.GenerateWallpaperAsync(new WallpaperImageRequest(request.Prompt)),
+                principal,
+                db,
+                logger,
+                "wallpaper");
+        })
+        .WithName("GenerateWallpaper")
+        .RequireAuthorization();
+
+        app.MapPost("/generate-image/catalog-on-wallpaper", async (
+            CatalogOnWallpaperApiRequest request,
+            ClaimsPrincipal principal,
+            AppDbContext db,
+            ILogger<Program> logger) =>
+        {
+            if (request.Products is null || request.Products.Count == 0)
+            {
+                return Results.BadRequest(new { error = "At least one product is required." });
+            }
+
+            if (string.IsNullOrWhiteSpace(request.WallpaperBase64))
+            {
+                return Results.BadRequest(new { error = "Wallpaper image is required." });
+            }
+
+            return await HandleGeneration(
+                () => Task.FromResult(CatalogCompositor.Composite(request)),
+                principal,
+                db,
+                logger,
+                "catalog-on-wallpaper");
+        })
+        .WithName("GenerateCatalogOnWallpaper")
+        .RequireAuthorization();
+
         app.MapPost("/generate-image/announcement", async (
             AnnouncementImageApiRequest request,
             ClaimsPrincipal principal,
@@ -191,6 +239,16 @@ internal sealed record CatalogImageApiRequest(
             this.ShowPrices,
             brandContext);
 }
+
+internal sealed record WallpaperApiRequest(string Prompt);
+
+internal sealed record CatalogOnWallpaperApiRequest(
+    List<CatalogProductApiItem>? Products,
+    string WallpaperBase64,
+    string Layout,
+    string Format,
+    bool ShowPrices,
+    TextStyleOptions? TextStyle = null);
 
 internal sealed record AnnouncementImageApiRequest(
     string PostType,

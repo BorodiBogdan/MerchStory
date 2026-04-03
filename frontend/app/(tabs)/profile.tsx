@@ -251,8 +251,7 @@ export default function ProfileScreen() {
           setSocialStatus((s) => ({ ...s, facebook: 'error' }));
         }
       }
-    } catch (err) {
-      console.error('Facebook connect error:', err);
+    } catch {
       setSocialStatus((s) => ({ ...s, facebook: 'error' }));
     }
   }

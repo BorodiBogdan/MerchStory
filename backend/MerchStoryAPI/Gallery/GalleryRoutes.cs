@@ -23,7 +23,7 @@ public static class GalleryRoutes
             }
 
             List<GalleryItemResponse> items = await db.GeneratedImages
-                .Where(g => g.UserId == userId)
+                .Where(g => g.UserId == userId && g.GenerationType != "wallpaper")
                 .OrderByDescending(g => g.CreatedAt)
                 .Select(g => new GalleryItemResponse(g.Id, g.ImageBase64, g.MimeType, g.CreatedAt))
                 .ToListAsync();
@@ -44,6 +44,53 @@ public static class GalleryRoutes
 
             GeneratedImage? image = await db.GeneratedImages
                 .SingleOrDefaultAsync(g => g.Id == id && g.UserId == userId);
+
+            if (image is null)
+            {
+                return Results.NotFound();
+            }
+
+            db.GeneratedImages.Remove(image);
+            await db.SaveChangesAsync();
+
+            return Results.NoContent();
+        });
+
+        // ── Wallpapers ────────────────────────────────────────────────────────
+        RouteGroupBuilder wallpapers = app.MapGroup("/wallpapers").RequireAuthorization();
+
+        wallpapers.MapGet("/", async (
+            ClaimsPrincipal principal,
+            AppDbContext db) =>
+        {
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            List<GalleryItemResponse> items = await db.GeneratedImages
+                .Where(g => g.UserId == userId && g.GenerationType == "wallpaper")
+                .OrderByDescending(g => g.CreatedAt)
+                .Select(g => new GalleryItemResponse(g.Id, g.ImageBase64, g.MimeType, g.CreatedAt))
+                .ToListAsync();
+
+            return Results.Ok(items);
+        });
+
+        wallpapers.MapDelete("/{id:guid}", async (
+            Guid id,
+            ClaimsPrincipal principal,
+            AppDbContext db) =>
+        {
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            GeneratedImage? image = await db.GeneratedImages
+                .SingleOrDefaultAsync(g => g.Id == id && g.UserId == userId && g.GenerationType == "wallpaper");
 
             if (image is null)
             {

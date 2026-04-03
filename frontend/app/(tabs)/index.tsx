@@ -1,12 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
   type DimensionValue,
+  FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -29,12 +32,17 @@ import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import {
   fetchProducts,
+  fetchWallpapers,
+  type GalleryItem,
   generateAnnouncementImage,
   generateCatalogImage,
+  generateCatalogOnWallpaper,
   type GenerateImageResponse,
+  generateWallpaper,
   getShopProfile,
   type ProductItem,
   type ShopProfileResponse,
+  type TextStyleOptions,
 } from '@/utils/api';
 
 const isWeb = Platform.OS === 'web';
@@ -42,8 +50,150 @@ const SIDEBAR_WIDTH = 320;
 const DESKTOP_BREAKPOINT = 860;
 
 type StudioTab = 'catalog' | 'announcements' | 'video';
+type CatalogMode = 'generate' | 'on-wallpaper';
+type WallpaperStage = 'none' | 'generating' | 'preview' | 'confirmed';
 type PostType = 'Announcement' | 'Job Post' | 'Info' | 'Promotion';
 type ContextItem = { key: string; label: string };
+
+// ─── Text style preset swatches ────────────────────────────────────────────────
+const TEXT_SWATCHES = [
+  '#FFFFFF',
+  '#1e1e1e',
+  '#475569',
+  '#F59E0B',
+  '#EF4444',
+  '#6366F1',
+  '#14B8A6',
+  '#F43F5E',
+  '#22C55E',
+  '#FEF9C3',
+];
+const FONT_OPTIONS = [
+  { value: 'Modern', label: 'Modern' },
+  { value: 'Elegant', label: 'Elegant' },
+  { value: 'Bold', label: 'Bold' },
+  { value: 'Friendly', label: 'Friendly' },
+];
+const FONT_SIZE_OPTIONS = [
+  { value: 'Small', label: 'Small' },
+  { value: 'Medium', label: 'Medium' },
+  { value: 'Large', label: 'Large' },
+];
+const COLOR_MODE_OPTIONS = [
+  { value: 'Solid', label: 'Solid' },
+  { value: 'Gradient', label: 'Gradient' },
+  { value: 'Rainbow', label: 'Rainbow' },
+];
+const TEXT_EFFECT_OPTIONS = [
+  { value: 'None', label: 'None' },
+  { value: 'Shadow', label: 'Shadow' },
+  { value: 'Outline', label: 'Outline' },
+];
+
+function SwatchRow({
+  label,
+  selected,
+  onSelect,
+  colors,
+}: {
+  label: string;
+  selected: string;
+  onSelect: (c: string) => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  return (
+    <View style={{ marginBottom: D.spacing.sm }}>
+      <Text
+        style={{
+          fontSize: D.fontSize.xs,
+          color: colors.text.muted,
+          marginBottom: 6,
+          fontWeight: '500' as const,
+        }}
+      >
+        {label}
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {TEXT_SWATCHES.map((hex) => (
+          <Pressable
+            key={hex}
+            onPress={() => onSelect(hex)}
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: 12,
+              backgroundColor: hex,
+              borderWidth: selected === hex ? 2.5 : 1,
+              borderColor: selected === hex ? colors.accent.primary : colors.border.default,
+            }}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: selected === hex }}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function TextStyleControls({
+  textStyle,
+  setTextStyle,
+  colors,
+}: {
+  textStyle: TextStyleOptions;
+  setTextStyle: React.Dispatch<React.SetStateAction<TextStyleOptions>>;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  return (
+    <>
+      <SectionLabel label="Text Style" />
+      <OptionLabel label="Font" />
+      <ChipSelector
+        options={FONT_OPTIONS}
+        selected={textStyle.fontFamily ?? 'Modern'}
+        onSelect={(v) => setTextStyle((p) => ({ ...p, fontFamily: v }))}
+        accessibilityLabel="Font family"
+      />
+      <OptionLabel label="Size" />
+      <ChipSelector
+        options={FONT_SIZE_OPTIONS}
+        selected={textStyle.fontSize ?? 'Medium'}
+        onSelect={(v) => setTextStyle((p) => ({ ...p, fontSize: v }))}
+        accessibilityLabel="Font size"
+      />
+      <OptionLabel label="Color Mode" />
+      <ChipSelector
+        options={COLOR_MODE_OPTIONS}
+        selected={textStyle.colorMode ?? 'Solid'}
+        onSelect={(v) => setTextStyle((p) => ({ ...p, colorMode: v }))}
+        accessibilityLabel="Color mode"
+      />
+      {textStyle.colorMode !== 'Rainbow' && (
+        <SwatchRow
+          label={textStyle.colorMode === 'Gradient' ? 'Gradient Start' : 'Text Color'}
+          selected={textStyle.nameColor ?? '#1e1e1e'}
+          onSelect={(c) => setTextStyle((p) => ({ ...p, nameColor: c }))}
+          colors={colors}
+        />
+      )}
+      {textStyle.colorMode === 'Gradient' && (
+        <SwatchRow
+          label="Gradient End"
+          selected={textStyle.gradientEndColor ?? '#6366F1'}
+          onSelect={(c) => setTextStyle((p) => ({ ...p, gradientEndColor: c }))}
+          colors={colors}
+        />
+      )}
+      <OptionLabel label="Effect" />
+      <ChipSelector
+        options={TEXT_EFFECT_OPTIONS}
+        selected={textStyle.textEffect ?? 'Shadow'}
+        onSelect={(v) => setTextStyle((p) => ({ ...p, textEffect: v }))}
+        accessibilityLabel="Text effect"
+      />
+    </>
+  );
+}
 
 // ─── Static data ───────────────────────────────────────────────────────────────
 const LAYOUT_OPTIONS = [
@@ -478,6 +628,14 @@ function ProductCard({
   );
 }
 
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
+}
+
 // ─── Main screen ───────────────────────────────────────────────────────────────
 export default function StudioScreen() {
   const { colors } = useTheme();
@@ -502,6 +660,55 @@ export default function StudioScreen() {
   const indicatorLeft = slideAnim.interpolate({
     inputRange: [0, 1, 2],
     outputRange: ['1%', '34.33%', '67.66%'],
+  });
+
+  // ── Catalog mode state ───────────────────────────────────────────────────────
+  const [catalogMode, setCatalogMode] = useState<CatalogMode>('generate');
+  const catalogModeAnim = useRef(new Animated.Value(0)).current;
+
+  function switchCatalogMode(mode: CatalogMode) {
+    Animated.timing(catalogModeAnim, {
+      toValue: mode === 'generate' ? 0 : 1,
+      duration: D.duration.normal,
+      useNativeDriver: false,
+    }).start();
+    setCatalogMode(mode);
+    setCatalogResult(null);
+    setCatalogError(null);
+    setWallpaperOnResult(null);
+    setWallpaperOnError(null);
+  }
+
+  const catalogModeIndicatorLeft = catalogModeAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['1%', '51%'],
+  });
+
+  // ── Wallpaper state ──────────────────────────────────────────────────────────
+  const [wallpaperStage, setWallpaperStage] = useState<WallpaperStage>('none');
+  const [wallpaperBase64, setWallpaperBase64] = useState<string | null>(null);
+  const [wallpaperPreview, setWallpaperPreview] = useState<string | null>(null);
+  const [wallpaperPrompt, setWallpaperPrompt] = useState('');
+  const [showWallpaperPrompt, setShowWallpaperPrompt] = useState(false);
+  const [wallpaperError, setWallpaperError] = useState<string | null>(null);
+  const [wallpaperOnGenerating, setWallpaperOnGenerating] = useState(false);
+  const [wallpaperOnResult, setWallpaperOnResult] = useState<GenerateImageResponse | null>(null);
+  const [wallpaperOnError, setWallpaperOnError] = useState<string | null>(null);
+
+  // ── Wallpaper picker (choose from saved wallpapers) ──────────────────────────
+  const [wallpaperPickerVisible, setWallpaperPickerVisible] = useState(false);
+  const [wallpaperPickerItems, setWallpaperPickerItems] = useState<GalleryItem[]>([]);
+  const [wallpaperPickerLoading, setWallpaperPickerLoading] = useState(false);
+
+  // ── Text style state ─────────────────────────────────────────────────────────
+  const [textStyle, setTextStyle] = useState<TextStyleOptions>({
+    fontFamily: 'Modern',
+    fontSize: 'Medium',
+    nameColor: '#1e1e1e',
+    priceColor: null,
+    colorMode: 'Solid',
+    gradientEndColor: '#6366F1',
+    textEffect: 'Shadow',
   });
 
   // ── Catalog state ────────────────────────────────────────────────────────────
@@ -577,6 +784,80 @@ export default function StudioScreen() {
     }
   }
 
+  async function handleGenerateWallpaper() {
+    if (!wallpaperPrompt.trim()) return;
+    setWallpaperStage('generating');
+    setWallpaperError(null);
+    setWallpaperPreview(null);
+    try {
+      const res = await generateWallpaper({ prompt: wallpaperPrompt.trim() });
+      setWallpaperPreview(res.imageBase64);
+      setWallpaperStage('preview');
+    } catch (err) {
+      setWallpaperError(err instanceof Error ? err.message : 'Failed to generate wallpaper.');
+      setWallpaperStage('none');
+    }
+  }
+
+  async function handleImportWallpaper() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      base64: true,
+      quality: 0.85,
+    });
+    if (!result.canceled && result.assets[0]?.base64) {
+      setWallpaperBase64(result.assets[0].base64);
+      setWallpaperStage('confirmed');
+      setWallpaperOnResult(null);
+      setWallpaperOnError(null);
+    }
+  }
+
+  async function handleWallpaperOnGenerate() {
+    const chosen = products.filter((p) => selected.has(p.id));
+    if (!chosen.length || !wallpaperBase64) return;
+    setWallpaperOnGenerating(true);
+    setWallpaperOnError(null);
+    setWallpaperOnResult(null);
+    try {
+      setWallpaperOnResult(
+        await generateCatalogOnWallpaper({
+          products: chosen.map((p) => ({
+            name: p.name,
+            price: p.price,
+            imageBase64: p.imageBase64,
+          })),
+          wallpaperBase64,
+          layout,
+          format: catalogFormat,
+          showPrices,
+          textStyle,
+        })
+      );
+    } catch (err) {
+      setWallpaperOnError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setWallpaperOnGenerating(false);
+    }
+  }
+
+  function openWallpaperPicker() {
+    setWallpaperPickerVisible(true);
+    setWallpaperPickerLoading(true);
+    fetchWallpapers()
+      .then(setWallpaperPickerItems)
+      .catch(() => setWallpaperPickerItems([]))
+      .finally(() => setWallpaperPickerLoading(false));
+  }
+
+  function pickWallpaperFromLibrary(item: GalleryItem) {
+    setWallpaperBase64(item.imageBase64);
+    setWallpaperStage('confirmed');
+    setWallpaperOnResult(null);
+    setWallpaperOnError(null);
+    setWallpaperPickerVisible(false);
+  }
+
   // ── Announcements state ──────────────────────────────────────────────────────
   const [postType, setPostType] = useState<PostType>('Announcement');
   const [content, setContent] = useState('');
@@ -642,13 +923,18 @@ export default function StudioScreen() {
 
   // ── Product card width ───────────────────────────────────────────────────────
   // Desktop right panel inner width ≈ screenWidth - SIDEBAR_WIDTH - 1 (divider) - 64 (padding)
-  // Mobile: 2 cols via '47%'
+  // Mobile: 2 cols with pixel-accurate width for centering last row
   const desktopPanelInner = screenWidth - SIDEBAR_WIDTH - 1 - 64;
   const desktopCardCols = desktopPanelInner > 600 ? 5 : desktopPanelInner > 420 ? 4 : 3;
   const desktopCardWidth = Math.floor(
     (desktopPanelInner - D.spacing.sm * (desktopCardCols - 1)) / desktopCardCols
   );
-  const productCardWidth: DimensionValue = isDesktop ? desktopCardWidth : '47%';
+  const mobileCardCols = 2;
+  const mobileCardWidth = Math.floor(
+    (screenWidth - D.spacing.md * 2 - D.spacing.sm) / mobileCardCols
+  );
+  const productCardWidth: DimensionValue = isDesktop ? desktopCardWidth : mobileCardWidth;
+  const gridCols = isDesktop ? desktopCardCols : mobileCardCols;
 
   // ────────────────────────────────────────────────────────────────────────────
   // DESKTOP LAYOUT
@@ -657,37 +943,61 @@ export default function StudioScreen() {
     // ── Sidebar options per tab ──────────────────────────────────────────────
     const sidebarOptions =
       activeTab === 'catalog' ? (
-        <>
-          <SectionLabel label="Generation Options" />
-          <OptionLabel label="Layout" />
-          <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
-          <OptionLabel label="Color Theme" />
-          <SidebarOptionGroup
-            options={COLOR_OPTIONS}
-            selected={colorTheme}
-            onSelect={setColorTheme}
-          />
-          <OptionLabel label="Format" />
-          <SidebarOptionGroup
-            options={FORMAT_OPTIONS}
-            selected={catalogFormat}
-            onSelect={setCatalogFormat}
-          />
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>Show Prices</Text>
-            <Switch
-              value={showPrices}
-              onValueChange={setShowPrices}
-              thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
-              trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+        catalogMode === 'generate' ? (
+          <>
+            <SectionLabel label="Generation Options" />
+            <OptionLabel label="Layout" />
+            <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
+            <OptionLabel label="Color Theme" />
+            <SidebarOptionGroup
+              options={COLOR_OPTIONS}
+              selected={colorTheme}
+              onSelect={setColorTheme}
             />
-          </View>
-          <BrandContextSection
-            items={contextItems}
-            selected={catalogContextFields}
-            onToggle={toggleCatalogField}
-          />
-        </>
+            <OptionLabel label="Format" />
+            <SidebarOptionGroup
+              options={FORMAT_OPTIONS}
+              selected={catalogFormat}
+              onSelect={setCatalogFormat}
+            />
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Show Prices</Text>
+              <Switch
+                value={showPrices}
+                onValueChange={setShowPrices}
+                thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            <BrandContextSection
+              items={contextItems}
+              selected={catalogContextFields}
+              onToggle={toggleCatalogField}
+            />
+          </>
+        ) : (
+          <>
+            <SectionLabel label="Placement Options" />
+            <OptionLabel label="Layout" />
+            <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
+            <OptionLabel label="Format" />
+            <SidebarOptionGroup
+              options={FORMAT_OPTIONS}
+              selected={catalogFormat}
+              onSelect={setCatalogFormat}
+            />
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Show Prices</Text>
+              <Switch
+                value={showPrices}
+                onValueChange={setShowPrices}
+                thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            <TextStyleControls textStyle={textStyle} setTextStyle={setTextStyle} colors={colors} />
+          </>
+        )
       ) : activeTab === 'announcements' ? (
         <>
           <SectionLabel label="Style Options" />
@@ -709,12 +1019,27 @@ export default function StudioScreen() {
 
     const sidebarFooter =
       activeTab === 'catalog' ? (
-        <GenerateButton
-          loading={catalogGenerating}
-          disabled={selectedCount === 0}
-          label={selectedCount === 0 ? 'Select products first' : `Generate Catalog`}
-          onPress={handleCatalogGenerate}
-        />
+        catalogMode === 'generate' ? (
+          <GenerateButton
+            loading={catalogGenerating}
+            disabled={selectedCount === 0}
+            label={selectedCount === 0 ? 'Select products first' : 'Generate Catalog'}
+            onPress={handleCatalogGenerate}
+          />
+        ) : (
+          <GenerateButton
+            loading={wallpaperOnGenerating}
+            disabled={selectedCount === 0 || wallpaperBase64 === null}
+            label={
+              wallpaperBase64 === null
+                ? 'Pick a wallpaper first'
+                : selectedCount === 0
+                  ? 'Select products first'
+                  : 'Place on Wallpaper'
+            }
+            onPress={handleWallpaperOnGenerate}
+          />
+        )
       ) : activeTab === 'announcements' ? (
         <GenerateButton
           loading={annoGenerating}
@@ -728,66 +1053,407 @@ export default function StudioScreen() {
     const rightContent =
       activeTab === 'catalog' ? (
         <>
-          {/* Product picker */}
+          {/* Catalog mode sub-tab bar */}
           <View style={styles.desktopSection}>
-            <View style={styles.desktopSectionHeader}>
-              <View>
-                <Text style={styles.desktopSectionTitle}>Choose Products</Text>
-                <Text style={styles.desktopSectionSub}>
-                  Select products to include in your catalog
-                </Text>
-              </View>
-              {selectedCount > 0 && (
-                <View style={styles.countBadge}>
-                  <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
-                </View>
-              )}
-            </View>
-
-            {loadingProducts ? (
-              <ActivityIndicator
-                size="small"
-                color={colors.accent.primary}
-                style={{ marginVertical: D.spacing.lg }}
+            <View style={styles.segmentTrack}>
+              <Animated.View
+                style={[styles.segmentIndicator, { width: '48%', left: catalogModeIndicatorLeft }]}
               />
-            ) : products.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-                <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
+              {(['generate', 'on-wallpaper'] as CatalogMode[]).map((mode) => {
+                const isActive = catalogMode === mode;
+                return (
+                  <Pressable
+                    key={mode}
+                    style={styles.segmentButton}
+                    onPress={() => switchCatalogMode(mode)}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons
+                      name={
+                        mode === 'generate'
+                          ? isActive
+                            ? 'sparkles'
+                            : 'sparkles-outline'
+                          : isActive
+                            ? 'image'
+                            : 'image-outline'
+                      }
+                      size={14}
+                      color={isActive ? '#fff' : colors.text.secondary}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}>
+                      {mode === 'generate' ? 'Generate' : 'On Wallpaper'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {catalogMode === 'generate' ? (
+            <>
+              {/* Product picker */}
+              <View style={styles.desktopSection}>
+                <View style={styles.desktopSectionHeader}>
+                  <View>
+                    <Text style={styles.desktopSectionTitle}>Choose Products</Text>
+                    <Text style={styles.desktopSectionSub}>
+                      Select products to include in your catalog
+                    </Text>
+                  </View>
+                  {selectedCount > 0 && (
+                    <View style={styles.countBadge}>
+                      <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+                    </View>
+                  )}
+                </View>
+
+                {loadingProducts ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.accent.primary}
+                    style={{ marginVertical: D.spacing.lg }}
+                  />
+                ) : products.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
+                    <Text style={styles.emptyText}>
+                      No products yet. Add some in the Products tab.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ gap: D.spacing.sm }}>
+                    {chunkArray(products, gridCols).map((row, rowIdx) => (
+                      <View
+                        key={rowIdx}
+                        style={{
+                          flexDirection: 'row',
+                          gap: D.spacing.sm,
+                          justifyContent: row.length < gridCols ? 'center' : 'flex-start',
+                        }}
+                      >
+                        {row.map((p) => (
+                          <ProductCard
+                            key={p.id}
+                            product={p}
+                            selected={selected.has(p.id)}
+                            onToggle={() => toggleProduct(p.id)}
+                            cardWidth={productCardWidth}
+                            colors={colors}
+                            styles={styles}
+                          />
+                        ))}
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
-            ) : (
-              <View style={styles.productGrid}>
-                {products.map((p) => (
-                  <ProductCard
-                    key={p.id}
-                    product={p}
-                    selected={selected.has(p.id)}
-                    onToggle={() => toggleProduct(p.id)}
-                    cardWidth={productCardWidth}
+
+              {/* Preview */}
+              <View style={styles.desktopSection}>
+                <Text style={styles.desktopSectionTitle}>Preview</Text>
+                <Text style={styles.desktopSectionSub}>
+                  Your generated catalog will appear here
+                </Text>
+                <View style={{ marginTop: D.spacing.md }}>
+                  <ResultPreviewPanel
+                    result={catalogResult}
+                    generating={catalogGenerating}
+                    error={catalogError}
+                    emptyTitle="Your catalog will appear here"
+                    emptyHint="Select products on the left, configure options, then hit Generate."
                     colors={colors}
                     styles={styles}
                   />
-                ))}
+                </View>
               </View>
-            )}
-          </View>
+            </>
+          ) : (
+            <>
+              {/* Wallpaper picker */}
+              <View style={styles.desktopSection}>
+                <Text style={styles.desktopSectionTitle}>Background Wallpaper</Text>
+                <Text style={styles.desktopSectionSub}>
+                  Import from device or generate with AI — your wallpaper stays unchanged
+                </Text>
 
-          {/* Preview */}
-          <View style={styles.desktopSection}>
-            <Text style={styles.desktopSectionTitle}>Preview</Text>
-            <Text style={styles.desktopSectionSub}>Your generated catalog will appear here</Text>
-            <View style={{ marginTop: D.spacing.md }}>
-              <ResultPreviewPanel
-                result={catalogResult}
-                generating={catalogGenerating}
-                error={catalogError}
-                emptyTitle="Your catalog will appear here"
-                emptyHint="Select products on the left, configure options, then hit Generate."
-                colors={colors}
-                styles={styles}
-              />
-            </View>
-          </View>
+                <View style={[styles.wallpaperActionRow, { marginTop: D.spacing.md }]}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.wallpaperActionBtn,
+                      pressed && { opacity: 0.75 },
+                    ]}
+                    onPress={handleImportWallpaper}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="image-outline" size={16} color={colors.accent.primary} />
+                    <Text style={styles.wallpaperActionText}>Import</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.wallpaperActionBtn,
+                      pressed && { opacity: 0.75 },
+                    ]}
+                    onPress={() => setShowWallpaperPrompt((v) => !v)}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="sparkles-outline" size={16} color={colors.accent.primary} />
+                    <Text style={styles.wallpaperActionText}>Generate</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.wallpaperActionBtn,
+                      pressed && { opacity: 0.75 },
+                    ]}
+                    onPress={openWallpaperPicker}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="albums-outline" size={16} color={colors.accent.primary} />
+                    <Text style={styles.wallpaperActionText}>My Wallpapers</Text>
+                  </Pressable>
+                </View>
+
+                {showWallpaperPrompt && (
+                  <View style={{ marginTop: D.spacing.md, gap: D.spacing.sm }}>
+                    <TextInput
+                      style={styles.textArea}
+                      placeholder="Describe the wallpaper (e.g. warm sunset market scene, soft bokeh lights…)"
+                      placeholderTextColor={colors.text.muted}
+                      value={wallpaperPrompt}
+                      onChangeText={setWallpaperPrompt}
+                      multiline
+                      editable={wallpaperStage !== 'generating'}
+                    />
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.wallpaperGenBtn,
+                        (wallpaperStage === 'generating' || !wallpaperPrompt.trim()) && {
+                          opacity: 0.45,
+                        },
+                        pressed && { opacity: 0.8 },
+                      ]}
+                      onPress={handleGenerateWallpaper}
+                      disabled={wallpaperStage === 'generating' || !wallpaperPrompt.trim()}
+                      accessibilityRole="button"
+                    >
+                      {wallpaperStage === 'generating' ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Ionicons name="sparkles-outline" size={15} color="#fff" />
+                      )}
+                      <Text style={styles.wallpaperGenBtnText}>
+                        {wallpaperStage === 'generating' ? 'Generating…' : 'Generate Wallpaper'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                {wallpaperError && (
+                  <Text style={[styles.errorText, { marginTop: D.spacing.sm }]}>
+                    {wallpaperError}
+                  </Text>
+                )}
+
+                {/* Preview candidate — keep or discard */}
+                {wallpaperStage === 'preview' && wallpaperPreview && (
+                  <View style={styles.wallpaperPreviewBox}>
+                    <Image
+                      source={{
+                        uri: wallpaperPreview.startsWith('data:')
+                          ? wallpaperPreview
+                          : `data:image/png;base64,${wallpaperPreview}`,
+                      }}
+                      style={styles.wallpaperPreviewImage}
+                      resizeMode="cover"
+                      accessibilityLabel="Generated wallpaper preview"
+                    />
+                    <View style={styles.wallpaperPreviewActions}>
+                      <Pressable
+                        style={[
+                          styles.wallpaperConfirmBtn,
+                          { backgroundColor: colors.accent.primary },
+                        ]}
+                        onPress={() => {
+                          setWallpaperBase64(wallpaperPreview);
+                          setWallpaperStage('confirmed');
+                          setWallpaperPreview(null);
+                        }}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="checkmark" size={15} color="#fff" />
+                        <Text style={styles.wallpaperConfirmBtnText}>Keep</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.wallpaperConfirmBtn,
+                          {
+                            backgroundColor: colors.bg.elevated,
+                            borderWidth: 1,
+                            borderColor: colors.border.default,
+                          },
+                        ]}
+                        onPress={() => {
+                          setWallpaperPreview(null);
+                          setWallpaperStage('none');
+                        }}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="close" size={15} color={colors.text.secondary} />
+                        <Text
+                          style={[styles.wallpaperConfirmBtnText, { color: colors.text.secondary }]}
+                        >
+                          Discard
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.wallpaperConfirmBtn,
+                          {
+                            backgroundColor: colors.bg.elevated,
+                            borderWidth: 1,
+                            borderColor: colors.border.default,
+                          },
+                        ]}
+                        onPress={handleGenerateWallpaper}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="refresh-outline" size={15} color={colors.text.secondary} />
+                        <Text
+                          style={[styles.wallpaperConfirmBtnText, { color: colors.text.secondary }]}
+                        >
+                          Retry
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+
+                {/* Confirmed wallpaper thumbnail */}
+                {wallpaperStage === 'confirmed' && wallpaperBase64 && (
+                  <View style={styles.wallpaperConfirmedRow}>
+                    <Image
+                      source={{
+                        uri: wallpaperBase64.startsWith('data:')
+                          ? wallpaperBase64
+                          : `data:image/png;base64,${wallpaperBase64}`,
+                      }}
+                      style={styles.wallpaperThumb}
+                      resizeMode="cover"
+                      accessibilityLabel="Selected wallpaper"
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          fontSize: D.fontSize.sm,
+                          color: colors.text.primary,
+                          fontWeight: D.fontWeight.medium,
+                        }}
+                      >
+                        Wallpaper selected
+                      </Text>
+                      <Pressable
+                        onPress={() => {
+                          setWallpaperBase64(null);
+                          setWallpaperStage('none');
+                          setWallpaperOnResult(null);
+                          setWallpaperOnError(null);
+                        }}
+                        accessibilityRole="button"
+                      >
+                        <Text
+                          style={{
+                            fontSize: D.fontSize.xs,
+                            color: colors.accent.primary,
+                            marginTop: 2,
+                          }}
+                        >
+                          Change
+                        </Text>
+                      </Pressable>
+                    </View>
+                    <Ionicons name="checkmark-circle" size={20} color={colors.accent.primary} />
+                  </View>
+                )}
+              </View>
+
+              {/* Product picker */}
+              <View style={styles.desktopSection}>
+                <View style={styles.desktopSectionHeader}>
+                  <View>
+                    <Text style={styles.desktopSectionTitle}>Choose Products</Text>
+                    <Text style={styles.desktopSectionSub}>
+                      Select products to place on your wallpaper
+                    </Text>
+                  </View>
+                  {selectedCount > 0 && (
+                    <View style={styles.countBadge}>
+                      <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+                    </View>
+                  )}
+                </View>
+
+                {loadingProducts ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.accent.primary}
+                    style={{ marginVertical: D.spacing.lg }}
+                  />
+                ) : products.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
+                    <Text style={styles.emptyText}>
+                      No products yet. Add some in the Products tab.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ gap: D.spacing.sm }}>
+                    {chunkArray(products, gridCols).map((row, rowIdx) => (
+                      <View
+                        key={rowIdx}
+                        style={{
+                          flexDirection: 'row',
+                          gap: D.spacing.sm,
+                          justifyContent: row.length < gridCols ? 'center' : 'flex-start',
+                        }}
+                      >
+                        {row.map((p) => (
+                          <ProductCard
+                            key={p.id}
+                            product={p}
+                            selected={selected.has(p.id)}
+                            onToggle={() => toggleProduct(p.id)}
+                            cardWidth={productCardWidth}
+                            colors={colors}
+                            styles={styles}
+                          />
+                        ))}
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Result */}
+              <View style={styles.desktopSection}>
+                <Text style={styles.desktopSectionTitle}>Result</Text>
+                <Text style={styles.desktopSectionSub}>
+                  Your products composited onto the wallpaper
+                </Text>
+                <View style={{ marginTop: D.spacing.md }}>
+                  <ResultPreviewPanel
+                    result={wallpaperOnResult}
+                    generating={wallpaperOnGenerating}
+                    error={wallpaperOnError}
+                    emptyTitle="Result will appear here"
+                    emptyHint="Pick a wallpaper, select products, configure options, then hit Place on Wallpaper."
+                    colors={colors}
+                    styles={styles}
+                  />
+                </View>
+              </View>
+            </>
+          )}
         </>
       ) : activeTab === 'announcements' ? (
         <>
@@ -891,78 +1557,152 @@ export default function StudioScreen() {
       );
 
     return (
-      <View style={styles.desktopRoot}>
-        {/* ── LEFT SIDEBAR ── */}
-        <View style={styles.sidebar}>
+      <>
+        <View style={styles.desktopRoot}>
+          {/* ── LEFT SIDEBAR ── */}
+          <View style={styles.sidebar}>
+            <ScrollView
+              style={styles.sidebarScroll}
+              contentContainerStyle={styles.sidebarContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Header */}
+              <View style={styles.sidebarHeader}>
+                <Text style={styles.sidebarTitle}>Studio</Text>
+                <Text style={styles.sidebarSubtitle}>AI-powered ad creation</Text>
+              </View>
+
+              {/* Vertical tab nav */}
+              <SectionLabel label="Tools" />
+              <View style={styles.verticalNav}>
+                {TAB_META.map((tab) => {
+                  const active = activeTab === tab.key;
+                  return (
+                    <Pressable
+                      key={tab.key}
+                      style={[styles.navItem, active && styles.navItemActive]}
+                      onPress={() => switchTab(tab.key)}
+                      accessibilityRole="button"
+                    >
+                      <View style={[styles.navIconBox, active && styles.navIconBoxActive]}>
+                        <Ionicons
+                          name={active ? tab.iconFilled : tab.icon}
+                          size={17}
+                          color={active ? '#fff' : colors.text.muted}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.navLabel, active && styles.navLabelActive]}>
+                          {tab.label}
+                        </Text>
+                        <Text style={styles.navDesc}>{tab.desc}</Text>
+                      </View>
+                      {tab.comingSoon && (
+                        <View style={styles.navBadge}>
+                          <Text style={styles.navBadgeText}>Soon</Text>
+                        </View>
+                      )}
+                      {active && !tab.comingSoon && (
+                        <Ionicons name="chevron-forward" size={14} color={colors.accent.primary} />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Tab-specific options */}
+              {sidebarOptions}
+            </ScrollView>
+
+            {/* Sticky footer */}
+            {sidebarFooter && <View style={styles.sidebarFooter}>{sidebarFooter}</View>}
+          </View>
+
+          {/* ── PANEL DIVIDER ── */}
+          <View style={styles.panelDivider} />
+
+          {/* ── RIGHT PANEL ── */}
           <ScrollView
-            style={styles.sidebarScroll}
-            contentContainerStyle={styles.sidebarContent}
+            style={styles.rightPanel}
+            contentContainerStyle={styles.rightPanelContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* Header */}
-            <View style={styles.sidebarHeader}>
-              <Text style={styles.sidebarTitle}>Studio</Text>
-              <Text style={styles.sidebarSubtitle}>AI-powered ad creation</Text>
-            </View>
-
-            {/* Vertical tab nav */}
-            <SectionLabel label="Tools" />
-            <View style={styles.verticalNav}>
-              {TAB_META.map((tab) => {
-                const active = activeTab === tab.key;
-                return (
-                  <Pressable
-                    key={tab.key}
-                    style={[styles.navItem, active && styles.navItemActive]}
-                    onPress={() => switchTab(tab.key)}
-                    accessibilityRole="button"
-                  >
-                    <View style={[styles.navIconBox, active && styles.navIconBoxActive]}>
-                      <Ionicons
-                        name={active ? tab.iconFilled : tab.icon}
-                        size={17}
-                        color={active ? '#fff' : colors.text.muted}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.navLabel, active && styles.navLabelActive]}>
-                        {tab.label}
-                      </Text>
-                      <Text style={styles.navDesc}>{tab.desc}</Text>
-                    </View>
-                    {tab.comingSoon && (
-                      <View style={styles.navBadge}>
-                        <Text style={styles.navBadgeText}>Soon</Text>
-                      </View>
-                    )}
-                    {active && !tab.comingSoon && (
-                      <Ionicons name="chevron-forward" size={14} color={colors.accent.primary} />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* Tab-specific options */}
-            {sidebarOptions}
+            {rightContent}
           </ScrollView>
-
-          {/* Sticky footer */}
-          {sidebarFooter && <View style={styles.sidebarFooter}>{sidebarFooter}</View>}
         </View>
 
-        {/* ── PANEL DIVIDER ── */}
-        <View style={styles.panelDivider} />
-
-        {/* ── RIGHT PANEL ── */}
-        <ScrollView
-          style={styles.rightPanel}
-          contentContainerStyle={styles.rightPanelContent}
-          showsVerticalScrollIndicator={false}
+        {/* Wallpaper picker modal (desktop) */}
+        <Modal
+          visible={wallpaperPickerVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setWallpaperPickerVisible(false)}
         >
-          {rightContent}
-        </ScrollView>
-      </View>
+          <Pressable style={styles.pickerOverlay} onPress={() => setWallpaperPickerVisible(false)}>
+            <Pressable style={styles.pickerSheet} onPress={() => {}}>
+              <View style={styles.pickerHandle} />
+              <View style={styles.pickerHeader}>
+                <Text style={styles.pickerTitle}>My Wallpapers</Text>
+                <Pressable
+                  style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
+                  onPress={() => setWallpaperPickerVisible(false)}
+                >
+                  <Ionicons name="close" size={20} color={colors.text.secondary} />
+                </Pressable>
+              </View>
+              {wallpaperPickerLoading ? (
+                <View style={styles.pickerEmpty}>
+                  <ActivityIndicator size="large" color={colors.accent.primary} />
+                </View>
+              ) : wallpaperPickerItems.length === 0 ? (
+                <View style={styles.pickerEmpty}>
+                  <Ionicons
+                    name="albums-outline"
+                    size={40}
+                    color={colors.text.muted}
+                    style={{ marginBottom: D.spacing.sm }}
+                  />
+                  <Text style={styles.pickerEmptyText}>No wallpapers saved yet.</Text>
+                  <Text style={styles.pickerEmptyHint}>
+                    Generate wallpapers in the Wallpapers tab first.
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={wallpaperPickerItems}
+                  keyExtractor={(item) => item.id}
+                  numColumns={2}
+                  contentContainerStyle={{ padding: D.spacing.md, gap: D.spacing.sm }}
+                  columnWrapperStyle={{ gap: D.spacing.sm }}
+                  renderItem={({ item }) => {
+                    const thumbSize = (screenWidth - D.spacing.md * 2 - D.spacing.sm) / 2;
+                    return (
+                      <Pressable
+                        style={({ pressed }) => ({
+                          width: thumbSize,
+                          height: thumbSize,
+                          borderRadius: D.radius.md,
+                          overflow: 'hidden',
+                          opacity: pressed ? 0.8 : 1,
+                          borderWidth: 2,
+                          borderColor: colors.border.default,
+                        })}
+                        onPress={() => pickWallpaperFromLibrary(item)}
+                      >
+                        <Image
+                          source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
+                          style={{ width: '100%', height: '100%' }}
+                          resizeMode="cover"
+                        />
+                      </Pressable>
+                    );
+                  }}
+                />
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
+      </>
     );
   }
 
@@ -1011,107 +1751,470 @@ export default function StudioScreen() {
           {/* ── CATALOG ── */}
           {activeTab === 'catalog' && (
             <>
-              <View style={styles.mobileSection}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Choose Products</Text>
-                  {selectedCount > 0 && (
-                    <View style={styles.countBadge}>
-                      <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+              {/* Catalog mode sub-tab bar */}
+              <View style={styles.segmentTrack}>
+                <Animated.View
+                  style={[
+                    styles.segmentIndicator,
+                    { width: '48%', left: catalogModeIndicatorLeft },
+                  ]}
+                />
+                {(['generate', 'on-wallpaper'] as CatalogMode[]).map((mode) => {
+                  const isActive = catalogMode === mode;
+                  return (
+                    <Pressable
+                      key={mode}
+                      style={styles.segmentButton}
+                      onPress={() => switchCatalogMode(mode)}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons
+                        name={
+                          mode === 'generate'
+                            ? isActive
+                              ? 'sparkles'
+                              : 'sparkles-outline'
+                            : isActive
+                              ? 'image'
+                              : 'image-outline'
+                        }
+                        size={14}
+                        color={isActive ? '#fff' : colors.text.secondary}
+                        style={{ marginRight: 4 }}
+                      />
+                      <Text style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}>
+                        {mode === 'generate' ? 'Generate' : 'On Wallpaper'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {catalogMode === 'generate' ? (
+                <>
+                  <View style={styles.mobileSection}>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>Choose Products</Text>
+                      {selectedCount > 0 && (
+                        <View style={styles.countBadge}>
+                          <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+                        </View>
+                      )}
+                    </View>
+                    {loadingProducts ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.accent.primary}
+                        style={{ marginVertical: D.spacing.lg }}
+                      />
+                    ) : products.length === 0 ? (
+                      <View style={styles.emptyState}>
+                        <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
+                        <Text style={styles.emptyText}>
+                          No products yet. Add some in the Products tab.
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.productGrid}>
+                        {products.map((p) => (
+                          <ProductCard
+                            key={p.id}
+                            product={p}
+                            selected={selected.has(p.id)}
+                            onToggle={() => toggleProduct(p.id)}
+                            cardWidth={productCardWidth}
+                            colors={colors}
+                            styles={styles}
+                          />
+                        ))}
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.mobileSection}>
+                    <Text style={styles.sectionTitle}>Generation Options</Text>
+                    <OptionLabel label="Layout" />
+                    <ChipSelector
+                      options={LAYOUT_OPTIONS}
+                      selected={layout}
+                      onSelect={setLayout}
+                      accessibilityLabel="Layout"
+                    />
+                    <OptionLabel label="Color Theme" />
+                    <ChipSelector
+                      options={COLOR_OPTIONS}
+                      selected={colorTheme}
+                      onSelect={setColorTheme}
+                      accessibilityLabel="Color theme"
+                    />
+                    <OptionLabel label="Format" />
+                    <ChipSelector
+                      options={FORMAT_OPTIONS}
+                      selected={catalogFormat}
+                      onSelect={setCatalogFormat}
+                      accessibilityLabel="Format"
+                    />
+                    <View style={styles.toggleRow}>
+                      <Text style={styles.toggleLabel}>Show Prices</Text>
+                      <Switch
+                        value={showPrices}
+                        onValueChange={setShowPrices}
+                        thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                  </View>
+
+                  {contextItems.length > 0 && (
+                    <View style={styles.mobileSection}>
+                      <BrandContextSection
+                        items={contextItems}
+                        selected={catalogContextFields}
+                        onToggle={toggleCatalogField}
+                      />
                     </View>
                   )}
-                </View>
-                {loadingProducts ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={colors.accent.primary}
-                    style={{ marginVertical: D.spacing.lg }}
+
+                  <GenerateButton
+                    loading={catalogGenerating}
+                    disabled={selectedCount === 0}
+                    label={selectedCount === 0 ? 'Select products to generate' : 'Generate Catalog'}
+                    onPress={handleCatalogGenerate}
                   />
-                ) : products.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-                    <Text style={styles.emptyText}>
-                      No products yet. Add some in the Products tab.
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.productGrid}>
-                    {products.map((p) => (
-                      <ProductCard
-                        key={p.id}
-                        product={p}
-                        selected={selected.has(p.id)}
-                        onToggle={() => toggleProduct(p.id)}
-                        cardWidth={productCardWidth}
-                        colors={colors}
-                        styles={styles}
+
+                  {catalogError && <Text style={styles.errorText}>{catalogError}</Text>}
+                  {catalogResult && (
+                    <View style={styles.mobileResultCard}>
+                      <Image
+                        source={{
+                          uri: `data:${catalogResult.mimeType};base64,${catalogResult.imageBase64}`,
+                        }}
+                        style={styles.mobileResultImage}
+                        resizeMode="contain"
                       />
-                    ))}
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* Wallpaper picker */}
+                  <View style={styles.mobileSection}>
+                    <Text style={styles.sectionTitle}>Background Wallpaper</Text>
+                    <Text
+                      style={[
+                        styles.emptyText,
+                        { textAlign: 'left', marginTop: 4, marginBottom: D.spacing.sm },
+                      ]}
+                    >
+                      Import or generate — your wallpaper stays unchanged
+                    </Text>
+
+                    <View style={styles.wallpaperActionRow}>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.wallpaperActionBtn,
+                          pressed && { opacity: 0.75 },
+                        ]}
+                        onPress={handleImportWallpaper}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="image-outline" size={15} color={colors.accent.primary} />
+                        <Text style={styles.wallpaperActionText}>Import</Text>
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.wallpaperActionBtn,
+                          pressed && { opacity: 0.75 },
+                        ]}
+                        onPress={() => setShowWallpaperPrompt((v) => !v)}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="sparkles-outline" size={15} color={colors.accent.primary} />
+                        <Text style={styles.wallpaperActionText}>Generate</Text>
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.wallpaperActionBtn,
+                          pressed && { opacity: 0.75 },
+                        ]}
+                        onPress={openWallpaperPicker}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="albums-outline" size={15} color={colors.accent.primary} />
+                        <Text style={styles.wallpaperActionText}>My Wallpapers</Text>
+                      </Pressable>
+                    </View>
+
+                    {showWallpaperPrompt && (
+                      <View style={{ marginTop: D.spacing.sm, gap: D.spacing.sm }}>
+                        <TextInput
+                          style={styles.textArea}
+                          placeholder="Describe the wallpaper…"
+                          placeholderTextColor={colors.text.muted}
+                          value={wallpaperPrompt}
+                          onChangeText={setWallpaperPrompt}
+                          multiline
+                          editable={wallpaperStage !== 'generating'}
+                        />
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.wallpaperGenBtn,
+                            (wallpaperStage === 'generating' || !wallpaperPrompt.trim()) && {
+                              opacity: 0.45,
+                            },
+                            pressed && { opacity: 0.8 },
+                          ]}
+                          onPress={handleGenerateWallpaper}
+                          disabled={wallpaperStage === 'generating' || !wallpaperPrompt.trim()}
+                          accessibilityRole="button"
+                        >
+                          {wallpaperStage === 'generating' ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Ionicons name="sparkles-outline" size={14} color="#fff" />
+                          )}
+                          <Text style={styles.wallpaperGenBtnText}>
+                            {wallpaperStage === 'generating' ? 'Generating…' : 'Generate Wallpaper'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    )}
+
+                    {wallpaperError && (
+                      <Text style={[styles.errorText, { marginTop: D.spacing.sm }]}>
+                        {wallpaperError}
+                      </Text>
+                    )}
+
+                    {wallpaperStage === 'preview' && wallpaperPreview && (
+                      <View style={styles.wallpaperPreviewBox}>
+                        <Image
+                          source={{
+                            uri: wallpaperPreview.startsWith('data:')
+                              ? wallpaperPreview
+                              : `data:image/png;base64,${wallpaperPreview}`,
+                          }}
+                          style={styles.wallpaperPreviewImage}
+                          resizeMode="cover"
+                          accessibilityLabel="Generated wallpaper preview"
+                        />
+                        <View style={styles.wallpaperPreviewActions}>
+                          <Pressable
+                            style={[
+                              styles.wallpaperConfirmBtn,
+                              { backgroundColor: colors.accent.primary },
+                            ]}
+                            onPress={() => {
+                              setWallpaperBase64(wallpaperPreview);
+                              setWallpaperStage('confirmed');
+                              setWallpaperPreview(null);
+                            }}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons name="checkmark" size={14} color="#fff" />
+                            <Text style={styles.wallpaperConfirmBtnText}>Keep</Text>
+                          </Pressable>
+                          <Pressable
+                            style={[
+                              styles.wallpaperConfirmBtn,
+                              {
+                                backgroundColor: colors.bg.elevated,
+                                borderWidth: 1,
+                                borderColor: colors.border.default,
+                              },
+                            ]}
+                            onPress={() => {
+                              setWallpaperPreview(null);
+                              setWallpaperStage('none');
+                            }}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons name="close" size={14} color={colors.text.secondary} />
+                            <Text
+                              style={[
+                                styles.wallpaperConfirmBtnText,
+                                { color: colors.text.secondary },
+                              ]}
+                            >
+                              Discard
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            style={[
+                              styles.wallpaperConfirmBtn,
+                              {
+                                backgroundColor: colors.bg.elevated,
+                                borderWidth: 1,
+                                borderColor: colors.border.default,
+                              },
+                            ]}
+                            onPress={handleGenerateWallpaper}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons
+                              name="refresh-outline"
+                              size={14}
+                              color={colors.text.secondary}
+                            />
+                            <Text
+                              style={[
+                                styles.wallpaperConfirmBtnText,
+                                { color: colors.text.secondary },
+                              ]}
+                            >
+                              Retry
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    )}
+
+                    {wallpaperStage === 'confirmed' && wallpaperBase64 && (
+                      <View style={styles.wallpaperConfirmedRow}>
+                        <Image
+                          source={{
+                            uri: wallpaperBase64.startsWith('data:')
+                              ? wallpaperBase64
+                              : `data:image/png;base64,${wallpaperBase64}`,
+                          }}
+                          style={styles.wallpaperThumb}
+                          resizeMode="cover"
+                          accessibilityLabel="Selected wallpaper"
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              fontSize: D.fontSize.sm,
+                              color: colors.text.primary,
+                              fontWeight: D.fontWeight.medium,
+                            }}
+                          >
+                            Wallpaper selected
+                          </Text>
+                          <Pressable
+                            onPress={() => {
+                              setWallpaperBase64(null);
+                              setWallpaperStage('none');
+                              setWallpaperOnResult(null);
+                              setWallpaperOnError(null);
+                            }}
+                            accessibilityRole="button"
+                          >
+                            <Text
+                              style={{
+                                fontSize: D.fontSize.xs,
+                                color: colors.accent.primary,
+                                marginTop: 2,
+                              }}
+                            >
+                              Change
+                            </Text>
+                          </Pressable>
+                        </View>
+                        <Ionicons name="checkmark-circle" size={20} color={colors.accent.primary} />
+                      </View>
+                    )}
                   </View>
-                )}
-              </View>
 
-              <View style={styles.mobileSection}>
-                <Text style={styles.sectionTitle}>Generation Options</Text>
-                <OptionLabel label="Layout" />
-                <ChipSelector
-                  options={LAYOUT_OPTIONS}
-                  selected={layout}
-                  onSelect={setLayout}
-                  accessibilityLabel="Layout"
-                />
-                <OptionLabel label="Color Theme" />
-                <ChipSelector
-                  options={COLOR_OPTIONS}
-                  selected={colorTheme}
-                  onSelect={setColorTheme}
-                  accessibilityLabel="Color theme"
-                />
-                <OptionLabel label="Format" />
-                <ChipSelector
-                  options={FORMAT_OPTIONS}
-                  selected={catalogFormat}
-                  onSelect={setCatalogFormat}
-                  accessibilityLabel="Format"
-                />
-                <View style={styles.toggleRow}>
-                  <Text style={styles.toggleLabel}>Show Prices</Text>
-                  <Switch
-                    value={showPrices}
-                    onValueChange={setShowPrices}
-                    thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
-                    trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                  {/* Products */}
+                  <View style={styles.mobileSection}>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>Choose Products</Text>
+                      {selectedCount > 0 && (
+                        <View style={styles.countBadge}>
+                          <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+                        </View>
+                      )}
+                    </View>
+                    {loadingProducts ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.accent.primary}
+                        style={{ marginVertical: D.spacing.lg }}
+                      />
+                    ) : products.length === 0 ? (
+                      <View style={styles.emptyState}>
+                        <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
+                        <Text style={styles.emptyText}>
+                          No products yet. Add some in the Products tab.
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.productGrid}>
+                        {products.map((p) => (
+                          <ProductCard
+                            key={p.id}
+                            product={p}
+                            selected={selected.has(p.id)}
+                            onToggle={() => toggleProduct(p.id)}
+                            cardWidth={productCardWidth}
+                            colors={colors}
+                            styles={styles}
+                          />
+                        ))}
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Placement options */}
+                  <View style={styles.mobileSection}>
+                    <Text style={styles.sectionTitle}>Placement Options</Text>
+                    <OptionLabel label="Layout" />
+                    <ChipSelector
+                      options={LAYOUT_OPTIONS}
+                      selected={layout}
+                      onSelect={setLayout}
+                      accessibilityLabel="Layout"
+                    />
+                    <OptionLabel label="Format" />
+                    <ChipSelector
+                      options={FORMAT_OPTIONS}
+                      selected={catalogFormat}
+                      onSelect={setCatalogFormat}
+                      accessibilityLabel="Format"
+                    />
+                    <View style={styles.toggleRow}>
+                      <Text style={styles.toggleLabel}>Show Prices</Text>
+                      <Switch
+                        value={showPrices}
+                        onValueChange={setShowPrices}
+                        thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                    <TextStyleControls
+                      textStyle={textStyle}
+                      setTextStyle={setTextStyle}
+                      colors={colors}
+                    />
+                  </View>
+
+                  <GenerateButton
+                    loading={wallpaperOnGenerating}
+                    disabled={selectedCount === 0 || wallpaperBase64 === null}
+                    label={
+                      wallpaperBase64 === null
+                        ? 'Pick a wallpaper first'
+                        : selectedCount === 0
+                          ? 'Select products first'
+                          : 'Place on Wallpaper'
+                    }
+                    onPress={handleWallpaperOnGenerate}
                   />
-                </View>
-              </View>
 
-              {contextItems.length > 0 && (
-                <View style={styles.mobileSection}>
-                  <BrandContextSection
-                    items={contextItems}
-                    selected={catalogContextFields}
-                    onToggle={toggleCatalogField}
-                  />
-                </View>
-              )}
-
-              <GenerateButton
-                loading={catalogGenerating}
-                disabled={selectedCount === 0}
-                label={selectedCount === 0 ? 'Select products to generate' : 'Generate Catalog'}
-                onPress={handleCatalogGenerate}
-              />
-
-              {catalogError && <Text style={styles.errorText}>{catalogError}</Text>}
-              {catalogResult && (
-                <View style={styles.mobileResultCard}>
-                  <Image
-                    source={{
-                      uri: `data:${catalogResult.mimeType};base64,${catalogResult.imageBase64}`,
-                    }}
-                    style={styles.mobileResultImage}
-                    resizeMode="contain"
-                  />
-                </View>
+                  {wallpaperOnError && <Text style={styles.errorText}>{wallpaperOnError}</Text>}
+                  {wallpaperOnResult && (
+                    <View style={styles.mobileResultCard}>
+                      <Image
+                        source={{
+                          uri: `data:${wallpaperOnResult.mimeType};base64,${wallpaperOnResult.imageBase64}`,
+                        }}
+                        style={styles.mobileResultImage}
+                        resizeMode="contain"
+                      />
+                    </View>
+                  )}
+                </>
               )}
             </>
           )}
@@ -1247,6 +2350,78 @@ export default function StudioScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Wallpaper picker modal */}
+      <Modal
+        visible={wallpaperPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setWallpaperPickerVisible(false)}
+      >
+        <Pressable style={styles.pickerOverlay} onPress={() => setWallpaperPickerVisible(false)}>
+          <Pressable style={styles.pickerSheet} onPress={() => {}}>
+            <View style={styles.pickerHandle} />
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>My Wallpapers</Text>
+              <Pressable
+                style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
+                onPress={() => setWallpaperPickerVisible(false)}
+              >
+                <Ionicons name="close" size={20} color={colors.text.secondary} />
+              </Pressable>
+            </View>
+            {wallpaperPickerLoading ? (
+              <View style={styles.pickerEmpty}>
+                <ActivityIndicator size="large" color={colors.accent.primary} />
+              </View>
+            ) : wallpaperPickerItems.length === 0 ? (
+              <View style={styles.pickerEmpty}>
+                <Ionicons
+                  name="albums-outline"
+                  size={40}
+                  color={colors.text.muted}
+                  style={{ marginBottom: D.spacing.sm }}
+                />
+                <Text style={styles.pickerEmptyText}>No wallpapers saved yet.</Text>
+                <Text style={styles.pickerEmptyHint}>
+                  Generate wallpapers in the Wallpapers tab first.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={wallpaperPickerItems}
+                keyExtractor={(item) => item.id}
+                numColumns={2}
+                contentContainerStyle={{ padding: D.spacing.md, gap: D.spacing.sm }}
+                columnWrapperStyle={{ gap: D.spacing.sm }}
+                renderItem={({ item }) => {
+                  const thumbSize = (screenWidth - D.spacing.md * 2 - D.spacing.sm) / 2;
+                  return (
+                    <Pressable
+                      style={({ pressed }) => ({
+                        width: thumbSize,
+                        height: thumbSize,
+                        borderRadius: D.radius.md,
+                        overflow: 'hidden',
+                        opacity: pressed ? 0.8 : 1,
+                        borderWidth: 2,
+                        borderColor: colors.border.default,
+                      })}
+                      onPress={() => pickWallpaperFromLibrary(item)}
+                    >
+                      <Image
+                        source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="cover"
+                      />
+                    </Pressable>
+                  );
+                }}
+              />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -1718,5 +2893,148 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       color: colors.text.muted,
     },
     stepLabel: { fontSize: D.fontSize.sm, color: colors.text.muted },
+
+    // ── Wallpaper picker ───────────────────────────────────────────────────────
+    wallpaperActionRow: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+    },
+    wallpaperActionBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      paddingVertical: D.spacing.sm,
+      borderRadius: D.radius.md,
+      borderWidth: 1.5,
+      borderColor: colors.accent.primary,
+      backgroundColor: colors.accent.dim,
+    },
+    wallpaperActionText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.accent.primary,
+    },
+    wallpaperGenBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      paddingVertical: D.spacing.sm,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.primary,
+    },
+    wallpaperGenBtnText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: '#fff',
+    },
+    wallpaperPreviewBox: {
+      marginTop: D.spacing.md,
+      borderRadius: D.radius.md,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+    wallpaperPreviewImage: {
+      width: '100%',
+      aspectRatio: 1,
+    },
+    wallpaperPreviewActions: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+      padding: D.spacing.sm,
+      backgroundColor: colors.bg.surface,
+    },
+    wallpaperConfirmBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      paddingVertical: 7,
+      borderRadius: D.radius.sm,
+    },
+    wallpaperConfirmBtnText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: '#fff',
+    },
+    wallpaperConfirmedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      marginTop: D.spacing.md,
+      padding: D.spacing.sm,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.accent.primary,
+    },
+    wallpaperThumb: {
+      width: 52,
+      height: 52,
+      borderRadius: D.radius.sm,
+    },
+
+    // ── Wallpaper picker modal ─────────────────────────────────────────────────
+    pickerOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+    },
+    pickerSheet: {
+      backgroundColor: colors.bg.surface,
+      borderTopLeftRadius: D.radius.xl,
+      borderTopRightRadius: D.radius.xl,
+      maxHeight: '80%' as DimensionValue,
+      paddingBottom: D.spacing.xl,
+    },
+    pickerHandle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.border.default,
+      alignSelf: 'center',
+      marginTop: D.spacing.sm,
+      marginBottom: D.spacing.md,
+    },
+    pickerHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: D.spacing.lg,
+      marginBottom: D.spacing.md,
+    },
+    pickerTitle: {
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+    },
+    pickerClose: {
+      width: 32,
+      height: 32,
+      borderRadius: D.radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.bg.base,
+    },
+    pickerEmpty: {
+      alignItems: 'center',
+      paddingVertical: D.spacing['2xl'],
+      gap: D.spacing.sm,
+      paddingHorizontal: D.spacing.lg,
+    },
+    pickerEmptyText: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
+    },
+    pickerEmptyHint: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      textAlign: 'center',
+    },
   });
 }

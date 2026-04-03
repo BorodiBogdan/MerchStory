@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
         // Content-type services
         services.AddScoped<ICatalogImageService, CatalogImageService>();
         services.AddScoped<IAnnouncementImageService, AnnouncementImageService>();
+        services.AddScoped<IWallpaperImageService, WallpaperImageService>();
 
         return services;
     }

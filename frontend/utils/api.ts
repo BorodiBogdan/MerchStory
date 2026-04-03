@@ -353,6 +353,67 @@ export async function generateAnnouncementImage(
   return response.json() as Promise<GenerateImageResponse>;
 }
 
+export interface GenerateWallpaperParams {
+  prompt: string;
+}
+
+export interface TextStyleOptions {
+  fontFamily?: string; // Modern | Elegant | Bold | Friendly
+  fontSize?: string; // Small | Medium | Large
+  nameColor?: string; // hex color
+  priceColor?: string | null;
+  colorMode?: string; // Solid | Gradient | Rainbow
+  gradientEndColor?: string;
+  textEffect?: string; // None | Shadow | Outline
+}
+
+export interface GenerateCatalogOnWallpaperParams {
+  products: CatalogImageProduct[];
+  wallpaperBase64: string;
+  layout: string;
+  format: string;
+  showPrices: boolean;
+  textStyle?: TextStyleOptions;
+}
+
+export async function generateWallpaper(
+  params: GenerateWallpaperParams
+): Promise<GenerateImageResponse> {
+  const response = await fetchWithAuth(`${API_URL}/generate-image/wallpaper`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as { detail?: string }).detail ?? `Request failed with status ${response.status}`
+    );
+  }
+
+  return response.json() as Promise<GenerateImageResponse>;
+}
+
+export async function generateCatalogOnWallpaper(
+  params: GenerateCatalogOnWallpaperParams
+): Promise<GenerateImageResponse> {
+  const response = await fetchWithAuth(`${API_URL}/generate-image/catalog-on-wallpaper`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as { detail?: string }).detail ?? `Request failed with status ${response.status}`
+    );
+  }
+
+  return response.json() as Promise<GenerateImageResponse>;
+}
+
 // ── Gallery ──────────────────────────────────────────────────────────────────
 
 export interface GalleryItem {
@@ -379,6 +440,28 @@ export async function deleteGalleryItem(id: string): Promise<void> {
 
   if (!response.ok && response.status !== 404) {
     throw new Error(`Failed to delete image (${response.status})`);
+  }
+}
+
+// ── Wallpapers ────────────────────────────────────────────────────────────────
+
+export async function fetchWallpapers(): Promise<GalleryItem[]> {
+  const response = await fetchWithAuth(`${API_URL}/wallpapers`, {});
+
+  if (!response.ok) {
+    throw new Error(`Failed to load wallpapers (${response.status})`);
+  }
+
+  return response.json() as Promise<GalleryItem[]>;
+}
+
+export async function deleteWallpaper(id: string): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/wallpapers/${id}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Failed to delete wallpaper (${response.status})`);
   }
 }
 
