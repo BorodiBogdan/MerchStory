@@ -628,13 +628,7 @@ function ProductCard({
   );
 }
 
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const result: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    result.push(arr.slice(i, i + size));
-  }
-  return result;
-}
+const DESKTOP_INLINE_LIMIT = 4;
 
 function ChooseProductsSection({
   subtitle,
@@ -644,8 +638,6 @@ function ChooseProductsSection({
   selectedCount,
   selected,
   toggleProduct,
-  productCardWidth,
-  gridCols,
   colors,
   styles,
 }: {
@@ -656,92 +648,484 @@ function ChooseProductsSection({
   selectedCount: number;
   selected: Set<string>;
   toggleProduct: (id: string) => void;
-  productCardWidth: DimensionValue;
-  gridCols: number;
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
 }) {
-  const header = (
-    <View style={isDesktop ? styles.desktopSectionHeader : styles.sectionHeader}>
-      <View>
-        <Text style={isDesktop ? styles.desktopSectionTitle : styles.sectionTitle}>
-          Choose Products
-        </Text>
-        {isDesktop && <Text style={styles.desktopSectionSub}>{subtitle}</Text>}
-      </View>
-      {selectedCount > 0 && (
-        <View style={styles.countBadge}>
-          <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
-        </View>
-      )}
-    </View>
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const { width: screenWidth } = useWindowDimensions();
+
+  const closePicker = () => {
+    setSearch('');
+    setPickerOpen(false);
+  };
+
+  const filtered = search.trim()
+    ? products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+    : products;
+
+  // Sizing
+  const DIALOG_MAX = 860;
+  const dialogWidth = Math.min(screenWidth - 96, DIALOG_MAX);
+  const MODAL_COLS_DESKTOP = 4;
+  const MODAL_COLS_MOBILE = 2;
+  const modalCols = isDesktop ? MODAL_COLS_DESKTOP : MODAL_COLS_MOBILE;
+  const modalPad = D.spacing.lg;
+  const modalGap = D.spacing.sm;
+  const modalThumbWidth = isDesktop
+    ? Math.floor(
+        (dialogWidth - modalPad * 2 - modalGap * (MODAL_COLS_DESKTOP - 1)) / MODAL_COLS_DESKTOP
+      )
+    : Math.floor(
+        (screenWidth - modalPad * 2 - modalGap * (MODAL_COLS_MOBILE - 1)) / MODAL_COLS_MOBILE
+      );
+
+  // Desktop inline card width: 4 cards in available panel space
+  const panelInner = screenWidth - SIDEBAR_WIDTH - 1 - 64;
+  const inlineCardWidth = Math.floor(
+    (panelInner - D.spacing.sm * (DESKTOP_INLINE_LIMIT - 1)) / DESKTOP_INLINE_LIMIT
   );
 
-  let content: React.ReactNode;
-  if (loadingProducts) {
-    content = (
-      <ActivityIndicator
-        size="small"
-        color={colors.accent.primary}
-        style={{ marginVertical: D.spacing.lg }}
-      />
-    );
-  } else if (products.length === 0) {
-    content = (
-      <View style={styles.emptyState}>
-        <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-        <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
-      </View>
-    );
-  } else if (isDesktop) {
-    content = (
-      <View style={{ gap: D.spacing.sm }}>
-        {chunkArray(products, gridCols).map((row, rowIdx) => (
-          <View
-            key={rowIdx}
-            style={{
-              flexDirection: 'row',
-              gap: D.spacing.sm,
-              justifyContent: row.length < gridCols ? 'center' : 'flex-start',
-            }}
-          >
-            {row.map((p) => (
-              <ProductCard
-                key={p.id}
-                product={p}
-                selected={selected.has(p.id)}
-                onToggle={() => toggleProduct(p.id)}
-                cardWidth={productCardWidth}
-                colors={colors}
-                styles={styles}
-              />
-            ))}
-          </View>
-        ))}
-      </View>
-    );
-  } else {
-    content = (
-      <View style={styles.productGrid}>
-        {products.map((p) => (
-          <ProductCard
-            key={p.id}
-            product={p}
-            selected={selected.has(p.id)}
-            onToggle={() => toggleProduct(p.id)}
-            cardWidth={productCardWidth}
-            colors={colors}
-            styles={styles}
+  const hasMore = products.length > DESKTOP_INLINE_LIMIT;
+  const inlineProducts = products.slice(0, DESKTOP_INLINE_LIMIT);
+  const selectedProducts = products.filter((p) => selected.has(p.id));
+
+  // ── Shared modal content ──────────────────────────────────────────────────────
+  const modalBody = (
+    <>
+      {/* Search */}
+      <View style={{ paddingHorizontal: modalPad, paddingBottom: D.spacing.sm }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: colors.bg.input,
+            borderRadius: D.radius.md,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            paddingHorizontal: D.spacing.md,
+            gap: D.spacing.sm,
+            height: 40,
+          }}
+        >
+          <Ionicons name="search-outline" size={16} color={colors.text.muted} />
+          <TextInput
+            style={
+              {
+                flex: 1,
+                color: colors.text.primary,
+                fontSize: D.fontSize.sm,
+                outline: 'none',
+              } as any
+            }
+            placeholder="Search products…"
+            placeholderTextColor={colors.text.muted}
+            value={search}
+            onChangeText={setSearch}
           />
-        ))}
+          {search.length > 0 && (
+            <Pressable onPress={() => setSearch('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={16} color={colors.text.muted} />
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      {/* Grid */}
+      {filtered.length === 0 ? (
+        <View style={{ alignItems: 'center', paddingVertical: D.spacing['2xl'] }}>
+          <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
+          <Text
+            style={{ color: colors.text.muted, marginTop: D.spacing.sm, fontSize: D.fontSize.sm }}
+          >
+            {search ? 'No products match your search.' : 'No products yet.'}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          numColumns={modalCols}
+          key={modalCols}
+          contentContainerStyle={{ padding: modalPad, gap: modalGap }}
+          columnWrapperStyle={{ gap: modalGap }}
+          renderItem={({ item }) => {
+            const isSel = selected.has(item.id);
+            return (
+              <Pressable
+                style={({ pressed }) => ({
+                  width: modalThumbWidth,
+                  borderRadius: D.radius.md,
+                  overflow: 'hidden',
+                  borderWidth: 1.5,
+                  borderColor: isSel ? colors.accent.primary : colors.border.subtle,
+                  backgroundColor: isSel ? colors.accent.dim : colors.bg.base,
+                  opacity: pressed ? 0.85 : 1,
+                })}
+                onPress={() => toggleProduct(item.id)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: isSel }}
+              >
+                <View style={{ width: '100%', aspectRatio: 1, position: 'relative' }}>
+                  {item.imageBase64 ? (
+                    <Image
+                      source={{ uri: `data:image/jpeg;base64,${item.imageBase64}` }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        flex: 1,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: colors.bg.surface,
+                      }}
+                    >
+                      <Ionicons name="image-outline" size={24} color={colors.text.muted} />
+                    </View>
+                  )}
+                  {isSel && (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        top: D.spacing.xs,
+                        right: D.spacing.xs,
+                        backgroundColor: 'rgba(255,255,255,0.92)',
+                        borderRadius: D.radius.pill,
+                      }}
+                    >
+                      <Ionicons name="checkmark-circle" size={20} color={colors.accent.primary} />
+                    </View>
+                  )}
+                </View>
+                <View style={{ padding: D.spacing.sm }}>
+                  <Text
+                    style={{
+                      fontSize: D.fontSize.sm,
+                      fontWeight: D.fontWeight.medium,
+                      color: colors.text.primary,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {item.name}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: D.fontSize.xs,
+                      color: colors.accent.primary,
+                      fontWeight: D.fontWeight.semibold,
+                      marginTop: 2,
+                    }}
+                  >
+                    ${item.price.toFixed(2)}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          }}
+        />
+      )}
+
+      {/* Done bar */}
+      <View
+        style={{
+          borderTopWidth: 1,
+          borderTopColor: colors.border.subtle,
+          paddingHorizontal: modalPad,
+          paddingVertical: D.spacing.md,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: colors.bg.surface,
+        }}
+      >
+        <Text style={{ fontSize: D.fontSize.sm, color: colors.text.secondary }}>
+          {selectedCount > 0
+            ? `${selectedCount} product${selectedCount !== 1 ? 's' : ''} selected`
+            : 'Tap products to select'}
+        </Text>
+        <Pressable
+          style={({ pressed }) => ({
+            backgroundColor: colors.accent.primary,
+            borderRadius: D.radius.md,
+            paddingHorizontal: D.spacing.lg,
+            paddingVertical: D.spacing.sm,
+            opacity: pressed ? 0.85 : 1,
+          })}
+          onPress={closePicker}
+          accessibilityRole="button"
+        >
+          <Text
+            style={{ color: '#fff', fontSize: D.fontSize.sm, fontWeight: D.fontWeight.semibold }}
+          >
+            {selectedCount > 0 ? `Done (${selectedCount})` : 'Done'}
+          </Text>
+        </Pressable>
+      </View>
+    </>
+  );
+
+  const picker = (
+    <Modal
+      visible={pickerOpen}
+      transparent={isDesktop}
+      animationType={isDesktop ? 'fade' : 'slide'}
+      onRequestClose={closePicker}
+    >
+      {isDesktop ? (
+        <Pressable style={styles.pickerOverlay} onPress={closePicker}>
+          <Pressable
+            style={[styles.pickerDialog, { maxHeight: '88%' as DimensionValue }]}
+            onPress={() => {}}
+          >
+            <View style={styles.pickerHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pickerTitle}>Choose Products</Text>
+                <Text style={styles.pickerSubtitle}>{subtitle}</Text>
+              </View>
+              {selectedCount > 0 && (
+                <View style={styles.countBadge}>
+                  <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+                </View>
+              )}
+              <Pressable
+                style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
+                onPress={closePicker}
+              >
+                <Ionicons name="close" size={18} color={colors.text.secondary} />
+              </Pressable>
+            </View>
+            {modalBody}
+          </Pressable>
+        </Pressable>
+      ) : (
+        <View style={styles.pickerFullScreen}>
+          <View style={styles.pickerHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pickerTitle}>Choose Products</Text>
+            </View>
+            {selectedCount > 0 && (
+              <View style={[styles.countBadge, { marginRight: D.spacing.sm }]}>
+                <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+              </View>
+            )}
+            <Pressable
+              style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
+              onPress={closePicker}
+            >
+              <Ionicons name="close" size={18} color={colors.text.secondary} />
+            </Pressable>
+          </View>
+          {modalBody}
+        </View>
+      )}
+    </Modal>
+  );
+
+  // ── Desktop layout ────────────────────────────────────────────────────────────
+  if (isDesktop) {
+    return (
+      <View style={styles.desktopSection}>
+        <View style={styles.desktopSectionHeader}>
+          <View>
+            <Text style={styles.desktopSectionTitle}>Choose Products</Text>
+            <Text style={styles.desktopSectionSub}>{subtitle}</Text>
+          </View>
+          {selectedCount > 0 && (
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+            </View>
+          )}
+        </View>
+
+        {loadingProducts ? (
+          <ActivityIndicator
+            size="small"
+            color={colors.accent.primary}
+            style={{ marginVertical: D.spacing.lg }}
+          />
+        ) : products.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
+            <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
+          </View>
+        ) : (
+          <>
+            <View style={{ flexDirection: 'row', gap: D.spacing.sm }}>
+              {inlineProducts.map((p) => (
+                <ProductCard
+                  key={p.id}
+                  product={p}
+                  selected={selected.has(p.id)}
+                  onToggle={() => toggleProduct(p.id)}
+                  cardWidth={inlineCardWidth}
+                  colors={colors}
+                  styles={styles}
+                />
+              ))}
+            </View>
+
+            <Pressable
+              style={({ pressed }) => ({
+                marginTop: D.spacing.md,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: D.spacing.xs,
+                alignSelf: 'flex-start',
+                paddingHorizontal: D.spacing.md,
+                paddingVertical: D.spacing.sm,
+                borderRadius: D.radius.md,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: pressed ? colors.bg.elevated : colors.bg.surface,
+              })}
+              onPress={() => setPickerOpen(true)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="grid-outline" size={14} color={colors.accent.primary} />
+              <Text
+                style={{
+                  fontSize: D.fontSize.sm,
+                  color: colors.accent.primary,
+                  fontWeight: D.fontWeight.medium,
+                }}
+              >
+                {hasMore ? `Browse all ${products.length} products` : 'Browse products'}
+              </Text>
+              <Ionicons name="chevron-forward" size={13} color={colors.accent.primary} />
+            </Pressable>
+          </>
+        )}
+
+        {picker}
       </View>
     );
   }
 
+  // ── Mobile layout ─────────────────────────────────────────────────────────────
   return (
-    <View style={isDesktop ? styles.desktopSection : styles.mobileSection}>
-      {header}
-      {content}
+    <View style={styles.mobileSection}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Choose Products</Text>
+        {selectedCount > 0 && (
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+          </View>
+        )}
+      </View>
+
+      {loadingProducts ? (
+        <ActivityIndicator
+          size="small"
+          color={colors.accent.primary}
+          style={{ marginVertical: D.spacing.lg }}
+        />
+      ) : products.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
+          <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
+        </View>
+      ) : (
+        <Pressable
+          style={({ pressed }) => ({
+            borderRadius: D.radius.md,
+            borderWidth: 1.5,
+            borderColor: selectedCount > 0 ? colors.accent.primary : colors.border.default,
+            backgroundColor: pressed ? colors.bg.elevated : colors.bg.surface,
+            overflow: 'hidden',
+          })}
+          onPress={() => setPickerOpen(true)}
+          accessibilityRole="button"
+        >
+          {/* Selected thumbnails strip */}
+          {selectedProducts.length > 0 && (
+            <View
+              style={{
+                flexDirection: 'row',
+                gap: 2,
+                height: 64,
+                backgroundColor: colors.bg.base,
+              }}
+            >
+              {selectedProducts.slice(0, 5).map((p, i) => (
+                <View key={p.id} style={{ flex: 1, position: 'relative' }}>
+                  {p.imageBase64 ? (
+                    <Image
+                      source={{ uri: `data:image/jpeg;base64,${p.imageBase64}` }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        flex: 1,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: colors.bg.elevated,
+                      }}
+                    >
+                      <Ionicons name="image-outline" size={16} color={colors.text.muted} />
+                    </View>
+                  )}
+                  {i === 4 && selectedProducts.length > 5 && (
+                    <View
+                      style={{
+                        ...StyleSheet.absoluteFillObject,
+                        backgroundColor: 'rgba(0,0,0,0.55)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: '#fff',
+                          fontSize: D.fontSize.sm,
+                          fontWeight: D.fontWeight.semibold,
+                        }}
+                      >
+                        +{selectedProducts.length - 4}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Trigger row */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: D.spacing.md,
+              paddingVertical: D.spacing.md,
+              gap: D.spacing.sm,
+            }}
+          >
+            <Ionicons
+              name={selectedCount > 0 ? 'checkmark-circle-outline' : 'pricetag-outline'}
+              size={18}
+              color={selectedCount > 0 ? colors.accent.primary : colors.text.muted}
+            />
+            <Text
+              style={{
+                flex: 1,
+                fontSize: D.fontSize.sm,
+                color: selectedCount > 0 ? colors.text.primary : colors.text.muted,
+                fontWeight: selectedCount > 0 ? D.fontWeight.medium : D.fontWeight.regular,
+              }}
+            >
+              {selectedCount > 0
+                ? `${selectedCount} of ${products.length} product${products.length !== 1 ? 's' : ''} selected`
+                : `Choose from ${products.length} product${products.length !== 1 ? 's' : ''}`}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.text.muted} />
+          </View>
+        </Pressable>
+      )}
+
+      {picker}
     </View>
   );
 }
@@ -1035,19 +1419,6 @@ export default function StudioScreen() {
   const currentPostType = POST_TYPES.find((t) => t.type === postType)!;
 
   // ── Product card width ───────────────────────────────────────────────────────
-  // Desktop right panel inner width ≈ screenWidth - SIDEBAR_WIDTH - 1 (divider) - 64 (padding)
-  // Mobile: 2 cols with pixel-accurate width for centering last row
-  const desktopPanelInner = screenWidth - SIDEBAR_WIDTH - 1 - 64;
-  const desktopCardCols = desktopPanelInner > 600 ? 5 : desktopPanelInner > 420 ? 4 : 3;
-  const desktopCardWidth = Math.floor(
-    (desktopPanelInner - D.spacing.sm * (desktopCardCols - 1)) / desktopCardCols
-  );
-  const mobileCardCols = 2;
-  const mobileCardWidth = Math.floor(
-    (screenWidth - D.spacing.md * 2 - D.spacing.sm) / mobileCardCols
-  );
-  const productCardWidth: DimensionValue = isDesktop ? desktopCardWidth : mobileCardWidth;
-  const gridCols = isDesktop ? desktopCardCols : mobileCardCols;
 
   // ────────────────────────────────────────────────────────────────────────────
   // DESKTOP LAYOUT
@@ -1215,8 +1586,6 @@ export default function StudioScreen() {
                 selectedCount={selectedCount}
                 selected={selected}
                 toggleProduct={toggleProduct}
-                productCardWidth={productCardWidth}
-                gridCols={gridCols}
                 colors={colors}
                 styles={styles}
               />
@@ -1251,8 +1620,6 @@ export default function StudioScreen() {
                 selectedCount={selectedCount}
                 selected={selected}
                 toggleProduct={toggleProduct}
-                productCardWidth={productCardWidth}
-                gridCols={gridCols}
                 colors={colors}
                 styles={styles}
               />
@@ -1836,8 +2203,6 @@ export default function StudioScreen() {
                     selectedCount={selectedCount}
                     selected={selected}
                     toggleProduct={toggleProduct}
-                    productCardWidth={productCardWidth}
-                    gridCols={gridCols}
                     colors={colors}
                     styles={styles}
                   />
@@ -1917,8 +2282,6 @@ export default function StudioScreen() {
                     selectedCount={selectedCount}
                     selected={selected}
                     toggleProduct={toggleProduct}
-                    productCardWidth={productCardWidth}
-                    gridCols={gridCols}
                     colors={colors}
                     styles={styles}
                   />
@@ -2994,6 +3357,7 @@ function makeStyles(
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: D.spacing.lg,
+      paddingTop: D.spacing.lg,
       marginBottom: D.spacing.md,
     },
     pickerTitle: {
