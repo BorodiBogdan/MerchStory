@@ -636,12 +636,125 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return result;
 }
 
+function ChooseProductsSection({
+  subtitle,
+  isDesktop,
+  products,
+  loadingProducts,
+  selectedCount,
+  selected,
+  toggleProduct,
+  productCardWidth,
+  gridCols,
+  colors,
+  styles,
+}: {
+  subtitle: string;
+  isDesktop: boolean;
+  products: ProductItem[];
+  loadingProducts: boolean;
+  selectedCount: number;
+  selected: Set<string>;
+  toggleProduct: (id: string) => void;
+  productCardWidth: DimensionValue;
+  gridCols: number;
+  colors: ReturnType<typeof useTheme>['colors'];
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  const header = (
+    <View style={isDesktop ? styles.desktopSectionHeader : styles.sectionHeader}>
+      <View>
+        <Text style={isDesktop ? styles.desktopSectionTitle : styles.sectionTitle}>
+          Choose Products
+        </Text>
+        {isDesktop && <Text style={styles.desktopSectionSub}>{subtitle}</Text>}
+      </View>
+      {selectedCount > 0 && (
+        <View style={styles.countBadge}>
+          <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+        </View>
+      )}
+    </View>
+  );
+
+  let content: React.ReactNode;
+  if (loadingProducts) {
+    content = (
+      <ActivityIndicator
+        size="small"
+        color={colors.accent.primary}
+        style={{ marginVertical: D.spacing.lg }}
+      />
+    );
+  } else if (products.length === 0) {
+    content = (
+      <View style={styles.emptyState}>
+        <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
+        <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
+      </View>
+    );
+  } else if (isDesktop) {
+    content = (
+      <View style={{ gap: D.spacing.sm }}>
+        {chunkArray(products, gridCols).map((row, rowIdx) => (
+          <View
+            key={rowIdx}
+            style={{
+              flexDirection: 'row',
+              gap: D.spacing.sm,
+              justifyContent: row.length < gridCols ? 'center' : 'flex-start',
+            }}
+          >
+            {row.map((p) => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                selected={selected.has(p.id)}
+                onToggle={() => toggleProduct(p.id)}
+                cardWidth={productCardWidth}
+                colors={colors}
+                styles={styles}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  } else {
+    content = (
+      <View style={styles.productGrid}>
+        {products.map((p) => (
+          <ProductCard
+            key={p.id}
+            product={p}
+            selected={selected.has(p.id)}
+            onToggle={() => toggleProduct(p.id)}
+            cardWidth={productCardWidth}
+            colors={colors}
+            styles={styles}
+          />
+        ))}
+      </View>
+    );
+  }
+
+  return (
+    <View style={isDesktop ? styles.desktopSection : styles.mobileSection}>
+      {header}
+      {content}
+    </View>
+  );
+}
+
 // ─── Main screen ───────────────────────────────────────────────────────────────
 export default function StudioScreen() {
   const { colors } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
   const isDesktop = isWeb && screenWidth >= DESKTOP_BREAKPOINT;
-  const styles = useMemo(() => makeStyles(colors, isDesktop), [colors, isDesktop]);
+  const styles = useMemo(
+    () => makeStyles(colors, isDesktop, screenWidth),
+    [colors, isDesktop, screenWidth]
+  );
 
   // ── Tab state ────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<StudioTab>('catalog');
@@ -1094,61 +1207,19 @@ export default function StudioScreen() {
           {catalogMode === 'generate' ? (
             <>
               {/* Product picker */}
-              <View style={styles.desktopSection}>
-                <View style={styles.desktopSectionHeader}>
-                  <View>
-                    <Text style={styles.desktopSectionTitle}>Choose Products</Text>
-                    <Text style={styles.desktopSectionSub}>
-                      Select products to include in your catalog
-                    </Text>
-                  </View>
-                  {selectedCount > 0 && (
-                    <View style={styles.countBadge}>
-                      <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
-                    </View>
-                  )}
-                </View>
-
-                {loadingProducts ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={colors.accent.primary}
-                    style={{ marginVertical: D.spacing.lg }}
-                  />
-                ) : products.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-                    <Text style={styles.emptyText}>
-                      No products yet. Add some in the Products tab.
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={{ gap: D.spacing.sm }}>
-                    {chunkArray(products, gridCols).map((row, rowIdx) => (
-                      <View
-                        key={rowIdx}
-                        style={{
-                          flexDirection: 'row',
-                          gap: D.spacing.sm,
-                          justifyContent: row.length < gridCols ? 'center' : 'flex-start',
-                        }}
-                      >
-                        {row.map((p) => (
-                          <ProductCard
-                            key={p.id}
-                            product={p}
-                            selected={selected.has(p.id)}
-                            onToggle={() => toggleProduct(p.id)}
-                            cardWidth={productCardWidth}
-                            colors={colors}
-                            styles={styles}
-                          />
-                        ))}
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
+              <ChooseProductsSection
+                subtitle="Select products to include in your catalog"
+                isDesktop
+                products={products}
+                loadingProducts={loadingProducts}
+                selectedCount={selectedCount}
+                selected={selected}
+                toggleProduct={toggleProduct}
+                productCardWidth={productCardWidth}
+                gridCols={gridCols}
+                colors={colors}
+                styles={styles}
+              />
 
               {/* Preview */}
               <View style={styles.desktopSection}>
@@ -1171,6 +1242,21 @@ export default function StudioScreen() {
             </>
           ) : (
             <>
+              {/* Product picker */}
+              <ChooseProductsSection
+                subtitle="Select products to place on your wallpaper"
+                isDesktop
+                products={products}
+                loadingProducts={loadingProducts}
+                selectedCount={selectedCount}
+                selected={selected}
+                toggleProduct={toggleProduct}
+                productCardWidth={productCardWidth}
+                gridCols={gridCols}
+                colors={colors}
+                styles={styles}
+              />
+
               {/* Wallpaper picker */}
               <View style={styles.desktopSection}>
                 <Text style={styles.desktopSectionTitle}>Background Wallpaper</Text>
@@ -1377,63 +1463,6 @@ export default function StudioScreen() {
                 )}
               </View>
 
-              {/* Product picker */}
-              <View style={styles.desktopSection}>
-                <View style={styles.desktopSectionHeader}>
-                  <View>
-                    <Text style={styles.desktopSectionTitle}>Choose Products</Text>
-                    <Text style={styles.desktopSectionSub}>
-                      Select products to place on your wallpaper
-                    </Text>
-                  </View>
-                  {selectedCount > 0 && (
-                    <View style={styles.countBadge}>
-                      <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
-                    </View>
-                  )}
-                </View>
-
-                {loadingProducts ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={colors.accent.primary}
-                    style={{ marginVertical: D.spacing.lg }}
-                  />
-                ) : products.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-                    <Text style={styles.emptyText}>
-                      No products yet. Add some in the Products tab.
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={{ gap: D.spacing.sm }}>
-                    {chunkArray(products, gridCols).map((row, rowIdx) => (
-                      <View
-                        key={rowIdx}
-                        style={{
-                          flexDirection: 'row',
-                          gap: D.spacing.sm,
-                          justifyContent: row.length < gridCols ? 'center' : 'flex-start',
-                        }}
-                      >
-                        {row.map((p) => (
-                          <ProductCard
-                            key={p.id}
-                            product={p}
-                            selected={selected.has(p.id)}
-                            onToggle={() => toggleProduct(p.id)}
-                            cardWidth={productCardWidth}
-                            colors={colors}
-                            styles={styles}
-                          />
-                        ))}
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-
               {/* Result */}
               <View style={styles.desktopSection}>
                 <Text style={styles.desktopSectionTitle}>Result</Text>
@@ -1635,21 +1664,26 @@ export default function StudioScreen() {
         <Modal
           visible={wallpaperPickerVisible}
           transparent
-          animationType="slide"
+          animationType="fade"
           onRequestClose={() => setWallpaperPickerVisible(false)}
         >
           <Pressable style={styles.pickerOverlay} onPress={() => setWallpaperPickerVisible(false)}>
-            <Pressable style={styles.pickerSheet} onPress={() => {}}>
-              <View style={styles.pickerHandle} />
+            <Pressable style={styles.pickerDialog} onPress={() => {}}>
+              {/* Dialog header */}
               <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>My Wallpapers</Text>
+                <View>
+                  <Text style={styles.pickerTitle}>My Wallpapers</Text>
+                  <Text style={styles.pickerSubtitle}>Select a wallpaper to use as background</Text>
+                </View>
                 <Pressable
                   style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
                   onPress={() => setWallpaperPickerVisible(false)}
                 >
-                  <Ionicons name="close" size={20} color={colors.text.secondary} />
+                  <Ionicons name="close" size={18} color={colors.text.secondary} />
                 </Pressable>
               </View>
+
+              {/* Content */}
               {wallpaperPickerLoading ? (
                 <View style={styles.pickerEmpty}>
                   <ActivityIndicator size="large" color={colors.accent.primary} />
@@ -1671,28 +1705,30 @@ export default function StudioScreen() {
                 <FlatList
                   data={wallpaperPickerItems}
                   keyExtractor={(item) => item.id}
-                  numColumns={2}
-                  contentContainerStyle={{ padding: D.spacing.md, gap: D.spacing.sm }}
-                  columnWrapperStyle={{ gap: D.spacing.sm }}
+                  numColumns={4}
+                  contentContainerStyle={{ padding: D.spacing.lg, gap: D.spacing.md }}
+                  columnWrapperStyle={{ gap: D.spacing.md }}
                   renderItem={({ item }) => {
-                    const thumbSize = (screenWidth - D.spacing.md * 2 - D.spacing.sm) / 2;
+                    const dialogWidth = Math.min(screenWidth - 96, 960);
+                    const thumbWidth = (dialogWidth - D.spacing.lg * 2 - D.spacing.md * 3) / 4;
                     return (
                       <Pressable
                         style={({ pressed }) => ({
-                          width: thumbSize,
-                          height: thumbSize,
+                          width: thumbWidth,
+                          aspectRatio: 9 / 16,
                           borderRadius: D.radius.md,
                           overflow: 'hidden',
-                          opacity: pressed ? 0.8 : 1,
-                          borderWidth: 2,
+                          opacity: pressed ? 0.85 : 1,
+                          borderWidth: 1,
                           borderColor: colors.border.default,
+                          backgroundColor: colors.bg.base,
                         })}
                         onPress={() => pickWallpaperFromLibrary(item)}
                       >
                         <Image
                           source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
                           style={{ width: '100%', height: '100%' }}
-                          resizeMode="cover"
+                          resizeMode="contain"
                         />
                       </Pressable>
                     );
@@ -1792,44 +1828,19 @@ export default function StudioScreen() {
 
               {catalogMode === 'generate' ? (
                 <>
-                  <View style={styles.mobileSection}>
-                    <View style={styles.sectionHeader}>
-                      <Text style={styles.sectionTitle}>Choose Products</Text>
-                      {selectedCount > 0 && (
-                        <View style={styles.countBadge}>
-                          <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
-                        </View>
-                      )}
-                    </View>
-                    {loadingProducts ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={colors.accent.primary}
-                        style={{ marginVertical: D.spacing.lg }}
-                      />
-                    ) : products.length === 0 ? (
-                      <View style={styles.emptyState}>
-                        <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-                        <Text style={styles.emptyText}>
-                          No products yet. Add some in the Products tab.
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={styles.productGrid}>
-                        {products.map((p) => (
-                          <ProductCard
-                            key={p.id}
-                            product={p}
-                            selected={selected.has(p.id)}
-                            onToggle={() => toggleProduct(p.id)}
-                            cardWidth={productCardWidth}
-                            colors={colors}
-                            styles={styles}
-                          />
-                        ))}
-                      </View>
-                    )}
-                  </View>
+                  <ChooseProductsSection
+                    subtitle="Select products to include in your catalog"
+                    isDesktop={false}
+                    products={products}
+                    loadingProducts={loadingProducts}
+                    selectedCount={selectedCount}
+                    selected={selected}
+                    toggleProduct={toggleProduct}
+                    productCardWidth={productCardWidth}
+                    gridCols={gridCols}
+                    colors={colors}
+                    styles={styles}
+                  />
 
                   <View style={styles.mobileSection}>
                     <Text style={styles.sectionTitle}>Generation Options</Text>
@@ -1897,6 +1908,21 @@ export default function StudioScreen() {
                 </>
               ) : (
                 <>
+                  {/* Products */}
+                  <ChooseProductsSection
+                    subtitle="Select products to place on your wallpaper"
+                    isDesktop={false}
+                    products={products}
+                    loadingProducts={loadingProducts}
+                    selectedCount={selectedCount}
+                    selected={selected}
+                    toggleProduct={toggleProduct}
+                    productCardWidth={productCardWidth}
+                    gridCols={gridCols}
+                    colors={colors}
+                    styles={styles}
+                  />
+
                   {/* Wallpaper picker */}
                   <View style={styles.mobileSection}>
                     <Text style={styles.sectionTitle}>Background Wallpaper</Text>
@@ -2116,46 +2142,6 @@ export default function StudioScreen() {
                     )}
                   </View>
 
-                  {/* Products */}
-                  <View style={styles.mobileSection}>
-                    <View style={styles.sectionHeader}>
-                      <Text style={styles.sectionTitle}>Choose Products</Text>
-                      {selectedCount > 0 && (
-                        <View style={styles.countBadge}>
-                          <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
-                        </View>
-                      )}
-                    </View>
-                    {loadingProducts ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={colors.accent.primary}
-                        style={{ marginVertical: D.spacing.lg }}
-                      />
-                    ) : products.length === 0 ? (
-                      <View style={styles.emptyState}>
-                        <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-                        <Text style={styles.emptyText}>
-                          No products yet. Add some in the Products tab.
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={styles.productGrid}>
-                        {products.map((p) => (
-                          <ProductCard
-                            key={p.id}
-                            product={p}
-                            selected={selected.has(p.id)}
-                            onToggle={() => toggleProduct(p.id)}
-                            cardWidth={productCardWidth}
-                            colors={colors}
-                            styles={styles}
-                          />
-                        ))}
-                      </View>
-                    )}
-                  </View>
-
                   {/* Placement options */}
                   <View style={styles.mobileSection}>
                     <Text style={styles.sectionTitle}>Placement Options</Text>
@@ -2354,80 +2340,81 @@ export default function StudioScreen() {
       {/* Wallpaper picker modal */}
       <Modal
         visible={wallpaperPickerVisible}
-        transparent
-        animationType="slide"
+        transparent={false}
+        animationType="fade"
         onRequestClose={() => setWallpaperPickerVisible(false)}
       >
-        <Pressable style={styles.pickerOverlay} onPress={() => setWallpaperPickerVisible(false)}>
-          <Pressable style={styles.pickerSheet} onPress={() => {}}>
-            <View style={styles.pickerHandle} />
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>My Wallpapers</Text>
-              <Pressable
-                style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
-                onPress={() => setWallpaperPickerVisible(false)}
-              >
-                <Ionicons name="close" size={20} color={colors.text.secondary} />
-              </Pressable>
+        <View style={styles.pickerFullScreen}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>My Wallpapers</Text>
+            <Pressable
+              style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
+              onPress={() => setWallpaperPickerVisible(false)}
+            >
+              <Ionicons name="close" size={20} color={colors.text.secondary} />
+            </Pressable>
+          </View>
+          {wallpaperPickerLoading ? (
+            <View style={styles.pickerEmpty}>
+              <ActivityIndicator size="large" color={colors.accent.primary} />
             </View>
-            {wallpaperPickerLoading ? (
-              <View style={styles.pickerEmpty}>
-                <ActivityIndicator size="large" color={colors.accent.primary} />
-              </View>
-            ) : wallpaperPickerItems.length === 0 ? (
-              <View style={styles.pickerEmpty}>
-                <Ionicons
-                  name="albums-outline"
-                  size={40}
-                  color={colors.text.muted}
-                  style={{ marginBottom: D.spacing.sm }}
-                />
-                <Text style={styles.pickerEmptyText}>No wallpapers saved yet.</Text>
-                <Text style={styles.pickerEmptyHint}>
-                  Generate wallpapers in the Wallpapers tab first.
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                data={wallpaperPickerItems}
-                keyExtractor={(item) => item.id}
-                numColumns={2}
-                contentContainerStyle={{ padding: D.spacing.md, gap: D.spacing.sm }}
-                columnWrapperStyle={{ gap: D.spacing.sm }}
-                renderItem={({ item }) => {
-                  const thumbSize = (screenWidth - D.spacing.md * 2 - D.spacing.sm) / 2;
-                  return (
-                    <Pressable
-                      style={({ pressed }) => ({
-                        width: thumbSize,
-                        height: thumbSize,
-                        borderRadius: D.radius.md,
-                        overflow: 'hidden',
-                        opacity: pressed ? 0.8 : 1,
-                        borderWidth: 2,
-                        borderColor: colors.border.default,
-                      })}
-                      onPress={() => pickWallpaperFromLibrary(item)}
-                    >
-                      <Image
-                        source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
-                        style={{ width: '100%', height: '100%' }}
-                        resizeMode="cover"
-                      />
-                    </Pressable>
-                  );
-                }}
+          ) : wallpaperPickerItems.length === 0 ? (
+            <View style={styles.pickerEmpty}>
+              <Ionicons
+                name="albums-outline"
+                size={40}
+                color={colors.text.muted}
+                style={{ marginBottom: D.spacing.sm }}
               />
-            )}
-          </Pressable>
-        </Pressable>
+              <Text style={styles.pickerEmptyText}>No wallpapers saved yet.</Text>
+              <Text style={styles.pickerEmptyHint}>
+                Generate wallpapers in the Wallpapers tab first.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={wallpaperPickerItems}
+              keyExtractor={(item) => item.id}
+              numColumns={2}
+              contentContainerStyle={{ padding: D.spacing.md, gap: D.spacing.sm }}
+              columnWrapperStyle={{ gap: D.spacing.sm }}
+              renderItem={({ item }) => {
+                const thumbWidth = (screenWidth - D.spacing.md * 2 - D.spacing.sm) / 2;
+                return (
+                  <Pressable
+                    style={({ pressed }) => ({
+                      width: thumbWidth,
+                      aspectRatio: 9 / 16,
+                      borderRadius: D.radius.md,
+                      overflow: 'hidden',
+                      opacity: pressed ? 0.8 : 1,
+                      borderWidth: 1.5,
+                      borderColor: colors.border.default,
+                    })}
+                    onPress={() => pickWallpaperFromLibrary(item)}
+                  >
+                    <Image
+                      source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="contain"
+                    />
+                  </Pressable>
+                );
+              }}
+            />
+          )}
+        </View>
       </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 // ─── Styles ────────────────────────────────────────────────────────────────────
-function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
+function makeStyles(
+  colors: ReturnType<typeof useTheme>['colors'],
+  isDesktop: boolean,
+  screenWidth: number
+) {
   return StyleSheet.create({
     // ── Desktop root ───────────────────────────────────────────────────────────
     desktopRoot: {
@@ -2979,26 +2966,28 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
     },
 
     // ── Wallpaper picker modal ─────────────────────────────────────────────────
+    pickerFullScreen: {
+      flex: 1,
+      backgroundColor: colors.bg.surface,
+    },
     pickerOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      justifyContent: 'flex-end',
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    pickerSheet: {
+    pickerDialog: {
+      width: Math.min(screenWidth - 96, 960),
+      maxHeight: '85%' as DimensionValue,
       backgroundColor: colors.bg.surface,
-      borderTopLeftRadius: D.radius.xl,
-      borderTopRightRadius: D.radius.xl,
-      maxHeight: '80%' as DimensionValue,
-      paddingBottom: D.spacing.xl,
+      borderRadius: D.radius.xl,
+      overflow: 'hidden',
+      ...D.shadow.modal,
     },
-    pickerHandle: {
-      width: 36,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: colors.border.default,
-      alignSelf: 'center',
-      marginTop: D.spacing.sm,
-      marginBottom: D.spacing.md,
+    pickerSubtitle: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      marginTop: 2,
     },
     pickerHeader: {
       flexDirection: 'row',
