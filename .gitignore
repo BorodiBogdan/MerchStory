@@ -24,6 +24,7 @@ obj/
 appsettings.Development.json
 appsettings.Local.json
 secrets.json
+*.lscache
 
 # Node / React Native
 node_modules/

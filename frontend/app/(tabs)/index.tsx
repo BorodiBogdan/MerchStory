@@ -521,12 +521,22 @@ function GenerateButton({
   );
 }
 
+function downloadImage(result: GenerateImageResponse, filename: string) {
+  if (Platform.OS !== 'web') return;
+  const ext = result.mimeType.split('/')[1] ?? 'png';
+  const a = document.createElement('a');
+  a.href = `data:${result.mimeType};base64,${result.imageBase64}`;
+  a.download = `${filename}.${ext}`;
+  a.click();
+}
+
 function ResultPreviewPanel({
   result,
   generating,
   error,
   emptyTitle,
   emptyHint,
+  filename,
   colors,
   styles,
 }: {
@@ -535,6 +545,7 @@ function ResultPreviewPanel({
   error: string | null;
   emptyTitle: string;
   emptyHint: string;
+  filename: string;
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
 }) {
@@ -567,6 +578,17 @@ function ResultPreviewPanel({
           resizeMode="contain"
           accessibilityLabel="Generated image"
         />
+        {isWeb && (
+          <Pressable
+            style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.75 }]}
+            onPress={() => downloadImage(result, filename)}
+            accessibilityRole="button"
+            accessibilityLabel="Download image"
+          >
+            <Ionicons name="download-outline" size={15} color="#fff" />
+            <Text style={styles.downloadBtnText}>Download</Text>
+          </Pressable>
+        )}
       </View>
     );
   }
@@ -1603,6 +1625,7 @@ export default function StudioScreen() {
                     error={catalogError}
                     emptyTitle="Your catalog will appear here"
                     emptyHint="Select products on the left, configure options, then hit Generate."
+                    filename="catalog"
                     colors={colors}
                     styles={styles}
                   />
@@ -1843,6 +1866,7 @@ export default function StudioScreen() {
                     error={wallpaperOnError}
                     emptyTitle="Result will appear here"
                     emptyHint="Pick a wallpaper, select products, configure options, then hit Place on Wallpaper."
+                    filename="wallpaper-composite"
                     colors={colors}
                     styles={styles}
                   />
@@ -1907,6 +1931,7 @@ export default function StudioScreen() {
                 error={annoError}
                 emptyTitle="Your graphic will appear here"
                 emptyHint="Fill in the content and style options, then hit Generate."
+                filename="announcement"
                 colors={colors}
                 styles={styles}
               />
@@ -2268,6 +2293,19 @@ export default function StudioScreen() {
                         style={styles.mobileResultImage}
                         resizeMode="contain"
                       />
+                      {isWeb && (
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.downloadBtn,
+                            pressed && { opacity: 0.75 },
+                          ]}
+                          onPress={() => downloadImage(catalogResult, 'catalog')}
+                          accessibilityRole="button"
+                        >
+                          <Ionicons name="download-outline" size={15} color="#fff" />
+                          <Text style={styles.downloadBtnText}>Download</Text>
+                        </Pressable>
+                      )}
                     </View>
                   )}
                 </>
@@ -2561,6 +2599,19 @@ export default function StudioScreen() {
                         style={styles.mobileResultImage}
                         resizeMode="contain"
                       />
+                      {isWeb && (
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.downloadBtn,
+                            pressed && { opacity: 0.75 },
+                          ]}
+                          onPress={() => downloadImage(wallpaperOnResult, 'wallpaper-composite')}
+                          accessibilityRole="button"
+                        >
+                          <Ionicons name="download-outline" size={15} color="#fff" />
+                          <Text style={styles.downloadBtnText}>Download</Text>
+                        </Pressable>
+                      )}
                     </View>
                   )}
                 </>
@@ -2654,6 +2705,16 @@ export default function StudioScreen() {
                     style={styles.mobileResultImage}
                     resizeMode="contain"
                   />
+                  {isWeb && (
+                    <Pressable
+                      style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.75 }]}
+                      onPress={() => downloadImage(annoResult, 'announcement')}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="download-outline" size={15} color="#fff" />
+                      <Text style={styles.downloadBtnText}>Download</Text>
+                    </Pressable>
+                  )}
                 </View>
               )}
             </>
@@ -2955,9 +3016,26 @@ function makeStyles(
       backgroundColor: colors.bg.surface,
       ...D.shadow.modal,
     },
+    downloadBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.xs,
+      margin: D.spacing.md,
+      alignSelf: 'flex-end',
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: D.spacing.sm,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.primary,
+    },
+    downloadBtnText: {
+      color: '#fff',
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+    },
     resultImage: {
       width: '100%',
       aspectRatio: 1,
+      maxHeight: 480,
     },
 
     // ── Mobile layout ──────────────────────────────────────────────────────────
@@ -3037,7 +3115,7 @@ function makeStyles(
       borderColor: colors.border.subtle,
       backgroundColor: colors.bg.surface,
     },
-    mobileResultImage: { width: '100%', aspectRatio: 1 },
+    mobileResultImage: { width: '100%', aspectRatio: 1, maxHeight: 400 },
 
     // ── Shared ─────────────────────────────────────────────────────────────────
     countBadge: {
