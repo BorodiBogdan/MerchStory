@@ -41,6 +41,7 @@ import {
   generateWallpaper,
   getShopProfile,
   type ProductItem,
+  saveToGallery,
   type ShopProfileResponse,
   type TextStyleOptions,
 } from '@/utils/api';
@@ -615,6 +616,8 @@ function ResultPreviewPanel({
   emptyTitle,
   emptyHint,
   filename,
+  onKeep,
+  isKept,
   colors,
   styles,
 }: {
@@ -624,6 +627,8 @@ function ResultPreviewPanel({
   emptyTitle: string;
   emptyHint: string;
   filename: string;
+  onKeep?: () => void;
+  isKept?: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
 }) {
@@ -656,17 +661,38 @@ function ResultPreviewPanel({
           resizeMode="contain"
           accessibilityLabel="Generated image"
         />
-        {isWeb && (
-          <Pressable
-            style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.75 }]}
-            onPress={() => downloadImage(result, filename)}
-            accessibilityRole="button"
-            accessibilityLabel="Download image"
-          >
-            <Ionicons name="download-outline" size={15} color="#fff" />
-            <Text style={styles.downloadBtnText}>Download</Text>
-          </Pressable>
-        )}
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          {onKeep && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.downloadBtn,
+                { backgroundColor: isKept ? colors.accent.dim : colors.accent.primary },
+                pressed && { opacity: 0.75 },
+              ]}
+              onPress={isKept ? undefined : onKeep}
+              accessibilityRole="button"
+              accessibilityLabel={isKept ? 'Image saved' : 'Keep image'}
+            >
+              <Ionicons
+                name={isKept ? 'checkmark-circle' : 'bookmark-outline'}
+                size={15}
+                color="#fff"
+              />
+              <Text style={styles.downloadBtnText}>{isKept ? 'Saved' : 'Keep'}</Text>
+            </Pressable>
+          )}
+          {isWeb && (
+            <Pressable
+              style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.75 }]}
+              onPress={() => downloadImage(result, filename)}
+              accessibilityRole="button"
+              accessibilityLabel="Download image"
+            >
+              <Ionicons name="download-outline" size={15} color="#fff" />
+              <Text style={styles.downloadBtnText}>Download</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
     );
   }
@@ -1290,6 +1316,7 @@ export default function StudioScreen() {
   const [wallpaperError, setWallpaperError] = useState<string | null>(null);
   const [wallpaperOnGenerating, setWallpaperOnGenerating] = useState(false);
   const [wallpaperOnResult, setWallpaperOnResult] = useState<GenerateImageResponse | null>(null);
+  const [wallpaperOnKept, setWallpaperOnKept] = useState(false);
   const [wallpaperOnError, setWallpaperOnError] = useState<string | null>(null);
 
   // ── Wallpaper picker (choose from saved wallpapers) ──────────────────────────
@@ -1324,6 +1351,7 @@ export default function StudioScreen() {
   const [catalogGenerating, setCatalogGenerating] = useState(false);
   const [catalogResult, setCatalogResult] = useState<GenerateImageResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogKept, setCatalogKept] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -1364,6 +1392,7 @@ export default function StudioScreen() {
     setCatalogGenerating(true);
     setCatalogError(null);
     setCatalogResult(null);
+    setCatalogKept(false);
     try {
       setCatalogResult(
         await generateCatalogImage({
@@ -1421,6 +1450,7 @@ export default function StudioScreen() {
     setWallpaperOnGenerating(true);
     setWallpaperOnError(null);
     setWallpaperOnResult(null);
+    setWallpaperOnKept(false);
     try {
       setWallpaperOnResult(
         await generateCatalogOnWallpaper({
@@ -1468,6 +1498,7 @@ export default function StudioScreen() {
   const [annoGenerating, setAnnoGenerating] = useState(false);
   const [annoResult, setAnnoResult] = useState<GenerateImageResponse | null>(null);
   const [annoError, setAnnoError] = useState<string | null>(null);
+  const [annoKept, setAnnoKept] = useState(false);
 
   // ── Brand context state ──────────────────────────────────────────────────────
   const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
@@ -1496,6 +1527,7 @@ export default function StudioScreen() {
     setAnnoGenerating(true);
     setAnnoError(null);
     setAnnoResult(null);
+    setAnnoKept(false);
     try {
       setAnnoResult(
         await generateAnnouncementImage({
@@ -1715,6 +1747,20 @@ export default function StudioScreen() {
                     emptyTitle="Your catalog will appear here"
                     emptyHint="Select products on the left, configure options, then hit Generate."
                     filename="catalog"
+                    onKeep={async () => {
+                      if (!catalogResult) return;
+                      try {
+                        await saveToGallery(
+                          catalogResult.imageBase64,
+                          catalogResult.mimeType,
+                          'catalog'
+                        );
+                        setCatalogKept(true);
+                      } catch (err) {
+                        console.error('Failed to save catalog:', err);
+                      }
+                    }}
+                    isKept={catalogKept}
                     colors={colors}
                     styles={styles}
                   />
@@ -1839,10 +1885,18 @@ export default function StudioScreen() {
                           styles.wallpaperConfirmBtn,
                           { backgroundColor: colors.accent.primary },
                         ]}
-                        onPress={() => {
+                        onPress={async () => {
                           setWallpaperBase64(wallpaperPreview);
                           setWallpaperStage('confirmed');
                           setWallpaperPreview(null);
+                          try {
+                            const b64 = wallpaperPreview.startsWith('data:')
+                              ? wallpaperPreview.split(',')[1]
+                              : wallpaperPreview;
+                            await saveToGallery(b64, 'image/png', 'wallpaper');
+                          } catch (err) {
+                            console.error('Failed to save wallpaper:', err);
+                          }
                         }}
                         accessibilityRole="button"
                       >
@@ -1956,6 +2010,20 @@ export default function StudioScreen() {
                     emptyTitle="Result will appear here"
                     emptyHint="Pick a wallpaper, select products, configure options, then hit Place on Wallpaper."
                     filename="wallpaper-composite"
+                    onKeep={async () => {
+                      if (!wallpaperOnResult) return;
+                      try {
+                        await saveToGallery(
+                          wallpaperOnResult.imageBase64,
+                          wallpaperOnResult.mimeType,
+                          'catalog-on-wallpaper'
+                        );
+                        setWallpaperOnKept(true);
+                      } catch (err) {
+                        console.error('Failed to save wallpaper composite:', err);
+                      }
+                    }}
+                    isKept={wallpaperOnKept}
                     colors={colors}
                     styles={styles}
                   />
@@ -2021,6 +2089,20 @@ export default function StudioScreen() {
                 emptyTitle="Your graphic will appear here"
                 emptyHint="Fill in the content and style options, then hit Generate."
                 filename="announcement"
+                onKeep={async () => {
+                  if (!annoResult) return;
+                  try {
+                    await saveToGallery(
+                      annoResult.imageBase64,
+                      annoResult.mimeType,
+                      'announcement'
+                    );
+                    setAnnoKept(true);
+                  } catch (err) {
+                    console.error('Failed to save announcement:', err);
+                  }
+                }}
+                isKept={annoKept}
                 colors={colors}
                 styles={styles}
               />
@@ -2382,19 +2464,55 @@ export default function StudioScreen() {
                         style={styles.mobileResultImage}
                         resizeMode="contain"
                       />
-                      {isWeb && (
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                         <Pressable
                           style={({ pressed }) => [
                             styles.downloadBtn,
+                            {
+                              backgroundColor: catalogKept
+                                ? colors.accent.dim
+                                : colors.accent.primary,
+                            },
                             pressed && { opacity: 0.75 },
                           ]}
-                          onPress={() => downloadImage(catalogResult, 'catalog')}
+                          onPress={async () => {
+                            if (catalogKept) return;
+                            try {
+                              await saveToGallery(
+                                catalogResult.imageBase64,
+                                catalogResult.mimeType,
+                                'catalog'
+                              );
+                              setCatalogKept(true);
+                            } catch (err) {
+                              console.error('Failed to save catalog:', err);
+                            }
+                          }}
                           accessibilityRole="button"
                         >
-                          <Ionicons name="download-outline" size={15} color="#fff" />
-                          <Text style={styles.downloadBtnText}>Download</Text>
+                          <Ionicons
+                            name={catalogKept ? 'checkmark-circle' : 'bookmark-outline'}
+                            size={15}
+                            color="#fff"
+                          />
+                          <Text style={styles.downloadBtnText}>
+                            {catalogKept ? 'Saved' : 'Keep'}
+                          </Text>
                         </Pressable>
-                      )}
+                        {isWeb && (
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.downloadBtn,
+                              pressed && { opacity: 0.75 },
+                            ]}
+                            onPress={() => downloadImage(catalogResult, 'catalog')}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons name="download-outline" size={15} color="#fff" />
+                            <Text style={styles.downloadBtnText}>Download</Text>
+                          </Pressable>
+                        )}
+                      </View>
                     </View>
                   )}
                 </>
@@ -2520,10 +2638,18 @@ export default function StudioScreen() {
                               styles.wallpaperConfirmBtn,
                               { backgroundColor: colors.accent.primary },
                             ]}
-                            onPress={() => {
+                            onPress={async () => {
                               setWallpaperBase64(wallpaperPreview);
                               setWallpaperStage('confirmed');
                               setWallpaperPreview(null);
+                              try {
+                                const b64 = wallpaperPreview.startsWith('data:')
+                                  ? wallpaperPreview.split(',')[1]
+                                  : wallpaperPreview;
+                                await saveToGallery(b64, 'image/png', 'wallpaper');
+                              } catch (err) {
+                                console.error('Failed to save wallpaper:', err);
+                              }
                             }}
                             accessibilityRole="button"
                           >
@@ -2690,19 +2816,55 @@ export default function StudioScreen() {
                         style={styles.mobileResultImage}
                         resizeMode="contain"
                       />
-                      {isWeb && (
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                         <Pressable
                           style={({ pressed }) => [
                             styles.downloadBtn,
+                            {
+                              backgroundColor: wallpaperOnKept
+                                ? colors.accent.dim
+                                : colors.accent.primary,
+                            },
                             pressed && { opacity: 0.75 },
                           ]}
-                          onPress={() => downloadImage(wallpaperOnResult, 'wallpaper-composite')}
+                          onPress={async () => {
+                            if (wallpaperOnKept) return;
+                            try {
+                              await saveToGallery(
+                                wallpaperOnResult.imageBase64,
+                                wallpaperOnResult.mimeType,
+                                'catalog-on-wallpaper'
+                              );
+                              setWallpaperOnKept(true);
+                            } catch (err) {
+                              console.error('Failed to save wallpaper composite:', err);
+                            }
+                          }}
                           accessibilityRole="button"
                         >
-                          <Ionicons name="download-outline" size={15} color="#fff" />
-                          <Text style={styles.downloadBtnText}>Download</Text>
+                          <Ionicons
+                            name={wallpaperOnKept ? 'checkmark-circle' : 'bookmark-outline'}
+                            size={15}
+                            color="#fff"
+                          />
+                          <Text style={styles.downloadBtnText}>
+                            {wallpaperOnKept ? 'Saved' : 'Keep'}
+                          </Text>
                         </Pressable>
-                      )}
+                        {isWeb && (
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.downloadBtn,
+                              pressed && { opacity: 0.75 },
+                            ]}
+                            onPress={() => downloadImage(wallpaperOnResult, 'wallpaper-composite')}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons name="download-outline" size={15} color="#fff" />
+                            <Text style={styles.downloadBtnText}>Download</Text>
+                          </Pressable>
+                        )}
+                      </View>
                     </View>
                   )}
                 </>
@@ -2796,16 +2958,46 @@ export default function StudioScreen() {
                     style={styles.mobileResultImage}
                     resizeMode="contain"
                   />
-                  {isWeb && (
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <Pressable
-                      style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.75 }]}
-                      onPress={() => downloadImage(annoResult, 'announcement')}
+                      style={({ pressed }) => [
+                        styles.downloadBtn,
+                        { backgroundColor: annoKept ? colors.accent.dim : colors.accent.primary },
+                        pressed && { opacity: 0.75 },
+                      ]}
+                      onPress={async () => {
+                        if (annoKept) return;
+                        try {
+                          await saveToGallery(
+                            annoResult.imageBase64,
+                            annoResult.mimeType,
+                            'announcement'
+                          );
+                          setAnnoKept(true);
+                        } catch (err) {
+                          console.error('Failed to save announcement:', err);
+                        }
+                      }}
                       accessibilityRole="button"
                     >
-                      <Ionicons name="download-outline" size={15} color="#fff" />
-                      <Text style={styles.downloadBtnText}>Download</Text>
+                      <Ionicons
+                        name={annoKept ? 'checkmark-circle' : 'bookmark-outline'}
+                        size={15}
+                        color="#fff"
+                      />
+                      <Text style={styles.downloadBtnText}>{annoKept ? 'Saved' : 'Keep'}</Text>
                     </Pressable>
-                  )}
+                    {isWeb && (
+                      <Pressable
+                        style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.75 }]}
+                        onPress={() => downloadImage(annoResult, 'announcement')}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="download-outline" size={15} color="#fff" />
+                        <Text style={styles.downloadBtnText}>Download</Text>
+                      </Pressable>
+                    )}
+                  </View>
                 </View>
               )}
             </>

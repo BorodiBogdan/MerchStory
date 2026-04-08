@@ -424,6 +424,22 @@ export interface GalleryItem {
   createdAt: string;
 }
 
+export async function saveToGallery(
+  imageBase64: string,
+  mimeType: string,
+  generationType: string
+): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/gallery/save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64, mimeType, generationType }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to save image (${response.status})`);
+  }
+}
+
 export async function fetchGallery(): Promise<GalleryItem[]> {
   const response = await fetchWithAuth(`${API_URL}/gallery`, {});
 

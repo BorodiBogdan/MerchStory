@@ -239,38 +239,79 @@ internal static class CatalogCompositor
         Font? priceFont,
         TextStyleOptions style)
     {
-        // Use a fixed reference string so priceTextH is identical for every cell in the row,
-        // making all prices colinear regardless of the actual price value or image height.
-        float priceTextH = showPrices && priceFont != null
-            ? MeasureTextHeight(priceFont, "$0.00") + PriceGap
-            : 0;
+        const int TextGap = 8;
+        const int PanelPadV = 10;
+        const int PanelPadH = 12;
 
-        // Reserve only 65% of the price height — lets the price overlap the image bottom edge
-        int imgAreaH = (int)(inner.Height - (priceTextH * 0.65f));
-        int maxImgW = inner.Width;
+        bool hasName = nameFont != null && !string.IsNullOrWhiteSpace(product.Name);
+        bool hasPrice = showPrices && priceFont != null;
 
-        float scaleX = (float)maxImgW / productImg.Width;
-        float scaleY = (float)imgAreaH / productImg.Height;
-        float scale = Math.Min(scaleX, scaleY);
+        // Use reference strings for height so ALL cards in the same row measure identical values
+        // and therefore share the same panelY — this keeps prices colinear across a row.
+        float nameH = hasName ? MeasureTextHeight(nameFont!, "Ag") : 0f;
+        float priceH = hasPrice ? MeasureTextHeight(priceFont!, "$0.00") : 0f;
+
+        // Panel height is deterministic (depends only on fonts, not on product data)
+        int panelH = 0;
+        if (hasName || hasPrice)
+        {
+            panelH = PanelPadV * 2;
+            if (hasName)
+            {
+                panelH += (int)nameH + TextGap;
+            }
+
+            if (hasPrice)
+            {
+                panelH += (int)priceH + TextGap;
+            }
+
+            panelH -= TextGap;
+        }
+
+        // imgAreaH depends only on inner.Height and fonts — identical for every card in the row
+        int imgAreaH = inner.Height - panelH - (panelH > 0 ? PriceGap : 0);
+
+        float scale = Math.Min(
+            (float)inner.Width / productImg.Width,
+            (float)imgAreaH / productImg.Height);
         int imgW = (int)(productImg.Width * scale);
         int imgH = (int)(productImg.Height * scale);
 
-        // Center image within the image area (above the price band)
+        // Center image within the image area
         int imgX = inner.X + ((inner.Width - imgW) / 2);
         int imgY = inner.Y + ((imgAreaH - imgH) / 2);
 
         using var resized = productImg.Clone(ctx => ctx.Resize(imgW, imgH));
         canvas.Mutate(ctx => ctx.DrawImage(resized, new Point(imgX, imgY), 1f));
 
-        if (showPrices && priceFont != null)
+        if (panelH == 0)
         {
-            int priceY = inner.Bottom - (int)priceTextH;
+            return;
+        }
+
+        // panelY is purely a function of inner.Y + imgAreaH — same for every card in the row
+        int panelY = inner.Y + imgAreaH + PriceGap;
+        canvas.Mutate(ctx => ctx.Fill(
+            Color.FromRgba(0, 0, 0, 110),
+            new RectangleF(inner.X - PanelPadH, panelY, inner.Width + (PanelPadH * 2), panelH)));
+
+        int currentY = panelY + PanelPadV;
+
+        if (hasName)
+        {
+            DrawStyledText(canvas, product.Name, nameFont!, inner.X, currentY, inner.Width, style, isPrice: false);
+            currentY += (int)nameH + TextGap;
+        }
+
+        if (hasPrice)
+        {
             if ((style.PriceBadge ?? "None") == "Pill")
             {
-                DrawPriceBadge(canvas, FormatPrice(product.Price), priceFont, inner.X, priceY, inner.Width, style);
+                DrawPriceBadge(canvas, FormatPrice(product.Price), priceFont!, inner.X, currentY, inner.Width, style);
             }
 
-            DrawStyledText(canvas, FormatPrice(product.Price), priceFont, inner.X, priceY, inner.Width, style, isPrice: true);
+            DrawStyledText(canvas, FormatPrice(product.Price), priceFont!, inner.X, currentY, inner.Width, style, isPrice: true);
         }
     }
 

@@ -12,6 +12,31 @@ public static class GalleryRoutes
     {
         RouteGroupBuilder group = app.MapGroup("/gallery").RequireAuthorization();
 
+        group.MapPost("/save", async (
+            SaveImageRequest req,
+            ClaimsPrincipal principal,
+            AppDbContext db) =>
+        {
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            db.GeneratedImages.Add(new GeneratedImage
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                ImageBase64 = req.ImageBase64,
+                MimeType = req.MimeType,
+                CreatedAt = DateTime.UtcNow,
+                GenerationType = req.GenerationType,
+            });
+            await db.SaveChangesAsync();
+
+            return Results.Created();
+        });
+
         group.MapGet("/", async (
             ClaimsPrincipal principal,
             AppDbContext db) =>
@@ -110,3 +135,5 @@ public static class GalleryRoutes
 }
 
 internal sealed record GalleryItemResponse(Guid Id, string ImageBase64, string MimeType, DateTime CreatedAt);
+
+internal sealed record SaveImageRequest(string ImageBase64, string MimeType, string GenerationType);

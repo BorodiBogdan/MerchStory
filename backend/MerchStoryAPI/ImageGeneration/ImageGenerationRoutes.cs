@@ -31,19 +31,14 @@ public static class ImageGenerationRoutes
 
             return await HandleGeneration(
                 () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext)),
-                principal,
-                db,
-                logger,
-                "catalog");
+                logger);
         })
         .WithName("GenerateCatalogImage")
         .RequireAuthorization();
 
         app.MapPost("/generate-image/wallpaper", async (
             WallpaperApiRequest request,
-            ClaimsPrincipal principal,
             IWallpaperImageService wallpaperService,
-            AppDbContext db,
             ILogger<Program> logger) =>
         {
             if (string.IsNullOrWhiteSpace(request.Prompt))
@@ -53,18 +48,13 @@ public static class ImageGenerationRoutes
 
             return await HandleGeneration(
                 () => wallpaperService.GenerateWallpaperAsync(new WallpaperImageRequest(request.Prompt)),
-                principal,
-                db,
-                logger,
-                "wallpaper");
+                logger);
         })
         .WithName("GenerateWallpaper")
         .RequireAuthorization();
 
         app.MapPost("/generate-image/catalog-on-wallpaper", async (
             CatalogOnWallpaperApiRequest request,
-            ClaimsPrincipal principal,
-            AppDbContext db,
             ILogger<Program> logger) =>
         {
             if (request.Products is null || request.Products.Count == 0)
@@ -79,10 +69,7 @@ public static class ImageGenerationRoutes
 
             return await HandleGeneration(
                 () => Task.FromResult(CatalogCompositor.Composite(request)),
-                principal,
-                db,
-                logger,
-                "catalog-on-wallpaper");
+                logger);
         })
         .WithName("GenerateCatalogOnWallpaper")
         .RequireAuthorization();
@@ -104,10 +91,7 @@ public static class ImageGenerationRoutes
 
             return await HandleGeneration(
                 () => announcementService.GenerateAnnouncementImageAsync(request.ToServiceRequest(brandContext)),
-                principal,
-                db,
-                logger,
-                "announcement");
+                logger);
         })
         .WithName("GenerateAnnouncementImage")
         .RequireAuthorization();
@@ -176,33 +160,12 @@ public static class ImageGenerationRoutes
 
     private static async Task<IResult> HandleGeneration(
         Func<Task<ImageGenerationResult>> generate,
-        ClaimsPrincipal principal,
-        AppDbContext db,
-        ILogger logger,
-        string generationType)
+        ILogger logger)
     {
         try
         {
-            var result = await generate();
+            ImageGenerationResult result = await generate();
             string base64 = Convert.ToBase64String(result.ImageData);
-
-            string? userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)
-                          ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
-
-            if (userId is not null)
-            {
-                db.GeneratedImages.Add(new GeneratedImage
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = userId,
-                    ImageBase64 = base64,
-                    MimeType = result.MimeType,
-                    CreatedAt = DateTime.UtcNow,
-                    GenerationType = generationType,
-                });
-                await db.SaveChangesAsync();
-            }
-
             return Results.Ok(new { imageBase64 = base64, mimeType = result.MimeType });
         }
         catch (InvalidOperationException ex)
