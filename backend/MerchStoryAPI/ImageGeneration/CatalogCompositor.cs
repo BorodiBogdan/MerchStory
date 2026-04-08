@@ -2,6 +2,7 @@ using System.Reflection;
 using MerchStoryImageGeneration.Models;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
@@ -16,7 +17,8 @@ internal sealed record TextStyleOptions(
     string? PriceColor = null,
     string? ColorMode = "Solid",
     string? GradientEndColor = null,
-    string? TextEffect = "Shadow");
+    string? TextEffect = "Shadow",
+    string? PriceBadge = "None");
 
 internal static class CatalogCompositor
 {
@@ -243,8 +245,8 @@ internal static class CatalogCompositor
             ? MeasureTextHeight(priceFont, "$0.00") + PriceGap
             : 0;
 
-        // Reserve space at the bottom for the price so it is colinear across a row
-        int imgAreaH = (int)(inner.Height - priceTextH);
+        // Reserve only 65% of the price height — lets the price overlap the image bottom edge
+        int imgAreaH = (int)(inner.Height - (priceTextH * 0.65f));
         int maxImgW = inner.Width;
 
         float scaleX = (float)maxImgW / productImg.Width;
@@ -263,6 +265,11 @@ internal static class CatalogCompositor
         if (showPrices && priceFont != null)
         {
             int priceY = inner.Bottom - (int)priceTextH;
+            if ((style.PriceBadge ?? "None") == "Pill")
+            {
+                DrawPriceBadge(canvas, FormatPrice(product.Price), priceFont, inner.X, priceY, inner.Width, style);
+            }
+
             DrawStyledText(canvas, FormatPrice(product.Price), priceFont, inner.X, priceY, inner.Width, style, isPrice: true);
         }
     }
@@ -308,7 +315,12 @@ internal static class CatalogCompositor
             "Large" => 22f,
             _ => 18f,
         };
-        float priceSize = Math.Max(nameSize - 2f, 10f);
+        float priceSize = (style.FontSize ?? "Medium") switch
+        {
+            "Small" => 36f,
+            "Large" => 52f,
+            _ => 44f,
+        };
 
         var collection = new FontCollection();
         FontFamily? family = LoadEmbeddedFamily(collection, style.FontFamily ?? "Modern");
@@ -374,6 +386,51 @@ internal static class CatalogCompositor
         }
 
         return family;
+    }
+
+    // ── Price badge drawing ───────────────────────────────────────────────────
+    private static void DrawPriceBadge(
+        Image<Rgba32> canvas,
+        string text,
+        Font font,
+        int areaX,
+        int areaY,
+        int areaW,
+        TextStyleOptions style)
+    {
+        var opts = new TextOptions(font);
+        float textW = TextMeasurer.MeasureSize(text, opts).Width;
+        float textH = TextMeasurer.MeasureSize(text, opts).Height;
+
+        const int PadH = 14;
+        const int PadV = 6;
+        float badgeW = textW + (PadH * 2);
+        float badgeH = textH + (PadV * 2);
+        float badgeX = areaX + ((areaW - badgeW) / 2f);
+        float badgeY = areaY - PadV;
+
+        // Pill = left semicircle + center rect + right semicircle
+        float r = badgeH / 2f;
+        var leftCap = new EllipsePolygon(badgeX + r, badgeY + r, r);
+        var centerRect = new RectangularPolygon(badgeX + r, badgeY, badgeW - (2 * r), badgeH);
+        var rightCap = new EllipsePolygon(badgeX + badgeW - r, badgeY + r, r);
+
+        Color fillColor = Color.FromRgba(0, 0, 0, 165);
+        canvas.Mutate(ctx => ctx
+            .Fill(fillColor, leftCap)
+            .Fill(fillColor, centerRect)
+            .Fill(fillColor, rightCap));
+
+        // Subtle colored border: stroke both caps + top/bottom connecting lines
+        string priceHex = style.PriceColor ?? style.NameColor ?? "#FFFFFF";
+        Color borderColor = ParseHexColor(priceHex);
+        Rgba32 px = borderColor.ToPixel<Rgba32>();
+        Pen borderPen = Pens.Solid(Color.FromRgba(px.R, px.G, px.B, 120), 1.5f);
+        canvas.Mutate(ctx => ctx
+            .Draw(borderPen, leftCap)
+            .Draw(borderPen, rightCap)
+            .DrawLine(borderPen, new PointF(badgeX + r, badgeY), new PointF(badgeX + badgeW - r, badgeY))
+            .DrawLine(borderPen, new PointF(badgeX + r, badgeY + badgeH), new PointF(badgeX + badgeW - r, badgeY + badgeH)));
     }
 
     // ── Styled text drawing ───────────────────────────────────────────────────

@@ -365,6 +365,7 @@ export interface TextStyleOptions {
   colorMode?: string; // Solid | Gradient | Rainbow
   gradientEndColor?: string;
   textEffect?: string; // None | Shadow | Outline
+  priceBadge?: string; // None | Pill
 }
 
 export interface GenerateCatalogOnWallpaperParams {

@@ -55,142 +55,220 @@ type WallpaperStage = 'none' | 'generating' | 'preview' | 'confirmed';
 type PostType = 'Announcement' | 'Job Post' | 'Info' | 'Promotion';
 type ContextItem = { key: string; label: string };
 
-// ─── Text style preset swatches ────────────────────────────────────────────────
-const TEXT_SWATCHES = [
-  '#FFFFFF',
-  '#1e1e1e',
-  '#475569',
-  '#F59E0B',
-  '#EF4444',
-  '#6366F1',
-  '#14B8A6',
-  '#F43F5E',
-  '#22C55E',
-  '#FEF9C3',
-];
-const FONT_OPTIONS = [
-  { value: 'Modern', label: 'Modern' },
-  { value: 'Elegant', label: 'Elegant' },
-  { value: 'Bold', label: 'Bold' },
-  { value: 'Friendly', label: 'Friendly' },
-];
-const FONT_SIZE_OPTIONS = [
-  { value: 'Small', label: 'Small' },
-  { value: 'Medium', label: 'Medium' },
-  { value: 'Large', label: 'Large' },
-];
-const COLOR_MODE_OPTIONS = [
-  { value: 'Solid', label: 'Solid' },
-  { value: 'Gradient', label: 'Gradient' },
-  { value: 'Rainbow', label: 'Rainbow' },
-];
-const TEXT_EFFECT_OPTIONS = [
-  { value: 'None', label: 'None' },
-  { value: 'Shadow', label: 'Shadow' },
-  { value: 'Outline', label: 'Outline' },
+// ─── Text style presets (style only — color is chosen separately) ──────────────
+type TextPreset = {
+  id: string;
+  label: string;
+  fontFamily: string;
+  textEffect: string;
+  priceBadge: string;
+};
+
+const TEXT_PRESETS: TextPreset[] = [
+  {
+    id: 'modern-shadow',
+    label: 'Shadow',
+    fontFamily: 'Modern',
+    textEffect: 'Shadow',
+    priceBadge: 'None',
+  },
+  {
+    id: 'bold-shadow',
+    label: 'Bold',
+    fontFamily: 'Bold',
+    textEffect: 'Shadow',
+    priceBadge: 'None',
+  },
+  {
+    id: 'elegant-clean',
+    label: 'Elegant',
+    fontFamily: 'Elegant',
+    textEffect: 'None',
+    priceBadge: 'None',
+  },
+  {
+    id: 'bold-badge',
+    label: 'Badge',
+    fontFamily: 'Bold',
+    textEffect: 'Shadow',
+    priceBadge: 'Pill',
+  },
+  {
+    id: 'outline',
+    label: 'Outline',
+    fontFamily: 'Modern',
+    textEffect: 'Outline',
+    priceBadge: 'None',
+  },
+  {
+    id: 'friendly-badge',
+    label: 'Friendly',
+    fontFamily: 'Friendly',
+    textEffect: 'Shadow',
+    priceBadge: 'Pill',
+  },
 ];
 
-function SwatchRow({
-  label,
-  selected,
+const PRICE_SWATCHES = [
+  '#FFFFFF',
+  '#F59E0B',
+  '#EF4444',
+  '#22C55E',
+  '#6366F1',
+  '#A855F7',
+  '#EC4899',
+  '#14B8A6',
+  '#F97316',
+  '#1e1e1e',
+];
+
+function isColorLight(hex: string): boolean {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  // Perceived luminance
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.45;
+}
+
+function TextStylePresetPicker({
+  selectedId,
   onSelect,
+  selectedColor,
+  onColorChange,
   colors,
 }: {
-  label: string;
-  selected: string;
-  onSelect: (c: string) => void;
+  selectedId: string;
+  onSelect: (id: string) => void;
+  selectedColor: string;
+  onColorChange: (c: string) => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
+  const previewBg = isColorLight(selectedColor) ? '#1a1a2e' : '#f0f4ff';
   return (
-    <View style={{ marginBottom: D.spacing.sm }}>
-      <Text
-        style={{
-          fontSize: D.fontSize.xs,
-          color: colors.text.muted,
-          marginBottom: 6,
-          fontWeight: '500' as const,
-        }}
-      >
-        {label}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-        {TEXT_SWATCHES.map((hex) => (
+    <>
+      <SectionLabel label="Color" />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: D.spacing.md }}>
+        {PRICE_SWATCHES.map((hex) => (
           <Pressable
             key={hex}
-            onPress={() => onSelect(hex)}
-            style={{
-              width: 24,
-              height: 24,
-              borderRadius: 12,
-              backgroundColor: hex,
-              borderWidth: selected === hex ? 2.5 : 1,
-              borderColor: selected === hex ? colors.accent.primary : colors.border.default,
-            }}
+            onPress={() => onColorChange(hex)}
             accessibilityRole="radio"
-            accessibilityState={{ selected: selected === hex }}
+            accessibilityState={{ selected: selectedColor === hex }}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 14,
+              backgroundColor: hex,
+              borderWidth: selectedColor === hex ? 2.5 : 1,
+              borderColor: selectedColor === hex ? colors.accent.primary : colors.border.default,
+            }}
           />
         ))}
       </View>
-    </View>
-  );
-}
 
-function TextStyleControls({
-  textStyle,
-  setTextStyle,
-  colors,
-}: {
-  textStyle: TextStyleOptions;
-  setTextStyle: React.Dispatch<React.SetStateAction<TextStyleOptions>>;
-  colors: ReturnType<typeof useTheme>['colors'];
-}) {
-  return (
-    <>
       <SectionLabel label="Text Style" />
-      <OptionLabel label="Font" />
-      <ChipSelector
-        options={FONT_OPTIONS}
-        selected={textStyle.fontFamily ?? 'Modern'}
-        onSelect={(v) => setTextStyle((p) => ({ ...p, fontFamily: v }))}
-        accessibilityLabel="Font family"
-      />
-      <OptionLabel label="Size" />
-      <ChipSelector
-        options={FONT_SIZE_OPTIONS}
-        selected={textStyle.fontSize ?? 'Medium'}
-        onSelect={(v) => setTextStyle((p) => ({ ...p, fontSize: v }))}
-        accessibilityLabel="Font size"
-      />
-      <OptionLabel label="Color Mode" />
-      <ChipSelector
-        options={COLOR_MODE_OPTIONS}
-        selected={textStyle.colorMode ?? 'Solid'}
-        onSelect={(v) => setTextStyle((p) => ({ ...p, colorMode: v }))}
-        accessibilityLabel="Color mode"
-      />
-      {textStyle.colorMode !== 'Rainbow' && (
-        <SwatchRow
-          label={textStyle.colorMode === 'Gradient' ? 'Gradient Start' : 'Text Color'}
-          selected={textStyle.nameColor ?? '#1e1e1e'}
-          onSelect={(c) => setTextStyle((p) => ({ ...p, nameColor: c }))}
-          colors={colors}
-        />
-      )}
-      {textStyle.colorMode === 'Gradient' && (
-        <SwatchRow
-          label="Gradient End"
-          selected={textStyle.gradientEndColor ?? '#6366F1'}
-          onSelect={(c) => setTextStyle((p) => ({ ...p, gradientEndColor: c }))}
-          colors={colors}
-        />
-      )}
-      <OptionLabel label="Effect" />
-      <ChipSelector
-        options={TEXT_EFFECT_OPTIONS}
-        selected={textStyle.textEffect ?? 'Shadow'}
-        onSelect={(v) => setTextStyle((p) => ({ ...p, textEffect: v }))}
-        accessibilityLabel="Text effect"
-      />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: D.spacing.sm }}>
+        {TEXT_PRESETS.map((preset) => {
+          const selected = preset.id === selectedId;
+          const hasShadow = preset.textEffect === 'Shadow';
+          return (
+            <Pressable
+              key={preset.id}
+              onPress={() => onSelect(preset.id)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              style={{
+                width: 130,
+                borderRadius: 12,
+                overflow: 'hidden',
+                borderWidth: selected ? 2.5 : 1.5,
+                borderColor: selected ? colors.accent.primary : colors.border.default,
+              }}
+            >
+              <View
+                style={{
+                  backgroundColor: previewBg,
+                  paddingHorizontal: 10,
+                  paddingVertical: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: 88,
+                }}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: selectedColor,
+                    fontSize: 10,
+                    fontWeight: '500',
+                    marginBottom: 8,
+                    opacity: 0.75,
+                    ...(hasShadow
+                      ? {
+                          textShadowColor: 'rgba(0,0,0,0.8)',
+                          textShadowOffset: { width: 1, height: 1 },
+                          textShadowRadius: 2,
+                        }
+                      : {}),
+                  }}
+                >
+                  Product Name
+                </Text>
+                <View
+                  style={
+                    preset.priceBadge === 'Pill'
+                      ? {
+                          backgroundColor: selectedColor + '25',
+                          paddingHorizontal: 10,
+                          paddingVertical: 3,
+                          borderRadius: 20,
+                          borderWidth: 1,
+                          borderColor: selectedColor + '88',
+                        }
+                      : undefined
+                  }
+                >
+                  <Text
+                    style={{
+                      color: selectedColor,
+                      fontSize: 24,
+                      fontWeight: '900',
+                      letterSpacing: -0.5,
+                      ...(hasShadow
+                        ? {
+                            textShadowColor: 'rgba(0,0,0,0.8)',
+                            textShadowOffset: { width: 1.5, height: 1.5 },
+                            textShadowRadius: 2,
+                          }
+                        : {}),
+                    }}
+                  >
+                    $19.99
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={{
+                  backgroundColor: colors.bg.surface,
+                  paddingVertical: 6,
+                  alignItems: 'center',
+                }}
+              >
+                <Text
+                  style={{
+                    color: selected ? colors.accent.primary : colors.text.secondary,
+                    fontSize: D.fontSize.xs,
+                    fontWeight: '600',
+                  }}
+                >
+                  {preset.label}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
     </>
   );
 }
@@ -1220,15 +1298,20 @@ export default function StudioScreen() {
   const [wallpaperPickerLoading, setWallpaperPickerLoading] = useState(false);
 
   // ── Text style state ─────────────────────────────────────────────────────────
-  const [textStyle, setTextStyle] = useState<TextStyleOptions>({
-    fontFamily: 'Modern',
-    fontSize: 'Medium',
-    nameColor: '#1e1e1e',
-    priceColor: null,
-    colorMode: 'Solid',
-    gradientEndColor: '#6366F1',
-    textEffect: 'Shadow',
-  });
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('modern-shadow');
+  const [selectedColor, setSelectedColor] = useState<string>('#F59E0B');
+  const textStyle = useMemo<TextStyleOptions>(() => {
+    const preset = TEXT_PRESETS.find((p) => p.id === selectedPresetId) ?? TEXT_PRESETS[0];
+    return {
+      fontFamily: preset.fontFamily,
+      fontSize: 'Large',
+      nameColor: selectedColor,
+      priceColor: selectedColor,
+      colorMode: 'Solid',
+      textEffect: preset.textEffect,
+      priceBadge: preset.priceBadge,
+    };
+  }, [selectedPresetId, selectedColor]);
 
   // ── Catalog state ────────────────────────────────────────────────────────────
   const [products, setProducts] = useState<ProductItem[]>([]);
@@ -1501,7 +1584,13 @@ export default function StudioScreen() {
                 trackColor={{ false: colors.border.default, true: colors.accent.dim }}
               />
             </View>
-            <TextStyleControls textStyle={textStyle} setTextStyle={setTextStyle} colors={colors} />
+            <TextStylePresetPicker
+              selectedId={selectedPresetId}
+              onSelect={setSelectedPresetId}
+              selectedColor={selectedColor}
+              onColorChange={setSelectedColor}
+              colors={colors}
+            />
           </>
         )
       ) : activeTab === 'announcements' ? (
@@ -2569,9 +2658,11 @@ export default function StudioScreen() {
                         trackColor={{ false: colors.border.default, true: colors.accent.dim }}
                       />
                     </View>
-                    <TextStyleControls
-                      textStyle={textStyle}
-                      setTextStyle={setTextStyle}
+                    <TextStylePresetPicker
+                      selectedId={selectedPresetId}
+                      onSelect={setSelectedPresetId}
+                      selectedColor={selectedColor}
+                      onColorChange={setSelectedColor}
                       colors={colors}
                     />
                   </View>
