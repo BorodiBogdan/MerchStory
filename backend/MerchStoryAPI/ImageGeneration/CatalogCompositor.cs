@@ -22,9 +22,9 @@ internal sealed record TextStyleOptions(
 
 internal static class CatalogCompositor
 {
-    private const int OuterMargin = 40;
-    private const int CellGap = 16;
-    private const int CardPadding = 12;
+    private const int OuterMargin = 20;
+    private const int CellGap = 8;
+    private const int CardPadding = 8;
 
     private const int PriceGap = 6;
 
@@ -93,57 +93,33 @@ internal static class CatalogCompositor
         return layout switch
         {
             "Showcase" => ShowcaseCells(count, usableX, usableY, usableW, usableH),
-            "Minimal" => MinimalCells(count, usableX, usableY, usableW, usableH),
-            "Story" => StoryCells(count, usableX, usableY, usableW, usableH),
-            _ => GridCells(count, usableX, usableY, usableW, usableH),
+            _ => StoryCells(count, usableX, usableY, usableW, usableH),
         };
-    }
-
-    private static List<Rectangle> GridCells(int count, int x, int y, int w, int h)
-    {
-        int cols = (int)Math.Ceiling(Math.Sqrt(count));
-        int rows = (int)Math.Ceiling((double)count / cols);
-        int cellW = (w - (CellGap * (cols - 1))) / cols;
-        int cellH = (h - (CellGap * (rows - 1))) / rows;
-
-        int lastRowCount = count - ((rows - 1) * cols);
-
-        var cells = new List<Rectangle>(count);
-        for (int i = 0; i < count; i++)
-        {
-            int col = i % cols;
-            int row = i / cols;
-            bool isLastRow = row == rows - 1;
-            int rowItemCount = isLastRow ? lastRowCount : cols;
-            int rowTotalW = (rowItemCount * cellW) + (CellGap * (rowItemCount - 1));
-            int rowStartX = x + ((w - rowTotalW) / 2);
-
-            cells.Add(new Rectangle(
-                rowStartX + (col * (cellW + CellGap)),
-                y + (row * (cellH + CellGap)),
-                cellW,
-                cellH));
-        }
-
-        return cells;
     }
 
     private static List<Rectangle> ShowcaseCells(int count, int x, int y, int w, int h)
     {
         if (count <= 1)
         {
-            return MinimalCells(count, x, y, w, h);
+            return StoryCells(count, x, y, w, h);
         }
 
         int heroW = (int)(w * 0.55);
         int sideW = w - heroW - CellGap;
-        int sideCount = count - 1;
+
+        // With 4+ products put 2 items in the hero column so neither column is too sparse.
+        int heroCount = count >= 4 ? 2 : 1;
+        int sideCount = count - heroCount;
+
+        int heroH = heroCount == 1 ? h : (h - CellGap) / 2;
         int sideH = sideCount == 1 ? h : (h - (CellGap * (sideCount - 1))) / sideCount;
 
-        var cells = new List<Rectangle>(count)
+        var cells = new List<Rectangle>(count);
+
+        for (int i = 0; i < heroCount; i++)
         {
-            new Rectangle(x, y, heroW, h),
-        };
+            cells.Add(new Rectangle(x, y + (i * (heroH + CellGap)), heroW, heroH));
+        }
 
         for (int i = 0; i < sideCount; i++)
         {
@@ -157,34 +133,6 @@ internal static class CatalogCompositor
         return cells;
     }
 
-    private static List<Rectangle> MinimalCells(int count, int x, int y, int w, int h)
-    {
-        int c = Math.Min(count, 2);
-        if (c == 0)
-        {
-            return [];
-        }
-
-        int cardW = c == 1 ? (int)(w * 0.55) : (int)((w - CellGap) * 0.45);
-        int cardH = (int)(h * 0.65);
-        int totalW = c == 1 ? cardW : (cardW * 2) + CellGap;
-        int startX = x + ((w - totalW) / 2);
-        int startY = y + ((h - cardH) / 2);
-
-        var cells = new List<Rectangle>(c);
-        for (int i = 0; i < c; i++)
-        {
-            cells.Add(new Rectangle(startX + (i * (cardW + CellGap)), startY, cardW, cardH));
-        }
-
-        if (count > 2)
-        {
-            cells.AddRange(GridCells(count - 2, x, y + cardH + CellGap, w, h - cardH - CellGap));
-        }
-
-        return cells;
-    }
-
     private static List<Rectangle> StoryCells(int count, int x, int y, int w, int h)
     {
         if (count == 0)
@@ -192,14 +140,46 @@ internal static class CatalogCompositor
             return [];
         }
 
-        int cellH = (h - (CellGap * (count - 1))) / count;
-        var cells = new List<Rectangle>(count);
-        for (int i = 0; i < count; i++)
+        // Use 2 columns when there are more than 3 products so cells stay large enough.
+        if (count > 3)
         {
-            cells.Add(new Rectangle(x, y + (i * (cellH + CellGap)), w, cellH));
+            int cols = 2;
+            int rows = (int)Math.Ceiling((double)count / cols);
+            int cellW = (w - CellGap) / cols;
+            int rawCellH = (h - (CellGap * (rows - 1))) / rows;
+            int cellH = rows > 1 ? Math.Min(rawCellH, w / 2) : rawCellH;
+            int lastRowCount = count - ((rows - 1) * cols);
+
+            var cells = new List<Rectangle>(count);
+            for (int i = 0; i < count; i++)
+            {
+                int col = i % cols;
+                int row = i / cols;
+                bool isLastRow = row == rows - 1;
+                int rowItemCount = isLastRow ? lastRowCount : cols;
+                int rowTotalW = (rowItemCount * cellW) + (CellGap * (rowItemCount - 1));
+                int rowStartX = x + ((w - rowTotalW) / 2);
+
+                cells.Add(new Rectangle(
+                    rowStartX + (col * (cellW + CellGap)),
+                    y + (row * (cellH + CellGap)),
+                    cellW,
+                    cellH));
+            }
+
+            return cells;
         }
 
-        return cells;
+        // 1–3 products: single column, full-width rows.
+        int rawSingleH = (h - (CellGap * (count - 1))) / count;
+        int singleCellH = count > 1 ? Math.Min(rawSingleH, w / 2) : rawSingleH;
+        var singleCells = new List<Rectangle>(count);
+        for (int i = 0; i < count; i++)
+        {
+            singleCells.Add(new Rectangle(x, y + (i * (singleCellH + CellGap)), w, singleCellH));
+        }
+
+        return singleCells;
     }
 
     // ── Card drawing ──────────────────────────────────────────────────────────
@@ -239,9 +219,8 @@ internal static class CatalogCompositor
         Font? priceFont,
         TextStyleOptions style)
     {
-        const int TextGap = 8;
-        const int PanelPadV = 10;
-        const int PanelPadH = 12;
+        const int TextGap = 10;
+        const int PanelPadV = 8;
 
         bool hasName = nameFont != null && !string.IsNullOrWhiteSpace(product.Name);
         bool hasPrice = showPrices && priceFont != null;
@@ -250,6 +229,8 @@ internal static class CatalogCompositor
         // and therefore share the same panelY — this keeps prices colinear across a row.
         float nameH = hasName ? MeasureTextHeight(nameFont!, "Ag") : 0f;
         float priceH = hasPrice ? MeasureTextHeight(priceFont!, "$0.00") : 0f;
+
+        const int ImgBottomPad = 8;
 
         // Panel height is deterministic (depends only on fonts, not on product data)
         int panelH = 0;
@@ -269,20 +250,28 @@ internal static class CatalogCompositor
             panelH -= TextGap;
         }
 
-        // imgAreaH depends only on inner.Height and fonts — identical for every card in the row
-        int imgAreaH = inner.Height - panelH - (panelH > 0 ? PriceGap : 0);
+        // Space available for the image (above the price panel)
+        int textBlockH = panelH > 0 ? ImgBottomPad + PriceGap + panelH : 0;
+        int availForImage = inner.Height - textBlockH;
+        if (availForImage <= 0)
+        {
+            return;
+        }
 
         float scale = Math.Min(
             (float)inner.Width / productImg.Width,
-            (float)imgAreaH / productImg.Height);
+            (float)availForImage / productImg.Height);
         int imgW = (int)(productImg.Width * scale);
         int imgH = (int)(productImg.Height * scale);
 
-        // Center image within the image area
-        int imgX = inner.X + ((inner.Width - imgW) / 2);
-        int imgY = inner.Y + ((imgAreaH - imgH) / 2);
+        // Center the image+price block vertically so dead space is split evenly above and below
+        int contentH = imgH + textBlockH;
+        int topPad = Math.Max(0, (inner.Height - contentH) / 2);
 
-        using var resized = productImg.Clone(ctx => ctx.Resize(imgW, imgH));
+        int imgX = inner.X + ((inner.Width - imgW) / 2);
+        int imgY = inner.Y + topPad;
+
+        using Image<Rgba32> resized = productImg.Clone(ctx => ctx.Resize(imgW, imgH));
         canvas.Mutate(ctx => ctx.DrawImage(resized, new Point(imgX, imgY), 1f));
 
         if (panelH == 0)
@@ -290,12 +279,7 @@ internal static class CatalogCompositor
             return;
         }
 
-        // panelY is purely a function of inner.Y + imgAreaH — same for every card in the row
-        int panelY = inner.Y + imgAreaH + PriceGap;
-        canvas.Mutate(ctx => ctx.Fill(
-            Color.FromRgba(0, 0, 0, 110),
-            new RectangleF(inner.X - PanelPadH, panelY, inner.Width + (PanelPadH * 2), panelH)));
-
+        int panelY = imgY + imgH + ImgBottomPad + PriceGap;
         int currentY = panelY + PanelPadV;
 
         if (hasName)
@@ -352,15 +336,15 @@ internal static class CatalogCompositor
     {
         float nameSize = (style.FontSize ?? "Medium") switch
         {
-            "Small" => 14f,
-            "Large" => 22f,
+            "Small" => 22f,
+            "Large" => 32f,
             _ => 18f,
         };
         float priceSize = (style.FontSize ?? "Medium") switch
         {
-            "Small" => 36f,
-            "Large" => 52f,
-            _ => 44f,
+            "Small" => 40f,
+            "Large" => 60f,
+            _ => 54f,
         };
 
         var collection = new FontCollection();
@@ -450,28 +434,27 @@ internal static class CatalogCompositor
         float badgeX = areaX + ((areaW - badgeW) / 2f);
         float badgeY = areaY - PadV;
 
-        // Pill = left semicircle + center rect + right semicircle
+        // Badge fill is the contrast of the price text color so text is always legible.
+        Color textColor = ParseHexColor(style.PriceColor ?? style.NameColor ?? "#1e1e1e");
+        Color fillColor = ContrastColor(textColor);
+
+        // Render pill on a separate layer with opaque fill, then composite at desired opacity.
+        // This avoids double-alpha darkening at the cap/rect overlap joints.
         float r = badgeH / 2f;
-        var leftCap = new EllipsePolygon(badgeX + r, badgeY + r, r);
-        var centerRect = new RectangularPolygon(badgeX + r, badgeY, badgeW - (2 * r), badgeH);
-        var rightCap = new EllipsePolygon(badgeX + badgeW - r, badgeY + r, r);
+        int bw = (int)Math.Ceiling(badgeW) + 2;
+        int bh = (int)Math.Ceiling(badgeH) + 2;
+        using var layer = new Image<Rgba32>(bw, bh, Color.Transparent);
 
-        Color fillColor = Color.FromRgba(0, 0, 0, 165);
-        canvas.Mutate(ctx => ctx
-            .Fill(fillColor, leftCap)
-            .Fill(fillColor, centerRect)
-            .Fill(fillColor, rightCap));
+        var localLeft = new EllipsePolygon(r, r, r);
+        var localCenter = new RectangularPolygon(r, 0, badgeW - (2 * r), badgeH);
+        var localRight = new EllipsePolygon(badgeW - r, r, r);
 
-        // Subtle colored border: stroke both caps + top/bottom connecting lines
-        string priceHex = style.PriceColor ?? style.NameColor ?? "#FFFFFF";
-        Color borderColor = ParseHexColor(priceHex);
-        Rgba32 px = borderColor.ToPixel<Rgba32>();
-        Pen borderPen = Pens.Solid(Color.FromRgba(px.R, px.G, px.B, 120), 1.5f);
-        canvas.Mutate(ctx => ctx
-            .Draw(borderPen, leftCap)
-            .Draw(borderPen, rightCap)
-            .DrawLine(borderPen, new PointF(badgeX + r, badgeY), new PointF(badgeX + badgeW - r, badgeY))
-            .DrawLine(borderPen, new PointF(badgeX + r, badgeY + badgeH), new PointF(badgeX + badgeW - r, badgeY + badgeH)));
+        layer.Mutate(ctx => ctx
+            .Fill(fillColor, localLeft)
+            .Fill(fillColor, localCenter)
+            .Fill(fillColor, localRight));
+
+        canvas.Mutate(ctx => ctx.DrawImage(layer, new Point((int)badgeX, (int)badgeY), 165f / 255f));
     }
 
     // ── Styled text drawing ───────────────────────────────────────────────────

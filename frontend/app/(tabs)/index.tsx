@@ -276,9 +276,7 @@ function TextStylePresetPicker({
 
 // ─── Static data ───────────────────────────────────────────────────────────────
 const LAYOUT_OPTIONS = [
-  { value: 'Grid', label: 'Grid' },
   { value: 'Showcase', label: 'Showcase' },
-  { value: 'Minimal', label: 'Minimal' },
   { value: 'Story', label: 'Story' },
 ];
 const COLOR_OPTIONS = [
@@ -1344,7 +1342,7 @@ export default function StudioScreen() {
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [layout, setLayout] = useState('Grid');
+  const [layout, setLayout] = useState('Showcase');
   const [colorTheme, setColorTheme] = useState('Brand Colors');
   const [catalogFormat, setCatalogFormat] = useState('Square');
   const [showPrices, setShowPrices] = useState(true);
