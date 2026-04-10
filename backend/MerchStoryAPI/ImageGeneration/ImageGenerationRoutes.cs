@@ -38,16 +38,25 @@ public static class ImageGenerationRoutes
 
         app.MapPost("/generate-image/wallpaper", async (
             WallpaperApiRequest request,
+            ClaimsPrincipal principal,
             IWallpaperImageService wallpaperService,
+            AppDbContext db,
             ILogger<Program> logger) =>
         {
-            if (string.IsNullOrWhiteSpace(request.Prompt))
+            string? userId = GetUserId(principal);
+            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, request.BrandContextFields);
+            string? brandLogo = null;
+
+            if (request.IncludeLogo)
             {
-                return Results.BadRequest(new { error = "Prompt must not be empty." });
+                brandLogo = await db.ShopProfiles
+                .Where(s => s.UserId == userId)
+                .Select(s => s.LogoBase64)
+                .FirstOrDefaultAsync();
             }
 
             return await HandleGeneration(
-                () => wallpaperService.GenerateWallpaperAsync(new WallpaperImageRequest(request.Prompt)),
+                () => wallpaperService.GenerateWallpaperAsync(request.ToServiceRequest(brandContext, brandLogo)),
                 logger);
         })
         .WithName("GenerateWallpaper")
@@ -203,7 +212,15 @@ internal sealed record CatalogImageApiRequest(
             brandContext);
 }
 
-internal sealed record WallpaperApiRequest(string Prompt);
+internal sealed record WallpaperApiRequest(string Prompt, string Format, bool IncludeLogo, List<string>? BrandContextFields)
+{
+    public WallpaperImageRequest ToServiceRequest(BrandContext? brandContext, string? brandLogo) =>
+        new(
+            Format: this.Format,
+            UserPrompt: this.Prompt,
+            InlineImages: string.IsNullOrWhiteSpace(brandLogo) ? null : [brandLogo],
+            BrandContext: brandContext);
+}
 
 internal sealed record CatalogOnWallpaperApiRequest(
     List<CatalogProductApiItem>? Products,

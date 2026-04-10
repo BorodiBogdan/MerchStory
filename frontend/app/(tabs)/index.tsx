@@ -1310,8 +1310,16 @@ export default function StudioScreen() {
   const [wallpaperBase64, setWallpaperBase64] = useState<string | null>(null);
   const [wallpaperPreview, setWallpaperPreview] = useState<string | null>(null);
   const [wallpaperPrompt, setWallpaperPrompt] = useState('');
-  const [showWallpaperPrompt, setShowWallpaperPrompt] = useState(false);
   const [wallpaperError, setWallpaperError] = useState<string | null>(null);
+  // Generate wallpaper modal
+  const [wallpaperGenModalVisible, setWallpaperGenModalVisible] = useState(false);
+  const [wallpaperGenModalStage, setWallpaperGenModalStage] = useState<'input' | 'result'>('input');
+  const [wallpaperGenFormat, setWallpaperGenFormat] = useState('9:16');
+  const [wallpaperGenIncludeLogo, setWallpaperGenIncludeLogo] = useState(false);
+  const [wallpaperGenBrandFields, setWallpaperGenBrandFields] = useState<string[]>([]);
+  const [wallpaperGenResult, setWallpaperGenResult] = useState<GenerateImageResponse | null>(null);
+  const [wallpaperGenKept, setWallpaperGenKept] = useState(false);
+  const [wallpaperGenGenerating, setWallpaperGenGenerating] = useState(false);
   const [wallpaperOnGenerating, setWallpaperOnGenerating] = useState(false);
   const [wallpaperOnResult, setWallpaperOnResult] = useState<GenerateImageResponse | null>(null);
   const [wallpaperOnKept, setWallpaperOnKept] = useState(false);
@@ -1414,18 +1422,39 @@ export default function StudioScreen() {
   }
 
   async function handleGenerateWallpaper() {
-    if (!wallpaperPrompt.trim()) return;
-    setWallpaperStage('generating');
+    setWallpaperGenGenerating(true);
     setWallpaperError(null);
-    setWallpaperPreview(null);
     try {
-      const res = await generateWallpaper({ prompt: wallpaperPrompt.trim() });
-      setWallpaperPreview(res.imageBase64);
-      setWallpaperStage('preview');
+      const res = await generateWallpaper({
+        prompt: wallpaperPrompt.trim(),
+        format: wallpaperGenFormat,
+        includeLogo: wallpaperGenIncludeLogo,
+        brandContextFields: wallpaperGenBrandFields,
+      });
+      setWallpaperGenResult(res);
+      setWallpaperGenKept(false);
+      setWallpaperGenModalStage('result');
     } catch (err) {
       setWallpaperError(err instanceof Error ? err.message : 'Failed to generate wallpaper.');
-      setWallpaperStage('none');
+    } finally {
+      setWallpaperGenGenerating(false);
     }
+  }
+
+  function handleCloseWallpaperGenModal() {
+    if (wallpaperGenGenerating) return;
+    setWallpaperGenModalVisible(false);
+    setWallpaperGenModalStage('input');
+    setWallpaperGenResult(null);
+    setWallpaperGenKept(false);
+    setWallpaperError(null);
+    setWallpaperPrompt('');
+  }
+
+  function toggleWallpaperGenBrandField(key: string) {
+    setWallpaperGenBrandFields((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
   }
 
   async function handleImportWallpaper() {
@@ -1804,7 +1833,7 @@ export default function StudioScreen() {
                       styles.wallpaperActionBtn,
                       pressed && { opacity: 0.75 },
                     ]}
-                    onPress={() => setShowWallpaperPrompt((v) => !v)}
+                    onPress={() => setWallpaperGenModalVisible(true)}
                     accessibilityRole="button"
                   >
                     <Ionicons name="sparkles-outline" size={16} color={colors.accent.primary} />
@@ -1822,41 +1851,6 @@ export default function StudioScreen() {
                     <Text style={styles.wallpaperActionText}>My Wallpapers</Text>
                   </Pressable>
                 </View>
-
-                {showWallpaperPrompt && (
-                  <View style={{ marginTop: D.spacing.md, gap: D.spacing.sm }}>
-                    <TextInput
-                      style={styles.textArea}
-                      placeholder="Describe the wallpaper (e.g. warm sunset market scene, soft bokeh lights…)"
-                      placeholderTextColor={colors.text.muted}
-                      value={wallpaperPrompt}
-                      onChangeText={setWallpaperPrompt}
-                      multiline
-                      editable={wallpaperStage !== 'generating'}
-                    />
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.wallpaperGenBtn,
-                        (wallpaperStage === 'generating' || !wallpaperPrompt.trim()) && {
-                          opacity: 0.45,
-                        },
-                        pressed && { opacity: 0.8 },
-                      ]}
-                      onPress={handleGenerateWallpaper}
-                      disabled={wallpaperStage === 'generating' || !wallpaperPrompt.trim()}
-                      accessibilityRole="button"
-                    >
-                      {wallpaperStage === 'generating' ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Ionicons name="sparkles-outline" size={15} color="#fff" />
-                      )}
-                      <Text style={styles.wallpaperGenBtnText}>
-                        {wallpaperStage === 'generating' ? 'Generating…' : 'Generate Wallpaper'}
-                      </Text>
-                    </Pressable>
-                  </View>
-                )}
 
                 {wallpaperError && (
                   <Text style={[styles.errorText, { marginTop: D.spacing.sm }]}>
@@ -2558,7 +2552,7 @@ export default function StudioScreen() {
                           styles.wallpaperActionBtn,
                           pressed && { opacity: 0.75 },
                         ]}
-                        onPress={() => setShowWallpaperPrompt((v) => !v)}
+                        onPress={() => setWallpaperGenModalVisible(true)}
                         accessibilityRole="button"
                       >
                         <Ionicons name="sparkles-outline" size={15} color={colors.accent.primary} />
@@ -2576,41 +2570,6 @@ export default function StudioScreen() {
                         <Text style={styles.wallpaperActionText}>My Wallpapers</Text>
                       </Pressable>
                     </View>
-
-                    {showWallpaperPrompt && (
-                      <View style={{ marginTop: D.spacing.sm, gap: D.spacing.sm }}>
-                        <TextInput
-                          style={styles.textArea}
-                          placeholder="Describe the wallpaper…"
-                          placeholderTextColor={colors.text.muted}
-                          value={wallpaperPrompt}
-                          onChangeText={setWallpaperPrompt}
-                          multiline
-                          editable={wallpaperStage !== 'generating'}
-                        />
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.wallpaperGenBtn,
-                            (wallpaperStage === 'generating' || !wallpaperPrompt.trim()) && {
-                              opacity: 0.45,
-                            },
-                            pressed && { opacity: 0.8 },
-                          ]}
-                          onPress={handleGenerateWallpaper}
-                          disabled={wallpaperStage === 'generating' || !wallpaperPrompt.trim()}
-                          accessibilityRole="button"
-                        >
-                          {wallpaperStage === 'generating' ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Ionicons name="sparkles-outline" size={14} color="#fff" />
-                          )}
-                          <Text style={styles.wallpaperGenBtnText}>
-                            {wallpaperStage === 'generating' ? 'Generating…' : 'Generate Wallpaper'}
-                          </Text>
-                        </Pressable>
-                      </View>
-                    )}
 
                     {wallpaperError && (
                       <Text style={[styles.errorText, { marginTop: D.spacing.sm }]}>
@@ -3041,6 +3000,279 @@ export default function StudioScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Wallpaper generate modal */}
+      <Modal
+        visible={wallpaperGenModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={handleCloseWallpaperGenModal}
+      >
+        <Pressable style={styles.wallpaperGenOverlay} onPress={handleCloseWallpaperGenModal}>
+          <View
+            style={styles.wallpaperGenSheet}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => {}}
+          >
+            <View style={styles.wallpaperGenHandle} />
+
+            {wallpaperGenModalStage === 'input' ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.wallpaperGenScrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <Text style={styles.wallpaperGenTitle}>Generate Wallpaper</Text>
+                <Text style={styles.wallpaperGenSubtitle}>
+                  Configure and generate an AI background
+                </Text>
+
+                {/* Format */}
+                <Text style={styles.wallpaperGenSectionLabel}>Format</Text>
+                <View style={styles.wallpaperGenFormatRow}>
+                  {(
+                    [
+                      { value: '9:16', label: 'Vertical' },
+                      { value: '1:1', label: 'Square' },
+                      { value: '16:9', label: 'Landscape' },
+                    ] as const
+                  ).map((opt) => (
+                    <Pressable
+                      key={opt.value}
+                      style={[
+                        styles.wallpaperGenFormatPill,
+                        wallpaperGenFormat === opt.value && styles.wallpaperGenFormatPillActive,
+                      ]}
+                      onPress={() => setWallpaperGenFormat(opt.value)}
+                      disabled={wallpaperGenGenerating}
+                    >
+                      <Text
+                        style={[
+                          styles.wallpaperGenFormatPillText,
+                          wallpaperGenFormat === opt.value &&
+                            styles.wallpaperGenFormatPillTextActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.wallpaperGenFormatPillRatio,
+                          wallpaperGenFormat === opt.value &&
+                            styles.wallpaperGenFormatPillTextActive,
+                        ]}
+                      >
+                        {opt.value}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {/* Prompt */}
+                <Text style={styles.wallpaperGenSectionLabel}>Style prompt (optional)</Text>
+                <TextInput
+                  style={styles.wallpaperGenInput}
+                  placeholder="e.g. warm sunset bokeh, soft pastel bakery, dark wood texture…"
+                  placeholderTextColor={colors.text.muted}
+                  value={wallpaperPrompt}
+                  onChangeText={setWallpaperPrompt}
+                  multiline
+                  editable={!wallpaperGenGenerating}
+                />
+
+                {/* Include logo */}
+                <View style={styles.wallpaperGenToggleRow}>
+                  <View>
+                    <Text style={styles.wallpaperGenToggleLabel}>Include Logo</Text>
+                    <Text style={styles.wallpaperGenToggleHint}>
+                      Place your brand logo in the header
+                    </Text>
+                  </View>
+                  <Switch
+                    value={wallpaperGenIncludeLogo}
+                    onValueChange={setWallpaperGenIncludeLogo}
+                    disabled={wallpaperGenGenerating}
+                    trackColor={{ true: colors.accent.primary }}
+                  />
+                </View>
+
+                {/* Brand context */}
+                <Text style={styles.wallpaperGenSectionLabel}>Include brand info</Text>
+                <View>
+                  {(
+                    [
+                      { key: 'brandName', label: 'Brand Name' },
+                      { key: 'slogan', label: 'Slogan' },
+                      { key: 'brandColors', label: 'Brand Colors' },
+                      { key: 'businessDomain', label: 'Business Domain' },
+                      { key: 'shopType', label: 'Shop Type' },
+                      { key: 'targetAudience', label: 'Target Audience' },
+                      { key: 'phoneNumber', label: 'Phone Number' },
+                      { key: 'email', label: 'Email' },
+                      { key: 'addresses', label: 'Address' },
+                      { key: 'instagramHandle', label: 'Instagram' },
+                      { key: 'facebookHandle', label: 'Facebook' },
+                      { key: 'tikTokHandle', label: 'TikTok' },
+                    ] as const
+                  ).map((opt) => {
+                    const checked = wallpaperGenBrandFields.includes(opt.key);
+                    return (
+                      <Pressable
+                        key={opt.key}
+                        style={({ pressed }) => [
+                          styles.wallpaperGenCheckRow,
+                          pressed && { opacity: 0.7 },
+                        ]}
+                        onPress={() => toggleWallpaperGenBrandField(opt.key)}
+                        disabled={wallpaperGenGenerating}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked }}
+                      >
+                        <Ionicons
+                          name={checked ? 'checkbox' : 'square-outline'}
+                          size={18}
+                          color={checked ? colors.accent.primary : colors.text.muted}
+                        />
+                        <Text style={styles.wallpaperGenCheckLabel}>{opt.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {wallpaperError && <Text style={styles.wallpaperGenError}>{wallpaperError}</Text>}
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.wallpaperGenBtn2,
+                    wallpaperGenGenerating && { opacity: 0.6 },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                  onPress={handleGenerateWallpaper}
+                  disabled={wallpaperGenGenerating}
+                  accessibilityRole="button"
+                >
+                  {wallpaperGenGenerating ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="sparkles-outline" size={16} color="#fff" />
+                  )}
+                  <Text style={styles.wallpaperGenBtnText2}>
+                    {wallpaperGenGenerating ? 'Generating…' : 'Generate'}
+                  </Text>
+                </Pressable>
+              </ScrollView>
+            ) : (
+              <View style={styles.wallpaperGenResultContainer}>
+                <Text style={styles.wallpaperGenTitle}>Wallpaper Generated</Text>
+                <Text style={styles.wallpaperGenSubtitle}>
+                  Keep it as your background or generate a new one
+                </Text>
+
+                {wallpaperGenResult && (
+                  <Image
+                    source={{
+                      uri: `data:${wallpaperGenResult.mimeType};base64,${wallpaperGenResult.imageBase64}`,
+                    }}
+                    style={[
+                      styles.wallpaperGenResultImage,
+                      {
+                        aspectRatio:
+                          wallpaperGenFormat === '16:9'
+                            ? 16 / 9
+                            : wallpaperGenFormat === '1:1'
+                              ? 1
+                              : 9 / 16,
+                      },
+                    ]}
+                    resizeMode="cover"
+                    accessibilityLabel="Generated wallpaper"
+                  />
+                )}
+
+                <View style={styles.wallpaperGenResultActions}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.wallpaperGenResultBtn,
+                      {
+                        backgroundColor: wallpaperGenKept
+                          ? colors.accent.dim
+                          : colors.accent.primary,
+                      },
+                      pressed && { opacity: 0.75 },
+                    ]}
+                    onPress={async () => {
+                      if (!wallpaperGenResult || wallpaperGenKept) return;
+                      setWallpaperBase64(wallpaperGenResult.imageBase64);
+                      setWallpaperStage('confirmed');
+                      setWallpaperGenKept(true);
+                      try {
+                        await saveToGallery(
+                          wallpaperGenResult.imageBase64,
+                          wallpaperGenResult.mimeType,
+                          'wallpaper'
+                        );
+                      } catch (err) {
+                        console.error('Failed to save wallpaper:', err);
+                      }
+                      setWallpaperGenModalVisible(false);
+                      setWallpaperGenModalStage('input');
+                    }}
+                    disabled={wallpaperGenKept}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons
+                      name={wallpaperGenKept ? 'checkmark-circle' : 'bookmark-outline'}
+                      size={16}
+                      color="#fff"
+                    />
+                    <Text style={styles.wallpaperGenResultBtnText}>
+                      {wallpaperGenKept ? 'Saved' : 'Keep'}
+                    </Text>
+                  </Pressable>
+
+                  {Platform.OS === 'web' && wallpaperGenResult && (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.wallpaperGenResultBtn,
+                        { backgroundColor: colors.accent.primary },
+                        pressed && { opacity: 0.75 },
+                      ]}
+                      onPress={() => {
+                        if (!wallpaperGenResult) return;
+                        const ext = wallpaperGenResult.mimeType.split('/')[1] ?? 'png';
+                        const a = document.createElement('a');
+                        a.href = `data:${wallpaperGenResult.mimeType};base64,${wallpaperGenResult.imageBase64}`;
+                        a.download = `wallpaper.${ext}`;
+                        a.click();
+                      }}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="download-outline" size={16} color="#fff" />
+                      <Text style={styles.wallpaperGenResultBtnText}>Download</Text>
+                    </Pressable>
+                  )}
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.wallpaperGenSecondaryBtn,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  onPress={() => {
+                    setWallpaperGenResult(null);
+                    setWallpaperGenModalStage('input');
+                    setWallpaperError(null);
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="refresh-outline" size={15} color={colors.text.secondary} />
+                  <Text style={styles.wallpaperGenSecondaryBtnText}>Generate Again</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
 
       {/* Wallpaper picker modal */}
       <Modal
@@ -3638,6 +3870,185 @@ function makeStyles(
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.semibold,
       color: '#fff',
+    },
+    // ── Wallpaper generate modal ─────────────────────────────────────────────
+    wallpaperGenOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+    },
+    wallpaperGenSheet: {
+      backgroundColor: colors.bg.surface,
+      borderTopLeftRadius: D.radius.xl,
+      borderTopRightRadius: D.radius.xl,
+      paddingTop: D.spacing.md,
+      paddingBottom: D.spacing['2xl'],
+      maxHeight: '90%',
+    },
+    wallpaperGenHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.border.default,
+      alignSelf: 'center',
+      marginBottom: D.spacing.md,
+    },
+    wallpaperGenScrollContent: {
+      paddingHorizontal: D.spacing.lg,
+      gap: D.spacing.sm,
+      paddingBottom: D.spacing.md,
+    },
+    wallpaperGenTitle: {
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+    },
+    wallpaperGenSubtitle: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+    },
+    wallpaperGenSectionLabel: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      marginTop: D.spacing.xs,
+    },
+    wallpaperGenFormatRow: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+    },
+    wallpaperGenFormatPill: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: D.spacing.sm,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.elevated,
+    },
+    wallpaperGenFormatPillActive: {
+      backgroundColor: colors.accent.primary,
+      borderColor: colors.accent.primary,
+    },
+    wallpaperGenFormatPillText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+    },
+    wallpaperGenFormatPillRatio: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginTop: 1,
+    },
+    wallpaperGenFormatPillTextActive: {
+      color: '#fff',
+    },
+    wallpaperGenInput: {
+      backgroundColor: colors.bg.elevated,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      color: colors.text.primary,
+      fontSize: D.fontSize.sm,
+      padding: D.spacing.md,
+      minHeight: 72,
+      textAlignVertical: 'top',
+    },
+    wallpaperGenToggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: D.spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    wallpaperGenToggleLabel: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.primary,
+    },
+    wallpaperGenToggleHint: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginTop: 2,
+    },
+    wallpaperGenCheckRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      paddingVertical: 7,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    wallpaperGenCheckLabel: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.primary,
+    },
+    wallpaperGenError: {
+      fontSize: D.fontSize.xs,
+      color: '#EF4444',
+    },
+    wallpaperGenBtn2: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      backgroundColor: colors.accent.primary,
+      paddingVertical: 13,
+      borderRadius: D.radius.pill,
+      marginTop: D.spacing.sm,
+      ...D.shadow.glow,
+    },
+    wallpaperGenBtnText2: {
+      color: '#fff',
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+    },
+    wallpaperGenResultContainer: {
+      paddingHorizontal: D.spacing.lg,
+      gap: D.spacing.sm,
+    },
+    wallpaperGenResultImage: {
+      width: '100%',
+      borderRadius: D.radius.lg,
+      backgroundColor: colors.bg.elevated,
+      marginTop: D.spacing.xs,
+    },
+    wallpaperGenResultActions: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+    },
+    wallpaperGenResultBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      paddingVertical: 12,
+      borderRadius: D.radius.pill,
+      ...D.shadow.glow,
+    },
+    wallpaperGenResultBtnText: {
+      color: '#fff',
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+    },
+    wallpaperGenSecondaryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      paddingVertical: 11,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+    wallpaperGenSecondaryBtnText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
     },
     wallpaperPreviewBox: {
       marginTop: D.spacing.md,

@@ -355,6 +355,9 @@ export async function generateAnnouncementImage(
 
 export interface GenerateWallpaperParams {
   prompt: string;
+  format: string;
+  includeLogo: boolean;
+  brandContextFields?: string[];
 }
 
 export interface TextStyleOptions {

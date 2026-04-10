@@ -8,7 +8,9 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   useWindowDimensions,
@@ -18,7 +20,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
-import { deleteWallpaper, fetchWallpapers, type GalleryItem, generateWallpaper } from '@/utils/api';
+import {
+  deleteWallpaper,
+  fetchWallpapers,
+  type GalleryItem,
+  type GenerateImageResponse,
+  generateWallpaper,
+  saveToGallery,
+} from '@/utils/api';
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1200;
@@ -26,9 +35,41 @@ const WEB_H_PADDING = 32;
 const MOBILE_H_PADDING = D.spacing.md;
 const GAP = D.spacing.sm;
 
+type GenerateStage = 'input' | 'result';
+
+const FORMAT_OPTIONS = [
+  { value: '9:16', label: 'Vertical' },
+  { value: '1:1', label: 'Square' },
+  { value: '16:9', label: 'Landscape' },
+];
+
+const BRAND_CONTEXT_OPTIONS = [
+  { key: 'brandName', label: 'Brand Name' },
+  { key: 'slogan', label: 'Slogan' },
+  { key: 'brandColors', label: 'Brand Colors' },
+  { key: 'businessDomain', label: 'Business Domain' },
+  { key: 'shopType', label: 'Shop Type' },
+  { key: 'targetAudience', label: 'Target Audience' },
+  { key: 'phoneNumber', label: 'Phone Number' },
+  { key: 'email', label: 'Email' },
+  { key: 'addresses', label: 'Address' },
+  { key: 'instagramHandle', label: 'Instagram' },
+  { key: 'facebookHandle', label: 'Facebook' },
+  { key: 'tikTokHandle', label: 'TikTok' },
+];
+
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function downloadImage(result: GenerateImageResponse, filename: string) {
+  if (Platform.OS !== 'web') return;
+  const ext = result.mimeType.split('/')[1] ?? 'png';
+  const a = document.createElement('a');
+  a.href = `data:${result.mimeType};base64,${result.imageBase64}`;
+  a.download = `${filename}.${ext}`;
+  a.click();
 }
 
 export default function WallpapersScreen() {
@@ -45,9 +86,20 @@ export default function WallpapersScreen() {
 
   // Generate sheet state
   const [generateSheetVisible, setGenerateSheetVisible] = useState(false);
+  const [generateStage, setGenerateStage] = useState<GenerateStage>('input');
+  // Input stage
   const [prompt, setPrompt] = useState('');
+  const [format, setFormat] = useState('9:16');
+  const [includeLogo, setIncludeLogo] = useState(false);
+  const [brandContextFields, setBrandContextFields] = useState<string[]>([]);
+  // Generation
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  // Result stage
+  const [generatedResult, setGeneratedResult] = useState<GenerateImageResponse | null>(null);
+  const [isKept, setIsKept] = useState(false);
+  const [keepError, setKeepError] = useState<string | null>(null);
+
   const promptRef = useRef(prompt);
   promptRef.current = prompt;
 
@@ -89,24 +141,54 @@ export default function WallpapersScreen() {
     }
   }
 
+  function toggleBrandField(key: string) {
+    setBrandContextFields((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }
+
   async function handleGenerate() {
-    const p = promptRef.current.trim();
-    if (!p) return;
     setGenerating(true);
     setGenerateError(null);
     try {
-      await generateWallpaper({ prompt: p });
-      setGenerateSheetVisible(false);
-      setPrompt('');
-      // Refresh the list to pick up the newly saved wallpaper
-      fetchWallpapers()
-        .then(setItems)
-        .catch(() => {});
+      const result = await generateWallpaper({
+        prompt: promptRef.current.trim(),
+        format,
+        includeLogo,
+        brandContextFields,
+      });
+      setGeneratedResult(result);
+      setIsKept(false);
+      setKeepError(null);
+      setGenerateStage('result');
     } catch (err) {
       setGenerateError(err instanceof Error ? err.message : 'Generation failed.');
     } finally {
       setGenerating(false);
     }
+  }
+
+  async function handleKeep() {
+    if (!generatedResult || isKept) return;
+    try {
+      await saveToGallery(generatedResult.imageBase64, generatedResult.mimeType, 'wallpaper');
+      setIsKept(true);
+      fetchWallpapers()
+        .then(setItems)
+        .catch(() => {});
+    } catch {
+      setKeepError('Failed to save. Try again.');
+    }
+  }
+
+  function handleCloseSheet() {
+    if (generating) return;
+    setGenerateSheetVisible(false);
+    setGenerateStage('input');
+    setGeneratedResult(null);
+    setIsKept(false);
+    setGenerateError(null);
+    setKeepError(null);
   }
 
   const renderItem = ({ item }: { item: GalleryItem }) => (
@@ -207,6 +289,9 @@ export default function WallpapersScreen() {
     );
   }
 
+  // Derive aspect ratio for result image preview
+  const resultAspectRatio = format === '16:9' ? 16 / 9 : format === '1:1' ? 1 : 9 / 16;
+
   return (
     <View style={styles.root}>
       <View style={styles.pageContainer}>
@@ -234,50 +319,199 @@ export default function WallpapersScreen() {
         visible={generateSheetVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => {
-          if (!generating) setGenerateSheetVisible(false);
-        }}
+        onRequestClose={handleCloseSheet}
       >
-        <Pressable
-          style={styles.sheetOverlay}
-          onPress={() => {
-            if (!generating) setGenerateSheetVisible(false);
-          }}
-        >
-          <Pressable style={styles.sheet} onPress={() => {}}>
+        <Pressable style={styles.sheetOverlay} onPress={handleCloseSheet}>
+          <View
+            style={styles.sheet}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => {}}
+          >
             <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Generate Wallpaper</Text>
-            <Text style={styles.sheetSubtitle}>Describe the background style you want</Text>
-            <TextInput
-              style={styles.sheetInput}
-              placeholder="e.g. warm sunset bokeh, soft pastel bakery, dark wood texture…"
-              placeholderTextColor={colors.text.muted}
-              value={prompt}
-              onChangeText={setPrompt}
-              multiline
-              editable={!generating}
-            />
-            {generateError && <Text style={styles.generateError}>{generateError}</Text>}
-            <Pressable
-              style={({ pressed }) => [
-                styles.sheetGenerateBtn,
-                (!prompt.trim() || generating) && { opacity: 0.45 },
-                pressed && { opacity: 0.8 },
-              ]}
-              onPress={handleGenerate}
-              disabled={!prompt.trim() || generating}
-              accessibilityRole="button"
-            >
-              {generating ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="sparkles-outline" size={16} color="#fff" />
-              )}
-              <Text style={styles.sheetGenerateBtnText}>
-                {generating ? 'Generating…' : 'Generate'}
-              </Text>
-            </Pressable>
-          </Pressable>
+
+            {generateStage === 'input' ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.sheetScrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <Text style={styles.sheetTitle}>Generate Wallpaper</Text>
+                <Text style={styles.sheetSubtitle}>Configure and generate an AI background</Text>
+
+                {/* Format picker */}
+                <Text style={styles.sectionLabel}>Format</Text>
+                <View style={styles.formatRow}>
+                  {FORMAT_OPTIONS.map((opt) => (
+                    <Pressable
+                      key={opt.value}
+                      style={[styles.formatPill, format === opt.value && styles.formatPillActive]}
+                      onPress={() => setFormat(opt.value)}
+                      disabled={generating}
+                      accessibilityRole="button"
+                    >
+                      <Text
+                        style={[
+                          styles.formatPillText,
+                          format === opt.value && styles.formatPillTextActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.formatPillRatio,
+                          format === opt.value && styles.formatPillTextActive,
+                        ]}
+                      >
+                        {opt.value}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {/* Prompt */}
+                <Text style={styles.sectionLabel}>Style prompt (optional)</Text>
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="e.g. warm sunset bokeh, soft pastel bakery, dark wood texture…"
+                  placeholderTextColor={colors.text.muted}
+                  value={prompt}
+                  onChangeText={setPrompt}
+                  multiline
+                  editable={!generating}
+                />
+
+                {/* Include logo */}
+                <View style={styles.toggleRow}>
+                  <View>
+                    <Text style={styles.toggleLabel}>Include Logo</Text>
+                    <Text style={styles.toggleHint}>Place your brand logo in the header</Text>
+                  </View>
+                  <Switch
+                    value={includeLogo}
+                    onValueChange={setIncludeLogo}
+                    disabled={generating}
+                    trackColor={{ true: colors.accent.primary }}
+                  />
+                </View>
+
+                {/* Brand context fields */}
+                <Text style={styles.sectionLabel}>Include brand info</Text>
+                <View style={styles.checkGrid}>
+                  {BRAND_CONTEXT_OPTIONS.map((opt) => {
+                    const checked = brandContextFields.includes(opt.key);
+                    return (
+                      <Pressable
+                        key={opt.key}
+                        style={({ pressed }) => [styles.checkRow, pressed && { opacity: 0.7 }]}
+                        onPress={() => toggleBrandField(opt.key)}
+                        disabled={generating}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked }}
+                      >
+                        <Ionicons
+                          name={checked ? 'checkbox' : 'square-outline'}
+                          size={18}
+                          color={checked ? colors.accent.primary : colors.text.muted}
+                        />
+                        <Text style={styles.checkLabel}>{opt.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {generateError && <Text style={styles.generateError}>{generateError}</Text>}
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.sheetGenerateBtn,
+                    generating && { opacity: 0.6 },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                  onPress={handleGenerate}
+                  disabled={generating}
+                  accessibilityRole="button"
+                >
+                  {generating ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="sparkles-outline" size={16} color="#fff" />
+                  )}
+                  <Text style={styles.sheetGenerateBtnText}>
+                    {generating ? 'Generating…' : 'Generate'}
+                  </Text>
+                </Pressable>
+              </ScrollView>
+            ) : (
+              /* Result stage */
+              <View style={styles.resultContainer}>
+                <Text style={styles.sheetTitle}>Wallpaper Generated</Text>
+                <Text style={styles.sheetSubtitle}>Keep it or generate a new one</Text>
+
+                {generatedResult && (
+                  <Image
+                    source={{
+                      uri: `data:${generatedResult.mimeType};base64,${generatedResult.imageBase64}`,
+                    }}
+                    style={[styles.resultImage, { aspectRatio: resultAspectRatio }]}
+                    resizeMode="cover"
+                    accessibilityLabel="Generated wallpaper"
+                  />
+                )}
+
+                {keepError && <Text style={styles.generateError}>{keepError}</Text>}
+
+                <View style={styles.resultActions}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.actionBtn,
+                      { backgroundColor: isKept ? colors.accent.dim : colors.accent.primary },
+                      pressed && { opacity: 0.75 },
+                    ]}
+                    onPress={handleKeep}
+                    disabled={isKept}
+                    accessibilityRole="button"
+                    accessibilityLabel={isKept ? 'Image saved' : 'Keep image'}
+                  >
+                    <Ionicons
+                      name={isKept ? 'checkmark-circle' : 'bookmark-outline'}
+                      size={16}
+                      color="#fff"
+                    />
+                    <Text style={styles.actionBtnText}>{isKept ? 'Saved' : 'Keep'}</Text>
+                  </Pressable>
+
+                  {isWeb && generatedResult && (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.actionBtn,
+                        { backgroundColor: colors.accent.primary },
+                        pressed && { opacity: 0.75 },
+                      ]}
+                      onPress={() => downloadImage(generatedResult, 'wallpaper')}
+                      accessibilityRole="button"
+                      accessibilityLabel="Download image"
+                    >
+                      <Ionicons name="download-outline" size={16} color="#fff" />
+                      <Text style={styles.actionBtnText}>Download</Text>
+                    </Pressable>
+                  )}
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [styles.secondaryBtn, pressed && { opacity: 0.7 }]}
+                  onPress={() => {
+                    setGeneratedResult(null);
+                    setGenerateStage('input');
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="refresh-outline" size={15} color={colors.text.secondary} />
+                  <Text style={styles.secondaryBtnText}>Generate Again</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
         </Pressable>
       </Modal>
 
@@ -537,9 +771,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.bg.surface,
       borderTopLeftRadius: D.radius.xl,
       borderTopRightRadius: D.radius.xl,
-      padding: D.spacing.lg,
+      paddingTop: D.spacing.md,
       paddingBottom: D.spacing['2xl'],
-      gap: D.spacing.sm,
+      maxHeight: '90%',
     },
     sheetHandle: {
       width: 40,
@@ -547,7 +781,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderRadius: D.radius.pill,
       backgroundColor: colors.border.default,
       alignSelf: 'center',
-      marginBottom: D.spacing.sm,
+      marginBottom: D.spacing.md,
+    },
+    sheetScrollContent: {
+      paddingHorizontal: D.spacing.lg,
+      gap: D.spacing.sm,
+      paddingBottom: D.spacing.md,
     },
     sheetTitle: {
       fontSize: D.fontSize.lg,
@@ -558,6 +797,46 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.sm,
       color: colors.text.muted,
     },
+    // Format picker
+    sectionLabel: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      marginTop: D.spacing.xs,
+    },
+    formatRow: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+    },
+    formatPill: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: D.spacing.sm,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.elevated,
+    },
+    formatPillActive: {
+      backgroundColor: colors.accent.primary,
+      borderColor: colors.accent.primary,
+    },
+    formatPillText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+    },
+    formatPillRatio: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginTop: 1,
+    },
+    formatPillTextActive: {
+      color: '#fff',
+    },
+    // Prompt
     sheetInput: {
       backgroundColor: colors.bg.elevated,
       borderRadius: D.radius.md,
@@ -566,14 +845,50 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.text.primary,
       fontSize: D.fontSize.sm,
       padding: D.spacing.md,
-      minHeight: 80,
+      minHeight: 72,
       textAlignVertical: 'top',
-      marginTop: D.spacing.xs,
     },
+    // Toggle row
+    toggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: D.spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle ?? colors.border.default,
+    },
+    toggleLabel: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.primary,
+    },
+    toggleHint: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginTop: 2,
+    },
+    // Brand context checkboxes
+    checkGrid: {
+      gap: 2,
+    },
+    checkRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      paddingVertical: 7,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle ?? colors.border.default,
+    },
+    checkLabel: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.primary,
+    },
+    // Error
     generateError: {
       fontSize: D.fontSize.xs,
       color: '#EF4444',
     },
+    // Generate button
     sheetGenerateBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -582,13 +897,58 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.accent.primary,
       paddingVertical: 13,
       borderRadius: D.radius.pill,
-      marginTop: D.spacing.xs,
+      marginTop: D.spacing.sm,
       ...D.shadow.glow,
     },
     sheetGenerateBtnText: {
       color: '#fff',
       fontSize: D.fontSize.base,
       fontWeight: D.fontWeight.semibold,
+    },
+    // ── Result stage ──────────────────────────────────────────────────────────
+    resultContainer: {
+      paddingHorizontal: D.spacing.lg,
+      gap: D.spacing.sm,
+    },
+    resultImage: {
+      width: '100%',
+      borderRadius: D.radius.lg,
+      backgroundColor: colors.bg.elevated,
+      marginTop: D.spacing.xs,
+    },
+    resultActions: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+    },
+    actionBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      paddingVertical: 12,
+      borderRadius: D.radius.pill,
+      ...D.shadow.glow,
+    },
+    actionBtnText: {
+      color: '#fff',
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+    },
+    secondaryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      paddingVertical: 11,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+    secondaryBtnText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
     },
     // ── Lightbox ────────────────────────────────────────────────────────────
     lightboxOverlay: {
