@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using MerchStoryImageGeneration.Models;
 
@@ -18,9 +19,10 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
     private static string BuildPrompt(WallpaperImageRequest r)
     {
         const string systemContext =
-            "You are an expert Graphic Designer and Product Photographer. " +
-            "Create a professional social media marketing template image. " +
-            "TYPOGRAPHY: If text is requested, use modern, clean, sans-serif fonts with premium spacing.";
+            "You are an expert Graphic Designer specializing in retail catalogue layouts. " +
+            "Your task is to generate a professional marketing background template — a backdrop image onto which real product photos will be composited in post-production. " +
+            "The hero area must be simple and clean — a calm, solid or very softly toned color that complements the brand. No busy patterns, no abstract art, no objects. " +
+            "TYPOGRAPHY: Only render text that is explicitly listed in the prompt. Do not add any extra text, taglines, or decorative copy. Use modern, clean, sans-serif fonts with premium spacing.";
 
         var sb = new StringBuilder();
         sb.AppendLine(systemContext);
@@ -47,26 +49,28 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
         bool hasFooter = hasContact || hasSocials;
 
         // --- DYNAMIC LAYOUT LOGIC ---
+        const string heroStyle = "This is the product placement zone for a retail catalogue. Use a calm, simple color — solid or with a very gentle, barely noticeable shift in tone if it helps the composition, but nothing dramatic. No patterns, no textures, no shapes, no lighting effects, no abstract elements. Think of a clean studio sweep backdrop. Completely empty of any objects, people, or props — real products will be composited here later.";
+
         sb.AppendLine("\n### LAYOUT STRUCTURE:");
         if (hasHeader && hasFooter)
         {
             sb.AppendLine("- HEADER (Top 15%): Reserved for branding text and logos.");
-            sb.AppendLine("- HERO AREA (Middle 70%): Must be a CLEAN, EMPTY STAGE with no text/logos.");
+            sb.AppendLine($"- HERO AREA (Middle 70%): {heroStyle}");
             sb.AppendLine("- FOOTER (Bottom 15%): Reserved for contact/social text.");
         }
         else if (hasHeader && !hasFooter)
         {
             sb.AppendLine("- HEADER (Top 15%): Reserved for branding text and logos.");
-            sb.AppendLine("- HERO AREA (Bottom 85%): Must be a CLEAN, EMPTY STAGE with no text. Do not reserve space for a footer.");
+            sb.AppendLine($"- HERO AREA (Bottom 85%): {heroStyle} Do not reserve space for a footer.");
         }
         else if (!hasHeader && hasFooter)
         {
-            sb.AppendLine("- HERO AREA (Top 85%): Must be a CLEAN, EMPTY STAGE with no text. Do not reserve space for a header.");
+            sb.AppendLine($"- HERO AREA (Top 85%): {heroStyle} Do not reserve space for a header.");
             sb.AppendLine("- FOOTER (Bottom 15%): Reserved for contact/social text.");
         }
         else
         {
-            sb.AppendLine("- FULL CANVAS (100%): The entire image must be a CLEAN, EMPTY STAGE. Do not reserve margins for text.");
+            sb.AppendLine($"- FULL CANVAS (100%): {heroStyle}");
         }
 
         // --- HEADER TEXT & LOGOS ---
@@ -77,14 +81,21 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
             // Strict Logo Instruction
             if (hasImages)
             {
-                sb.AppendLine("- BRAND LOGO: Incorporate the provided reference image(s) into the header design. CRITICAL: You must reproduce the logo exactly as provided. Do NOT alter its shape, colors, typography, or details in any way. Keep it completely unmodified.");
+                sb.AppendLine("- BRAND LOGO: Place the provided logo in the header. ABSOLUTE RULE: reproduce it pixel-perfect — do NOT recolor, reinterpret, restyle, or alter it in any way for any reason, including brand color matching. The logo is always used as-is.");
             }
 
             if (bc != null)
             {
                 if (!string.IsNullOrWhiteSpace(bc.BrandName))
                 {
-                    sb.AppendLine($"- Display Brand Name: \"{bc.BrandName}\"");
+                    if (hasImages)
+                    {
+                        sb.AppendLine(CultureInfo.InvariantCulture, $"- Brand Name \"{bc.BrandName}\": ONLY display this as separate text if the logo above does NOT already contain this name. If the logo already includes the brand name, skip adding it as a separate text element.");
+                    }
+                    else
+                    {
+                        sb.AppendLine(CultureInfo.InvariantCulture, $"- Display Brand Name: \"{bc.BrandName}\"");
+                    }
                 }
 
                 if (!string.IsNullOrWhiteSpace(bc.Slogan))
@@ -144,9 +155,12 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
         // --- ARTISTIC DIRECTION & VIBE ---
         sb.AppendLine("\n### ARTISTIC DIRECTION & VIBE:");
 
-        if (!string.IsNullOrWhiteSpace(r.UserPrompt))
+        bool hasUserPrompt = !string.IsNullOrWhiteSpace(r.UserPrompt);
+
+        if (hasUserPrompt)
         {
-            sb.AppendLine($"- CUSTOM STYLE OVERRIDE: {r.UserPrompt}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"- USER DIRECTION: {r.UserPrompt}");
+            sb.AppendLine("- This user direction takes priority. Where it overlaps with any default style, color, scenery, or mood guidance below, follow the user direction instead.");
         }
         else
         {
@@ -155,9 +169,13 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
 
         if (bc != null)
         {
-            if (!string.IsNullOrWhiteSpace(bc.BrandColors))
+            if (!string.IsNullOrWhiteSpace(bc.BrandColors) && !hasUserPrompt)
             {
-                sb.AppendLine($"- COLOR PALETTE: Apply the {bc.BrandColors} color scheme seamlessly.");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"- COLOR PALETTE: Use {bc.BrandColors} to color the wallpaper background, header/footer areas, and any text elements. NEVER apply these colors to the logo — the logo must remain exactly as provided regardless of the palette.");
+            }
+            else if (!string.IsNullOrWhiteSpace(bc.BrandColors))
+            {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"- BRAND COLORS (reference for the wallpaper and text, defer to user direction if it conflicts — never apply to the logo): {bc.BrandColors}.");
             }
 
             if (!string.IsNullOrWhiteSpace(bc.BusinessDomain) || !string.IsNullOrWhiteSpace(bc.ShopType))
@@ -176,23 +194,30 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
             }
         }
 
+        // This constraint is unconditional — the wallpaper must always be a clean backdrop for product placement
+        sb.AppendLine("\n### NON-NEGOTIABLE CONSTRAINTS:");
+        sb.AppendLine("- HERO ZONE: Must be a plain, minimal backdrop — flat color or very subtle tone only. No gradients, no textures, no patterns, no decorative elements. Real products will be placed here in post-production; anything in this zone makes it unusable.");
+        sb.AppendLine("- TEXT: Do NOT invent, add, or decorate with any text that was not explicitly listed above. Only render the exact strings provided — nothing more, no taglines, no decorative labels, no filler copy.");
+
         // --- DYNAMIC FINAL REINFORCEMENT ---
+        const string heroCheck = "must be a simple, calm color — clean and minimal. No patterns, no textures, no shapes, no dramatic effects. Completely empty of objects. Real products will be placed here in post-production.";
+
         sb.AppendLine("\n### FINAL QUALITY CHECK:");
         if (hasHeader && hasFooter)
         {
-            sb.AppendLine("- Ensure the middle 70% is perfectly lit and completely empty.");
+            sb.AppendLine($"- The middle 70% {heroCheck}");
         }
         else if (hasHeader && !hasFooter)
         {
-            sb.AppendLine("- Ensure the bottom 85% is perfectly lit and completely empty. Absolutely no text at the bottom.");
+            sb.AppendLine($"- The bottom 85% {heroCheck}");
         }
         else if (!hasHeader && hasFooter)
         {
-            sb.AppendLine("- Ensure the top 85% is perfectly lit and completely empty. Absolutely no text at the top.");
+            sb.AppendLine($"- The top 85% {heroCheck}");
         }
         else
         {
-            sb.AppendLine("- Ensure the ENTIRE canvas is perfectly lit and completely empty.");
+            sb.AppendLine($"- The ENTIRE canvas {heroCheck}");
         }
 
         if (hasHeader || hasFooter)

@@ -2222,7 +2222,10 @@ export default function StudioScreen() {
           animationType="fade"
           onRequestClose={handleCloseWallpaperGenModal}
         >
-          <Pressable style={styles.wallpaperGenOverlay} onPress={handleCloseWallpaperGenModal}>
+          <Pressable
+            style={styles.wallpaperGenOverlay}
+            onPress={isWeb ? () => {} : handleCloseWallpaperGenModal}
+          >
             <View
               style={styles.wallpaperGenSheet}
               onStartShouldSetResponder={() => true}
@@ -2254,7 +2257,7 @@ export default function StudioScreen() {
                       [
                         { value: '9:16', label: 'Vertical' },
                         { value: '1:1', label: 'Square' },
-                        { value: '16:9', label: 'Landscape' },
+                        { value: '4:5', label: 'Portrait' },
                       ] as const
                     ).map((opt) => (
                       <Pressable
@@ -3288,7 +3291,10 @@ export default function StudioScreen() {
         animationType="slide"
         onRequestClose={handleCloseWallpaperGenModal}
       >
-        <Pressable style={styles.wallpaperGenOverlay} onPress={handleCloseWallpaperGenModal}>
+        <Pressable
+          style={styles.wallpaperGenOverlay}
+          onPress={isWeb ? () => {} : handleCloseWallpaperGenModal}
+        >
           <View
             style={styles.wallpaperGenSheet}
             onStartShouldSetResponder={() => true}
