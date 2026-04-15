@@ -371,6 +371,13 @@ export interface TextStyleOptions {
   priceBadge?: string; // None | Pill
 }
 
+export interface PlacementZone {
+  x: number; // 0.0–1.0 fraction of canvas width
+  y: number; // 0.0–1.0 fraction of canvas height
+  width: number; // 0.0–1.0 fraction of canvas width
+  height: number; // 0.0–1.0 fraction of canvas height
+}
+
 export interface GenerateCatalogOnWallpaperParams {
   products: CatalogImageProduct[];
   wallpaperBase64: string;
@@ -378,6 +385,7 @@ export interface GenerateCatalogOnWallpaperParams {
   format: string;
   showPrices: boolean;
   textStyle?: TextStyleOptions;
+  placementZone?: PlacementZone;
 }
 
 export async function generateWallpaper(

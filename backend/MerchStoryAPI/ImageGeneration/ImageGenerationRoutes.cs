@@ -222,13 +222,20 @@ internal sealed record WallpaperApiRequest(string Prompt, string Format, bool In
             BrandContext: brandContext);
 }
 
+internal sealed record PlacementZone(
+    double X,
+    double Y,
+    double Width,
+    double Height);
+
 internal sealed record CatalogOnWallpaperApiRequest(
     List<CatalogProductApiItem>? Products,
     string WallpaperBase64,
     string Layout,
     string Format,
     bool ShowPrices,
-    TextStyleOptions? TextStyle = null);
+    TextStyleOptions? TextStyle = null,
+    PlacementZone? PlacementZone = null);
 
 internal sealed record AnnouncementImageApiRequest(
     string PostType,

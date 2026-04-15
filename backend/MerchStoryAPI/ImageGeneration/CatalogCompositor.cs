@@ -23,6 +23,7 @@ internal sealed record TextStyleOptions(
 internal static class CatalogCompositor
 {
     private const int OuterMargin = 20;
+    private const int ZoneInnerPadding = 12;
     private const int CellGap = 8;
     private const int CardPadding = 8;
 
@@ -37,7 +38,7 @@ internal static class CatalogCompositor
         canvas.Mutate(ctx => ctx.Resize(new ResizeOptions
         {
             Size = new Size(canvasW, canvasH),
-            Mode = ResizeMode.Crop,
+            Mode = ResizeMode.Pad,
         }));
 
         var products = request.Products ?? [];
@@ -53,7 +54,7 @@ internal static class CatalogCompositor
 
         try
         {
-            var cells = ComputeCells(request.Layout, products.Count, canvasW, canvasH);
+            var cells = ComputeCells(request.Layout, products.Count, canvasW, canvasH, request.PlacementZone);
             var (nameFont, priceFont) = ResolveFonts(textStyle);
 
             for (int i = 0; i < products.Count && i < cells.Count; i++)
@@ -83,12 +84,33 @@ internal static class CatalogCompositor
     };
 
     // ── Cell layout ───────────────────────────────────────────────────────────
-    private static List<Rectangle> ComputeCells(string layout, int count, int canvasW, int canvasH)
+    private static List<Rectangle> ComputeCells(
+        string layout,
+        int count,
+        int canvasW,
+        int canvasH,
+        PlacementZone? zone = null)
     {
-        int usableX = OuterMargin;
-        int usableY = OuterMargin;
-        int usableW = canvasW - (OuterMargin * 2);
-        int usableH = canvasH - (OuterMargin * 2);
+        int usableX, usableY, usableW, usableH;
+
+        if (zone is not null)
+        {
+            usableX = (int)Math.Round(zone.X * canvasW) + ZoneInnerPadding;
+            usableY = (int)Math.Round(zone.Y * canvasH) + ZoneInnerPadding;
+            usableW = (int)Math.Round(zone.Width * canvasW) - (ZoneInnerPadding * 2);
+            usableH = (int)Math.Round(zone.Height * canvasH) - (ZoneInnerPadding * 2);
+            usableX = Math.Clamp(usableX, 0, canvasW - 1);
+            usableY = Math.Clamp(usableY, 0, canvasH - 1);
+            usableW = Math.Clamp(usableW, 1, canvasW - usableX);
+            usableH = Math.Clamp(usableH, 1, canvasH - usableY);
+        }
+        else
+        {
+            usableX = OuterMargin;
+            usableY = OuterMargin;
+            usableW = canvasW - (OuterMargin * 2);
+            usableH = canvasH - (OuterMargin * 2);
+        }
 
         return layout switch
         {
