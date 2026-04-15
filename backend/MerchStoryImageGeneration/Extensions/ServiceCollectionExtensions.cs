@@ -8,7 +8,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddMerchStoryImageGeneration(this IServiceCollection services)
     {
         // Provider — swap this registration to switch the underlying model globally
-        services.AddScoped<IImageProvider, GeminiImageProvider>();
+        services.AddScoped<IImageProvider, MockImageProvider>();
 
         // Content-type services
         services.AddScoped<ICatalogImageService, CatalogImageService>();

@@ -2401,14 +2401,14 @@ export default function StudioScreen() {
                         styles.wallpaperGenResultImage,
                         {
                           aspectRatio:
-                            wallpaperGenFormat === '16:9'
-                              ? 16 / 9
-                              : wallpaperGenFormat === '1:1'
-                                ? 1
+                            wallpaperGenFormat === '1:1'
+                              ? 1
+                              : wallpaperGenFormat === '4:5'
+                                ? 4 / 5
                                 : 9 / 16,
                         },
                       ]}
-                      resizeMode="cover"
+                      resizeMode="contain"
                       accessibilityLabel="Generated wallpaper"
                     />
                   )}
@@ -3478,14 +3478,14 @@ export default function StudioScreen() {
                       styles.wallpaperGenResultImage,
                       {
                         aspectRatio:
-                          wallpaperGenFormat === '16:9'
-                            ? 16 / 9
-                            : wallpaperGenFormat === '1:1'
-                              ? 1
+                          wallpaperGenFormat === '1:1'
+                            ? 1
+                            : wallpaperGenFormat === '4:5'
+                              ? 4 / 5
                               : 9 / 16,
                       },
                     ]}
-                    resizeMode="cover"
+                    resizeMode="contain"
                     accessibilityLabel="Generated wallpaper"
                   />
                 )}
