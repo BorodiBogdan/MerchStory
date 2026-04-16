@@ -18,10 +18,15 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
         CatalogImageRequest request,
         CancellationToken cancellationToken = default)
     {
-        var images = request.Products
+        var images = new List<string?>();
+        if (!string.IsNullOrWhiteSpace(request.LogoBase64))
+        {
+            images.Add(request.LogoBase64);
+        }
+
+        images.AddRange(request.Products
             .Select(p => p.ImageBase64)
-            .Where(img => !string.IsNullOrWhiteSpace(img))
-            .ToList();
+            .Where(img => !string.IsNullOrWhiteSpace(img)));
 
         return this.GenerateAsync(
             BuildPrompt(request),
@@ -34,6 +39,13 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
         var names = string.Join(", ", r.Products.Select(p =>
             r.ShowPrices ? $"{p.Name} (${p.Price:F2})" : p.Name));
 
+        string logoNote = !string.IsNullOrWhiteSpace(r.LogoBase64)
+            ? "Brand logo: a logo image has been provided as the first inline image. " +
+              "Place it in a natural brand position (e.g. top corner or header area). " +
+              "Reproduce it pixel-perfect — do NOT recolor, rescale disproportionately, " +
+              "reinterpret, or alter it in any way.\n\n"
+            : string.Empty;
+
         string imageNote = r.Products.Any(p => !string.IsNullOrWhiteSpace(p.ImageBase64))
             ? "Use the provided product photos as the basis for the visuals. "
             : string.Empty;
@@ -41,6 +53,7 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
         return
             $"{SystemContext}\n\n" +
             BrandContextBlock(r.BrandContext) +
+            logoNote +
             $"Create a professional product catalog ad image in {r.Format} format. " +
             $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}. Products: {names}. " +
             imageNote +

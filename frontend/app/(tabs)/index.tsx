@@ -359,6 +359,7 @@ const TAB_META: {
 // ─── Brand context helpers ──────────────────────────────────────────────────────
 function deriveContextItems(profile: ShopProfileResponse): ContextItem[] {
   const items: ContextItem[] = [];
+  if (profile.logoBase64) items.push({ key: 'logoBase64', label: 'Brand Logo' });
   if (profile.brandName) items.push({ key: 'brandName', label: 'Brand Name' });
   if (profile.slogan) items.push({ key: 'slogan', label: 'Slogan' });
   if (profile.brandColors?.length > 0) items.push({ key: 'brandColors', label: 'Brand Colors' });
@@ -766,6 +767,7 @@ function ChooseProductsSection({
   toggleProduct,
   colors,
   styles,
+  showProducts,
 }: {
   subtitle: string;
   isDesktop: boolean;
@@ -776,6 +778,7 @@ function ChooseProductsSection({
   toggleProduct: (id: string) => void;
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
+  showProducts: boolean;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -1076,6 +1079,38 @@ function ChooseProductsSection({
             <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
             <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
           </View>
+        ) : showProducts == false ? (
+          <>
+            <Pressable
+              style={({ pressed }) => ({
+                marginTop: D.spacing.md,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: D.spacing.xs,
+                alignSelf: 'flex-start',
+                paddingHorizontal: D.spacing.md,
+                paddingVertical: D.spacing.sm,
+                borderRadius: D.radius.md,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: pressed ? colors.bg.elevated : colors.bg.surface,
+              })}
+              onPress={() => setPickerOpen(true)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="grid-outline" size={14} color={colors.accent.primary} />
+              <Text
+                style={{
+                  fontSize: D.fontSize.sm,
+                  color: colors.accent.primary,
+                  fontWeight: D.fontWeight.medium,
+                }}
+              >
+                {'Browse products'}
+              </Text>
+              <Ionicons name="chevron-forward" size={13} color={colors.accent.primary} />
+            </Pressable>
+          </>
         ) : (
           <>
             <View style={{ flexDirection: 'row', gap: D.spacing.sm }}>
@@ -1549,6 +1584,7 @@ export default function StudioScreen() {
   const [annoResult, setAnnoResult] = useState<GenerateImageResponse | null>(null);
   const [annoError, setAnnoError] = useState<string | null>(null);
   const [annoKept, setAnnoKept] = useState(false);
+  const [promotionSelected, setPromotionSelected] = useState<Set<string>>(new Set());
 
   // ── Brand context state ──────────────────────────────────────────────────────
   const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
@@ -1572,6 +1608,18 @@ export default function StudioScreen() {
     );
   }, []);
 
+  const togglePromotionProduct = useCallback((id: string) => {
+    setPromotionSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (postType !== 'Promotion') setPromotionSelected(new Set());
+  }, [postType]);
+
   async function handleAnnoGenerate() {
     if (!content.trim()) return;
     setAnnoGenerating(true);
@@ -1579,6 +1627,13 @@ export default function StudioScreen() {
     setAnnoResult(null);
     setAnnoKept(false);
     try {
+      const promotionProductImages =
+        postType === 'Promotion' && promotionSelected.size > 0
+          ? products
+              .filter((p) => promotionSelected.has(p.id) && p.imageBase64)
+              .map((p) => p.imageBase64!)
+          : undefined;
+
       setAnnoResult(
         await generateAnnouncementImage({
           postType,
@@ -1586,6 +1641,7 @@ export default function StudioScreen() {
           tone,
           format: annoFormat,
           brandContextFields: annoContextFields.length > 0 ? annoContextFields : undefined,
+          productImages: promotionProductImages,
         })
       );
     } catch (err) {
@@ -1775,6 +1831,7 @@ export default function StudioScreen() {
                 toggleProduct={toggleProduct}
                 colors={colors}
                 styles={styles}
+                showProducts
               />
 
               {/* Preview */}
@@ -1824,6 +1881,7 @@ export default function StudioScreen() {
                 toggleProduct={toggleProduct}
                 colors={colors}
                 styles={styles}
+                showProducts
               />
 
               {/* Wallpaper picker */}
@@ -2083,7 +2141,20 @@ export default function StudioScreen() {
               })}
             </View>
           </View>
-
+          {postType === 'Promotion' && (
+            <ChooseProductsSection
+              subtitle="Select products to use as visual reference (optional)"
+              isDesktop
+              products={products}
+              loadingProducts={loadingProducts}
+              selectedCount={promotionSelected.size}
+              selected={promotionSelected}
+              toggleProduct={togglePromotionProduct}
+              colors={colors}
+              styles={styles}
+              showProducts={false}
+            />
+          )}
           <View style={styles.desktopSection}>
             <Text style={styles.desktopSectionTitle}>Content</Text>
             <Text style={styles.desktopSectionSub}>Describe what you want to communicate</Text>
@@ -2706,6 +2777,7 @@ export default function StudioScreen() {
                     toggleProduct={toggleProduct}
                     colors={colors}
                     styles={styles}
+                    showProducts
                   />
 
                   <View style={styles.mobileSection}>
@@ -2834,6 +2906,7 @@ export default function StudioScreen() {
                     toggleProduct={toggleProduct}
                     colors={colors}
                     styles={styles}
+                    showProducts
                   />
 
                   {/* Wallpaper picker */}
@@ -3216,6 +3289,21 @@ export default function StudioScreen() {
                     onToggle={toggleAnnoField}
                   />
                 </View>
+              )}
+
+              {postType === 'Promotion' && (
+                <ChooseProductsSection
+                  subtitle="Select products to use as visual reference (optional)"
+                  isDesktop={false}
+                  products={products}
+                  loadingProducts={loadingProducts}
+                  selectedCount={promotionSelected.size}
+                  selected={promotionSelected}
+                  toggleProduct={togglePromotionProduct}
+                  colors={colors}
+                  styles={styles}
+                  showProducts
+                />
               )}
 
               <GenerateButton
