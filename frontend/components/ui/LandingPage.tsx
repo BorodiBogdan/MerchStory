@@ -1,6 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  Image,
+  ImageSourcePropType,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
@@ -8,21 +17,29 @@ import { useTheme } from '@/context/theme';
 const ACCENT = '#6366F1';
 const MAX_WIDTH = 1100;
 
-const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }[] = [
+const FEATURES: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  body: string;
+  image: ImageSourcePropType;
+}[] = [
   {
     icon: 'color-wand-outline',
     title: 'AI Scene Generation',
     body: 'Upload a raw photo. AI removes the background and places your product in a professional studio scene automatically.',
+    image: require('@/assets/images/background-removal.png'),
   },
   {
     icon: 'partly-sunny-outline',
     title: 'Context Engine',
     body: 'Posts when it matters — recommendations tuned to local weather, holidays, events, and trending occasions.',
+    image: require('@/assets/images/recommandations.png'),
   },
   {
     icon: 'share-social-outline',
     title: 'One-Touch Distribution',
     body: 'Publish directly to Facebook and Instagram from the same screen you created the ad. No copy-pasting.',
+    image: require('@/assets/images/publish-to.png'),
   },
 ];
 
@@ -236,11 +253,8 @@ export default function LandingPage() {
           <View style={[s.featureRow, isNarrow && s.featureRowNarrow]}>
             {FEATURES.map((f) => (
               <View key={f.title} style={[s.featureCard, isNarrow && s.featureCardNarrow]}>
-                {/* Image placeholder */}
-                <View style={s.featureImgArea}>
-                  <Ionicons name={f.icon} size={22} color={ACCENT} style={{ opacity: 0.5 }} />
-                  <Text style={s.featureImgLabel}>Screenshot</Text>
-                </View>
+                {/* Feature image */}
+                <Image source={f.image} style={s.featureImg} resizeMode="cover" />
                 {/* Content */}
                 <View style={s.featureCardBody}>
                   <View style={s.featureIconBadge}>
@@ -795,18 +809,11 @@ function makeStyles(
     featureCardNarrow: {
       flex: undefined,
     },
-    featureImgArea: {
+    featureImg: {
+      width: '100%',
       height: 140,
-      backgroundColor: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)',
       borderBottomWidth: 1,
       borderBottomColor: colors.border.subtle,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: D.spacing.xs,
-    },
-    featureImgLabel: {
-      fontSize: D.fontSize.xs,
-      color: colors.text.muted,
     },
     featureCardBody: {
       padding: D.spacing.lg,
