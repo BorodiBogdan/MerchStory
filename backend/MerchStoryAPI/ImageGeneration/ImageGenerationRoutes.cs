@@ -27,10 +27,12 @@ public static class ImageGenerationRoutes
             }
 
             string? userId = GetUserId(principal);
-            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, request.BrandContextFields);
+            string? logoBase64 = await FetchLogoIfRequestedAsync(db, userId, request.BrandContextFields);
+            List<string>? textFields = StripLogoField(request.BrandContextFields);
+            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
 
             return await HandleGeneration(
-                () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext)),
+                () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext, logoBase64)),
                 logger);
         })
         .WithName("GenerateCatalogImage")
@@ -96,10 +98,12 @@ public static class ImageGenerationRoutes
             }
 
             string? userId = GetUserId(principal);
-            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, request.BrandContextFields);
+            string? logoBase64 = await FetchLogoIfRequestedAsync(db, userId, request.BrandContextFields);
+            List<string>? textFields = StripLogoField(request.BrandContextFields);
+            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
 
             return await HandleGeneration(
-                () => announcementService.GenerateAnnouncementImageAsync(request.ToServiceRequest(brandContext)),
+                () => announcementService.GenerateAnnouncementImageAsync(request.ToServiceRequest(brandContext, logoBase64)),
                 logger);
         })
         .WithName("GenerateAnnouncementImage")
@@ -109,6 +113,36 @@ public static class ImageGenerationRoutes
     private static string? GetUserId(ClaimsPrincipal principal) =>
         principal.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+    private static List<string>? StripLogoField(List<string>? fields) =>
+        fields is null
+            ? null
+            : fields
+                .Where(f => !f.Equals("logoBase64", StringComparison.OrdinalIgnoreCase))
+                .ToList() is { Count: > 0 } result
+                    ? result
+                    : null;
+
+    private static async Task<string?> FetchLogoIfRequestedAsync(
+        AppDbContext db,
+        string? userId,
+        List<string>? fields)
+    {
+        if (userId is null || fields is null)
+        {
+            return null;
+        }
+
+        if (!fields.Any(f => f.Equals("logoBase64", StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+
+        return await db.ShopProfiles
+            .Where(s => s.UserId == userId)
+            .Select(s => s.LogoBase64)
+            .FirstOrDefaultAsync();
+    }
 
     private static async Task<BrandContext?> BuildBrandContextAsync(
         AppDbContext db,
@@ -202,14 +236,15 @@ internal sealed record CatalogImageApiRequest(
     bool ShowPrices,
     List<string>? BrandContextFields)
 {
-    public CatalogImageRequest ToServiceRequest(BrandContext? brandContext) =>
+    public CatalogImageRequest ToServiceRequest(BrandContext? brandContext, string? logoBase64 = null) =>
         new(
             this.Products!.Select(p => new CatalogProductItem(p.Name, p.Price, p.ImageBase64)).ToList(),
             this.Layout,
             this.ColorTheme,
             this.Format,
             this.ShowPrices,
-            brandContext);
+            brandContext,
+            logoBase64);
 }
 
 internal sealed record WallpaperApiRequest(string Prompt, string Format, bool IncludeLogo, List<string>? BrandContextFields)
@@ -241,8 +276,9 @@ internal sealed record AnnouncementImageApiRequest(
     string Content,
     string Tone,
     string Format,
-    List<string>? BrandContextFields)
+    List<string>? BrandContextFields,
+    List<string>? ProductImages = null)
 {
-    public AnnouncementImageRequest ToServiceRequest(BrandContext? brandContext) =>
-        new(this.PostType, this.Content, this.Tone, this.Format, brandContext);
+    public AnnouncementImageRequest ToServiceRequest(BrandContext? brandContext, string? logoBase64 = null) =>
+        new(this.PostType, this.Content, this.Tone, this.Format, brandContext, this.ProductImages, logoBase64);
 }

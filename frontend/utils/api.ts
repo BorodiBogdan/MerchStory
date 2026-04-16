@@ -313,6 +313,7 @@ export interface GenerateAnnouncementImageParams {
   tone: string;
   format: string;
   brandContextFields?: string[];
+  productImages?: string[];
 }
 
 export async function generateCatalogImage(

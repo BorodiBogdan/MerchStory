@@ -4,11 +4,6 @@ namespace MerchStoryImageGeneration.Services;
 
 internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAnnouncementImageService
 {
-    private const string SystemContext =
-        "You are a professional social media graphic designer for small retail businesses. " +
-        "Produce clean, modern, visually striking graphics that are easy to read at a glance. " +
-        "Never add watermarks, placeholders, or generic stock imagery.";
-
     public AnnouncementImageService(IImageProvider provider)
         : base(provider)
     {
@@ -17,17 +12,111 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
     public Task<ImageGenerationResult> GenerateAnnouncementImageAsync(
         AnnouncementImageRequest request,
         CancellationToken cancellationToken = default)
-        => this.GenerateAsync(BuildPrompt(request), null, cancellationToken);
+        => this.GenerateAsync(BuildPrompt(request), BuildInlineImages(request), cancellationToken);
 
-    private static string BuildPrompt(AnnouncementImageRequest r) =>
-        $"{SystemContext}\n\n" +
+    private static List<string>? BuildInlineImages(AnnouncementImageRequest r)
+    {
+        var images = new List<string>();
+        if (!string.IsNullOrWhiteSpace(r.LogoBase64))
+        {
+            images.Add(r.LogoBase64);
+        }
+
+        if (r.PostType == "Promotion" && r.ProductImages != null)
+        {
+            images.AddRange(r.ProductImages);
+        }
+
+        return images.Count > 0 ? images : null;
+    }
+
+    private static string BuildPrompt(AnnouncementImageRequest r) => r.PostType switch
+    {
+        "Job Post" => BuildJobPostPrompt(r),
+        "Info" => BuildInfoPrompt(r),
+        "Promotion" => BuildPromotionPrompt(r),
+        _ => BuildAnnouncementPrompt(r),
+    };
+
+    // ── Announcement ─────────────────────────────────────────────────────────────
+    private static string BuildAnnouncementPrompt(AnnouncementImageRequest r) =>
+        "You are a professional social media graphic designer for small retail businesses. " +
+        "Produce clean, modern, event-announcement graphics that communicate news clearly and drive action. " +
+        "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
         BrandContextBlock(r.BrandContext) +
-        $"Create a {r.Tone.ToLowerInvariant()} {r.PostType.ToLowerInvariant()} social media graphic " +
-        $"in {r.Format} format. Content: \"{r.Content}\". " +
-        "Style: clean, modern, suitable for a small retail shop. " +
-        "Make it visually striking and easy to read at a glance.";
+        LogoBlock(r.LogoBase64) +
+        $"Create a {r.Tone.ToLowerInvariant()} announcement social media graphic in {r.Format} format. " +
+        $"Announcement: \"{r.Content}\". " +
+        "Design requirements: bold, readable headline that dominates the layout; " +
+        "supporting date/time/location details if mentioned; clear call-to-action area at the bottom; " +
+        "clean background that does not compete with the text. " +
+        "Make it unmistakably about news or an event — not a sale.";
 
-    private static string BrandContextBlock(MerchStoryImageGeneration.Models.BrandContext? ctx)
+    // ── Job Post ─────────────────────────────────────────────────────────────────
+    private static string BuildJobPostPrompt(AnnouncementImageRequest r) =>
+        "You are a professional social media graphic designer specializing in recruitment visuals for small retail businesses. " +
+        "Produce modern, welcoming hiring graphics that attract qualified candidates. " +
+        "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
+        BrandContextBlock(r.BrandContext) +
+        LogoBlock(r.LogoBase64) +
+        $"Create a {r.Tone.ToLowerInvariant()} job-posting social media graphic in {r.Format} format. " +
+        $"Job details: \"{r.Content}\". " +
+        "Design requirements: a prominent \"We're Hiring\" or \"Join Our Team\" hook as the hero headline; " +
+        "the role title clearly visible as a secondary headline; " +
+        "a short, friendly CTA (e.g. \"Apply Today\" or \"DM us to apply\"); " +
+        "professional yet approachable tone — avoid corporate coldness; " +
+        "clean layout with good whitespace so the role stands out immediately.";
+
+    // ── Info ─────────────────────────────────────────────────────────────────────
+    private static string BuildInfoPrompt(AnnouncementImageRequest r) =>
+        "You are a professional social media graphic designer for small retail businesses. " +
+        "Produce clean, educational tip-card or info-card graphics that are easy to scan at a glance. " +
+        "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
+        BrandContextBlock(r.BrandContext) +
+        LogoBlock(r.LogoBase64) +
+        $"Create a {r.Tone.ToLowerInvariant()} informational social media graphic in {r.Format} format. " +
+        $"Key information: \"{r.Content}\". " +
+        "Design requirements: treat this as a tip card or fact card — " +
+        "a short, punchy headline that captures the key insight; " +
+        "supporting body copy that elaborates briefly; " +
+        "icon-friendly layout (leave room for a simple icon or illustration area); " +
+        "clean, structured, minimal clutter — the information must be the hero, not decoration.";
+
+    // ── Promotion ────────────────────────────────────────────────────────────────
+    private static string BuildPromotionPrompt(AnnouncementImageRequest r)
+    {
+        bool hasProductPhotos = r.ProductImages is { Count: > 0 };
+
+        return "You are a professional social media graphic designer for small retail businesses. " +
+               "Produce high-impact promotional sale graphics that drive immediate purchases. " +
+               "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
+               BrandContextBlock(r.BrandContext) +
+               LogoBlock(r.LogoBase64) +
+               $"Create a {r.Tone.ToLowerInvariant()} promotional sale graphic in {r.Format} format. " +
+               $"Promotion details: \"{r.Content}\". " +
+               "Design requirements: the discount or offer (e.g. \"20% OFF\") must be the largest, " +
+               "most eye-catching element on the graphic — treat it as the hero; " +
+               "urgency language (\"Limited Time\", \"This Weekend Only\", \"While Stocks Last\") if relevant; " +
+               "a clear CTA (\"Shop Now\", \"Visit Us Today\"); " +
+               (hasProductPhotos
+                   ? $"{r.ProductImages!.Count} product reference photo(s) are attached — " +
+                     "incorporate the actual product(s) shown as the visual centrepiece of the graphic, " +
+                     "styled attractively; do not invent substitute products; "
+                   : "no product photos provided — use bold typography, graphic shapes, and brand colours as the visual focus; ") +
+               "overall feel: exciting, urgent, impossible to scroll past.";
+    }
+
+    // ── Logo block ────────────────────────────────────────────────────────────────
+    private static string LogoBlock(string? logoBase64) =>
+        string.IsNullOrWhiteSpace(logoBase64)
+            ? string.Empty
+            : "Brand logo: a logo image has been provided as an inline image. " +
+              "Place it in a natural brand position (e.g. top corner or header area). " +
+              "Reproduce it pixel-perfect — do NOT recolor, rescale disproportionately, " +
+              "reinterpret, or alter it in any way.\n\n";
+
+    // ── Shared brand context block ────────────────────────────────────────────────
+    private static string BrandContextBlock(BrandContext? ctx)
     {
         if (ctx is null)
         {

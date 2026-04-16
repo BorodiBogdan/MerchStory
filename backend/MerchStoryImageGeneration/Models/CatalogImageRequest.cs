@@ -8,4 +8,5 @@ public sealed record CatalogImageRequest(
     string ColorTheme,  // "Brand Colors" | "Vibrant" | "Monochrome" | "Dark"
     string Format,      // "Square 1:1" | "Portrait 4:5" | "Story 9:16"
     bool ShowPrices,
-    BrandContext? BrandContext = null);
+    BrandContext? BrandContext = null,
+    string? LogoBase64 = null);  // brand logo inline image

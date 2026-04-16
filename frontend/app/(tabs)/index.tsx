@@ -359,6 +359,7 @@ const TAB_META: {
 // ─── Brand context helpers ──────────────────────────────────────────────────────
 function deriveContextItems(profile: ShopProfileResponse): ContextItem[] {
   const items: ContextItem[] = [];
+  if (profile.logoBase64) items.push({ key: 'logoBase64', label: 'Brand Logo' });
   if (profile.brandName) items.push({ key: 'brandName', label: 'Brand Name' });
   if (profile.slogan) items.push({ key: 'slogan', label: 'Slogan' });
   if (profile.brandColors?.length > 0) items.push({ key: 'brandColors', label: 'Brand Colors' });
@@ -1549,6 +1550,7 @@ export default function StudioScreen() {
   const [annoResult, setAnnoResult] = useState<GenerateImageResponse | null>(null);
   const [annoError, setAnnoError] = useState<string | null>(null);
   const [annoKept, setAnnoKept] = useState(false);
+  const [promotionSelected, setPromotionSelected] = useState<Set<string>>(new Set());
 
   // ── Brand context state ──────────────────────────────────────────────────────
   const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
@@ -1572,6 +1574,18 @@ export default function StudioScreen() {
     );
   }, []);
 
+  const togglePromotionProduct = useCallback((id: string) => {
+    setPromotionSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (postType !== 'Promotion') setPromotionSelected(new Set());
+  }, [postType]);
+
   async function handleAnnoGenerate() {
     if (!content.trim()) return;
     setAnnoGenerating(true);
@@ -1579,6 +1593,13 @@ export default function StudioScreen() {
     setAnnoResult(null);
     setAnnoKept(false);
     try {
+      const promotionProductImages =
+        postType === 'Promotion' && promotionSelected.size > 0
+          ? products
+              .filter((p) => promotionSelected.has(p.id) && p.imageBase64)
+              .map((p) => p.imageBase64!)
+          : undefined;
+
       setAnnoResult(
         await generateAnnouncementImage({
           postType,
@@ -1586,6 +1607,7 @@ export default function StudioScreen() {
           tone,
           format: annoFormat,
           brandContextFields: annoContextFields.length > 0 ? annoContextFields : undefined,
+          productImages: promotionProductImages,
         })
       );
     } catch (err) {
@@ -2097,6 +2119,20 @@ export default function StudioScreen() {
               editable={!annoGenerating}
             />
           </View>
+
+          {postType === 'Promotion' && (
+            <ChooseProductsSection
+              subtitle="Select products to use as visual reference (optional)"
+              isDesktop
+              products={products}
+              loadingProducts={loadingProducts}
+              selectedCount={promotionSelected.size}
+              selected={promotionSelected}
+              toggleProduct={togglePromotionProduct}
+              colors={colors}
+              styles={styles}
+            />
+          )}
 
           {/* Preview */}
           <View style={styles.desktopSection}>
@@ -3216,6 +3252,20 @@ export default function StudioScreen() {
                     onToggle={toggleAnnoField}
                   />
                 </View>
+              )}
+
+              {postType === 'Promotion' && (
+                <ChooseProductsSection
+                  subtitle="Select products to use as visual reference (optional)"
+                  isDesktop={false}
+                  products={products}
+                  loadingProducts={loadingProducts}
+                  selectedCount={promotionSelected.size}
+                  selected={promotionSelected}
+                  toggleProduct={togglePromotionProduct}
+                  colors={colors}
+                  styles={styles}
+                />
               )}
 
               <GenerateButton
