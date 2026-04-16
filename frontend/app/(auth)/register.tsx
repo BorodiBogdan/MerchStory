@@ -20,6 +20,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AuthNavbar } from '@/components/ui/AuthNavbar';
 import { FloatingInput } from '@/components/ui/FloatingInput';
 import { SocialButton } from '@/components/ui/SocialButton';
 import { D } from '@/constants/design';
@@ -147,18 +148,24 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <Pressable
-        onPress={toggleTheme}
-        style={styles.themeToggle}
-        accessibilityLabel={colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        accessibilityRole="button"
-      >
-        <Ionicons
-          name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
-          size={22}
-          color={colors.text.secondary}
-        />
-      </Pressable>
+      {isWeb ? (
+        <AuthNavbar ctaLabel="Sign in" ctaHref="/(auth)/login" />
+      ) : (
+        <Pressable
+          onPress={toggleTheme}
+          style={styles.themeToggle}
+          accessibilityLabel={
+            colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
+          }
+          accessibilityRole="button"
+        >
+          <Ionicons
+            name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
+            size={22}
+            color={colors.text.secondary}
+          />
+        </Pressable>
+      )}
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <ScrollView
           contentContainerStyle={styles.scroll}
