@@ -1,12 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
   type DimensionValue,
+  FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -25,16 +28,24 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
+import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import {
   fetchProducts,
+  fetchWallpapers,
+  type GalleryItem,
   generateAnnouncementImage,
   generateCatalogImage,
+  generateCatalogOnWallpaper,
   type GenerateImageResponse,
+  generateWallpaper,
   getShopProfile,
+  type PlacementZone,
   type ProductItem,
+  saveToGallery,
   type ShopProfileResponse,
+  type TextStyleOptions,
 } from '@/utils/api';
 
 const isWeb = Platform.OS === 'web';
@@ -42,14 +53,232 @@ const SIDEBAR_WIDTH = 320;
 const DESKTOP_BREAKPOINT = 860;
 
 type StudioTab = 'catalog' | 'announcements' | 'video';
+type CatalogMode = 'generate' | 'on-wallpaper';
+type WallpaperStage = 'none' | 'generating' | 'preview' | 'confirmed';
 type PostType = 'Announcement' | 'Job Post' | 'Info' | 'Promotion';
 type ContextItem = { key: string; label: string };
 
+// ─── Text style presets (style only — color is chosen separately) ──────────────
+type TextPreset = {
+  id: string;
+  label: string;
+  fontFamily: string;
+  textEffect: string;
+  priceBadge: string;
+};
+
+const TEXT_PRESETS: TextPreset[] = [
+  {
+    id: 'modern-shadow',
+    label: 'Shadow',
+    fontFamily: 'Modern',
+    textEffect: 'Shadow',
+    priceBadge: 'None',
+  },
+  {
+    id: 'bold-shadow',
+    label: 'Bold',
+    fontFamily: 'Bold',
+    textEffect: 'Shadow',
+    priceBadge: 'None',
+  },
+  {
+    id: 'elegant-clean',
+    label: 'Elegant',
+    fontFamily: 'Elegant',
+    textEffect: 'None',
+    priceBadge: 'None',
+  },
+  {
+    id: 'bold-badge',
+    label: 'Badge',
+    fontFamily: 'Bold',
+    textEffect: 'Shadow',
+    priceBadge: 'Pill',
+  },
+  {
+    id: 'outline',
+    label: 'Outline',
+    fontFamily: 'Modern',
+    textEffect: 'Outline',
+    priceBadge: 'None',
+  },
+  {
+    id: 'friendly-badge',
+    label: 'Friendly',
+    fontFamily: 'Friendly',
+    textEffect: 'Shadow',
+    priceBadge: 'Pill',
+  },
+];
+
+const PRICE_SWATCHES = [
+  '#FFFFFF',
+  '#F59E0B',
+  '#EF4444',
+  '#22C55E',
+  '#6366F1',
+  '#A855F7',
+  '#EC4899',
+  '#14B8A6',
+  '#F97316',
+  '#1e1e1e',
+];
+
+function isColorLight(hex: string): boolean {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  // Perceived luminance
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.45;
+}
+
+function TextStylePresetPicker({
+  selectedId,
+  onSelect,
+  selectedColor,
+  onColorChange,
+  colors,
+}: {
+  selectedId: string;
+  onSelect: (id: string) => void;
+  selectedColor: string;
+  onColorChange: (c: string) => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const previewBg = isColorLight(selectedColor) ? '#1a1a2e' : '#f0f4ff';
+  return (
+    <>
+      <SectionLabel label="Color" />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: D.spacing.md }}>
+        {PRICE_SWATCHES.map((hex) => (
+          <Pressable
+            key={hex}
+            onPress={() => onColorChange(hex)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: selectedColor === hex }}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 14,
+              backgroundColor: hex,
+              borderWidth: selectedColor === hex ? 2.5 : 1,
+              borderColor: selectedColor === hex ? colors.accent.primary : colors.border.default,
+            }}
+          />
+        ))}
+      </View>
+
+      <SectionLabel label="Text Style" />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: D.spacing.sm }}>
+        {TEXT_PRESETS.map((preset) => {
+          const selected = preset.id === selectedId;
+          const hasShadow = preset.textEffect === 'Shadow';
+          return (
+            <Pressable
+              key={preset.id}
+              onPress={() => onSelect(preset.id)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              style={{
+                width: 130,
+                borderRadius: 12,
+                overflow: 'hidden',
+                borderWidth: selected ? 2.5 : 1.5,
+                borderColor: selected ? colors.accent.primary : colors.border.default,
+              }}
+            >
+              <View
+                style={{
+                  backgroundColor: previewBg,
+                  paddingHorizontal: 10,
+                  paddingVertical: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: 88,
+                }}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: selectedColor,
+                    fontSize: 10,
+                    fontWeight: '500',
+                    marginBottom: 8,
+                    opacity: 0.75,
+                    ...(hasShadow
+                      ? {
+                          textShadowColor: 'rgba(0,0,0,0.8)',
+                          textShadowOffset: { width: 1, height: 1 },
+                          textShadowRadius: 2,
+                        }
+                      : {}),
+                  }}
+                >
+                  Product Name
+                </Text>
+                <View
+                  style={
+                    preset.priceBadge === 'Pill'
+                      ? {
+                          backgroundColor: selectedColor + '25',
+                          paddingHorizontal: 10,
+                          paddingVertical: 3,
+                          borderRadius: 20,
+                          borderWidth: 1,
+                          borderColor: selectedColor + '88',
+                        }
+                      : undefined
+                  }
+                >
+                  <Text
+                    style={{
+                      color: selectedColor,
+                      fontSize: 24,
+                      fontWeight: '900',
+                      letterSpacing: -0.5,
+                      ...(hasShadow
+                        ? {
+                            textShadowColor: 'rgba(0,0,0,0.8)',
+                            textShadowOffset: { width: 1.5, height: 1.5 },
+                            textShadowRadius: 2,
+                          }
+                        : {}),
+                    }}
+                  >
+                    $19.99
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={{
+                  backgroundColor: colors.bg.surface,
+                  paddingVertical: 6,
+                  alignItems: 'center',
+                }}
+              >
+                <Text
+                  style={{
+                    color: selected ? colors.accent.primary : colors.text.secondary,
+                    fontSize: D.fontSize.xs,
+                    fontWeight: '600',
+                  }}
+                >
+                  {preset.label}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+    </>
+  );
+}
+
 // ─── Static data ───────────────────────────────────────────────────────────────
 const LAYOUT_OPTIONS = [
-  { value: 'Grid', label: 'Grid' },
   { value: 'Showcase', label: 'Showcase' },
-  { value: 'Minimal', label: 'Minimal' },
   { value: 'Story', label: 'Story' },
 ];
 const COLOR_OPTIONS = [
@@ -371,12 +600,24 @@ function GenerateButton({
   );
 }
 
+function downloadImage(result: GenerateImageResponse, filename: string) {
+  if (Platform.OS !== 'web') return;
+  const ext = result.mimeType.split('/')[1] ?? 'png';
+  const a = document.createElement('a');
+  a.href = `data:${result.mimeType};base64,${result.imageBase64}`;
+  a.download = `${filename}.${ext}`;
+  a.click();
+}
+
 function ResultPreviewPanel({
   result,
   generating,
   error,
   emptyTitle,
   emptyHint,
+  filename,
+  onKeep,
+  isKept,
   colors,
   styles,
 }: {
@@ -385,6 +626,9 @@ function ResultPreviewPanel({
   error: string | null;
   emptyTitle: string;
   emptyHint: string;
+  filename: string;
+  onKeep?: () => void;
+  isKept?: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
 }) {
@@ -417,6 +661,38 @@ function ResultPreviewPanel({
           resizeMode="contain"
           accessibilityLabel="Generated image"
         />
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          {onKeep && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.downloadBtn,
+                { backgroundColor: isKept ? colors.accent.dim : colors.accent.primary },
+                pressed && { opacity: 0.75 },
+              ]}
+              onPress={isKept ? undefined : onKeep}
+              accessibilityRole="button"
+              accessibilityLabel={isKept ? 'Image saved' : 'Keep image'}
+            >
+              <Ionicons
+                name={isKept ? 'checkmark-circle' : 'bookmark-outline'}
+                size={15}
+                color="#fff"
+              />
+              <Text style={styles.downloadBtnText}>{isKept ? 'Saved' : 'Keep'}</Text>
+            </Pressable>
+          )}
+          {isWeb && (
+            <Pressable
+              style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.75 }]}
+              onPress={() => downloadImage(result, filename)}
+              accessibilityRole="button"
+              accessibilityLabel="Download image"
+            >
+              <Ionicons name="download-outline" size={15} color="#fff" />
+              <Text style={styles.downloadBtnText}>Download</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
     );
   }
@@ -478,12 +754,517 @@ function ProductCard({
   );
 }
 
+const DESKTOP_INLINE_LIMIT = 4;
+
+function ChooseProductsSection({
+  subtitle,
+  isDesktop,
+  products,
+  loadingProducts,
+  selectedCount,
+  selected,
+  toggleProduct,
+  colors,
+  styles,
+}: {
+  subtitle: string;
+  isDesktop: boolean;
+  products: ProductItem[];
+  loadingProducts: boolean;
+  selectedCount: number;
+  selected: Set<string>;
+  toggleProduct: (id: string) => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const { width: screenWidth } = useWindowDimensions();
+
+  const closePicker = () => {
+    setSearch('');
+    setPickerOpen(false);
+  };
+
+  const filtered = search.trim()
+    ? products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+    : products;
+
+  // Sizing
+  const DIALOG_MAX = 860;
+  const dialogWidth = Math.min(screenWidth - 96, DIALOG_MAX);
+  const MODAL_COLS_DESKTOP = 4;
+  const MODAL_COLS_MOBILE = 2;
+  const modalCols = isDesktop ? MODAL_COLS_DESKTOP : MODAL_COLS_MOBILE;
+  const modalPad = D.spacing.lg;
+  const modalGap = D.spacing.sm;
+  const modalThumbWidth = isDesktop
+    ? Math.floor(
+        (dialogWidth - modalPad * 2 - modalGap * (MODAL_COLS_DESKTOP - 1)) / MODAL_COLS_DESKTOP
+      )
+    : Math.floor(
+        (screenWidth - modalPad * 2 - modalGap * (MODAL_COLS_MOBILE - 1)) / MODAL_COLS_MOBILE
+      );
+
+  // Desktop inline card width: 4 cards in available panel space
+  const panelInner = screenWidth - SIDEBAR_WIDTH - 1 - 64;
+  const inlineCardWidth = Math.floor(
+    (panelInner - D.spacing.sm * (DESKTOP_INLINE_LIMIT - 1)) / DESKTOP_INLINE_LIMIT
+  );
+
+  const hasMore = products.length > DESKTOP_INLINE_LIMIT;
+  const inlineProducts = products.slice(0, DESKTOP_INLINE_LIMIT);
+  const selectedProducts = products.filter((p) => selected.has(p.id));
+
+  // ── Shared modal content ──────────────────────────────────────────────────────
+  const modalBody = (
+    <>
+      {/* Search */}
+      <View style={{ paddingHorizontal: modalPad, paddingBottom: D.spacing.sm }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: colors.bg.input,
+            borderRadius: D.radius.md,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            paddingHorizontal: D.spacing.md,
+            gap: D.spacing.sm,
+            height: 40,
+          }}
+        >
+          <Ionicons name="search-outline" size={16} color={colors.text.muted} />
+          <TextInput
+            style={
+              {
+                flex: 1,
+                color: colors.text.primary,
+                fontSize: D.fontSize.sm,
+                outline: 'none',
+              } as any
+            }
+            placeholder="Search products…"
+            placeholderTextColor={colors.text.muted}
+            value={search}
+            onChangeText={setSearch}
+          />
+          {search.length > 0 && (
+            <Pressable onPress={() => setSearch('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={16} color={colors.text.muted} />
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      {/* Grid */}
+      {filtered.length === 0 ? (
+        <View style={{ alignItems: 'center', paddingVertical: D.spacing['2xl'] }}>
+          <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
+          <Text
+            style={{ color: colors.text.muted, marginTop: D.spacing.sm, fontSize: D.fontSize.sm }}
+          >
+            {search ? 'No products match your search.' : 'No products yet.'}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          numColumns={modalCols}
+          key={modalCols}
+          contentContainerStyle={{ padding: modalPad, gap: modalGap }}
+          columnWrapperStyle={{ gap: modalGap }}
+          renderItem={({ item }) => {
+            const isSel = selected.has(item.id);
+            return (
+              <Pressable
+                style={({ pressed }) => ({
+                  width: modalThumbWidth,
+                  borderRadius: D.radius.md,
+                  overflow: 'hidden',
+                  borderWidth: 1.5,
+                  borderColor: isSel ? colors.accent.primary : colors.border.subtle,
+                  backgroundColor: isSel ? colors.accent.dim : colors.bg.base,
+                  opacity: pressed ? 0.85 : 1,
+                })}
+                onPress={() => toggleProduct(item.id)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: isSel }}
+              >
+                <View style={{ width: '100%', aspectRatio: 1, position: 'relative' }}>
+                  {item.imageBase64 ? (
+                    <Image
+                      source={{ uri: `data:image/jpeg;base64,${item.imageBase64}` }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        flex: 1,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: colors.bg.surface,
+                      }}
+                    >
+                      <Ionicons name="image-outline" size={24} color={colors.text.muted} />
+                    </View>
+                  )}
+                  {isSel && (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        top: D.spacing.xs,
+                        right: D.spacing.xs,
+                        backgroundColor: 'rgba(255,255,255,0.92)',
+                        borderRadius: D.radius.pill,
+                      }}
+                    >
+                      <Ionicons name="checkmark-circle" size={20} color={colors.accent.primary} />
+                    </View>
+                  )}
+                </View>
+                <View style={{ padding: D.spacing.sm }}>
+                  <Text
+                    style={{
+                      fontSize: D.fontSize.sm,
+                      fontWeight: D.fontWeight.medium,
+                      color: colors.text.primary,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {item.name}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: D.fontSize.xs,
+                      color: colors.accent.primary,
+                      fontWeight: D.fontWeight.semibold,
+                      marginTop: 2,
+                    }}
+                  >
+                    ${item.price.toFixed(2)}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          }}
+        />
+      )}
+
+      {/* Done bar */}
+      <View
+        style={{
+          borderTopWidth: 1,
+          borderTopColor: colors.border.subtle,
+          paddingHorizontal: modalPad,
+          paddingVertical: D.spacing.md,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: colors.bg.surface,
+        }}
+      >
+        <Text style={{ fontSize: D.fontSize.sm, color: colors.text.secondary }}>
+          {selectedCount > 0
+            ? `${selectedCount} product${selectedCount !== 1 ? 's' : ''} selected`
+            : 'Tap products to select'}
+        </Text>
+        <Pressable
+          style={({ pressed }) => ({
+            backgroundColor: colors.accent.primary,
+            borderRadius: D.radius.md,
+            paddingHorizontal: D.spacing.lg,
+            paddingVertical: D.spacing.sm,
+            opacity: pressed ? 0.85 : 1,
+          })}
+          onPress={closePicker}
+          accessibilityRole="button"
+        >
+          <Text
+            style={{ color: '#fff', fontSize: D.fontSize.sm, fontWeight: D.fontWeight.semibold }}
+          >
+            {selectedCount > 0 ? `Done (${selectedCount})` : 'Done'}
+          </Text>
+        </Pressable>
+      </View>
+    </>
+  );
+
+  const picker = (
+    <Modal
+      visible={pickerOpen}
+      transparent={isDesktop}
+      animationType={isDesktop ? 'fade' : 'slide'}
+      onRequestClose={closePicker}
+    >
+      {isDesktop ? (
+        <Pressable style={styles.pickerOverlay} onPress={closePicker}>
+          <Pressable
+            style={[styles.pickerDialog, { maxHeight: '88%' as DimensionValue }]}
+            onPress={() => {}}
+          >
+            <View style={styles.pickerHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pickerTitle}>Choose Products</Text>
+                <Text style={styles.pickerSubtitle}>{subtitle}</Text>
+              </View>
+              {selectedCount > 0 && (
+                <View style={styles.countBadge}>
+                  <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+                </View>
+              )}
+              <Pressable
+                style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
+                onPress={closePicker}
+              >
+                <Ionicons name="close" size={18} color={colors.text.secondary} />
+              </Pressable>
+            </View>
+            {modalBody}
+          </Pressable>
+        </Pressable>
+      ) : (
+        <View style={styles.pickerFullScreen}>
+          <View style={styles.pickerHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pickerTitle}>Choose Products</Text>
+            </View>
+            {selectedCount > 0 && (
+              <View style={[styles.countBadge, { marginRight: D.spacing.sm }]}>
+                <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+              </View>
+            )}
+            <Pressable
+              style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
+              onPress={closePicker}
+            >
+              <Ionicons name="close" size={18} color={colors.text.secondary} />
+            </Pressable>
+          </View>
+          {modalBody}
+        </View>
+      )}
+    </Modal>
+  );
+
+  // ── Desktop layout ────────────────────────────────────────────────────────────
+  if (isDesktop) {
+    return (
+      <View style={styles.desktopSection}>
+        <View style={styles.desktopSectionHeader}>
+          <View>
+            <Text style={styles.desktopSectionTitle}>Choose Products</Text>
+            <Text style={styles.desktopSectionSub}>{subtitle}</Text>
+          </View>
+          {selectedCount > 0 && (
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+            </View>
+          )}
+        </View>
+
+        {loadingProducts ? (
+          <ActivityIndicator
+            size="small"
+            color={colors.accent.primary}
+            style={{ marginVertical: D.spacing.lg }}
+          />
+        ) : products.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
+            <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
+          </View>
+        ) : (
+          <>
+            <View style={{ flexDirection: 'row', gap: D.spacing.sm }}>
+              {inlineProducts.map((p) => (
+                <ProductCard
+                  key={p.id}
+                  product={p}
+                  selected={selected.has(p.id)}
+                  onToggle={() => toggleProduct(p.id)}
+                  cardWidth={inlineCardWidth}
+                  colors={colors}
+                  styles={styles}
+                />
+              ))}
+            </View>
+
+            <Pressable
+              style={({ pressed }) => ({
+                marginTop: D.spacing.md,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: D.spacing.xs,
+                alignSelf: 'flex-start',
+                paddingHorizontal: D.spacing.md,
+                paddingVertical: D.spacing.sm,
+                borderRadius: D.radius.md,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: pressed ? colors.bg.elevated : colors.bg.surface,
+              })}
+              onPress={() => setPickerOpen(true)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="grid-outline" size={14} color={colors.accent.primary} />
+              <Text
+                style={{
+                  fontSize: D.fontSize.sm,
+                  color: colors.accent.primary,
+                  fontWeight: D.fontWeight.medium,
+                }}
+              >
+                {hasMore ? `Browse all ${products.length} products` : 'Browse products'}
+              </Text>
+              <Ionicons name="chevron-forward" size={13} color={colors.accent.primary} />
+            </Pressable>
+          </>
+        )}
+
+        {picker}
+      </View>
+    );
+  }
+
+  // ── Mobile layout ─────────────────────────────────────────────────────────────
+  return (
+    <View style={styles.mobileSection}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Choose Products</Text>
+        {selectedCount > 0 && (
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+          </View>
+        )}
+      </View>
+
+      {loadingProducts ? (
+        <ActivityIndicator
+          size="small"
+          color={colors.accent.primary}
+          style={{ marginVertical: D.spacing.lg }}
+        />
+      ) : products.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
+          <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
+        </View>
+      ) : (
+        <Pressable
+          style={({ pressed }) => ({
+            borderRadius: D.radius.md,
+            borderWidth: 1.5,
+            borderColor: selectedCount > 0 ? colors.accent.primary : colors.border.default,
+            backgroundColor: pressed ? colors.bg.elevated : colors.bg.surface,
+            overflow: 'hidden',
+          })}
+          onPress={() => setPickerOpen(true)}
+          accessibilityRole="button"
+        >
+          {/* Selected thumbnails strip */}
+          {selectedProducts.length > 0 && (
+            <View
+              style={{
+                flexDirection: 'row',
+                gap: 2,
+                height: 64,
+                backgroundColor: colors.bg.base,
+              }}
+            >
+              {selectedProducts.slice(0, 5).map((p, i) => (
+                <View key={p.id} style={{ flex: 1, position: 'relative' }}>
+                  {p.imageBase64 ? (
+                    <Image
+                      source={{ uri: `data:image/jpeg;base64,${p.imageBase64}` }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        flex: 1,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: colors.bg.elevated,
+                      }}
+                    >
+                      <Ionicons name="image-outline" size={16} color={colors.text.muted} />
+                    </View>
+                  )}
+                  {i === 4 && selectedProducts.length > 5 && (
+                    <View
+                      style={{
+                        ...StyleSheet.absoluteFillObject,
+                        backgroundColor: 'rgba(0,0,0,0.55)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: '#fff',
+                          fontSize: D.fontSize.sm,
+                          fontWeight: D.fontWeight.semibold,
+                        }}
+                      >
+                        +{selectedProducts.length - 4}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Trigger row */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: D.spacing.md,
+              paddingVertical: D.spacing.md,
+              gap: D.spacing.sm,
+            }}
+          >
+            <Ionicons
+              name={selectedCount > 0 ? 'checkmark-circle-outline' : 'pricetag-outline'}
+              size={18}
+              color={selectedCount > 0 ? colors.accent.primary : colors.text.muted}
+            />
+            <Text
+              style={{
+                flex: 1,
+                fontSize: D.fontSize.sm,
+                color: selectedCount > 0 ? colors.text.primary : colors.text.muted,
+                fontWeight: selectedCount > 0 ? D.fontWeight.medium : D.fontWeight.regular,
+              }}
+            >
+              {selectedCount > 0
+                ? `${selectedCount} of ${products.length} product${products.length !== 1 ? 's' : ''} selected`
+                : `Choose from ${products.length} product${products.length !== 1 ? 's' : ''}`}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.text.muted} />
+          </View>
+        </Pressable>
+      )}
+
+      {picker}
+    </View>
+  );
+}
+
 // ─── Main screen ───────────────────────────────────────────────────────────────
 export default function StudioScreen() {
   const { colors } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
   const isDesktop = isWeb && screenWidth >= DESKTOP_BREAKPOINT;
-  const styles = useMemo(() => makeStyles(colors, isDesktop), [colors, isDesktop]);
+  const styles = useMemo(
+    () => makeStyles(colors, isDesktop, screenWidth),
+    [colors, isDesktop, screenWidth]
+  );
 
   // ── Tab state ────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<StudioTab>('catalog');
@@ -504,17 +1285,100 @@ export default function StudioScreen() {
     outputRange: ['1%', '34.33%', '67.66%'],
   });
 
+  // ── Catalog mode state ───────────────────────────────────────────────────────
+  const [catalogMode, setCatalogMode] = useState<CatalogMode>('generate');
+  const catalogModeAnim = useRef(new Animated.Value(0)).current;
+
+  function switchCatalogMode(mode: CatalogMode) {
+    Animated.timing(catalogModeAnim, {
+      toValue: mode === 'generate' ? 0 : 1,
+      duration: D.duration.normal,
+      useNativeDriver: false,
+    }).start();
+    setCatalogMode(mode);
+    setCatalogResult(null);
+    setCatalogError(null);
+    setWallpaperOnResult(null);
+    setWallpaperOnError(null);
+  }
+
+  const catalogModeIndicatorLeft = catalogModeAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['1%', '51%'],
+  });
+
+  // ── Wallpaper state ──────────────────────────────────────────────────────────
+  const [wallpaperStage, setWallpaperStage] = useState<WallpaperStage>('none');
+  const [wallpaperBase64, setWallpaperBase64] = useState<string | null>(null);
+  const [wallpaperPreview, setWallpaperPreview] = useState<string | null>(null);
+  const [wallpaperPrompt, setWallpaperPrompt] = useState('');
+  const [wallpaperError, setWallpaperError] = useState<string | null>(null);
+  // Generate wallpaper modal
+  const [wallpaperGenModalVisible, setWallpaperGenModalVisible] = useState(false);
+  const [wallpaperGenModalStage, setWallpaperGenModalStage] = useState<'input' | 'result'>('input');
+  const [wallpaperGenFormat, setWallpaperGenFormat] = useState('9:16');
+  const [wallpaperGenIncludeLogo, setWallpaperGenIncludeLogo] = useState(false);
+  const [wallpaperGenBrandFields, setWallpaperGenBrandFields] = useState<string[]>([]);
+  const [wallpaperGenResult, setWallpaperGenResult] = useState<GenerateImageResponse | null>(null);
+  const [wallpaperGenKept, setWallpaperGenKept] = useState(false);
+  const [wallpaperGenGenerating, setWallpaperGenGenerating] = useState(false);
+  const [wallpaperOnGenerating, setWallpaperOnGenerating] = useState(false);
+  const [wallpaperOnResult, setWallpaperOnResult] = useState<GenerateImageResponse | null>(null);
+  const [wallpaperOnKept, setWallpaperOnKept] = useState(false);
+  const [wallpaperOnError, setWallpaperOnError] = useState<string | null>(null);
+
+  // ── Placement zone ───────────────────────────────────────────────────────────
+  const DEFAULT_PLACEMENT_ZONE: PlacementZone = { x: 0, y: 0.15, width: 1.0, height: 0.7 };
+  const [placementZone, setPlacementZone] = useState<PlacementZone>(DEFAULT_PLACEMENT_ZONE);
+  // Track the format of the selected wallpaper to warn on mismatch
+  const [wallpaperAspectRatio, setWallpaperAspectRatio] = useState<number>(1);
+
+  useEffect(() => {
+    if (!wallpaperBase64) {
+      setWallpaperAspectRatio(1);
+      return;
+    }
+    const uri = `data:image/jpeg;base64,${wallpaperBase64}`;
+    Image.getSize(
+      uri,
+      (w, h) => setWallpaperAspectRatio(h > 0 ? w / h : 1),
+      () => setWallpaperAspectRatio(1)
+    );
+  }, [wallpaperBase64]);
+
+  // ── Wallpaper picker (choose from saved wallpapers) ──────────────────────────
+  const [wallpaperPickerVisible, setWallpaperPickerVisible] = useState(false);
+  const [wallpaperPickerItems, setWallpaperPickerItems] = useState<GalleryItem[]>([]);
+  const [wallpaperPickerLoading, setWallpaperPickerLoading] = useState(false);
+
+  // ── Text style state ─────────────────────────────────────────────────────────
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('modern-shadow');
+  const [selectedColor, setSelectedColor] = useState<string>('#F59E0B');
+  const textStyle = useMemo<TextStyleOptions>(() => {
+    const preset = TEXT_PRESETS.find((p) => p.id === selectedPresetId) ?? TEXT_PRESETS[0];
+    return {
+      fontFamily: preset.fontFamily,
+      fontSize: 'Large',
+      nameColor: selectedColor,
+      priceColor: selectedColor,
+      colorMode: 'Solid',
+      textEffect: preset.textEffect,
+      priceBadge: preset.priceBadge,
+    };
+  }, [selectedPresetId, selectedColor]);
+
   // ── Catalog state ────────────────────────────────────────────────────────────
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [layout, setLayout] = useState('Grid');
+  const [layout, setLayout] = useState('Showcase');
   const [colorTheme, setColorTheme] = useState('Brand Colors');
   const [catalogFormat, setCatalogFormat] = useState('Square');
   const [showPrices, setShowPrices] = useState(true);
   const [catalogGenerating, setCatalogGenerating] = useState(false);
   const [catalogResult, setCatalogResult] = useState<GenerateImageResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogKept, setCatalogKept] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -555,6 +1419,7 @@ export default function StudioScreen() {
     setCatalogGenerating(true);
     setCatalogError(null);
     setCatalogResult(null);
+    setCatalogKept(false);
     try {
       setCatalogResult(
         await generateCatalogImage({
@@ -577,6 +1442,104 @@ export default function StudioScreen() {
     }
   }
 
+  async function handleGenerateWallpaper() {
+    setWallpaperGenGenerating(true);
+    setWallpaperError(null);
+    try {
+      const res = await generateWallpaper({
+        prompt: wallpaperPrompt.trim(),
+        format: wallpaperGenFormat,
+        includeLogo: wallpaperGenIncludeLogo,
+        brandContextFields: wallpaperGenBrandFields,
+      });
+      setWallpaperGenResult(res);
+      setWallpaperGenKept(false);
+      setWallpaperGenModalStage('result');
+    } catch (err) {
+      setWallpaperError(err instanceof Error ? err.message : 'Failed to generate wallpaper.');
+    } finally {
+      setWallpaperGenGenerating(false);
+    }
+  }
+
+  function handleCloseWallpaperGenModal() {
+    if (wallpaperGenGenerating) return;
+    setWallpaperGenModalVisible(false);
+    setWallpaperGenModalStage('input');
+    setWallpaperGenResult(null);
+    setWallpaperGenKept(false);
+    setWallpaperError(null);
+    setWallpaperPrompt('');
+  }
+
+  function toggleWallpaperGenBrandField(key: string) {
+    setWallpaperGenBrandFields((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }
+
+  async function handleImportWallpaper() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      base64: true,
+      quality: 0.85,
+    });
+    if (!result.canceled && result.assets[0]?.base64) {
+      setWallpaperBase64(result.assets[0].base64);
+      setWallpaperStage('confirmed');
+      setWallpaperOnResult(null);
+      setWallpaperOnError(null);
+      setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+    }
+  }
+
+  async function handleWallpaperOnGenerate() {
+    const chosen = products.filter((p) => selected.has(p.id));
+    if (!chosen.length || !wallpaperBase64) return;
+    setWallpaperOnGenerating(true);
+    setWallpaperOnError(null);
+    setWallpaperOnResult(null);
+    setWallpaperOnKept(false);
+    try {
+      setWallpaperOnResult(
+        await generateCatalogOnWallpaper({
+          products: chosen.map((p) => ({
+            name: p.name,
+            price: p.price,
+            imageBase64: p.imageBase64,
+          })),
+          wallpaperBase64,
+          layout,
+          showPrices,
+          textStyle,
+          placementZone,
+        })
+      );
+    } catch (err) {
+      setWallpaperOnError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setWallpaperOnGenerating(false);
+    }
+  }
+
+  function openWallpaperPicker() {
+    setWallpaperPickerVisible(true);
+    setWallpaperPickerLoading(true);
+    fetchWallpapers()
+      .then(setWallpaperPickerItems)
+      .catch(() => setWallpaperPickerItems([]))
+      .finally(() => setWallpaperPickerLoading(false));
+  }
+
+  function pickWallpaperFromLibrary(item: GalleryItem) {
+    setWallpaperBase64(item.imageBase64);
+    setWallpaperStage('confirmed');
+    setWallpaperOnResult(null);
+    setWallpaperOnError(null);
+    setWallpaperPickerVisible(false);
+    setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+  }
+
   // ── Announcements state ──────────────────────────────────────────────────────
   const [postType, setPostType] = useState<PostType>('Announcement');
   const [content, setContent] = useState('');
@@ -585,6 +1548,7 @@ export default function StudioScreen() {
   const [annoGenerating, setAnnoGenerating] = useState(false);
   const [annoResult, setAnnoResult] = useState<GenerateImageResponse | null>(null);
   const [annoError, setAnnoError] = useState<string | null>(null);
+  const [annoKept, setAnnoKept] = useState(false);
 
   // ── Brand context state ──────────────────────────────────────────────────────
   const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
@@ -613,6 +1577,7 @@ export default function StudioScreen() {
     setAnnoGenerating(true);
     setAnnoError(null);
     setAnnoResult(null);
+    setAnnoKept(false);
     try {
       setAnnoResult(
         await generateAnnouncementImage({
@@ -641,14 +1606,6 @@ export default function StudioScreen() {
   const currentPostType = POST_TYPES.find((t) => t.type === postType)!;
 
   // ── Product card width ───────────────────────────────────────────────────────
-  // Desktop right panel inner width ≈ screenWidth - SIDEBAR_WIDTH - 1 (divider) - 64 (padding)
-  // Mobile: 2 cols via '47%'
-  const desktopPanelInner = screenWidth - SIDEBAR_WIDTH - 1 - 64;
-  const desktopCardCols = desktopPanelInner > 600 ? 5 : desktopPanelInner > 420 ? 4 : 3;
-  const desktopCardWidth = Math.floor(
-    (desktopPanelInner - D.spacing.sm * (desktopCardCols - 1)) / desktopCardCols
-  );
-  const productCardWidth: DimensionValue = isDesktop ? desktopCardWidth : '47%';
 
   // ────────────────────────────────────────────────────────────────────────────
   // DESKTOP LAYOUT
@@ -657,37 +1614,61 @@ export default function StudioScreen() {
     // ── Sidebar options per tab ──────────────────────────────────────────────
     const sidebarOptions =
       activeTab === 'catalog' ? (
-        <>
-          <SectionLabel label="Generation Options" />
-          <OptionLabel label="Layout" />
-          <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
-          <OptionLabel label="Color Theme" />
-          <SidebarOptionGroup
-            options={COLOR_OPTIONS}
-            selected={colorTheme}
-            onSelect={setColorTheme}
-          />
-          <OptionLabel label="Format" />
-          <SidebarOptionGroup
-            options={FORMAT_OPTIONS}
-            selected={catalogFormat}
-            onSelect={setCatalogFormat}
-          />
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>Show Prices</Text>
-            <Switch
-              value={showPrices}
-              onValueChange={setShowPrices}
-              thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
-              trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+        catalogMode === 'generate' ? (
+          <>
+            <SectionLabel label="Generation Options" />
+            <OptionLabel label="Layout" />
+            <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
+            <OptionLabel label="Color Theme" />
+            <SidebarOptionGroup
+              options={COLOR_OPTIONS}
+              selected={colorTheme}
+              onSelect={setColorTheme}
             />
-          </View>
-          <BrandContextSection
-            items={contextItems}
-            selected={catalogContextFields}
-            onToggle={toggleCatalogField}
-          />
-        </>
+            <OptionLabel label="Format" />
+            <SidebarOptionGroup
+              options={FORMAT_OPTIONS}
+              selected={catalogFormat}
+              onSelect={setCatalogFormat}
+            />
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Show Prices</Text>
+              <Switch
+                value={showPrices}
+                onValueChange={setShowPrices}
+                thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            <BrandContextSection
+              items={contextItems}
+              selected={catalogContextFields}
+              onToggle={toggleCatalogField}
+            />
+          </>
+        ) : (
+          <>
+            <SectionLabel label="Placement Options" />
+            <OptionLabel label="Layout" />
+            <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Show Prices</Text>
+              <Switch
+                value={showPrices}
+                onValueChange={setShowPrices}
+                thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            <TextStylePresetPicker
+              selectedId={selectedPresetId}
+              onSelect={setSelectedPresetId}
+              selectedColor={selectedColor}
+              onColorChange={setSelectedColor}
+              colors={colors}
+            />
+          </>
+        )
       ) : activeTab === 'announcements' ? (
         <>
           <SectionLabel label="Style Options" />
@@ -709,12 +1690,27 @@ export default function StudioScreen() {
 
     const sidebarFooter =
       activeTab === 'catalog' ? (
-        <GenerateButton
-          loading={catalogGenerating}
-          disabled={selectedCount === 0}
-          label={selectedCount === 0 ? 'Select products first' : `Generate Catalog`}
-          onPress={handleCatalogGenerate}
-        />
+        catalogMode === 'generate' ? (
+          <GenerateButton
+            loading={catalogGenerating}
+            disabled={selectedCount === 0}
+            label={selectedCount === 0 ? 'Select products first' : 'Generate Catalog'}
+            onPress={handleCatalogGenerate}
+          />
+        ) : (
+          <GenerateButton
+            loading={wallpaperOnGenerating}
+            disabled={selectedCount === 0 || wallpaperBase64 === null}
+            label={
+              wallpaperBase64 === null
+                ? 'Pick a wallpaper first'
+                : selectedCount === 0
+                  ? 'Select products first'
+                  : 'Place on Wallpaper'
+            }
+            onPress={handleWallpaperOnGenerate}
+          />
+        )
       ) : activeTab === 'announcements' ? (
         <GenerateButton
           loading={annoGenerating}
@@ -728,66 +1724,334 @@ export default function StudioScreen() {
     const rightContent =
       activeTab === 'catalog' ? (
         <>
-          {/* Product picker */}
+          {/* Catalog mode sub-tab bar */}
           <View style={styles.desktopSection}>
-            <View style={styles.desktopSectionHeader}>
-              <View>
-                <Text style={styles.desktopSectionTitle}>Choose Products</Text>
-                <Text style={styles.desktopSectionSub}>
-                  Select products to include in your catalog
-                </Text>
-              </View>
-              {selectedCount > 0 && (
-                <View style={styles.countBadge}>
-                  <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
-                </View>
-              )}
-            </View>
-
-            {loadingProducts ? (
-              <ActivityIndicator
-                size="small"
-                color={colors.accent.primary}
-                style={{ marginVertical: D.spacing.lg }}
+            <View style={styles.segmentTrack}>
+              <Animated.View
+                style={[styles.segmentIndicator, { width: '48%', left: catalogModeIndicatorLeft }]}
               />
-            ) : products.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-                <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
-              </View>
-            ) : (
-              <View style={styles.productGrid}>
-                {products.map((p) => (
-                  <ProductCard
-                    key={p.id}
-                    product={p}
-                    selected={selected.has(p.id)}
-                    onToggle={() => toggleProduct(p.id)}
-                    cardWidth={productCardWidth}
-                    colors={colors}
-                    styles={styles}
-                  />
-                ))}
-              </View>
-            )}
+              {(['generate', 'on-wallpaper'] as CatalogMode[]).map((mode) => {
+                const isActive = catalogMode === mode;
+                return (
+                  <Pressable
+                    key={mode}
+                    style={styles.segmentButton}
+                    onPress={() => switchCatalogMode(mode)}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons
+                      name={
+                        mode === 'generate'
+                          ? isActive
+                            ? 'sparkles'
+                            : 'sparkles-outline'
+                          : isActive
+                            ? 'image'
+                            : 'image-outline'
+                      }
+                      size={14}
+                      color={isActive ? '#fff' : colors.text.secondary}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}>
+                      {mode === 'generate' ? 'Generate' : 'On Wallpaper'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
-          {/* Preview */}
-          <View style={styles.desktopSection}>
-            <Text style={styles.desktopSectionTitle}>Preview</Text>
-            <Text style={styles.desktopSectionSub}>Your generated catalog will appear here</Text>
-            <View style={{ marginTop: D.spacing.md }}>
-              <ResultPreviewPanel
-                result={catalogResult}
-                generating={catalogGenerating}
-                error={catalogError}
-                emptyTitle="Your catalog will appear here"
-                emptyHint="Select products on the left, configure options, then hit Generate."
+          {catalogMode === 'generate' ? (
+            <>
+              {/* Product picker */}
+              <ChooseProductsSection
+                subtitle="Select products to include in your catalog"
+                isDesktop
+                products={products}
+                loadingProducts={loadingProducts}
+                selectedCount={selectedCount}
+                selected={selected}
+                toggleProduct={toggleProduct}
                 colors={colors}
                 styles={styles}
               />
-            </View>
-          </View>
+
+              {/* Preview */}
+              <View style={styles.desktopSection}>
+                <Text style={styles.desktopSectionTitle}>Preview</Text>
+                <Text style={styles.desktopSectionSub}>
+                  Your generated catalog will appear here
+                </Text>
+                <View style={{ marginTop: D.spacing.md }}>
+                  <ResultPreviewPanel
+                    result={catalogResult}
+                    generating={catalogGenerating}
+                    error={catalogError}
+                    emptyTitle="Your catalog will appear here"
+                    emptyHint="Select products on the left, configure options, then hit Generate."
+                    filename="catalog"
+                    onKeep={async () => {
+                      if (!catalogResult) return;
+                      try {
+                        await saveToGallery(
+                          catalogResult.imageBase64,
+                          catalogResult.mimeType,
+                          'catalog'
+                        );
+                        setCatalogKept(true);
+                      } catch (err) {
+                        console.error('Failed to save catalog:', err);
+                      }
+                    }}
+                    isKept={catalogKept}
+                    colors={colors}
+                    styles={styles}
+                  />
+                </View>
+              </View>
+            </>
+          ) : (
+            <>
+              {/* Product picker */}
+              <ChooseProductsSection
+                subtitle="Select products to place on your wallpaper"
+                isDesktop
+                products={products}
+                loadingProducts={loadingProducts}
+                selectedCount={selectedCount}
+                selected={selected}
+                toggleProduct={toggleProduct}
+                colors={colors}
+                styles={styles}
+              />
+
+              {/* Wallpaper picker */}
+              <View style={styles.desktopSection}>
+                <Text style={styles.desktopSectionTitle}>Background Wallpaper</Text>
+                <Text style={styles.desktopSectionSub}>
+                  Import from device or generate with AI — your wallpaper stays unchanged
+                </Text>
+
+                <View style={[styles.wallpaperActionRow, { marginTop: D.spacing.md }]}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.wallpaperActionBtn,
+                      pressed && { opacity: 0.75 },
+                    ]}
+                    onPress={handleImportWallpaper}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="image-outline" size={16} color={colors.accent.primary} />
+                    <Text style={styles.wallpaperActionText}>Import</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.wallpaperActionBtn,
+                      pressed && { opacity: 0.75 },
+                    ]}
+                    onPress={() => setWallpaperGenModalVisible(true)}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="sparkles-outline" size={16} color={colors.accent.primary} />
+                    <Text style={styles.wallpaperActionText}>Generate</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.wallpaperActionBtn,
+                      pressed && { opacity: 0.75 },
+                    ]}
+                    onPress={openWallpaperPicker}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="albums-outline" size={16} color={colors.accent.primary} />
+                    <Text style={styles.wallpaperActionText}>My Wallpapers</Text>
+                  </Pressable>
+                </View>
+
+                {wallpaperError && (
+                  <Text style={[styles.errorText, { marginTop: D.spacing.sm }]}>
+                    {wallpaperError}
+                  </Text>
+                )}
+
+                {/* Preview candidate — keep or discard */}
+                {wallpaperStage === 'preview' && wallpaperPreview && (
+                  <View style={styles.wallpaperPreviewBox}>
+                    <Image
+                      source={{
+                        uri: wallpaperPreview.startsWith('data:')
+                          ? wallpaperPreview
+                          : `data:image/png;base64,${wallpaperPreview}`,
+                      }}
+                      style={styles.wallpaperPreviewImage}
+                      resizeMode="cover"
+                      accessibilityLabel="Generated wallpaper preview"
+                    />
+                    <View style={styles.wallpaperPreviewActions}>
+                      <Pressable
+                        style={[
+                          styles.wallpaperConfirmBtn,
+                          { backgroundColor: colors.accent.primary },
+                        ]}
+                        onPress={async () => {
+                          setWallpaperBase64(wallpaperPreview);
+                          setWallpaperStage('confirmed');
+                          setWallpaperPreview(null);
+                          setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+                          try {
+                            const b64 = wallpaperPreview.startsWith('data:')
+                              ? wallpaperPreview.split(',')[1]
+                              : wallpaperPreview;
+                            await saveToGallery(b64, 'image/png', 'wallpaper');
+                          } catch (err) {
+                            console.error('Failed to save wallpaper:', err);
+                          }
+                        }}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="checkmark" size={15} color="#fff" />
+                        <Text style={styles.wallpaperConfirmBtnText}>Keep</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.wallpaperConfirmBtn,
+                          {
+                            backgroundColor: colors.bg.elevated,
+                            borderWidth: 1,
+                            borderColor: colors.border.default,
+                          },
+                        ]}
+                        onPress={() => {
+                          setWallpaperPreview(null);
+                          setWallpaperStage('none');
+                        }}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="close" size={15} color={colors.text.secondary} />
+                        <Text
+                          style={[styles.wallpaperConfirmBtnText, { color: colors.text.secondary }]}
+                        >
+                          Discard
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.wallpaperConfirmBtn,
+                          {
+                            backgroundColor: colors.bg.elevated,
+                            borderWidth: 1,
+                            borderColor: colors.border.default,
+                          },
+                        ]}
+                        onPress={handleGenerateWallpaper}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="refresh-outline" size={15} color={colors.text.secondary} />
+                        <Text
+                          style={[styles.wallpaperConfirmBtnText, { color: colors.text.secondary }]}
+                        >
+                          Retry
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+
+                {/* Confirmed wallpaper thumbnail */}
+                {wallpaperStage === 'confirmed' && wallpaperBase64 && (
+                  <View style={styles.wallpaperConfirmedRow}>
+                    <Image
+                      source={{
+                        uri: wallpaperBase64.startsWith('data:')
+                          ? wallpaperBase64
+                          : `data:image/png;base64,${wallpaperBase64}`,
+                      }}
+                      style={styles.wallpaperThumb}
+                      resizeMode="cover"
+                      accessibilityLabel="Selected wallpaper"
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          fontSize: D.fontSize.sm,
+                          color: colors.text.primary,
+                          fontWeight: D.fontWeight.medium,
+                        }}
+                      >
+                        Wallpaper selected
+                      </Text>
+                      <Pressable
+                        onPress={() => {
+                          setWallpaperBase64(null);
+                          setWallpaperStage('none');
+                          setWallpaperOnResult(null);
+                          setWallpaperOnError(null);
+                          setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+                        }}
+                        accessibilityRole="button"
+                      >
+                        <Text
+                          style={{
+                            fontSize: D.fontSize.xs,
+                            color: colors.accent.primary,
+                            marginTop: 2,
+                          }}
+                        >
+                          Change
+                        </Text>
+                      </Pressable>
+                    </View>
+                    <Ionicons name="checkmark-circle" size={20} color={colors.accent.primary} />
+                  </View>
+                )}
+
+                {/* Placement zone editor */}
+                {wallpaperStage === 'confirmed' && wallpaperBase64 && (
+                  <PlacementZoneEditor
+                    wallpaperBase64={wallpaperBase64}
+                    outputAspectRatio={wallpaperAspectRatio}
+                    zone={placementZone}
+                    onChange={setPlacementZone}
+                  />
+                )}
+              </View>
+
+              {/* Result */}
+              <View style={styles.desktopSection}>
+                <Text style={styles.desktopSectionTitle}>Result</Text>
+                <Text style={styles.desktopSectionSub}>
+                  Your products composited onto the wallpaper
+                </Text>
+                <View style={{ marginTop: D.spacing.md }}>
+                  <ResultPreviewPanel
+                    result={wallpaperOnResult}
+                    generating={wallpaperOnGenerating}
+                    error={wallpaperOnError}
+                    emptyTitle="Result will appear here"
+                    emptyHint="Pick a wallpaper, select products, configure options, then hit Place on Wallpaper."
+                    filename="wallpaper-composite"
+                    onKeep={async () => {
+                      if (!wallpaperOnResult) return;
+                      try {
+                        await saveToGallery(
+                          wallpaperOnResult.imageBase64,
+                          wallpaperOnResult.mimeType,
+                          'catalog-on-wallpaper'
+                        );
+                        setWallpaperOnKept(true);
+                      } catch (err) {
+                        console.error('Failed to save wallpaper composite:', err);
+                      }
+                    }}
+                    isKept={wallpaperOnKept}
+                    colors={colors}
+                    styles={styles}
+                  />
+                </View>
+              </View>
+            </>
+          )}
         </>
       ) : activeTab === 'announcements' ? (
         <>
@@ -845,6 +2109,21 @@ export default function StudioScreen() {
                 error={annoError}
                 emptyTitle="Your graphic will appear here"
                 emptyHint="Fill in the content and style options, then hit Generate."
+                filename="announcement"
+                onKeep={async () => {
+                  if (!annoResult) return;
+                  try {
+                    await saveToGallery(
+                      annoResult.imageBase64,
+                      annoResult.mimeType,
+                      'announcement'
+                    );
+                    setAnnoKept(true);
+                  } catch (err) {
+                    console.error('Failed to save announcement:', err);
+                  }
+                }}
+                isKept={annoKept}
                 colors={colors}
                 styles={styles}
               />
@@ -891,78 +2170,443 @@ export default function StudioScreen() {
       );
 
     return (
-      <View style={styles.desktopRoot}>
-        {/* ── LEFT SIDEBAR ── */}
-        <View style={styles.sidebar}>
+      <>
+        <View style={styles.desktopRoot}>
+          {/* ── LEFT SIDEBAR ── */}
+          <View style={styles.sidebar}>
+            <ScrollView
+              style={styles.sidebarScroll}
+              contentContainerStyle={styles.sidebarContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Header */}
+              <View style={styles.sidebarHeader}>
+                <Text style={styles.sidebarTitle}>Studio</Text>
+                <Text style={styles.sidebarSubtitle}>AI-powered ad creation</Text>
+              </View>
+
+              {/* Vertical tab nav */}
+              <SectionLabel label="Tools" />
+              <View style={styles.verticalNav}>
+                {TAB_META.map((tab) => {
+                  const active = activeTab === tab.key;
+                  return (
+                    <Pressable
+                      key={tab.key}
+                      style={[styles.navItem, active && styles.navItemActive]}
+                      onPress={() => switchTab(tab.key)}
+                      accessibilityRole="button"
+                    >
+                      <View style={[styles.navIconBox, active && styles.navIconBoxActive]}>
+                        <Ionicons
+                          name={active ? tab.iconFilled : tab.icon}
+                          size={17}
+                          color={active ? '#fff' : colors.text.muted}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.navLabel, active && styles.navLabelActive]}>
+                          {tab.label}
+                        </Text>
+                        <Text style={styles.navDesc}>{tab.desc}</Text>
+                      </View>
+                      {tab.comingSoon && (
+                        <View style={styles.navBadge}>
+                          <Text style={styles.navBadgeText}>Soon</Text>
+                        </View>
+                      )}
+                      {active && !tab.comingSoon && (
+                        <Ionicons name="chevron-forward" size={14} color={colors.accent.primary} />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Tab-specific options */}
+              {sidebarOptions}
+            </ScrollView>
+
+            {/* Sticky footer */}
+            {sidebarFooter && <View style={styles.sidebarFooter}>{sidebarFooter}</View>}
+          </View>
+
+          {/* ── PANEL DIVIDER ── */}
+          <View style={styles.panelDivider} />
+
+          {/* ── RIGHT PANEL ── */}
           <ScrollView
-            style={styles.sidebarScroll}
-            contentContainerStyle={styles.sidebarContent}
+            style={styles.rightPanel}
+            contentContainerStyle={styles.rightPanelContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* Header */}
-            <View style={styles.sidebarHeader}>
-              <Text style={styles.sidebarTitle}>Studio</Text>
-              <Text style={styles.sidebarSubtitle}>AI-powered ad creation</Text>
-            </View>
-
-            {/* Vertical tab nav */}
-            <SectionLabel label="Tools" />
-            <View style={styles.verticalNav}>
-              {TAB_META.map((tab) => {
-                const active = activeTab === tab.key;
-                return (
-                  <Pressable
-                    key={tab.key}
-                    style={[styles.navItem, active && styles.navItemActive]}
-                    onPress={() => switchTab(tab.key)}
-                    accessibilityRole="button"
-                  >
-                    <View style={[styles.navIconBox, active && styles.navIconBoxActive]}>
-                      <Ionicons
-                        name={active ? tab.iconFilled : tab.icon}
-                        size={17}
-                        color={active ? '#fff' : colors.text.muted}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.navLabel, active && styles.navLabelActive]}>
-                        {tab.label}
-                      </Text>
-                      <Text style={styles.navDesc}>{tab.desc}</Text>
-                    </View>
-                    {tab.comingSoon && (
-                      <View style={styles.navBadge}>
-                        <Text style={styles.navBadgeText}>Soon</Text>
-                      </View>
-                    )}
-                    {active && !tab.comingSoon && (
-                      <Ionicons name="chevron-forward" size={14} color={colors.accent.primary} />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* Tab-specific options */}
-            {sidebarOptions}
+            {rightContent}
           </ScrollView>
-
-          {/* Sticky footer */}
-          {sidebarFooter && <View style={styles.sidebarFooter}>{sidebarFooter}</View>}
         </View>
 
-        {/* ── PANEL DIVIDER ── */}
-        <View style={styles.panelDivider} />
-
-        {/* ── RIGHT PANEL ── */}
-        <ScrollView
-          style={styles.rightPanel}
-          contentContainerStyle={styles.rightPanelContent}
-          showsVerticalScrollIndicator={false}
+        {/* Wallpaper generate modal (desktop) */}
+        <Modal
+          visible={wallpaperGenModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={handleCloseWallpaperGenModal}
         >
-          {rightContent}
-        </ScrollView>
-      </View>
+          <Pressable
+            style={styles.wallpaperGenOverlay}
+            onPress={isWeb ? () => {} : handleCloseWallpaperGenModal}
+          >
+            <View
+              style={styles.wallpaperGenSheet}
+              onStartShouldSetResponder={() => true}
+              onResponderRelease={() => {}}
+            >
+              <Pressable
+                style={styles.wallpaperGenCloseBtn}
+                onPress={handleCloseWallpaperGenModal}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <Ionicons name="close" size={20} color={colors.text.secondary} />
+              </Pressable>
+
+              {wallpaperGenModalStage === 'input' ? (
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.wallpaperGenScrollContent}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <Text style={styles.wallpaperGenTitle}>Generate Wallpaper</Text>
+                  <Text style={styles.wallpaperGenSubtitle}>
+                    Configure and generate an AI background
+                  </Text>
+
+                  <Text style={styles.wallpaperGenSectionLabel}>Format</Text>
+                  <View style={styles.wallpaperGenFormatRow}>
+                    {(
+                      [
+                        { value: '9:16', label: 'Vertical' },
+                        { value: '1:1', label: 'Square' },
+                        { value: '4:5', label: 'Portrait' },
+                      ] as const
+                    ).map((opt) => (
+                      <Pressable
+                        key={opt.value}
+                        style={[
+                          styles.wallpaperGenFormatPill,
+                          wallpaperGenFormat === opt.value && styles.wallpaperGenFormatPillActive,
+                        ]}
+                        onPress={() => setWallpaperGenFormat(opt.value)}
+                        disabled={wallpaperGenGenerating}
+                      >
+                        <Text
+                          style={[
+                            styles.wallpaperGenFormatPillText,
+                            wallpaperGenFormat === opt.value &&
+                              styles.wallpaperGenFormatPillTextActive,
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.wallpaperGenFormatPillRatio,
+                            wallpaperGenFormat === opt.value &&
+                              styles.wallpaperGenFormatPillTextActive,
+                          ]}
+                        >
+                          {opt.value}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  <Text style={styles.wallpaperGenSectionLabel}>Style prompt (optional)</Text>
+                  <TextInput
+                    style={styles.wallpaperGenInput}
+                    placeholder="e.g. warm sunset bokeh, soft pastel bakery, dark wood texture…"
+                    placeholderTextColor={colors.text.muted}
+                    value={wallpaperPrompt}
+                    onChangeText={setWallpaperPrompt}
+                    multiline
+                    editable={!wallpaperGenGenerating}
+                  />
+
+                  <View style={styles.wallpaperGenToggleRow}>
+                    <View>
+                      <Text style={styles.wallpaperGenToggleLabel}>Include Logo</Text>
+                      <Text style={styles.wallpaperGenToggleHint}>
+                        Place your brand logo in the header
+                      </Text>
+                    </View>
+                    <Switch
+                      value={wallpaperGenIncludeLogo}
+                      onValueChange={setWallpaperGenIncludeLogo}
+                      disabled={wallpaperGenGenerating}
+                      trackColor={{ true: colors.accent.primary }}
+                    />
+                  </View>
+
+                  <Text style={styles.wallpaperGenSectionLabel}>Include brand info</Text>
+                  <View>
+                    {(
+                      [
+                        { key: 'brandName', label: 'Brand Name' },
+                        { key: 'slogan', label: 'Slogan' },
+                        { key: 'brandColors', label: 'Brand Colors' },
+                        { key: 'businessDomain', label: 'Business Domain' },
+                        { key: 'shopType', label: 'Shop Type' },
+                        { key: 'targetAudience', label: 'Target Audience' },
+                        { key: 'phoneNumber', label: 'Phone Number' },
+                        { key: 'email', label: 'Email' },
+                        { key: 'addresses', label: 'Address' },
+                        { key: 'instagramHandle', label: 'Instagram' },
+                        { key: 'facebookHandle', label: 'Facebook' },
+                        { key: 'tikTokHandle', label: 'TikTok' },
+                      ] as const
+                    ).map((opt) => {
+                      const checked = wallpaperGenBrandFields.includes(opt.key);
+                      return (
+                        <Pressable
+                          key={opt.key}
+                          style={({ pressed }) => [
+                            styles.wallpaperGenCheckRow,
+                            pressed && { opacity: 0.7 },
+                          ]}
+                          onPress={() => toggleWallpaperGenBrandField(opt.key)}
+                          disabled={wallpaperGenGenerating}
+                          accessibilityRole="checkbox"
+                          accessibilityState={{ checked }}
+                        >
+                          <Ionicons
+                            name={checked ? 'checkbox' : 'square-outline'}
+                            size={18}
+                            color={checked ? colors.accent.primary : colors.text.muted}
+                          />
+                          <Text style={styles.wallpaperGenCheckLabel}>{opt.label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {wallpaperError && <Text style={styles.wallpaperGenError}>{wallpaperError}</Text>}
+
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.wallpaperGenBtn2,
+                      wallpaperGenGenerating && { opacity: 0.6 },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                    onPress={handleGenerateWallpaper}
+                    disabled={wallpaperGenGenerating}
+                    accessibilityRole="button"
+                  >
+                    {wallpaperGenGenerating ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Ionicons name="sparkles-outline" size={16} color="#fff" />
+                    )}
+                    <Text style={styles.wallpaperGenBtnText2}>
+                      {wallpaperGenGenerating ? 'Generating…' : 'Generate'}
+                    </Text>
+                  </Pressable>
+                </ScrollView>
+              ) : (
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.wallpaperGenResultContainer}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <Text style={styles.wallpaperGenTitle}>Wallpaper Generated</Text>
+                  <Text style={styles.wallpaperGenSubtitle}>
+                    Keep it as your background or generate a new one
+                  </Text>
+
+                  {wallpaperGenResult && (
+                    <Image
+                      source={{
+                        uri: `data:${wallpaperGenResult.mimeType};base64,${wallpaperGenResult.imageBase64}`,
+                      }}
+                      style={[
+                        styles.wallpaperGenResultImage,
+                        {
+                          aspectRatio:
+                            wallpaperGenFormat === '1:1'
+                              ? 1
+                              : wallpaperGenFormat === '4:5'
+                                ? 4 / 5
+                                : 9 / 16,
+                        },
+                      ]}
+                      resizeMode="contain"
+                      accessibilityLabel="Generated wallpaper"
+                    />
+                  )}
+
+                  <View style={styles.wallpaperGenResultActions}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.wallpaperGenResultBtn,
+                        {
+                          backgroundColor: wallpaperGenKept
+                            ? colors.accent.dim
+                            : colors.accent.primary,
+                        },
+                        pressed && { opacity: 0.75 },
+                      ]}
+                      onPress={async () => {
+                        if (!wallpaperGenResult || wallpaperGenKept) return;
+                        setWallpaperBase64(wallpaperGenResult.imageBase64);
+                        setWallpaperStage('confirmed');
+                        setWallpaperGenKept(true);
+                        setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+                        try {
+                          await saveToGallery(
+                            wallpaperGenResult.imageBase64,
+                            wallpaperGenResult.mimeType,
+                            'wallpaper'
+                          );
+                        } catch (err) {
+                          console.error('Failed to save wallpaper:', err);
+                        }
+                        setWallpaperGenModalVisible(false);
+                        setWallpaperGenModalStage('input');
+                      }}
+                      disabled={wallpaperGenKept}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons
+                        name={wallpaperGenKept ? 'checkmark-circle' : 'bookmark-outline'}
+                        size={16}
+                        color="#fff"
+                      />
+                      <Text style={styles.wallpaperGenResultBtnText}>
+                        {wallpaperGenKept ? 'Saved' : 'Keep'}
+                      </Text>
+                    </Pressable>
+
+                    {wallpaperGenResult && (
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.wallpaperGenResultBtn,
+                          { backgroundColor: colors.accent.primary },
+                          pressed && { opacity: 0.75 },
+                        ]}
+                        onPress={() => {
+                          if (!wallpaperGenResult) return;
+                          const ext = wallpaperGenResult.mimeType.split('/')[1] ?? 'png';
+                          const a = document.createElement('a');
+                          a.href = `data:${wallpaperGenResult.mimeType};base64,${wallpaperGenResult.imageBase64}`;
+                          a.download = `wallpaper.${ext}`;
+                          a.click();
+                        }}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="download-outline" size={16} color="#fff" />
+                        <Text style={styles.wallpaperGenResultBtnText}>Download</Text>
+                      </Pressable>
+                    )}
+                  </View>
+
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.wallpaperGenSecondaryBtn,
+                      pressed && { opacity: 0.7 },
+                    ]}
+                    onPress={() => {
+                      setWallpaperGenResult(null);
+                      setWallpaperGenModalStage('input');
+                      setWallpaperError(null);
+                    }}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="refresh-outline" size={15} color={colors.text.secondary} />
+                    <Text style={styles.wallpaperGenSecondaryBtnText}>Generate Again</Text>
+                  </Pressable>
+                </ScrollView>
+              )}
+            </View>
+          </Pressable>
+        </Modal>
+
+        {/* Wallpaper picker modal (desktop) */}
+        <Modal
+          visible={wallpaperPickerVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setWallpaperPickerVisible(false)}
+        >
+          <Pressable style={styles.pickerOverlay} onPress={() => setWallpaperPickerVisible(false)}>
+            <Pressable style={styles.pickerDialog} onPress={() => {}}>
+              {/* Dialog header */}
+              <View style={styles.pickerHeader}>
+                <View>
+                  <Text style={styles.pickerTitle}>My Wallpapers</Text>
+                  <Text style={styles.pickerSubtitle}>Select a wallpaper to use as background</Text>
+                </View>
+                <Pressable
+                  style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
+                  onPress={() => setWallpaperPickerVisible(false)}
+                >
+                  <Ionicons name="close" size={18} color={colors.text.secondary} />
+                </Pressable>
+              </View>
+
+              {/* Content */}
+              {wallpaperPickerLoading ? (
+                <View style={styles.pickerEmpty}>
+                  <ActivityIndicator size="large" color={colors.accent.primary} />
+                </View>
+              ) : wallpaperPickerItems.length === 0 ? (
+                <View style={styles.pickerEmpty}>
+                  <Ionicons
+                    name="albums-outline"
+                    size={40}
+                    color={colors.text.muted}
+                    style={{ marginBottom: D.spacing.sm }}
+                  />
+                  <Text style={styles.pickerEmptyText}>No wallpapers saved yet.</Text>
+                  <Text style={styles.pickerEmptyHint}>
+                    Generate wallpapers in the Wallpapers tab first.
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={wallpaperPickerItems}
+                  keyExtractor={(item) => item.id}
+                  numColumns={4}
+                  contentContainerStyle={{ padding: D.spacing.lg, gap: D.spacing.md }}
+                  columnWrapperStyle={{ gap: D.spacing.md }}
+                  renderItem={({ item }) => {
+                    const dialogWidth = Math.min(screenWidth - 96, 960);
+                    const thumbWidth = (dialogWidth - D.spacing.lg * 2 - D.spacing.md * 3) / 4;
+                    return (
+                      <Pressable
+                        style={({ pressed }) => ({
+                          width: thumbWidth,
+                          aspectRatio: 9 / 16,
+                          borderRadius: D.radius.md,
+                          overflow: 'hidden',
+                          opacity: pressed ? 0.85 : 1,
+                          borderWidth: 1,
+                          borderColor: colors.border.default,
+                          backgroundColor: colors.bg.base,
+                        })}
+                        onPress={() => pickWallpaperFromLibrary(item)}
+                      >
+                        <Image
+                          source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
+                          style={{ width: '100%', height: '100%' }}
+                          resizeMode="contain"
+                        />
+                      </Pressable>
+                    );
+                  }}
+                />
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
+      </>
     );
   }
 
@@ -1011,107 +2655,494 @@ export default function StudioScreen() {
           {/* ── CATALOG ── */}
           {activeTab === 'catalog' && (
             <>
-              <View style={styles.mobileSection}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Choose Products</Text>
-                  {selectedCount > 0 && (
-                    <View style={styles.countBadge}>
-                      <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+              {/* Catalog mode sub-tab bar */}
+              <View style={styles.segmentTrack}>
+                <Animated.View
+                  style={[
+                    styles.segmentIndicator,
+                    { width: '48%', left: catalogModeIndicatorLeft },
+                  ]}
+                />
+                {(['generate', 'on-wallpaper'] as CatalogMode[]).map((mode) => {
+                  const isActive = catalogMode === mode;
+                  return (
+                    <Pressable
+                      key={mode}
+                      style={styles.segmentButton}
+                      onPress={() => switchCatalogMode(mode)}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons
+                        name={
+                          mode === 'generate'
+                            ? isActive
+                              ? 'sparkles'
+                              : 'sparkles-outline'
+                            : isActive
+                              ? 'image'
+                              : 'image-outline'
+                        }
+                        size={14}
+                        color={isActive ? '#fff' : colors.text.secondary}
+                        style={{ marginRight: 4 }}
+                      />
+                      <Text style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}>
+                        {mode === 'generate' ? 'Generate' : 'On Wallpaper'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {catalogMode === 'generate' ? (
+                <>
+                  <ChooseProductsSection
+                    subtitle="Select products to include in your catalog"
+                    isDesktop={false}
+                    products={products}
+                    loadingProducts={loadingProducts}
+                    selectedCount={selectedCount}
+                    selected={selected}
+                    toggleProduct={toggleProduct}
+                    colors={colors}
+                    styles={styles}
+                  />
+
+                  <View style={styles.mobileSection}>
+                    <Text style={styles.sectionTitle}>Generation Options</Text>
+                    <OptionLabel label="Layout" />
+                    <ChipSelector
+                      options={LAYOUT_OPTIONS}
+                      selected={layout}
+                      onSelect={setLayout}
+                      accessibilityLabel="Layout"
+                    />
+                    <OptionLabel label="Color Theme" />
+                    <ChipSelector
+                      options={COLOR_OPTIONS}
+                      selected={colorTheme}
+                      onSelect={setColorTheme}
+                      accessibilityLabel="Color theme"
+                    />
+                    <OptionLabel label="Format" />
+                    <ChipSelector
+                      options={FORMAT_OPTIONS}
+                      selected={catalogFormat}
+                      onSelect={setCatalogFormat}
+                      accessibilityLabel="Format"
+                    />
+                    <View style={styles.toggleRow}>
+                      <Text style={styles.toggleLabel}>Show Prices</Text>
+                      <Switch
+                        value={showPrices}
+                        onValueChange={setShowPrices}
+                        thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                  </View>
+
+                  {contextItems.length > 0 && (
+                    <View style={styles.mobileSection}>
+                      <BrandContextSection
+                        items={contextItems}
+                        selected={catalogContextFields}
+                        onToggle={toggleCatalogField}
+                      />
                     </View>
                   )}
-                </View>
-                {loadingProducts ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={colors.accent.primary}
-                    style={{ marginVertical: D.spacing.lg }}
+
+                  <GenerateButton
+                    loading={catalogGenerating}
+                    disabled={selectedCount === 0}
+                    label={selectedCount === 0 ? 'Select products to generate' : 'Generate Catalog'}
+                    onPress={handleCatalogGenerate}
                   />
-                ) : products.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-                    <Text style={styles.emptyText}>
-                      No products yet. Add some in the Products tab.
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.productGrid}>
-                    {products.map((p) => (
-                      <ProductCard
-                        key={p.id}
-                        product={p}
-                        selected={selected.has(p.id)}
-                        onToggle={() => toggleProduct(p.id)}
-                        cardWidth={productCardWidth}
-                        colors={colors}
-                        styles={styles}
+
+                  {catalogError && <Text style={styles.errorText}>{catalogError}</Text>}
+                  {catalogResult && (
+                    <View style={styles.mobileResultCard}>
+                      <Image
+                        source={{
+                          uri: `data:${catalogResult.mimeType};base64,${catalogResult.imageBase64}`,
+                        }}
+                        style={styles.mobileResultImage}
+                        resizeMode="contain"
                       />
-                    ))}
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.downloadBtn,
+                            {
+                              backgroundColor: catalogKept
+                                ? colors.accent.dim
+                                : colors.accent.primary,
+                            },
+                            pressed && { opacity: 0.75 },
+                          ]}
+                          onPress={async () => {
+                            if (catalogKept) return;
+                            try {
+                              await saveToGallery(
+                                catalogResult.imageBase64,
+                                catalogResult.mimeType,
+                                'catalog'
+                              );
+                              setCatalogKept(true);
+                            } catch (err) {
+                              console.error('Failed to save catalog:', err);
+                            }
+                          }}
+                          accessibilityRole="button"
+                        >
+                          <Ionicons
+                            name={catalogKept ? 'checkmark-circle' : 'bookmark-outline'}
+                            size={15}
+                            color="#fff"
+                          />
+                          <Text style={styles.downloadBtnText}>
+                            {catalogKept ? 'Saved' : 'Keep'}
+                          </Text>
+                        </Pressable>
+                        {isWeb && (
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.downloadBtn,
+                              pressed && { opacity: 0.75 },
+                            ]}
+                            onPress={() => downloadImage(catalogResult, 'catalog')}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons name="download-outline" size={15} color="#fff" />
+                            <Text style={styles.downloadBtnText}>Download</Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* Products */}
+                  <ChooseProductsSection
+                    subtitle="Select products to place on your wallpaper"
+                    isDesktop={false}
+                    products={products}
+                    loadingProducts={loadingProducts}
+                    selectedCount={selectedCount}
+                    selected={selected}
+                    toggleProduct={toggleProduct}
+                    colors={colors}
+                    styles={styles}
+                  />
+
+                  {/* Wallpaper picker */}
+                  <View style={styles.mobileSection}>
+                    <Text style={styles.sectionTitle}>Background Wallpaper</Text>
+                    <Text
+                      style={[
+                        styles.emptyText,
+                        { textAlign: 'left', marginTop: 4, marginBottom: D.spacing.sm },
+                      ]}
+                    >
+                      Import or generate — your wallpaper stays unchanged
+                    </Text>
+
+                    <View style={styles.wallpaperActionRow}>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.wallpaperActionBtn,
+                          pressed && { opacity: 0.75 },
+                        ]}
+                        onPress={handleImportWallpaper}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="image-outline" size={15} color={colors.accent.primary} />
+                        <Text style={styles.wallpaperActionText}>Import</Text>
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.wallpaperActionBtn,
+                          pressed && { opacity: 0.75 },
+                        ]}
+                        onPress={() => setWallpaperGenModalVisible(true)}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="sparkles-outline" size={15} color={colors.accent.primary} />
+                        <Text style={styles.wallpaperActionText}>Generate</Text>
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.wallpaperActionBtn,
+                          pressed && { opacity: 0.75 },
+                        ]}
+                        onPress={openWallpaperPicker}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="albums-outline" size={15} color={colors.accent.primary} />
+                        <Text style={styles.wallpaperActionText}>My Wallpapers</Text>
+                      </Pressable>
+                    </View>
+
+                    {wallpaperError && (
+                      <Text style={[styles.errorText, { marginTop: D.spacing.sm }]}>
+                        {wallpaperError}
+                      </Text>
+                    )}
+
+                    {wallpaperStage === 'preview' && wallpaperPreview && (
+                      <View style={styles.wallpaperPreviewBox}>
+                        <Image
+                          source={{
+                            uri: wallpaperPreview.startsWith('data:')
+                              ? wallpaperPreview
+                              : `data:image/png;base64,${wallpaperPreview}`,
+                          }}
+                          style={styles.wallpaperPreviewImage}
+                          resizeMode="cover"
+                          accessibilityLabel="Generated wallpaper preview"
+                        />
+                        <View style={styles.wallpaperPreviewActions}>
+                          <Pressable
+                            style={[
+                              styles.wallpaperConfirmBtn,
+                              { backgroundColor: colors.accent.primary },
+                            ]}
+                            onPress={async () => {
+                              setWallpaperBase64(wallpaperPreview);
+                              setWallpaperStage('confirmed');
+                              setWallpaperPreview(null);
+                              setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+                              try {
+                                const b64 = wallpaperPreview.startsWith('data:')
+                                  ? wallpaperPreview.split(',')[1]
+                                  : wallpaperPreview;
+                                await saveToGallery(b64, 'image/png', 'wallpaper');
+                              } catch (err) {
+                                console.error('Failed to save wallpaper:', err);
+                              }
+                            }}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons name="checkmark" size={14} color="#fff" />
+                            <Text style={styles.wallpaperConfirmBtnText}>Keep</Text>
+                          </Pressable>
+                          <Pressable
+                            style={[
+                              styles.wallpaperConfirmBtn,
+                              {
+                                backgroundColor: colors.bg.elevated,
+                                borderWidth: 1,
+                                borderColor: colors.border.default,
+                              },
+                            ]}
+                            onPress={() => {
+                              setWallpaperPreview(null);
+                              setWallpaperStage('none');
+                            }}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons name="close" size={14} color={colors.text.secondary} />
+                            <Text
+                              style={[
+                                styles.wallpaperConfirmBtnText,
+                                { color: colors.text.secondary },
+                              ]}
+                            >
+                              Discard
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            style={[
+                              styles.wallpaperConfirmBtn,
+                              {
+                                backgroundColor: colors.bg.elevated,
+                                borderWidth: 1,
+                                borderColor: colors.border.default,
+                              },
+                            ]}
+                            onPress={handleGenerateWallpaper}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons
+                              name="refresh-outline"
+                              size={14}
+                              color={colors.text.secondary}
+                            />
+                            <Text
+                              style={[
+                                styles.wallpaperConfirmBtnText,
+                                { color: colors.text.secondary },
+                              ]}
+                            >
+                              Retry
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    )}
+
+                    {wallpaperStage === 'confirmed' && wallpaperBase64 && (
+                      <View style={styles.wallpaperConfirmedRow}>
+                        <Image
+                          source={{
+                            uri: wallpaperBase64.startsWith('data:')
+                              ? wallpaperBase64
+                              : `data:image/png;base64,${wallpaperBase64}`,
+                          }}
+                          style={styles.wallpaperThumb}
+                          resizeMode="cover"
+                          accessibilityLabel="Selected wallpaper"
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              fontSize: D.fontSize.sm,
+                              color: colors.text.primary,
+                              fontWeight: D.fontWeight.medium,
+                            }}
+                          >
+                            Wallpaper selected
+                          </Text>
+                          <Pressable
+                            onPress={() => {
+                              setWallpaperBase64(null);
+                              setWallpaperStage('none');
+                              setWallpaperOnResult(null);
+                              setWallpaperOnError(null);
+                              setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+                            }}
+                            accessibilityRole="button"
+                          >
+                            <Text
+                              style={{
+                                fontSize: D.fontSize.xs,
+                                color: colors.accent.primary,
+                                marginTop: 2,
+                              }}
+                            >
+                              Change
+                            </Text>
+                          </Pressable>
+                        </View>
+                        <Ionicons name="checkmark-circle" size={20} color={colors.accent.primary} />
+                      </View>
+                    )}
+
+                    {/* Placement zone editor */}
+                    {wallpaperStage === 'confirmed' && wallpaperBase64 && (
+                      <PlacementZoneEditor
+                        wallpaperBase64={wallpaperBase64}
+                        outputAspectRatio={wallpaperAspectRatio}
+                        zone={placementZone}
+                        onChange={setPlacementZone}
+                      />
+                    )}
                   </View>
-                )}
-              </View>
 
-              <View style={styles.mobileSection}>
-                <Text style={styles.sectionTitle}>Generation Options</Text>
-                <OptionLabel label="Layout" />
-                <ChipSelector
-                  options={LAYOUT_OPTIONS}
-                  selected={layout}
-                  onSelect={setLayout}
-                  accessibilityLabel="Layout"
-                />
-                <OptionLabel label="Color Theme" />
-                <ChipSelector
-                  options={COLOR_OPTIONS}
-                  selected={colorTheme}
-                  onSelect={setColorTheme}
-                  accessibilityLabel="Color theme"
-                />
-                <OptionLabel label="Format" />
-                <ChipSelector
-                  options={FORMAT_OPTIONS}
-                  selected={catalogFormat}
-                  onSelect={setCatalogFormat}
-                  accessibilityLabel="Format"
-                />
-                <View style={styles.toggleRow}>
-                  <Text style={styles.toggleLabel}>Show Prices</Text>
-                  <Switch
-                    value={showPrices}
-                    onValueChange={setShowPrices}
-                    thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
-                    trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                  {/* Placement options */}
+                  <View style={styles.mobileSection}>
+                    <Text style={styles.sectionTitle}>Placement Options</Text>
+                    <OptionLabel label="Layout" />
+                    <ChipSelector
+                      options={LAYOUT_OPTIONS}
+                      selected={layout}
+                      onSelect={setLayout}
+                      accessibilityLabel="Layout"
+                    />
+                    <View style={styles.toggleRow}>
+                      <Text style={styles.toggleLabel}>Show Prices</Text>
+                      <Switch
+                        value={showPrices}
+                        onValueChange={setShowPrices}
+                        thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                    <TextStylePresetPicker
+                      selectedId={selectedPresetId}
+                      onSelect={setSelectedPresetId}
+                      selectedColor={selectedColor}
+                      onColorChange={setSelectedColor}
+                      colors={colors}
+                    />
+                  </View>
+
+                  <GenerateButton
+                    loading={wallpaperOnGenerating}
+                    disabled={selectedCount === 0 || wallpaperBase64 === null}
+                    label={
+                      wallpaperBase64 === null
+                        ? 'Pick a wallpaper first'
+                        : selectedCount === 0
+                          ? 'Select products first'
+                          : 'Place on Wallpaper'
+                    }
+                    onPress={handleWallpaperOnGenerate}
                   />
-                </View>
-              </View>
 
-              {contextItems.length > 0 && (
-                <View style={styles.mobileSection}>
-                  <BrandContextSection
-                    items={contextItems}
-                    selected={catalogContextFields}
-                    onToggle={toggleCatalogField}
-                  />
-                </View>
-              )}
-
-              <GenerateButton
-                loading={catalogGenerating}
-                disabled={selectedCount === 0}
-                label={selectedCount === 0 ? 'Select products to generate' : 'Generate Catalog'}
-                onPress={handleCatalogGenerate}
-              />
-
-              {catalogError && <Text style={styles.errorText}>{catalogError}</Text>}
-              {catalogResult && (
-                <View style={styles.mobileResultCard}>
-                  <Image
-                    source={{
-                      uri: `data:${catalogResult.mimeType};base64,${catalogResult.imageBase64}`,
-                    }}
-                    style={styles.mobileResultImage}
-                    resizeMode="contain"
-                  />
-                </View>
+                  {wallpaperOnError && <Text style={styles.errorText}>{wallpaperOnError}</Text>}
+                  {wallpaperOnResult && (
+                    <View style={styles.mobileResultCard}>
+                      <Image
+                        source={{
+                          uri: `data:${wallpaperOnResult.mimeType};base64,${wallpaperOnResult.imageBase64}`,
+                        }}
+                        style={styles.mobileResultImage}
+                        resizeMode="contain"
+                      />
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.downloadBtn,
+                            {
+                              backgroundColor: wallpaperOnKept
+                                ? colors.accent.dim
+                                : colors.accent.primary,
+                            },
+                            pressed && { opacity: 0.75 },
+                          ]}
+                          onPress={async () => {
+                            if (wallpaperOnKept) return;
+                            try {
+                              await saveToGallery(
+                                wallpaperOnResult.imageBase64,
+                                wallpaperOnResult.mimeType,
+                                'catalog-on-wallpaper'
+                              );
+                              setWallpaperOnKept(true);
+                            } catch (err) {
+                              console.error('Failed to save wallpaper composite:', err);
+                            }
+                          }}
+                          accessibilityRole="button"
+                        >
+                          <Ionicons
+                            name={wallpaperOnKept ? 'checkmark-circle' : 'bookmark-outline'}
+                            size={15}
+                            color="#fff"
+                          />
+                          <Text style={styles.downloadBtnText}>
+                            {wallpaperOnKept ? 'Saved' : 'Keep'}
+                          </Text>
+                        </Pressable>
+                        {isWeb && (
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.downloadBtn,
+                              pressed && { opacity: 0.75 },
+                            ]}
+                            onPress={() => downloadImage(wallpaperOnResult, 'wallpaper-composite')}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons name="download-outline" size={15} color="#fff" />
+                            <Text style={styles.downloadBtnText}>Download</Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                </>
               )}
             </>
           )}
@@ -1202,6 +3233,46 @@ export default function StudioScreen() {
                     style={styles.mobileResultImage}
                     resizeMode="contain"
                   />
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.downloadBtn,
+                        { backgroundColor: annoKept ? colors.accent.dim : colors.accent.primary },
+                        pressed && { opacity: 0.75 },
+                      ]}
+                      onPress={async () => {
+                        if (annoKept) return;
+                        try {
+                          await saveToGallery(
+                            annoResult.imageBase64,
+                            annoResult.mimeType,
+                            'announcement'
+                          );
+                          setAnnoKept(true);
+                        } catch (err) {
+                          console.error('Failed to save announcement:', err);
+                        }
+                      }}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons
+                        name={annoKept ? 'checkmark-circle' : 'bookmark-outline'}
+                        size={15}
+                        color="#fff"
+                      />
+                      <Text style={styles.downloadBtnText}>{annoKept ? 'Saved' : 'Keep'}</Text>
+                    </Pressable>
+                    {isWeb && (
+                      <Pressable
+                        style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.75 }]}
+                        onPress={() => downloadImage(annoResult, 'announcement')}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="download-outline" size={15} color="#fff" />
+                        <Text style={styles.downloadBtnText}>Download</Text>
+                      </Pressable>
+                    )}
+                  </View>
                 </View>
               )}
             </>
@@ -1247,12 +3318,377 @@ export default function StudioScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Wallpaper generate modal */}
+      <Modal
+        visible={wallpaperGenModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={handleCloseWallpaperGenModal}
+      >
+        <Pressable
+          style={styles.wallpaperGenOverlay}
+          onPress={isWeb ? () => {} : handleCloseWallpaperGenModal}
+        >
+          <View
+            style={styles.wallpaperGenSheet}
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => {}}
+          >
+            {!isWeb && <View style={styles.wallpaperGenHandle} />}
+
+            {isWeb && (
+              <Pressable
+                style={styles.wallpaperGenCloseBtn}
+                onPress={handleCloseWallpaperGenModal}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <Ionicons name="close" size={20} color={colors.text.secondary} />
+              </Pressable>
+            )}
+
+            {wallpaperGenModalStage === 'input' ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.wallpaperGenScrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <Text style={styles.wallpaperGenTitle}>Generate Wallpaper</Text>
+                <Text style={styles.wallpaperGenSubtitle}>
+                  Configure and generate an AI background
+                </Text>
+
+                {/* Format */}
+                <Text style={styles.wallpaperGenSectionLabel}>Format</Text>
+                <View style={styles.wallpaperGenFormatRow}>
+                  {(
+                    [
+                      { value: '9:16', label: 'Vertical' },
+                      { value: '1:1', label: 'Square' },
+                      { value: '16:9', label: 'Landscape' },
+                    ] as const
+                  ).map((opt) => (
+                    <Pressable
+                      key={opt.value}
+                      style={[
+                        styles.wallpaperGenFormatPill,
+                        wallpaperGenFormat === opt.value && styles.wallpaperGenFormatPillActive,
+                      ]}
+                      onPress={() => setWallpaperGenFormat(opt.value)}
+                      disabled={wallpaperGenGenerating}
+                    >
+                      <Text
+                        style={[
+                          styles.wallpaperGenFormatPillText,
+                          wallpaperGenFormat === opt.value &&
+                            styles.wallpaperGenFormatPillTextActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.wallpaperGenFormatPillRatio,
+                          wallpaperGenFormat === opt.value &&
+                            styles.wallpaperGenFormatPillTextActive,
+                        ]}
+                      >
+                        {opt.value}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {/* Prompt */}
+                <Text style={styles.wallpaperGenSectionLabel}>Style prompt (optional)</Text>
+                <TextInput
+                  style={styles.wallpaperGenInput}
+                  placeholder="e.g. warm sunset bokeh, soft pastel bakery, dark wood texture…"
+                  placeholderTextColor={colors.text.muted}
+                  value={wallpaperPrompt}
+                  onChangeText={setWallpaperPrompt}
+                  multiline
+                  editable={!wallpaperGenGenerating}
+                />
+
+                {/* Include logo */}
+                <View style={styles.wallpaperGenToggleRow}>
+                  <View>
+                    <Text style={styles.wallpaperGenToggleLabel}>Include Logo</Text>
+                    <Text style={styles.wallpaperGenToggleHint}>
+                      Place your brand logo in the header
+                    </Text>
+                  </View>
+                  <Switch
+                    value={wallpaperGenIncludeLogo}
+                    onValueChange={setWallpaperGenIncludeLogo}
+                    disabled={wallpaperGenGenerating}
+                    trackColor={{ true: colors.accent.primary }}
+                  />
+                </View>
+
+                {/* Brand context */}
+                <Text style={styles.wallpaperGenSectionLabel}>Include brand info</Text>
+                <View>
+                  {(
+                    [
+                      { key: 'brandName', label: 'Brand Name' },
+                      { key: 'slogan', label: 'Slogan' },
+                      { key: 'brandColors', label: 'Brand Colors' },
+                      { key: 'businessDomain', label: 'Business Domain' },
+                      { key: 'shopType', label: 'Shop Type' },
+                      { key: 'targetAudience', label: 'Target Audience' },
+                      { key: 'phoneNumber', label: 'Phone Number' },
+                      { key: 'email', label: 'Email' },
+                      { key: 'addresses', label: 'Address' },
+                      { key: 'instagramHandle', label: 'Instagram' },
+                      { key: 'facebookHandle', label: 'Facebook' },
+                      { key: 'tikTokHandle', label: 'TikTok' },
+                    ] as const
+                  ).map((opt) => {
+                    const checked = wallpaperGenBrandFields.includes(opt.key);
+                    return (
+                      <Pressable
+                        key={opt.key}
+                        style={({ pressed }) => [
+                          styles.wallpaperGenCheckRow,
+                          pressed && { opacity: 0.7 },
+                        ]}
+                        onPress={() => toggleWallpaperGenBrandField(opt.key)}
+                        disabled={wallpaperGenGenerating}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked }}
+                      >
+                        <Ionicons
+                          name={checked ? 'checkbox' : 'square-outline'}
+                          size={18}
+                          color={checked ? colors.accent.primary : colors.text.muted}
+                        />
+                        <Text style={styles.wallpaperGenCheckLabel}>{opt.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {wallpaperError && <Text style={styles.wallpaperGenError}>{wallpaperError}</Text>}
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.wallpaperGenBtn2,
+                    wallpaperGenGenerating && { opacity: 0.6 },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                  onPress={handleGenerateWallpaper}
+                  disabled={wallpaperGenGenerating}
+                  accessibilityRole="button"
+                >
+                  {wallpaperGenGenerating ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="sparkles-outline" size={16} color="#fff" />
+                  )}
+                  <Text style={styles.wallpaperGenBtnText2}>
+                    {wallpaperGenGenerating ? 'Generating…' : 'Generate'}
+                  </Text>
+                </Pressable>
+              </ScrollView>
+            ) : (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.wallpaperGenResultContainer}
+                keyboardShouldPersistTaps="handled"
+              >
+                <Text style={styles.wallpaperGenTitle}>Wallpaper Generated</Text>
+                <Text style={styles.wallpaperGenSubtitle}>
+                  Keep it as your background or generate a new one
+                </Text>
+
+                {wallpaperGenResult && (
+                  <Image
+                    source={{
+                      uri: `data:${wallpaperGenResult.mimeType};base64,${wallpaperGenResult.imageBase64}`,
+                    }}
+                    style={[
+                      styles.wallpaperGenResultImage,
+                      {
+                        aspectRatio:
+                          wallpaperGenFormat === '1:1'
+                            ? 1
+                            : wallpaperGenFormat === '4:5'
+                              ? 4 / 5
+                              : 9 / 16,
+                      },
+                    ]}
+                    resizeMode="contain"
+                    accessibilityLabel="Generated wallpaper"
+                  />
+                )}
+
+                <View style={styles.wallpaperGenResultActions}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.wallpaperGenResultBtn,
+                      {
+                        backgroundColor: wallpaperGenKept
+                          ? colors.accent.dim
+                          : colors.accent.primary,
+                      },
+                      pressed && { opacity: 0.75 },
+                    ]}
+                    onPress={async () => {
+                      if (!wallpaperGenResult || wallpaperGenKept) return;
+                      setWallpaperBase64(wallpaperGenResult.imageBase64);
+                      setWallpaperStage('confirmed');
+                      setWallpaperGenKept(true);
+                      setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+                      try {
+                        await saveToGallery(
+                          wallpaperGenResult.imageBase64,
+                          wallpaperGenResult.mimeType,
+                          'wallpaper'
+                        );
+                      } catch (err) {
+                        console.error('Failed to save wallpaper:', err);
+                      }
+                      setWallpaperGenModalVisible(false);
+                      setWallpaperGenModalStage('input');
+                    }}
+                    disabled={wallpaperGenKept}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons
+                      name={wallpaperGenKept ? 'checkmark-circle' : 'bookmark-outline'}
+                      size={16}
+                      color="#fff"
+                    />
+                    <Text style={styles.wallpaperGenResultBtnText}>
+                      {wallpaperGenKept ? 'Saved' : 'Keep'}
+                    </Text>
+                  </Pressable>
+
+                  {Platform.OS === 'web' && wallpaperGenResult && (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.wallpaperGenResultBtn,
+                        { backgroundColor: colors.accent.primary },
+                        pressed && { opacity: 0.75 },
+                      ]}
+                      onPress={() => {
+                        if (!wallpaperGenResult) return;
+                        const ext = wallpaperGenResult.mimeType.split('/')[1] ?? 'png';
+                        const a = document.createElement('a');
+                        a.href = `data:${wallpaperGenResult.mimeType};base64,${wallpaperGenResult.imageBase64}`;
+                        a.download = `wallpaper.${ext}`;
+                        a.click();
+                      }}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="download-outline" size={16} color="#fff" />
+                      <Text style={styles.wallpaperGenResultBtnText}>Download</Text>
+                    </Pressable>
+                  )}
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.wallpaperGenSecondaryBtn,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  onPress={() => {
+                    setWallpaperGenResult(null);
+                    setWallpaperGenModalStage('input');
+                    setWallpaperError(null);
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="refresh-outline" size={15} color={colors.text.secondary} />
+                  <Text style={styles.wallpaperGenSecondaryBtnText}>Generate Again</Text>
+                </Pressable>
+              </ScrollView>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Wallpaper picker modal */}
+      <Modal
+        visible={wallpaperPickerVisible}
+        transparent={false}
+        animationType="fade"
+        onRequestClose={() => setWallpaperPickerVisible(false)}
+      >
+        <View style={styles.pickerFullScreen}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>My Wallpapers</Text>
+            <Pressable
+              style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
+              onPress={() => setWallpaperPickerVisible(false)}
+            >
+              <Ionicons name="close" size={20} color={colors.text.secondary} />
+            </Pressable>
+          </View>
+          {wallpaperPickerLoading ? (
+            <View style={styles.pickerEmpty}>
+              <ActivityIndicator size="large" color={colors.accent.primary} />
+            </View>
+          ) : wallpaperPickerItems.length === 0 ? (
+            <View style={styles.pickerEmpty}>
+              <Ionicons
+                name="albums-outline"
+                size={40}
+                color={colors.text.muted}
+                style={{ marginBottom: D.spacing.sm }}
+              />
+              <Text style={styles.pickerEmptyText}>No wallpapers saved yet.</Text>
+              <Text style={styles.pickerEmptyHint}>
+                Generate wallpapers in the Wallpapers tab first.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={wallpaperPickerItems}
+              keyExtractor={(item) => item.id}
+              numColumns={2}
+              contentContainerStyle={{ padding: D.spacing.md, gap: D.spacing.sm }}
+              columnWrapperStyle={{ gap: D.spacing.sm }}
+              renderItem={({ item }) => {
+                const thumbWidth = (screenWidth - D.spacing.md * 2 - D.spacing.sm) / 2;
+                return (
+                  <Pressable
+                    style={({ pressed }) => ({
+                      width: thumbWidth,
+                      aspectRatio: 9 / 16,
+                      borderRadius: D.radius.md,
+                      overflow: 'hidden',
+                      opacity: pressed ? 0.8 : 1,
+                      borderWidth: 1.5,
+                      borderColor: colors.border.default,
+                    })}
+                    onPress={() => pickWallpaperFromLibrary(item)}
+                  >
+                    <Image
+                      source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="contain"
+                    />
+                  </Pressable>
+                );
+              }}
+            />
+          )}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 // ─── Styles ────────────────────────────────────────────────────────────────────
-function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
+function makeStyles(
+  colors: ReturnType<typeof useTheme>['colors'],
+  isDesktop: boolean,
+  screenWidth: number
+) {
   return StyleSheet.create({
     // ── Desktop root ───────────────────────────────────────────────────────────
     desktopRoot: {
@@ -1430,9 +3866,26 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       backgroundColor: colors.bg.surface,
       ...D.shadow.modal,
     },
+    downloadBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.xs,
+      margin: D.spacing.md,
+      alignSelf: 'flex-end',
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: D.spacing.sm,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.primary,
+    },
+    downloadBtnText: {
+      color: '#fff',
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+    },
     resultImage: {
       width: '100%',
       aspectRatio: 1,
+      maxHeight: 480,
     },
 
     // ── Mobile layout ──────────────────────────────────────────────────────────
@@ -1512,7 +3965,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       borderColor: colors.border.subtle,
       backgroundColor: colors.bg.surface,
     },
-    mobileResultImage: { width: '100%', aspectRatio: 1 },
+    mobileResultImage: { width: '100%', aspectRatio: 1, maxHeight: 400 },
 
     // ── Shared ─────────────────────────────────────────────────────────────────
     countBadge: {
@@ -1718,5 +4171,366 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       color: colors.text.muted,
     },
     stepLabel: { fontSize: D.fontSize.sm, color: colors.text.muted },
+
+    // ── Wallpaper picker ───────────────────────────────────────────────────────
+    wallpaperActionRow: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+    },
+    wallpaperActionBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      paddingVertical: D.spacing.sm,
+      borderRadius: D.radius.md,
+      borderWidth: 1.5,
+      borderColor: colors.accent.primary,
+      backgroundColor: colors.accent.dim,
+    },
+    wallpaperActionText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.accent.primary,
+    },
+    wallpaperGenBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      paddingVertical: D.spacing.sm,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.primary,
+    },
+    wallpaperGenBtnText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: '#fff',
+    },
+    // ── Wallpaper generate modal ─────────────────────────────────────────────
+    wallpaperGenOverlay: {
+      flex: 1,
+      backgroundColor: isWeb ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0.5)',
+      justifyContent: isWeb ? 'center' : 'flex-end',
+      alignItems: isWeb ? 'center' : 'stretch',
+      padding: isWeb ? D.spacing.xl : 0,
+    },
+    wallpaperGenSheet: {
+      backgroundColor: colors.bg.surface,
+      borderTopLeftRadius: D.radius.xl,
+      borderTopRightRadius: D.radius.xl,
+      borderBottomLeftRadius: isWeb ? D.radius.xl : 0,
+      borderBottomRightRadius: isWeb ? D.radius.xl : 0,
+      paddingTop: D.spacing.md,
+      paddingBottom: isWeb ? D.spacing.lg : D.spacing['2xl'],
+      maxHeight: isWeb ? ('85vh' as unknown as number) : '90%',
+      ...(isWeb ? { width: '100%', maxWidth: 540, ...D.shadow.modal } : {}),
+    },
+    wallpaperGenHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.border.default,
+      alignSelf: 'center',
+      marginBottom: D.spacing.md,
+    },
+    wallpaperGenScrollContent: {
+      paddingHorizontal: D.spacing.lg,
+      gap: D.spacing.sm,
+      paddingBottom: D.spacing.md,
+    },
+    wallpaperGenTitle: {
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+    },
+    wallpaperGenSubtitle: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+    },
+    wallpaperGenSectionLabel: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      marginTop: D.spacing.xs,
+    },
+    wallpaperGenFormatRow: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+    },
+    wallpaperGenFormatPill: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: D.spacing.sm,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.elevated,
+    },
+    wallpaperGenFormatPillActive: {
+      backgroundColor: colors.accent.primary,
+      borderColor: colors.accent.primary,
+    },
+    wallpaperGenFormatPillText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+    },
+    wallpaperGenFormatPillRatio: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginTop: 1,
+    },
+    wallpaperGenFormatPillTextActive: {
+      color: '#fff',
+    },
+    wallpaperGenInput: {
+      backgroundColor: colors.bg.elevated,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      color: colors.text.primary,
+      fontSize: D.fontSize.sm,
+      padding: D.spacing.md,
+      minHeight: 72,
+      textAlignVertical: 'top',
+    },
+    wallpaperGenToggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: D.spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    wallpaperGenToggleLabel: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.primary,
+    },
+    wallpaperGenToggleHint: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginTop: 2,
+    },
+    wallpaperGenCheckRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      paddingVertical: 7,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    wallpaperGenCheckLabel: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.primary,
+    },
+    wallpaperGenError: {
+      fontSize: D.fontSize.xs,
+      color: '#EF4444',
+    },
+    wallpaperGenBtn2: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      backgroundColor: colors.accent.primary,
+      paddingVertical: 13,
+      borderRadius: D.radius.pill,
+      marginTop: D.spacing.sm,
+      ...D.shadow.glow,
+    },
+    wallpaperGenBtnText2: {
+      color: '#fff',
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+    },
+    wallpaperGenResultContainer: {
+      paddingHorizontal: D.spacing.lg,
+      paddingBottom: D.spacing.md,
+      gap: D.spacing.sm,
+    },
+    wallpaperGenResultImage: {
+      width: '100%',
+      borderRadius: D.radius.lg,
+      backgroundColor: colors.bg.elevated,
+      marginTop: D.spacing.xs,
+      ...(isWeb ? { maxHeight: 380 } : {}),
+    },
+    wallpaperGenResultActions: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+    },
+    wallpaperGenResultBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      paddingVertical: 12,
+      borderRadius: D.radius.pill,
+      ...D.shadow.glow,
+    },
+    wallpaperGenResultBtnText: {
+      color: '#fff',
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+    },
+    wallpaperGenSecondaryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+      paddingVertical: 11,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+    wallpaperGenSecondaryBtnText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
+    },
+    wallpaperGenCloseBtn: {
+      position: 'absolute',
+      top: D.spacing.md,
+      right: D.spacing.md,
+      width: 32,
+      height: 32,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.elevated,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1,
+    },
+    wallpaperPreviewBox: {
+      marginTop: D.spacing.md,
+      borderRadius: D.radius.md,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+    wallpaperPreviewImage: {
+      width: '100%',
+      aspectRatio: 1,
+    },
+    wallpaperPreviewActions: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+      padding: D.spacing.sm,
+      backgroundColor: colors.bg.surface,
+    },
+    wallpaperConfirmBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      paddingVertical: 7,
+      borderRadius: D.radius.sm,
+    },
+    wallpaperConfirmBtnText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: '#fff',
+    },
+    wallpaperConfirmedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      marginTop: D.spacing.md,
+      padding: D.spacing.sm,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.accent.primary,
+    },
+    wallpaperThumb: {
+      width: 52,
+      height: 52,
+      borderRadius: D.radius.sm,
+    },
+
+    // ── Wallpaper picker modal ─────────────────────────────────────────────────
+    pickerFullScreen: {
+      flex: 1,
+      backgroundColor: colors.bg.surface,
+    },
+    pickerOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    pickerDialog: {
+      width: Math.min(screenWidth - 96, 960),
+      maxHeight: '85%' as DimensionValue,
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.xl,
+      overflow: 'hidden',
+      ...D.shadow.modal,
+    },
+    pickerSubtitle: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      marginTop: 2,
+    },
+    pickerHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: D.spacing.lg,
+      paddingTop: D.spacing.lg,
+      marginBottom: D.spacing.md,
+    },
+    pickerTitle: {
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+    },
+    pickerClose: {
+      width: 32,
+      height: 32,
+      borderRadius: D.radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.bg.base,
+    },
+    pickerEmpty: {
+      alignItems: 'center',
+      paddingVertical: D.spacing['2xl'],
+      gap: D.spacing.sm,
+      paddingHorizontal: D.spacing.lg,
+    },
+    pickerEmptyText: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
+    },
+    pickerEmptyHint: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      textAlign: 'center',
+    },
+    aspectWarningBanner: {
+      flexDirection: 'row' as const,
+      alignItems: 'flex-start' as const,
+      gap: D.spacing.xs,
+      backgroundColor: 'rgba(245,158,11,0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(245,158,11,0.30)',
+      borderRadius: D.radius.sm,
+      padding: D.spacing.sm,
+      marginTop: D.spacing.sm,
+    },
+    aspectWarningText: {
+      flex: 1,
+      fontSize: D.fontSize.xs,
+      color: colors.text.secondary,
+      lineHeight: 16,
+    },
   });
 }

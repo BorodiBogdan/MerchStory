@@ -129,6 +129,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="wallpapers"
+        options={{
+          tabBarItemStyle: { display: 'none' },
+        }}
+      />
+      <Tabs.Screen
         name="gallery"
         options={{
           tabBarLabel: 'Gallery',

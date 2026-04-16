@@ -62,7 +62,7 @@ internal sealed class GeminiImageProvider : IImageProvider
 
         byte[]? imageData = null;
         string mimeType = "image/png";
-
+        /*
         await foreach (var chunk in client.Models.GenerateContentStreamAsync("gemini-3-pro-image-preview", contents, generateConfig, cancellationToken))
         {
             if (chunk.Candidates == null || chunk.Candidates.Count == 0 ||
@@ -85,6 +85,7 @@ internal sealed class GeminiImageProvider : IImageProvider
             this.logger.LogWarning("No image returned from Gemini for prompt: {Prompt}", prompt);
             throw new InvalidOperationException("No image returned from generation service.");
         }
+        */
 
         return new ImageGenerationResult(imageData, mimeType);
     }

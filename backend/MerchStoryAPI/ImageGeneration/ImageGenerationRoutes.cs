@@ -31,12 +31,56 @@ public static class ImageGenerationRoutes
 
             return await HandleGeneration(
                 () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext)),
-                principal,
-                db,
-                logger,
-                "catalog");
+                logger);
         })
         .WithName("GenerateCatalogImage")
+        .RequireAuthorization();
+
+        app.MapPost("/generate-image/wallpaper", async (
+            WallpaperApiRequest request,
+            ClaimsPrincipal principal,
+            IWallpaperImageService wallpaperService,
+            AppDbContext db,
+            ILogger<Program> logger) =>
+        {
+            string? userId = GetUserId(principal);
+            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, request.BrandContextFields);
+            string? brandLogo = null;
+
+            if (request.IncludeLogo)
+            {
+                brandLogo = await db.ShopProfiles
+                .Where(s => s.UserId == userId)
+                .Select(s => s.LogoBase64)
+                .FirstOrDefaultAsync();
+            }
+
+            return await HandleGeneration(
+                () => wallpaperService.GenerateWallpaperAsync(request.ToServiceRequest(brandContext, brandLogo)),
+                logger);
+        })
+        .WithName("GenerateWallpaper")
+        .RequireAuthorization();
+
+        app.MapPost("/generate-image/catalog-on-wallpaper", async (
+            CatalogOnWallpaperApiRequest request,
+            ILogger<Program> logger) =>
+        {
+            if (request.Products is null || request.Products.Count == 0)
+            {
+                return Results.BadRequest(new { error = "At least one product is required." });
+            }
+
+            if (string.IsNullOrWhiteSpace(request.WallpaperBase64))
+            {
+                return Results.BadRequest(new { error = "Wallpaper image is required." });
+            }
+
+            return await HandleGeneration(
+                () => Task.FromResult(CatalogCompositor.Composite(request)),
+                logger);
+        })
+        .WithName("GenerateCatalogOnWallpaper")
         .RequireAuthorization();
 
         app.MapPost("/generate-image/announcement", async (
@@ -56,10 +100,7 @@ public static class ImageGenerationRoutes
 
             return await HandleGeneration(
                 () => announcementService.GenerateAnnouncementImageAsync(request.ToServiceRequest(brandContext)),
-                principal,
-                db,
-                logger,
-                "announcement");
+                logger);
         })
         .WithName("GenerateAnnouncementImage")
         .RequireAuthorization();
@@ -128,33 +169,12 @@ public static class ImageGenerationRoutes
 
     private static async Task<IResult> HandleGeneration(
         Func<Task<ImageGenerationResult>> generate,
-        ClaimsPrincipal principal,
-        AppDbContext db,
-        ILogger logger,
-        string generationType)
+        ILogger logger)
     {
         try
         {
-            var result = await generate();
+            ImageGenerationResult result = await generate();
             string base64 = Convert.ToBase64String(result.ImageData);
-
-            string? userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)
-                          ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
-
-            if (userId is not null)
-            {
-                db.GeneratedImages.Add(new GeneratedImage
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = userId,
-                    ImageBase64 = base64,
-                    MimeType = result.MimeType,
-                    CreatedAt = DateTime.UtcNow,
-                    GenerationType = generationType,
-                });
-                await db.SaveChangesAsync();
-            }
-
             return Results.Ok(new { imageBase64 = base64, mimeType = result.MimeType });
         }
         catch (InvalidOperationException ex)
@@ -191,6 +211,30 @@ internal sealed record CatalogImageApiRequest(
             this.ShowPrices,
             brandContext);
 }
+
+internal sealed record WallpaperApiRequest(string Prompt, string Format, bool IncludeLogo, List<string>? BrandContextFields)
+{
+    public WallpaperImageRequest ToServiceRequest(BrandContext? brandContext, string? brandLogo) =>
+        new(
+            Format: this.Format,
+            UserPrompt: this.Prompt,
+            InlineImages: string.IsNullOrWhiteSpace(brandLogo) ? null : [brandLogo],
+            BrandContext: brandContext);
+}
+
+internal sealed record PlacementZone(
+    double X,
+    double Y,
+    double Width,
+    double Height);
+
+internal sealed record CatalogOnWallpaperApiRequest(
+    List<CatalogProductApiItem>? Products,
+    string WallpaperBase64,
+    string Layout,
+    bool ShowPrices,
+    TextStyleOptions? TextStyle = null,
+    PlacementZone? PlacementZone = null);
 
 internal sealed record AnnouncementImageApiRequest(
     string PostType,

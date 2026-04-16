@@ -28,10 +28,20 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
+    <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.4" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MerchStoryImageGeneration\MerchStoryImageGeneration.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="ImageGeneration\Fonts\Inter-Regular.ttf" />
+    <EmbeddedResource Include="ImageGeneration\Fonts\Inter-Bold.ttf" />
+    <EmbeddedResource Include="ImageGeneration\Fonts\PlayfairDisplay-Regular.ttf" />
+    <EmbeddedResource Include="ImageGeneration\Fonts\Montserrat-Bold.ttf" />
+    <EmbeddedResource Include="ImageGeneration\Fonts\Lato-Regular.ttf" />
   </ItemGroup>
 
 </Project>

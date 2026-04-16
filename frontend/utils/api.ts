@@ -353,6 +353,78 @@ export async function generateAnnouncementImage(
   return response.json() as Promise<GenerateImageResponse>;
 }
 
+export interface GenerateWallpaperParams {
+  prompt: string;
+  format: string;
+  includeLogo: boolean;
+  brandContextFields?: string[];
+}
+
+export interface TextStyleOptions {
+  fontFamily?: string; // Modern | Elegant | Bold | Friendly
+  fontSize?: string; // Small | Medium | Large
+  nameColor?: string; // hex color
+  priceColor?: string | null;
+  colorMode?: string; // Solid | Gradient | Rainbow
+  gradientEndColor?: string;
+  textEffect?: string; // None | Shadow | Outline
+  priceBadge?: string; // None | Pill
+}
+
+export interface PlacementZone {
+  x: number; // 0.0–1.0 fraction of canvas width
+  y: number; // 0.0–1.0 fraction of canvas height
+  width: number; // 0.0–1.0 fraction of canvas width
+  height: number; // 0.0–1.0 fraction of canvas height
+}
+
+export interface GenerateCatalogOnWallpaperParams {
+  products: CatalogImageProduct[];
+  wallpaperBase64: string;
+  layout: string;
+  showPrices: boolean;
+  textStyle?: TextStyleOptions;
+  placementZone?: PlacementZone;
+}
+
+export async function generateWallpaper(
+  params: GenerateWallpaperParams
+): Promise<GenerateImageResponse> {
+  const response = await fetchWithAuth(`${API_URL}/generate-image/wallpaper`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as { detail?: string }).detail ?? `Request failed with status ${response.status}`
+    );
+  }
+
+  return response.json() as Promise<GenerateImageResponse>;
+}
+
+export async function generateCatalogOnWallpaper(
+  params: GenerateCatalogOnWallpaperParams
+): Promise<GenerateImageResponse> {
+  const response = await fetchWithAuth(`${API_URL}/generate-image/catalog-on-wallpaper`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as { detail?: string }).detail ?? `Request failed with status ${response.status}`
+    );
+  }
+
+  return response.json() as Promise<GenerateImageResponse>;
+}
+
 // ── Gallery ──────────────────────────────────────────────────────────────────
 
 export interface GalleryItem {
@@ -360,6 +432,22 @@ export interface GalleryItem {
   imageBase64: string;
   mimeType: string;
   createdAt: string;
+}
+
+export async function saveToGallery(
+  imageBase64: string,
+  mimeType: string,
+  generationType: string
+): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/gallery/save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64, mimeType, generationType }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to save image (${response.status})`);
+  }
 }
 
 export async function fetchGallery(): Promise<GalleryItem[]> {
@@ -379,6 +467,28 @@ export async function deleteGalleryItem(id: string): Promise<void> {
 
   if (!response.ok && response.status !== 404) {
     throw new Error(`Failed to delete image (${response.status})`);
+  }
+}
+
+// ── Wallpapers ────────────────────────────────────────────────────────────────
+
+export async function fetchWallpapers(): Promise<GalleryItem[]> {
+  const response = await fetchWithAuth(`${API_URL}/wallpapers`, {});
+
+  if (!response.ok) {
+    throw new Error(`Failed to load wallpapers (${response.status})`);
+  }
+
+  return response.json() as Promise<GalleryItem[]>;
+}
+
+export async function deleteWallpaper(id: string): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/wallpapers/${id}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Failed to delete wallpaper (${response.status})`);
   }
 }
 
@@ -447,4 +557,24 @@ export async function deleteProduct(id: string): Promise<void> {
   if (!response.ok && response.status !== 404) {
     throw new Error(`Failed to delete product (${response.status})`);
   }
+}
+
+export interface RemoveBackgroundResponse {
+  imageBase64: string;
+  mimeType: string;
+}
+
+export async function removeBackground(imageBase64: string): Promise<RemoveBackgroundResponse> {
+  const response = await fetchWithAuth(`${API_URL}/products/remove-background`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64 }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Background removal failed (${response.status})`);
+  }
+
+  return response.json() as Promise<RemoveBackgroundResponse>;
 }
