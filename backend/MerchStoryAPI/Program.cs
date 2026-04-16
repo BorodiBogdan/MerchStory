@@ -21,9 +21,22 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        }
+        else
+        {
+            string? allowedOrigin = builder.Configuration["AllowedOrigins:Web"];
+            if (!string.IsNullOrEmpty(allowedOrigin))
+            {
+                policy.WithOrigins(allowedOrigin)
+                      .AllowAnyHeader()
+                      .AllowAnyMethod();
+            }
+        }
     });
 });
 
@@ -63,6 +76,12 @@ builder.Services.AddScoped<FacebookSocialPostSyncService>();
 builder.Services.AddMerchStoryImageGeneration();
 
 var app = builder.Build();
+
+using (IServiceScope scope = app.Services.CreateScope())
+{
+    AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
 
 if (app.Environment.IsDevelopment())
 {

@@ -3,21 +3,23 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 function getApiUrl(): string {
-  // Web always runs on the same machine as the dev server
-  if (Platform.OS === 'web') return 'http://localhost:5257';
-
-  // In development on a physical device, derive the host from Expo's dev server
-  // so the phone hits the same machine it loaded the JS bundle from — no manual IP needed
-  if (__DEV__) {
-    const hostUri = Constants.expoConfig?.hostUri;
-    if (hostUri) {
-      const host = hostUri.split(':')[0];
-      return `http://${host}:5257`;
-    }
+  // In production, always use the explicit env var regardless of platform
+  if (!__DEV__) {
+    return process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5257';
   }
 
-  // Production (or dev fallback): use explicit env var
-  return process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5257';
+  // Dev on web: use localhost
+  if (Platform.OS === 'web') return 'http://localhost:5257';
+
+  // Dev on a physical device: derive the host from Expo's dev server
+  // so the phone hits the same machine it loaded the JS bundle from — no manual IP needed
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (hostUri) {
+    const host = hostUri.split(':')[0];
+    return `http://${host}:5257`;
+  }
+
+  return 'http://localhost:5257';
 }
 
 const API_URL = getApiUrl();
