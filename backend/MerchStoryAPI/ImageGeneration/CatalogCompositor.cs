@@ -29,17 +29,23 @@ internal static class CatalogCompositor
 
     private const int PriceGap = 6;
 
+    private const int TargetWidth = 1080;
+
     public static ImageGenerationResult Composite(CatalogOnWallpaperApiRequest request)
     {
-        var (canvasW, canvasH) = CanvasSize(request.Format);
-
         byte[] wallpaperBytes = DecodeBase64Image(request.WallpaperBase64);
         using var canvas = Image.Load<Rgba32>(wallpaperBytes);
-        canvas.Mutate(ctx => ctx.Resize(new ResizeOptions
+
+        // Normalize to 1080 px wide (preserve aspect ratio, no letterboxing).
+        // Font sizes and margins are tuned for this width; other resolutions cause overflow.
+        if (canvas.Width != TargetWidth)
         {
-            Size = new Size(canvasW, canvasH),
-            Mode = ResizeMode.Pad,
-        }));
+            int targetH = (int)Math.Round((double)canvas.Height * TargetWidth / canvas.Width);
+            canvas.Mutate(ctx => ctx.Resize(TargetWidth, Math.Max(1, targetH)));
+        }
+
+        int canvasW = canvas.Width;
+        int canvasH = canvas.Height;
 
         var products = request.Products ?? [];
         var productImages = new List<Image<Rgba32>?>(products.Count);
@@ -74,14 +80,6 @@ internal static class CatalogCompositor
             }
         }
     }
-
-    // ── Canvas size ───────────────────────────────────────────────────────────
-    private static (int W, int H) CanvasSize(string format) => format switch
-    {
-        "Portrait" => (1080, 1350),
-        "Story" => (1080, 1920),
-        _ => (1080, 1080),
-    };
 
     // ── Cell layout ───────────────────────────────────────────────────────────
     private static List<Rectangle> ComputeCells(

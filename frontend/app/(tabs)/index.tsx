@@ -1331,7 +1331,20 @@ export default function StudioScreen() {
   const DEFAULT_PLACEMENT_ZONE: PlacementZone = { x: 0, y: 0.15, width: 1.0, height: 0.7 };
   const [placementZone, setPlacementZone] = useState<PlacementZone>(DEFAULT_PLACEMENT_ZONE);
   // Track the format of the selected wallpaper to warn on mismatch
-  const [wallpaperSourceFormat, setWallpaperSourceFormat] = useState<string | null>(null);
+  const [wallpaperAspectRatio, setWallpaperAspectRatio] = useState<number>(1);
+
+  useEffect(() => {
+    if (!wallpaperBase64) {
+      setWallpaperAspectRatio(1);
+      return;
+    }
+    const uri = `data:image/jpeg;base64,${wallpaperBase64}`;
+    Image.getSize(
+      uri,
+      (w, h) => setWallpaperAspectRatio(h > 0 ? w / h : 1),
+      () => setWallpaperAspectRatio(1)
+    );
+  }, [wallpaperBase64]);
 
   // ── Wallpaper picker (choose from saved wallpapers) ──────────────────────────
   const [wallpaperPickerVisible, setWallpaperPickerVisible] = useState(false);
@@ -1477,7 +1490,6 @@ export default function StudioScreen() {
       setWallpaperOnResult(null);
       setWallpaperOnError(null);
       setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-      setWallpaperSourceFormat(null);
     }
   }
 
@@ -1498,7 +1510,6 @@ export default function StudioScreen() {
           })),
           wallpaperBase64,
           layout,
-          format: catalogFormat,
           showPrices,
           textStyle,
           placementZone,
@@ -1527,7 +1538,6 @@ export default function StudioScreen() {
     setWallpaperOnError(null);
     setWallpaperPickerVisible(false);
     setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-    setWallpaperSourceFormat(null);
   }
 
   // ── Announcements state ──────────────────────────────────────────────────────
@@ -1549,24 +1559,6 @@ export default function StudioScreen() {
     () => (shopProfile ? deriveContextItems(shopProfile) : []),
     [shopProfile]
   );
-
-  function catalogFormatAspectRatio(format: string): number {
-    switch (format) {
-      case 'Story':
-        return 9 / 16;
-      case 'Portrait':
-        return 4 / 5;
-      default:
-        return 1;
-    }
-  }
-
-  const showAspectWarning = useMemo(() => {
-    if (!wallpaperSourceFormat || !wallpaperBase64) return false;
-    const wallpaperAR =
-      wallpaperSourceFormat === '9:16' ? 9 / 16 : wallpaperSourceFormat === '4:5' ? 4 / 5 : 1;
-    return Math.abs(wallpaperAR - catalogFormatAspectRatio(catalogFormat)) > 0.05;
-  }, [wallpaperSourceFormat, catalogFormat, wallpaperBase64]);
 
   const toggleCatalogField = useCallback((key: string) => {
     setCatalogContextFields((prev) =>
@@ -1659,12 +1651,6 @@ export default function StudioScreen() {
             <SectionLabel label="Placement Options" />
             <OptionLabel label="Layout" />
             <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
-            <OptionLabel label="Format" />
-            <SidebarOptionGroup
-              options={FORMAT_OPTIONS}
-              selected={catalogFormat}
-              onSelect={setCatalogFormat}
-            />
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Show Prices</Text>
               <Switch
@@ -1913,7 +1899,6 @@ export default function StudioScreen() {
                           setWallpaperStage('confirmed');
                           setWallpaperPreview(null);
                           setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                          setWallpaperSourceFormat(wallpaperGenFormat);
                           try {
                             const b64 = wallpaperPreview.startsWith('data:')
                               ? wallpaperPreview.split(',')[1]
@@ -2003,7 +1988,6 @@ export default function StudioScreen() {
                           setWallpaperOnResult(null);
                           setWallpaperOnError(null);
                           setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                          setWallpaperSourceFormat(null);
                         }}
                         accessibilityRole="button"
                       >
@@ -2022,23 +2006,11 @@ export default function StudioScreen() {
                   </View>
                 )}
 
-                {/* Aspect ratio mismatch warning */}
-                {showAspectWarning && (
-                  <View style={styles.aspectWarningBanner}>
-                    <Ionicons name="warning-outline" size={15} color="#F59E0B" />
-                    <Text style={styles.aspectWarningText}>
-                      Wallpaper format ({wallpaperSourceFormat}) doesn&apos;t match output (
-                      {catalogFormat}). It will be letterboxed — adjust the placement zone
-                      accordingly.
-                    </Text>
-                  </View>
-                )}
-
                 {/* Placement zone editor */}
                 {wallpaperStage === 'confirmed' && wallpaperBase64 && (
                   <PlacementZoneEditor
                     wallpaperBase64={wallpaperBase64}
-                    outputAspectRatio={catalogFormatAspectRatio(catalogFormat)}
+                    outputAspectRatio={wallpaperAspectRatio}
                     zone={placementZone}
                     onChange={setPlacementZone}
                   />
@@ -2487,7 +2459,6 @@ export default function StudioScreen() {
                         setWallpaperStage('confirmed');
                         setWallpaperGenKept(true);
                         setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                        setWallpaperSourceFormat(wallpaperGenFormat);
                         try {
                           await saveToGallery(
                             wallpaperGenResult.imageBase64,
@@ -2942,7 +2913,6 @@ export default function StudioScreen() {
                               setWallpaperStage('confirmed');
                               setWallpaperPreview(null);
                               setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                              setWallpaperSourceFormat(wallpaperGenFormat);
                               try {
                                 const b64 = wallpaperPreview.startsWith('data:')
                                   ? wallpaperPreview.split(',')[1]
@@ -3041,7 +3011,6 @@ export default function StudioScreen() {
                               setWallpaperOnResult(null);
                               setWallpaperOnError(null);
                               setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                              setWallpaperSourceFormat(null);
                             }}
                             accessibilityRole="button"
                           >
@@ -3060,23 +3029,11 @@ export default function StudioScreen() {
                       </View>
                     )}
 
-                    {/* Aspect ratio mismatch warning */}
-                    {showAspectWarning && (
-                      <View style={styles.aspectWarningBanner}>
-                        <Ionicons name="warning-outline" size={15} color="#F59E0B" />
-                        <Text style={styles.aspectWarningText}>
-                          Wallpaper format ({wallpaperSourceFormat}) doesn&apos;t match output (
-                          {catalogFormat}). It will be letterboxed — adjust the placement zone
-                          accordingly.
-                        </Text>
-                      </View>
-                    )}
-
                     {/* Placement zone editor */}
                     {wallpaperStage === 'confirmed' && wallpaperBase64 && (
                       <PlacementZoneEditor
                         wallpaperBase64={wallpaperBase64}
-                        outputAspectRatio={catalogFormatAspectRatio(catalogFormat)}
+                        outputAspectRatio={wallpaperAspectRatio}
                         zone={placementZone}
                         onChange={setPlacementZone}
                       />
@@ -3092,13 +3049,6 @@ export default function StudioScreen() {
                       selected={layout}
                       onSelect={setLayout}
                       accessibilityLabel="Layout"
-                    />
-                    <OptionLabel label="Format" />
-                    <ChipSelector
-                      options={FORMAT_OPTIONS}
-                      selected={catalogFormat}
-                      onSelect={setCatalogFormat}
-                      accessibilityLabel="Format"
                     />
                     <View style={styles.toggleRow}>
                       <Text style={styles.toggleLabel}>Show Prices</Text>
@@ -3592,7 +3542,6 @@ export default function StudioScreen() {
                       setWallpaperStage('confirmed');
                       setWallpaperGenKept(true);
                       setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                      setWallpaperSourceFormat(wallpaperGenFormat);
                       try {
                         await saveToGallery(
                           wallpaperGenResult.imageBase64,

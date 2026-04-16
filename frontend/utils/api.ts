@@ -382,7 +382,6 @@ export interface GenerateCatalogOnWallpaperParams {
   products: CatalogImageProduct[];
   wallpaperBase64: string;
   layout: string;
-  format: string;
   showPrices: boolean;
   textStyle?: TextStyleOptions;
   placementZone?: PlacementZone;
