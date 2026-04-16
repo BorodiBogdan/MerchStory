@@ -767,6 +767,7 @@ function ChooseProductsSection({
   toggleProduct,
   colors,
   styles,
+  showProducts,
 }: {
   subtitle: string;
   isDesktop: boolean;
@@ -777,6 +778,7 @@ function ChooseProductsSection({
   toggleProduct: (id: string) => void;
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
+  showProducts: boolean;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -1077,6 +1079,38 @@ function ChooseProductsSection({
             <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
             <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
           </View>
+        ) : showProducts == false ? (
+          <>
+            <Pressable
+              style={({ pressed }) => ({
+                marginTop: D.spacing.md,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: D.spacing.xs,
+                alignSelf: 'flex-start',
+                paddingHorizontal: D.spacing.md,
+                paddingVertical: D.spacing.sm,
+                borderRadius: D.radius.md,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: pressed ? colors.bg.elevated : colors.bg.surface,
+              })}
+              onPress={() => setPickerOpen(true)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="grid-outline" size={14} color={colors.accent.primary} />
+              <Text
+                style={{
+                  fontSize: D.fontSize.sm,
+                  color: colors.accent.primary,
+                  fontWeight: D.fontWeight.medium,
+                }}
+              >
+                {'Browse products'}
+              </Text>
+              <Ionicons name="chevron-forward" size={13} color={colors.accent.primary} />
+            </Pressable>
+          </>
         ) : (
           <>
             <View style={{ flexDirection: 'row', gap: D.spacing.sm }}>
@@ -1797,6 +1831,7 @@ export default function StudioScreen() {
                 toggleProduct={toggleProduct}
                 colors={colors}
                 styles={styles}
+                showProducts
               />
 
               {/* Preview */}
@@ -1846,6 +1881,7 @@ export default function StudioScreen() {
                 toggleProduct={toggleProduct}
                 colors={colors}
                 styles={styles}
+                showProducts
               />
 
               {/* Wallpaper picker */}
@@ -2105,7 +2141,20 @@ export default function StudioScreen() {
               })}
             </View>
           </View>
-
+          {postType === 'Promotion' && (
+            <ChooseProductsSection
+              subtitle="Select products to use as visual reference (optional)"
+              isDesktop
+              products={products}
+              loadingProducts={loadingProducts}
+              selectedCount={promotionSelected.size}
+              selected={promotionSelected}
+              toggleProduct={togglePromotionProduct}
+              colors={colors}
+              styles={styles}
+              showProducts={false}
+            />
+          )}
           <View style={styles.desktopSection}>
             <Text style={styles.desktopSectionTitle}>Content</Text>
             <Text style={styles.desktopSectionSub}>Describe what you want to communicate</Text>
@@ -2119,20 +2168,6 @@ export default function StudioScreen() {
               editable={!annoGenerating}
             />
           </View>
-
-          {postType === 'Promotion' && (
-            <ChooseProductsSection
-              subtitle="Select products to use as visual reference (optional)"
-              isDesktop
-              products={products}
-              loadingProducts={loadingProducts}
-              selectedCount={promotionSelected.size}
-              selected={promotionSelected}
-              toggleProduct={togglePromotionProduct}
-              colors={colors}
-              styles={styles}
-            />
-          )}
 
           {/* Preview */}
           <View style={styles.desktopSection}>
@@ -2742,6 +2777,7 @@ export default function StudioScreen() {
                     toggleProduct={toggleProduct}
                     colors={colors}
                     styles={styles}
+                    showProducts
                   />
 
                   <View style={styles.mobileSection}>
@@ -2870,6 +2906,7 @@ export default function StudioScreen() {
                     toggleProduct={toggleProduct}
                     colors={colors}
                     styles={styles}
+                    showProducts
                   />
 
                   {/* Wallpaper picker */}
@@ -3265,6 +3302,7 @@ export default function StudioScreen() {
                   toggleProduct={togglePromotionProduct}
                   colors={colors}
                   styles={styles}
+                  showProducts
                 />
               )}
 
