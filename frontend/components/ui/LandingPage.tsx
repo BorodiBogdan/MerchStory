@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
@@ -7,43 +8,55 @@ import { useTheme } from '@/context/theme';
 const ACCENT = '#6366F1';
 const MAX_WIDTH = 1100;
 
-const FEATURES = [
+const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }[] = [
   {
-    icon: '✦',
+    icon: 'color-wand-outline',
     title: 'AI Scene Generation',
-    body: 'Upload a raw photo. Get a studio-quality product shot placed in a professional scene.',
+    body: 'Upload a raw photo. AI removes the background and places your product in a professional studio scene automatically.',
   },
   {
-    icon: '◈',
+    icon: 'partly-sunny-outline',
     title: 'Context Engine',
-    body: 'Post at the right moment — tuned to local weather, events, and trending occasions.',
+    body: 'Posts when it matters — recommendations tuned to local weather, holidays, events, and trending occasions.',
   },
   {
-    icon: '◎',
+    icon: 'share-social-outline',
     title: 'One-Touch Distribution',
-    body: 'Publish directly to your social channels from the same screen you created the ad.',
+    body: 'Publish directly to Facebook and Instagram from the same screen you created the ad. No copy-pasting.',
   },
 ];
 
 const STEPS = [
-  { num: '01', title: 'Upload', body: 'Take a photo of any product with your phone.' },
-  { num: '02', title: 'Generate', body: 'AI removes the background and builds a professional ad.' },
+  {
+    num: '01',
+    icon: 'camera-outline' as keyof typeof Ionicons.glyphMap,
+    title: 'Upload a Photo',
+    body: 'Take any product photo with your phone. No studio, no lighting setup needed.',
+  },
+  {
+    num: '02',
+    icon: 'sparkles-outline' as keyof typeof Ionicons.glyphMap,
+    title: 'AI Generates the Ad',
+    body: 'Background removed, scene generated, layout composed — in seconds.',
+  },
   {
     num: '03',
+    icon: 'rocket-outline' as keyof typeof Ionicons.glyphMap,
     title: 'Post & Sell',
-    body: 'Share to Facebook, Instagram, or download in one tap.',
+    body: 'Publish to your social channels or download the asset — done.',
   },
 ];
 
 export default function LandingPage() {
-  const { colors, colorScheme } = useTheme();
+  const { colors, colorScheme, toggleTheme } = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
 
   const isNarrow = width < 768;
   const hPad = isNarrow ? D.spacing.md : D.spacing.xl;
+  const isDark = colorScheme === 'dark';
 
-  const s = makeStyles(colors, colorScheme, hPad, isNarrow);
+  const s = makeStyles(colors, isDark, hPad, isNarrow);
 
   return (
     <ScrollView
@@ -54,59 +67,188 @@ export default function LandingPage() {
       {/* ── Navbar ─────────────────────────────────────────────── */}
       <View style={s.navOuter}>
         <View style={s.navInner}>
-          <Text style={s.logo}>
-            Merch<Text style={s.logoAccent}>Story</Text>
-          </Text>
+          {/* Logo — matches post-login header exactly */}
           <Pressable
-            style={({ pressed }) => [s.navBtn, pressed && s.navBtnPressed]}
-            onPress={() => router.push('/(auth)/login')}
+            style={({ pressed }) => [s.logoBtn, pressed && { opacity: 0.75 }]}
+            onPress={() => {}}
+            accessibilityRole="button"
           >
-            <Text style={s.navBtnText}>Sign In</Text>
+            <View style={s.logoMark}>
+              <Ionicons name="color-wand" size={13} color="#fff" />
+            </View>
+            <Text style={s.logoWordmark}>
+              <Text style={s.logoWordmarkBold}>Merch</Text>
+              <Text style={s.logoWordmarkAccent}>Story</Text>
+            </Text>
           </Pressable>
+
+          <View style={s.navRight}>
+            {/* Theme toggle */}
+            <Pressable
+              onPress={toggleTheme}
+              style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.6 }]}
+              accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name={isDark ? 'sunny-outline' : 'moon-outline'}
+                size={19}
+                color={colors.text.secondary}
+              />
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [s.navSignIn, pressed && { opacity: 0.7 }]}
+              onPress={() => router.push('/(auth)/login')}
+            >
+              <Text style={s.navSignInText}>Sign In</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
 
       {/* ── Hero ───────────────────────────────────────────────── */}
       <View style={s.heroOuter}>
-        <View style={s.heroBg} pointerEvents="none" />
-        <View style={s.heroInner}>
-          <Text style={s.eyebrow}>AI-POWERED ADS FOR LOCAL RETAILERS</Text>
-          <Text style={s.heroHeadline}>
-            Turn product photos{'\n'}into professional ads{'\n'}
-            <Text style={s.heroAccent}>instantly.</Text>
-          </Text>
-          <Text style={s.heroSub}>
-            MerchStory uses AI to transform raw product photos into scroll-stopping ads — no design
-            skills required.
-          </Text>
-          <View style={s.heroCtas}>
-            <Pressable
-              style={({ pressed }) => [s.ctaPrimary, pressed && s.ctaPrimaryPressed]}
-              onPress={() => router.push('/(auth)/register')}
-            >
-              <Text style={s.ctaPrimaryText}>Get Started Free</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [s.ctaSecondary, pressed && s.ctaSecondaryPressed]}
-              onPress={() => router.push('/(auth)/login')}
-            >
-              <Text style={s.ctaSecondaryText}>Sign In</Text>
-            </Pressable>
+        {/* Background glow */}
+        <View style={s.heroBgGlow} pointerEvents="none" />
+
+        <View style={[s.heroInner, !isNarrow && s.heroInnerRow]}>
+          {/* Left — copy */}
+          <View style={[s.heroLeft, !isNarrow && s.heroLeftWide]}>
+            <View style={s.eyebrowPill}>
+              <Ionicons name="sparkles" size={11} color={ACCENT} style={{ marginRight: 5 }} />
+              <Text style={s.eyebrowText}>AI-POWERED · BUILT FOR LOCAL RETAIL</Text>
+            </View>
+
+            <Text style={s.heroHeadline}>
+              {'Turn product photos\ninto professional\nads '}
+              <Text style={s.heroAccent}>instantly.</Text>
+            </Text>
+
+            <Text style={s.heroSub}>
+              MerchStory automates the full creative pipeline — background removal, scene
+              generation, and one-touch social posting — so you can focus on running your store.
+            </Text>
+
+            <View style={s.heroCtas}>
+              <Pressable
+                style={({ pressed }) => [s.ctaPrimary, pressed && s.ctaPrimaryPressed]}
+                onPress={() => router.push('/(auth)/register')}
+              >
+                <Text style={s.ctaPrimaryText}>Get Started Free</Text>
+                <Ionicons name="arrow-forward" size={15} color="#fff" style={{ marginLeft: 6 }} />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [s.ctaSecondary, pressed && s.ctaSecondaryPressed]}
+                onPress={() => router.push('/(auth)/login')}
+              >
+                <Text style={s.ctaSecondaryText}>Sign In</Text>
+              </Pressable>
+            </View>
+
+            <View style={s.trustRow}>
+              <Ionicons name="shield-checkmark-outline" size={14} color={colors.text.muted} />
+              <Text style={s.trustText}>Free to start · No credit card required</Text>
+            </View>
           </View>
+
+          {/* Right — app mockup placeholder */}
+          {!isNarrow && (
+            <View style={s.heroRight}>
+              <View style={s.mockupGlow} pointerEvents="none" />
+              <View style={s.phoneMockup}>
+                {/* Status bar dots */}
+                <View style={s.mockStatusBar}>
+                  <View style={[s.mockDot, { backgroundColor: '#FF5F57' }]} />
+                  <View style={[s.mockDot, { backgroundColor: '#FEBC2E' }]} />
+                  <View style={[s.mockDot, { backgroundColor: '#28C840' }]} />
+                </View>
+
+                {/* Mock header */}
+                <View style={s.mockHeader}>
+                  <View style={s.mockLogoMark}>
+                    <Ionicons name="color-wand" size={9} color="#fff" />
+                  </View>
+                  <View style={s.mockSkeletonLine} />
+                  <View style={[s.mockSkeletonLine, { width: 28, opacity: 0.4 }]} />
+                </View>
+
+                {/* Mock image area — placeholder for screenshot */}
+                <View style={s.mockImageArea}>
+                  <View style={s.mockImagePlaceholder}>
+                    <Ionicons
+                      name="image-outline"
+                      size={28}
+                      color={ACCENT}
+                      style={{ opacity: 0.5 }}
+                    />
+                    <Text style={s.mockImageLabel}>Your ad here</Text>
+                  </View>
+                </View>
+
+                {/* Mock product chips */}
+                <View style={s.mockChipRow}>
+                  <View style={[s.mockChip, s.mockChipActive]} />
+                  <View style={s.mockChip} />
+                  <View style={s.mockChip} />
+                </View>
+
+                {/* Mock skeleton lines */}
+                <View style={s.mockTextBlock}>
+                  <View style={[s.mockSkeletonLine, { width: '90%' }]} />
+                  <View style={[s.mockSkeletonLine, { width: '65%', marginTop: 6 }]} />
+                </View>
+
+                {/* Mock action button */}
+                <View style={s.mockActionRow}>
+                  <View style={s.mockActionBtn}>
+                    <Ionicons name="sparkles" size={11} color="#fff" />
+                    <View
+                      style={[s.mockSkeletonLine, { width: 60, opacity: 0.9, marginLeft: 5 }]}
+                    />
+                  </View>
+                  <View style={s.mockIconBtn}>
+                    <Ionicons name="share-social-outline" size={14} color={ACCENT} />
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
+
+        {/* Mobile mockup — below copy on narrow */}
+        {isNarrow && (
+          <View style={s.mockupNarrow}>
+            <View style={s.mockImageAreaNarrow}>
+              <Ionicons name="image-outline" size={36} color={ACCENT} style={{ opacity: 0.45 }} />
+              <Text style={s.mockImageLabel}>App screenshot coming soon</Text>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* ── Features ───────────────────────────────────────────── */}
       <View style={s.section}>
         <View style={s.container}>
           <Text style={s.sectionLabel}>WHAT IT DOES</Text>
-          <Text style={s.sectionHeading}>Everything you need to sell more.</Text>
+          <Text style={s.sectionHeading}>Everything a local retailer needs to run great ads.</Text>
+
           <View style={[s.featureRow, isNarrow && s.featureRowNarrow]}>
             {FEATURES.map((f) => (
               <View key={f.title} style={[s.featureCard, isNarrow && s.featureCardNarrow]}>
-                <Text style={s.featureIcon}>{f.icon}</Text>
-                <Text style={s.featureTitle}>{f.title}</Text>
-                <Text style={s.featureBody}>{f.body}</Text>
+                {/* Image placeholder */}
+                <View style={s.featureImgArea}>
+                  <Ionicons name={f.icon} size={22} color={ACCENT} style={{ opacity: 0.5 }} />
+                  <Text style={s.featureImgLabel}>Screenshot</Text>
+                </View>
+                {/* Content */}
+                <View style={s.featureCardBody}>
+                  <View style={s.featureIconBadge}>
+                    <Ionicons name={f.icon} size={16} color={ACCENT} />
+                  </View>
+                  <Text style={s.featureTitle}>{f.title}</Text>
+                  <Text style={s.featureBody}>{f.body}</Text>
+                </View>
               </View>
             ))}
           </View>
@@ -117,14 +259,20 @@ export default function LandingPage() {
       <View style={s.stepsOuter}>
         <View style={s.container}>
           <Text style={s.sectionLabel}>HOW IT WORKS</Text>
-          <Text style={s.sectionHeading}>From photo to ad in seconds.</Text>
+          <Text style={s.sectionHeading}>From photo to published ad in under a minute.</Text>
+
           <View style={[s.stepsRow, isNarrow && s.stepsRowNarrow]}>
             {STEPS.map((step, i) => (
               <View key={step.num} style={[s.stepItem, isNarrow && s.stepItemNarrow]}>
+                {/* Connector line — desktop only, between items */}
+                {!isNarrow && i < STEPS.length - 1 && <View style={s.stepConnector} />}
+
                 <View style={s.stepBadge}>
+                  <Ionicons name={step.icon} size={22} color={ACCENT} />
+                </View>
+                <View style={s.stepNumLabel}>
                   <Text style={s.stepNum}>{step.num}</Text>
                 </View>
-                {!isNarrow && i < STEPS.length - 1 && <View style={s.stepConnector} />}
                 <Text style={s.stepTitle}>{step.title}</Text>
                 <Text style={s.stepBody}>{step.body}</Text>
               </View>
@@ -133,22 +281,77 @@ export default function LandingPage() {
         </View>
       </View>
 
-      {/* ── Footer CTA ─────────────────────────────────────────── */}
+      {/* ── Footer ─────────────────────────────────────────────── */}
       <View style={s.footerOuter}>
+        <View style={s.footerBgGlow} pointerEvents="none" />
         <View style={s.container}>
-          <Text style={s.footerHeading}>Ready to level up your store?</Text>
-          <Text style={s.footerSub}>
-            Join small retailers already using MerchStory to create professional ads in minutes.
-          </Text>
-          <Pressable
-            style={({ pressed }) => [s.ctaPrimary, s.footerCta, pressed && s.ctaPrimaryPressed]}
-            onPress={() => router.push('/(auth)/register')}
-          >
-            <Text style={s.ctaPrimaryText}>Start for Free</Text>
-          </Pressable>
-          <Text style={s.copyright}>
-            © {new Date().getFullYear()} MerchStory · Built for local retailers
-          </Text>
+          {/* CTA row */}
+          <View style={[s.footerTop, isNarrow && s.footerTopNarrow]}>
+            <View style={s.footerTopLeft}>
+              <Text style={s.footerHeading}>
+                Ready to level up{'\n'}
+                <Text style={s.footerHeadingAccent}>your store?</Text>
+              </Text>
+              <Text style={s.footerSub}>
+                Join local retailers using MerchStory to create and post professional ads without a
+                marketing team.
+              </Text>
+            </View>
+            <View style={[s.footerTopRight, isNarrow && s.footerTopRightNarrow]}>
+              <Pressable
+                style={({ pressed }) => [s.ctaPrimary, pressed && s.ctaPrimaryPressed]}
+                onPress={() => router.push('/(auth)/register')}
+              >
+                <Text style={s.ctaPrimaryText}>Start for Free</Text>
+                <Ionicons name="arrow-forward" size={15} color="#fff" style={{ marginLeft: 6 }} />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  s.ctaSecondary,
+                  s.footerSignIn,
+                  pressed && s.ctaSecondaryPressed,
+                ]}
+                onPress={() => router.push('/(auth)/login')}
+              >
+                <Text style={s.ctaSecondaryText}>Already have an account? Sign in</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Divider */}
+          <View style={s.footerDivider} />
+
+          {/* Bottom bar */}
+          <View style={[s.footerBottom, isNarrow && s.footerBottomNarrow]}>
+            {/* Logo */}
+            <View style={s.footerLogoRow}>
+              <View style={s.logoMark}>
+                <Ionicons name="color-wand" size={11} color="#fff" />
+              </View>
+              <Text style={s.footerLogoText}>
+                <Text style={s.logoWordmarkBold}>Merch</Text>
+                <Text style={s.logoWordmarkAccent}>Story</Text>
+              </Text>
+            </View>
+
+            <Text style={s.copyright}>
+              © {new Date().getFullYear()} MerchStory · Built for local retailers
+            </Text>
+
+            {/* Theme toggle */}
+            <Pressable
+              onPress={toggleTheme}
+              style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.6 }]}
+              accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name={isDark ? 'sunny-outline' : 'moon-outline'}
+                size={17}
+                color={colors.text.muted}
+              />
+            </Pressable>
+          </View>
         </View>
       </View>
     </ScrollView>
@@ -157,12 +360,10 @@ export default function LandingPage() {
 
 function makeStyles(
   colors: ReturnType<typeof useTheme>['colors'],
-  colorScheme: string,
+  isDark: boolean,
   hPad: number,
   isNarrow: boolean
 ) {
-  const isDark = colorScheme === 'dark';
-
   return StyleSheet.create({
     scroll: {
       flex: 1,
@@ -172,13 +373,24 @@ function makeStyles(
       flexGrow: 1,
     },
 
-    // ── Navbar
+    // ── Shared layout
+    container: {
+      maxWidth: MAX_WIDTH,
+      // @ts-ignore
+      marginHorizontal: 'auto',
+      width: '100%',
+      paddingHorizontal: hPad,
+    },
+
+    // ── Navbar ──────────────────────────────────────────────────
     navOuter: {
-      // @ts-ignore — web-only sticky positioning
+      // @ts-ignore
       position: 'sticky',
       top: 0,
       zIndex: 100,
-      backgroundColor: colors.bg.base,
+      backgroundColor: isDark ? 'rgba(15,17,23,0.85)' : 'rgba(248,250,252,0.88)',
+      // @ts-ignore
+      backdropFilter: 'blur(12px)',
       borderBottomWidth: 1,
       borderBottomColor: colors.border.subtle,
     },
@@ -193,71 +405,139 @@ function makeStyles(
       alignItems: 'center',
       justifyContent: 'space-between',
     },
-    logo: {
+    logoBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.xs,
+      // @ts-ignore
+      outlineWidth: 0,
+    },
+    logoMark: {
+      width: 26,
+      height: 26,
+      borderRadius: D.radius.sm,
+      backgroundColor: ACCENT,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    logoWordmark: {
       fontSize: D.fontSize.lg,
-      fontWeight: D.fontWeight.bold,
-      color: colors.text.primary,
       letterSpacing: -0.5,
     },
-    logoAccent: {
+    logoWordmarkBold: {
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+    },
+    logoWordmarkAccent: {
+      fontWeight: D.fontWeight.bold,
       color: ACCENT,
     },
-    navBtn: {
+    navLinks: {
+      flexDirection: 'row',
+      gap: D.spacing.xl,
+      position: 'absolute',
+      // @ts-ignore
+      left: '50%',
+      transform: [{ translateX: -80 }],
+    },
+    navLink: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
+      // @ts-ignore
+      cursor: 'pointer',
+    },
+    navRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+    },
+    iconBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: D.radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      // @ts-ignore
+      outlineWidth: 0,
+    },
+    navSignIn: {
       paddingHorizontal: D.spacing.md,
-      paddingVertical: D.spacing.sm,
+      paddingVertical: D.spacing.sm - 2,
       borderRadius: D.radius.pill,
       borderWidth: 1,
       borderColor: colors.border.default,
+      // @ts-ignore
+      outlineWidth: 0,
     },
-    navBtnPressed: {
-      opacity: 0.7,
-    },
-    navBtnText: {
+    navSignInText: {
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.medium,
       color: colors.text.primary,
     },
 
-    // ── Hero
+    // ── Hero ────────────────────────────────────────────────────
     heroOuter: {
-      minHeight: isNarrow ? 480 : 600,
-      justifyContent: 'center',
-      alignItems: 'center',
+      paddingTop: isNarrow ? D.spacing.xl : 80,
+      paddingBottom: isNarrow ? D.spacing['2xl'] : 80,
+      paddingHorizontal: hPad,
       overflow: 'hidden',
       position: 'relative',
-      paddingVertical: D.spacing['2xl'],
-      paddingHorizontal: hPad,
     },
-    heroBg: {
+    heroBgGlow: {
       position: 'absolute',
-      top: '10%',
-      left: '50%',
+      top: -80,
       // @ts-ignore
-      transform: [{ translateX: '-50%' }],
+      left: '30%',
       width: 600,
-      height: 400,
+      height: 500,
       borderRadius: 300,
-      backgroundColor: isDark ? 'rgba(99,102,241,0.07)' : 'rgba(99,102,241,0.05)',
+      backgroundColor: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.06)',
     },
     heroInner: {
-      maxWidth: 680,
+      maxWidth: MAX_WIDTH,
       // @ts-ignore
       marginHorizontal: 'auto',
+      width: '100%',
       alignItems: 'center',
     },
-    eyebrow: {
+    heroInnerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: D.spacing['2xl'],
+    },
+    heroLeft: {
+      alignItems: isNarrow ? 'center' : 'flex-start',
+    },
+    heroLeftWide: {
+      flex: 1,
+      maxWidth: 520,
+    },
+    eyebrowPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.2)',
+      borderRadius: D.radius.pill,
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: D.spacing.xs + 2,
+      marginBottom: D.spacing.lg,
+      alignSelf: isNarrow ? 'center' : 'flex-start',
+    },
+    eyebrowText: {
       fontSize: D.fontSize.xs,
       fontWeight: D.fontWeight.semibold,
       color: ACCENT,
-      letterSpacing: 2,
-      marginBottom: D.spacing.md,
+      letterSpacing: 0.8,
     },
     heroHeadline: {
-      fontSize: isNarrow ? 36 : 52,
+      fontSize: isNarrow ? 34 : 52,
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
-      textAlign: 'center',
-      lineHeight: isNarrow ? 44 : 62,
+      textAlign: isNarrow ? 'center' : 'left',
+      lineHeight: isNarrow ? 42 : 62,
       letterSpacing: -1.5,
       marginBottom: D.spacing.lg,
     },
@@ -265,26 +545,188 @@ function makeStyles(
       color: ACCENT,
     },
     heroSub: {
-      fontSize: D.fontSize.lg,
+      fontSize: isNarrow ? D.fontSize.base : D.fontSize.lg,
       color: colors.text.secondary,
-      textAlign: 'center',
+      textAlign: isNarrow ? 'center' : 'left',
       lineHeight: 28,
       marginBottom: D.spacing['2xl'],
-      maxWidth: 520,
+      maxWidth: 480,
     },
     heroCtas: {
       flexDirection: 'row',
       gap: D.spacing.md,
       flexWrap: 'wrap',
+      justifyContent: isNarrow ? 'center' : 'flex-start',
+      marginBottom: D.spacing.lg,
+    },
+    trustRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.xs,
+    },
+    trustText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+    },
+
+    // ── Mockup — desktop ───────────────────────────────────────
+    heroRight: {
+      flex: 1,
+      maxWidth: 400,
+      alignItems: 'center',
+      position: 'relative',
+    },
+    mockupGlow: {
+      position: 'absolute',
+      top: '20%',
+      left: '10%',
+      width: 280,
+      height: 280,
+      borderRadius: 140,
+      backgroundColor: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.08)',
+    },
+    phoneMockup: {
+      width: 320,
+      backgroundColor: isDark ? '#161B27' : '#FFFFFF',
+      borderRadius: D.radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      overflow: 'hidden',
+      ...D.shadow.modal,
+    },
+    mockStatusBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: D.spacing.sm,
+      backgroundColor: isDark ? '#0F1117' : '#F1F5F9',
+    },
+    mockDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+    },
+    mockHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: D.spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    mockLogoMark: {
+      width: 20,
+      height: 20,
+      borderRadius: 5,
+      backgroundColor: ACCENT,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    mockSkeletonLine: {
+      height: 8,
+      flex: 1,
+      borderRadius: 4,
+      backgroundColor: colors.border.default,
+    },
+    mockImageArea: {
+      height: 180,
+      margin: D.spacing.md,
+      borderRadius: D.radius.md,
+      backgroundColor: isDark ? 'rgba(99,102,241,0.06)' : 'rgba(99,102,241,0.04)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.12)',
+      borderStyle: 'dashed',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    mockImagePlaceholder: {
+      alignItems: 'center',
+      gap: D.spacing.xs,
+    },
+    mockImageLabel: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+    },
+    mockChipRow: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+      paddingHorizontal: D.spacing.md,
+      paddingBottom: D.spacing.sm,
+    },
+    mockChip: {
+      height: 24,
+      width: 64,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.border.default,
+    },
+    mockChipActive: {
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: ACCENT,
+    },
+    mockTextBlock: {
+      paddingHorizontal: D.spacing.md,
+      paddingBottom: D.spacing.sm,
+      gap: 4,
+    },
+    mockActionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      padding: D.spacing.md,
+    },
+    mockActionBtn: {
+      flex: 1,
+      height: 36,
+      borderRadius: D.radius.md,
+      backgroundColor: ACCENT,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: D.spacing.md,
+    },
+    mockIconBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.25)',
+      backgroundColor: colors.accent.dim,
+      alignItems: 'center',
       justifyContent: 'center',
     },
 
-    // ── Buttons
+    // ── Mockup — narrow ────────────────────────────────────────
+    mockupNarrow: {
+      maxWidth: MAX_WIDTH,
+      // @ts-ignore
+      marginHorizontal: 'auto',
+      width: '100%',
+      marginTop: D.spacing['2xl'],
+    },
+    mockImageAreaNarrow: {
+      height: 160,
+      borderRadius: D.radius.lg,
+      backgroundColor: isDark ? 'rgba(99,102,241,0.06)' : 'rgba(99,102,241,0.04)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(99,102,241,0.18)' : 'rgba(99,102,241,0.12)',
+      borderStyle: 'dashed',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.sm,
+    },
+
+    // ── Buttons ────────────────────────────────────────────────
     ctaPrimary: {
       backgroundColor: ACCENT,
       paddingHorizontal: D.spacing.xl,
       paddingVertical: D.spacing.md,
       borderRadius: D.radius.pill,
+      flexDirection: 'row',
+      alignItems: 'center',
+      ...D.shadow.glow,
     },
     ctaPrimaryPressed: {
       opacity: 0.85,
@@ -307,24 +749,17 @@ function makeStyles(
     ctaSecondaryText: {
       fontSize: D.fontSize.base,
       fontWeight: D.fontWeight.medium,
-      color: colors.text.primary,
+      color: colors.text.secondary,
     },
 
-    // ── Section shared
+    // ── Section shared ─────────────────────────────────────────
     section: {
       paddingVertical: isNarrow ? D.spacing['2xl'] : 80,
-      paddingHorizontal: hPad,
-    },
-    container: {
-      maxWidth: MAX_WIDTH,
-      // @ts-ignore
-      marginHorizontal: 'auto',
-      width: '100%',
     },
     sectionLabel: {
       fontSize: D.fontSize.xs,
       fontWeight: D.fontWeight.semibold,
-      color: colors.text.muted,
+      color: ACCENT,
       letterSpacing: 2,
       marginBottom: D.spacing.sm,
       textAlign: 'center',
@@ -336,9 +771,12 @@ function makeStyles(
       textAlign: 'center',
       letterSpacing: -0.5,
       marginBottom: isNarrow ? D.spacing.lg : D.spacing['2xl'],
+      maxWidth: 640,
+      // @ts-ignore
+      alignSelf: 'center',
     },
 
-    // ── Features
+    // ── Features ───────────────────────────────────────────────
     featureRow: {
       flexDirection: 'row',
       gap: D.spacing.lg,
@@ -352,14 +790,36 @@ function makeStyles(
       borderRadius: D.radius.lg,
       borderWidth: 1,
       borderColor: colors.border.default,
-      padding: D.spacing.lg,
+      overflow: 'hidden',
     },
     featureCardNarrow: {
       flex: undefined,
     },
-    featureIcon: {
-      fontSize: 24,
-      color: ACCENT,
+    featureImgArea: {
+      height: 140,
+      backgroundColor: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)',
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.xs,
+    },
+    featureImgLabel: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+    },
+    featureCardBody: {
+      padding: D.spacing.lg,
+    },
+    featureIconBadge: {
+      width: 36,
+      height: 36,
+      borderRadius: D.radius.sm,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.2)',
+      alignItems: 'center',
+      justifyContent: 'center',
       marginBottom: D.spacing.md,
     },
     featureTitle: {
@@ -374,15 +834,23 @@ function makeStyles(
       lineHeight: 22,
     },
 
-    // ── How It Works
+    // ── How It Works ───────────────────────────────────────────
     stepsOuter: {
       backgroundColor: colors.bg.surface,
       paddingVertical: isNarrow ? D.spacing['2xl'] : 80,
       paddingHorizontal: hPad,
+      borderTopWidth: 1,
+      borderTopColor: colors.border.subtle,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
     },
     stepsRow: {
       flexDirection: 'row',
       gap: D.spacing.lg,
+      maxWidth: MAX_WIDTH,
+      // @ts-ignore
+      marginHorizontal: 'auto',
+      width: '100%',
       position: 'relative',
     },
     stepsRowNarrow: {
@@ -395,35 +863,35 @@ function makeStyles(
     },
     stepItemNarrow: {
       flex: undefined,
-      alignItems: 'flex-start',
-      flexDirection: 'row',
-      gap: D.spacing.md,
-    },
-    stepBadge: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      backgroundColor: colors.accent.dim,
-      borderWidth: 1,
-      borderColor: ACCENT,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: D.spacing.md,
-      flexShrink: 0,
-    },
-    stepNum: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.bold,
-      color: ACCENT,
-      letterSpacing: 1,
     },
     stepConnector: {
       position: 'absolute',
-      top: 24,
-      left: '55%',
-      right: '-45%',
+      top: 28,
+      // @ts-ignore
+      left: '60%',
+      right: '-40%',
       height: 1,
       backgroundColor: colors.border.default,
+    },
+    stepBadge: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.25)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: D.spacing.sm,
+    },
+    stepNumLabel: {
+      marginBottom: D.spacing.sm,
+    },
+    stepNum: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: ACCENT,
+      letterSpacing: 1.5,
     },
     stepTitle: {
       fontSize: D.fontSize.lg,
@@ -437,36 +905,109 @@ function makeStyles(
       color: colors.text.secondary,
       lineHeight: 22,
       textAlign: isNarrow ? 'left' : 'center',
+      maxWidth: isNarrow ? undefined : 200,
     },
 
-    // ── Footer CTA
+    // ── Footer ─────────────────────────────────────────────────
     footerOuter: {
-      paddingVertical: isNarrow ? D.spacing['2xl'] : 100,
+      position: 'relative',
+      overflow: 'hidden',
+      paddingTop: isNarrow ? D.spacing['2xl'] : 80,
+      paddingBottom: D.spacing['2xl'],
       paddingHorizontal: hPad,
-      alignItems: 'center',
+    },
+    footerBgGlow: {
+      position: 'absolute',
+      bottom: -100,
+      // @ts-ignore
+      left: '20%',
+      width: 500,
+      height: 400,
+      borderRadius: 250,
+      backgroundColor: isDark ? 'rgba(99,102,241,0.06)' : 'rgba(99,102,241,0.04)',
+    },
+    footerTop: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: D.spacing['2xl'],
+      maxWidth: MAX_WIDTH,
+      // @ts-ignore
+      marginHorizontal: 'auto',
+      width: '100%',
+      marginBottom: D.spacing['2xl'],
+    },
+    footerTopNarrow: {
+      flexDirection: 'column',
+    },
+    footerTopLeft: {
+      flex: 1,
+      maxWidth: 480,
     },
     footerHeading: {
       fontSize: isNarrow ? D.fontSize['2xl'] : 40,
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
-      textAlign: 'center',
       letterSpacing: -0.5,
+      lineHeight: isNarrow ? 36 : 52,
       marginBottom: D.spacing.md,
+    },
+    footerHeadingAccent: {
+      color: ACCENT,
     },
     footerSub: {
       fontSize: D.fontSize.base,
       color: colors.text.secondary,
-      textAlign: 'center',
-      marginBottom: D.spacing['2xl'],
-      maxWidth: 480,
+      lineHeight: 24,
+      maxWidth: 400,
     },
-    footerCta: {
-      marginBottom: D.spacing['2xl'],
+    footerTopRight: {
+      alignItems: 'flex-start',
+      justifyContent: 'center',
+      gap: D.spacing.md,
+    },
+    footerTopRightNarrow: {
+      marginTop: D.spacing.lg,
+    },
+    footerSignIn: {
+      paddingHorizontal: 0,
+      borderWidth: 0,
+    },
+    footerDivider: {
+      height: 1,
+      backgroundColor: colors.border.subtle,
+      maxWidth: MAX_WIDTH,
+      // @ts-ignore
+      marginHorizontal: 'auto',
+      width: '100%',
+      marginBottom: D.spacing.lg,
+    },
+    footerBottom: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      maxWidth: MAX_WIDTH,
+      // @ts-ignore
+      marginHorizontal: 'auto',
+      width: '100%',
+    },
+    footerBottomNarrow: {
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+      gap: D.spacing.md,
+    },
+    footerLogoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.xs,
+    },
+    footerLogoText: {
+      fontSize: D.fontSize.base,
+      letterSpacing: -0.3,
     },
     copyright: {
       fontSize: D.fontSize.xs,
       color: colors.text.muted,
-      textAlign: 'center',
     },
   });
 }
