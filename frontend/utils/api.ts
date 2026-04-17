@@ -101,6 +101,7 @@ export interface AuthResponse {
   email: string;
   userName: string;
   isShopSetupComplete: boolean;
+  isAdmin: boolean;
 }
 
 export interface BrandColor {
@@ -565,6 +566,61 @@ export async function deleteProduct(id: string): Promise<void> {
 export interface RemoveBackgroundResponse {
   imageBase64: string;
   mimeType: string;
+}
+
+// ── Reference image similarity search ────────────────────────────────────────
+
+export interface ReferenceImage {
+  id: string;
+  name: string;
+  category: string | null;
+  imageBase64: string;
+  similarity: number;
+}
+
+export interface AddReferenceImagePayload {
+  name: string;
+  category?: string | null;
+  imageBase64: string;
+}
+
+export async function addReferenceImage(payload: AddReferenceImagePayload): Promise<{
+  id: string;
+  name: string;
+  category: string | null;
+  createdAt: string;
+}> {
+  const response = await fetchWithAuth(`${API_URL}/reference-images/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to add reference image (${response.status})`);
+  }
+  return response.json() as Promise<{
+    id: string;
+    name: string;
+    category: string | null;
+    createdAt: string;
+  }>;
+}
+
+export async function searchReferenceImages(
+  imageBase64: string,
+  topK = 10
+): Promise<ReferenceImage[]> {
+  const response = await fetchWithAuth(`${API_URL}/reference-images/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64, topK }),
+  });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Similarity search failed (${response.status})`);
+  }
+  return response.json() as Promise<ReferenceImage[]>;
 }
 
 export async function removeBackground(imageBase64: string): Promise<RemoveBackgroundResponse> {

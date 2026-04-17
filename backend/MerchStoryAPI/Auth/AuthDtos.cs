@@ -4,7 +4,7 @@ public record RegisterRequest(string Email, string Password, string? ClientType 
 
 public record LoginRequest(string Email, string Password, string? ClientType = null);
 
-public record AuthResponse(string Token, string RefreshToken, string Email, string UserName, bool IsShopSetupComplete);
+public record AuthResponse(string Token, string RefreshToken, string Email, string UserName, bool IsShopSetupComplete, bool IsAdmin);
 
 public record RefreshRequest(string RefreshToken);
 

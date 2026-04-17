@@ -29,6 +29,7 @@ public class JwtService
             new Claim(JwtRegisteredClaimNames.Email, user.Email!),
             new Claim(JwtRegisteredClaimNames.UniqueName, user.UserName!),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new Claim("is_admin", user.IsAdmin ? "true" : "false"),
         };
 
         var token = new JwtSecurityToken(

@@ -41,7 +41,7 @@ public static class AuthRoutes
             db.RefreshTokens.Add(refreshToken);
             await db.SaveChangesAsync();
 
-            return Results.Ok(new AuthResponse(accessToken, refreshToken.Token, user.Email!, user.UserName!, false));
+            return Results.Ok(new AuthResponse(accessToken, refreshToken.Token, user.Email!, user.UserName!, false, user.IsAdmin));
         });
 
         group.MapPost("/login", async (
@@ -73,7 +73,7 @@ public static class AuthRoutes
             await db.SaveChangesAsync();
 
             bool hasProfile = await db.ShopProfiles.AnyAsync(s => s.UserId == user.Id);
-            return Results.Ok(new AuthResponse(accessToken, refreshToken.Token, user.Email!, user.UserName!, hasProfile));
+            return Results.Ok(new AuthResponse(accessToken, refreshToken.Token, user.Email!, user.UserName!, hasProfile, user.IsAdmin));
         });
 
         group.MapPost("/refresh", async (
@@ -106,7 +106,8 @@ public static class AuthRoutes
                 newRefreshToken.Token,
                 stored.User.Email!,
                 stored.User.UserName!,
-                hasProfile));
+                hasProfile,
+                stored.User.IsAdmin));
         });
     }
 }

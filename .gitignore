@@ -20,6 +20,9 @@ obj/
 *.nupkg
 *.snupkg
 
+# CLIP ONNX model (large binary, download separately)
+backend/models/
+
 # .NET user secrets / local config
 appsettings.Development.json
 appsettings.Local.json

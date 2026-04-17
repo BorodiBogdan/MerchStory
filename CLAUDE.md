@@ -5,7 +5,7 @@ This file gives Claude Code the context needed to make good decisions across all
 ---
 
 ## Project Summary
-**MerchStory** is a mobile app that turns raw product photos into professional AI-generated ads for small/local retailers. See [docs/project-description.md](docs/project-description.md) for the full product spec and build phases.
+**MerchStory** is a mobile app that turns raw product photos into professional AI-generated ads, catalogs, and wallpapers for small/local retailers, with one-tap publishing to social channels. See [docs/project-description.md](docs/project-description.md) for the full product spec and build phases.
 
 ---
 
@@ -15,33 +15,45 @@ This file gives Claude Code the context needed to make good decisions across all
 /
 ├── backend/
 │   ├── MerchStoryAPI/                # ASP.NET Core minimal API (main service)
-│   │   ├── Auth/                     # JWT + refresh token auth (AuthRoutes, JwtService)
+│   │   ├── Auth/                     # JWT + refresh tokens (AuthRoutes, JwtService, RefreshTokenCleanupService)
 │   │   ├── Data/                     # EF Core DbContext (AppDbContext)
-│   │   ├── Models/                   # AppUser, RefreshToken
-│   │   └── Migrations/               # EF Core migrations
+│   │   ├── Models/                   # AppUser, RefreshToken, ShopProfile, Product,
+│   │   │                             #   GeneratedImage, ReferenceImage, SocialPost
+│   │   ├── Migrations/               # EF Core migrations (pgvector-enabled)
+│   │   ├── Shop/                     # ShopRoutes — shop profile (brand colors, contact, logo)
+│   │   ├── Products/                 # ProductRoutes — product CRUD, image upload
+│   │   ├── Gallery/                  # GalleryRoutes — user's generated-asset library
+│   │   ├── ImageGeneration/          # ImageGenerationRoutes, CatalogCompositor, Fonts/
+│   │   ├── ReferenceImages/          # ReferenceImageRoutes + CLIP embedding service (pgvector search)
+│   │   ├── Facebook/                 # FacebookRoutes — OAuth + page/post endpoints
+│   │   ├── Social/                   # SocialRoutes + FacebookSocialPostSyncService (post cache)
+│   │   └── Program.cs                # Endpoint wiring, DI, auth, CORS
 │   ├── MerchStoryImageGeneration/    # Image generation class library
-│   │   ├── Services/                 # IImageGenerationService, GeminiImageGenerationService
+│   │   ├── Services/                 # Announcement / Catalog / Wallpaper image services,
+│   │   │                             #   GeminiImageProvider, MockImageProvider, IImageProvider
+│   │   ├── Models/                   # Request DTOs + BrandContext + ImageGenerationResult
 │   │   └── Extensions/               # ServiceCollectionExtensions (DI registration)
-│   └── MerchStory.Tests/             # xUnit integration test project
+│   └── MerchStory.Tests/             # xUnit integration tests
 ├── frontend/                         # React Native (Expo) app
 │   ├── app/
-│   │   ├── _layout.tsx               # Root layout (AuthProvider, ThemeProvider)
-│   │   ├── (auth)/                   # Login & register screens
-│   │   └── (tabs)/                   # Main tab screens (index, explore)
-│   ├── components/ui/                # FloatingInput, LogoutModal, SocialButton, etc.
-│   ├── context/
-│   │   ├── auth.tsx                  # Auth state (JWT storage, login/logout)
-│   │   └── theme.tsx                 # Dark/light theme state
-│   ├── utils/
-│   │   └── api.ts                    # Centralized API client
-│   └── constants/
-│       ├── design.ts                 # Spacing, duration, layout tokens
-│       └── theme.ts                  # Color palette for dark/light modes
+│   │   ├── _layout.tsx               # Root layout (Auth, Theme, Shop, Setup providers)
+│   │   ├── (auth)/                   # Login & register
+│   │   ├── (setup)/                  # 3-step shop onboarding (step1..step3)
+│   │   ├── (tabs)/                   # index, products, gallery, wallpapers, analytics, profile
+│   │   ├── add-products-professional.tsx  # Admin product-import flow
+│   │   ├── social-callback.tsx       # OAuth redirect handler
+│   │   └── modal.tsx
+│   ├── components/ui/                # AuthNavbar, FloatingInput, ChipSelector,
+│   │                                 #   ColorPickerInput, RgbColorPicker, PlacementZoneEditor,
+│   │                                 #   SetupShell, StepProgress, LandingPage, LogoutModal, SocialButton
+│   ├── context/                      # auth, theme, shop, setup
+│   ├── utils/                        # api.ts (central API client), formatMessage.ts
+│   └── constants/                    # design tokens + theme colors
 ├── docs/
-│   └── project-description.md       # Full product spec
-├── .husky/
-│   └── pre-commit                    # Runs lint-staged (frontend) + dotnet format (backend)
-└── docker-compose.yml
+│   └── project-description.md        # Full product spec
+├── .husky/pre-commit                 # lint-staged (frontend) + dotnet format (backend)
+├── docker-compose.yml
+└── docker-compose.override.yml
 ```
 
 ---
@@ -50,41 +62,42 @@ This file gives Claude Code the context needed to make good decisions across all
 
 ### Backend
 - **Runtime:** .NET 10 (ASP.NET Core minimal API)
-- **Auth:** ASP.NET Identity + custom JWT service with refresh tokens (stored in PostgreSQL)
-- **AI Orchestration:** Microsoft Semantic Kernel — multi-model routing, prompt management, plugin system, memory/RAG
-- **Image Generation:** Google Gemini API via `GeminiImageGenerationService`
-- **ORM:** Entity Framework Core
+- **Auth:** ASP.NET Identity + custom JWT service with refresh tokens; `IsAdmin` flag on `AppUser`
+- **AI Orchestration:** Microsoft Semantic Kernel — multi-model routing, prompt management, plugin system
+- **Image Generation:** Google Gemini via `GeminiImageProvider`; `MockImageProvider` for tests. Three service flavors: Announcement, Catalog, Wallpaper (each with its own request model and prompt strategy). `CatalogCompositor` overlays text/branding onto generated catalogs.
+- **Reference-image search:** CLIP embeddings stored in pgvector for "find similar products from a photo"
+- **Social:** Facebook OAuth + page publishing; `FacebookSocialPostSyncService` caches posted content. Instagram scaffolding exists but Instagram sync has been removed.
+- **ORM:** Entity Framework Core with `UseVector()` (pgvector)
 - **Storage:** Azure Blob Storage (images, videos, generated assets)
-- **Database:** PostgreSQL 18 (Docker container) + pgvector for Semantic Kernel vector store
+- **Database:** PostgreSQL 18 (Docker) + pgvector
 
 ### Frontend
 - **Framework:** React Native via Expo (~54)
 - **Language:** TypeScript (strict mode)
-- **Navigation:** Expo Router (file-based routing under `app/`)
+- **Navigation:** Expo Router (file-based routing under `app/`, route groups for auth/setup/tabs)
 - **Animation:** React Native Reanimated (shared values, `useAnimatedStyle`)
-- **State:** React Context — `AuthContext` (JWT + refresh tokens), `ThemeContext` (dark/light)
-- **Haptics:** `expo-haptics` for tactile feedback on interactions
+- **State:** React Context — `AuthContext`, `ThemeContext`, `ShopContext`, `SetupContext`
+- **Haptics:** `expo-haptics`
 
 ### Infrastructure
-- Docker Compose for local dev (PostgreSQL + backend + frontend)
-- GitHub Actions CI/CD (`.github/workflows/ci.yml`)
-- Husky + lint-staged for pre-commit hooks (root `package.json`)
+- Docker Compose for local dev (PostgreSQL + backend + frontend); `docker-compose.override.yml` for dev-only tweaks
+- GitHub Actions CI (`.github/workflows/ci.yml`)
+- Husky + lint-staged pre-commit hooks (root `package.json`)
 
 ---
 
 ## Coding Conventions
 
 ### Backend (.NET)
-- Minimal API style in `Program.cs`; group related endpoints into route groups (e.g. `Auth/AuthRoutes.cs`)
-- Semantic Kernel plugins go in a `Plugins/` folder under `MerchStoryAPI/`
+- Minimal API style. Each feature area has its own folder with a `*Routes.cs` file and a `Map<Feature>Endpoints()` extension method wired up in `Program.cs`.
 - Use `ILogger<T>` for logging; no `Console.WriteLine` in production code
 - All secrets (API keys, JWT key, DB connection) go in `appsettings.Development.json` or environment variables — never hardcoded
-- Test project mirrors backend structure; use xUnit (no Moq yet — integration tests hit real DB)
+- Tests live in `MerchStory.Tests` (xUnit, integration-style against a real DB; no Moq)
 
 ### Frontend (React Native / Expo)
 - TypeScript strict mode
-- Screens in `app/` (Expo Router), reusable components in `components/`
-- No inline styles — use `StyleSheet.create` or the design token constants
+- Screens in `app/` (Expo Router), reusable components in `components/ui/`
+- No inline styles — use `StyleSheet.create` or design token constants
 - All API calls go through `utils/api.ts`
 - Design tokens in `constants/design.ts` (spacing, durations) and `constants/theme.ts` (colors)
 - Animated values (`useSharedValue`) must be included in `useEffect` dependency arrays
@@ -96,29 +109,29 @@ This file gives Claude Code the context needed to make good decisions across all
 
 ---
 
-## AI Integration Notes (Semantic Kernel)
-- Semantic Kernel is the single orchestration layer — all LLM calls route through it
-- Use SK Plugins to wrap third-party APIs (weather, news, image generation, social posting)
-- Use SK Memory / Vector Store for storing user asset metadata and retrieval
-- Model routing: default to GPT-4o for reasoning tasks; swap to cheaper models for simple classification/tagging
-- Prompt templates go in `Plugins/<PluginName>/skprompt.txt` following SK conventions
-- Current image generation: Google Gemini (`GeminiImageGenerationService`) — registered via `ServiceCollectionExtensions`
+## AI Integration Notes
+- Semantic Kernel is the orchestration layer for LLM-based reasoning tasks
+- Image generation goes through `IImageProvider` (Gemini in prod, Mock in tests)
+- Per-asset-type services (`AnnouncementImageService`, `CatalogImageService`, `WallpaperImageService`) encapsulate prompts and post-processing
+- CLIP embeddings + pgvector power the reference-image / "search by photo" feature
 
 ---
 
 ## Build Phase Priority
-Always respect the P0 → P1 → P2 order from the product spec. Do not implement P1/P2 features before P0 is solid.
+Always respect the P0 → P1 → P2 order from the product spec.
 
-**P0 (current focus):**
-- Auth — JWT + refresh tokens implemented
-- Context Engine (weather, events, holidays)
-- Smart Object Studio (background removal, upscaling, scene generation)
-- Basic asset library
+**Shipped / in progress (P0):**
+- Auth (JWT + refresh tokens, admin flag)
+- Shop profile + 3-step setup onboarding
+- Product library (CRUD + photo import + search-by-photo via CLIP)
+- Generated-image gallery (catalog, announcement, wallpaper asset types)
+- Facebook OAuth + post publishing + post cache
+- Admin dashboard (professional product import)
 
 ---
 
 ## Important Constraints
 - Keep AI API keys out of source control — use `.env` or user-secrets
 - Image/video assets are stored externally (blob storage), not in the repo
-- The app targets small retailers — UX must be simple; avoid jargon in UI copy
-- Mobile-first: all UI decisions should be validated against small screens first
+- Mobile-first UX — small retailers, no jargon in UI copy
+- Instagram routes/scaffolding exist but Instagram sync has been removed; don't reintroduce it without product sign-off
