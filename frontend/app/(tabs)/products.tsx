@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -57,8 +58,8 @@ export default function ProductsScreen() {
   const [draftImageBase64, setDraftImageBase64] = useState<string | null>(null);
   const [nameError, setNameError] = useState('');
 
-  // Image preview / background-removal step
-  const [previewVisible, setPreviewVisible] = useState(false);
+  // Image preview / background-removal step (rendered inside the same modal)
+  const [showPreview, setShowPreview] = useState(false);
   const [previewOriginalUri, setPreviewOriginalUri] = useState<string | null>(null);
   const [previewOriginalB64, setPreviewOriginalB64] = useState<string | null>(null);
   const [previewProcessedB64, setPreviewProcessedB64] = useState<string | null>(null);
@@ -117,6 +118,28 @@ export default function ProductsScreen() {
   function closeModal() {
     setModalVisible(false);
     setEditingProduct(null);
+    setShowPreview(false);
+  }
+
+  async function uriToBase64(uri: string): Promise<string> {
+    if (Platform.OS === 'web') {
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      return new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1] ?? '');
+        reader.readAsDataURL(blob);
+      });
+    }
+    return FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+  }
+
+  async function openImagePreview(uri: string) {
+    setPreviewOriginalUri(uri);
+    setPreviewOriginalB64(null);
+    setPreviewProcessedB64(null);
+    setRemoveBgError(null);
+    setShowPreview(true);
   }
 
   async function pickImage() {
@@ -127,39 +150,38 @@ export default function ProductsScreen() {
       quality: 0.8,
     });
     if (result.canceled || !result.assets[0]) return;
+    await openImagePreview(result.assets[0].uri);
+  }
 
-    const uri = result.assets[0].uri;
-    let base64: string | null = null;
+  async function takePhoto() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') return;
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    await openImagePreview(result.assets[0].uri);
+  }
 
-    if (Platform.OS === 'web') {
-      const res = await fetch(uri);
-      const blob = await res.blob();
-      base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const dataUrl = reader.result as string;
-          resolve(dataUrl.split(',')[1] ?? '');
-        };
-        reader.readAsDataURL(blob);
-      });
-    } else {
-      base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-    }
-
-    setPreviewOriginalUri(uri);
-    setPreviewOriginalB64(base64);
-    setPreviewProcessedB64(null);
-    setRemoveBgError(null);
-    setModalVisible(false);
-    setPreviewVisible(true);
+  function showPhotoSourcePicker() {
+    Alert.alert('Add Photo', undefined, [
+      { text: 'Take Photo', onPress: () => void takePhoto() },
+      { text: 'Choose from Library', onPress: () => void pickImage() },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   }
 
   async function handleRemoveBackground() {
-    if (!previewOriginalB64) return;
+    if (!previewOriginalUri) return;
     setIsRemovingBg(true);
     setRemoveBgError(null);
     try {
-      const result = await removeBackground(previewOriginalB64);
+      const b64 = previewOriginalB64 ?? (await uriToBase64(previewOriginalUri));
+      if (!previewOriginalB64) setPreviewOriginalB64(b64);
+      const result = await removeBackground(b64);
       setPreviewProcessedB64(result.imageBase64);
     } catch (err: unknown) {
       setRemoveBgError(err instanceof Error ? err.message : 'Background removal failed.');
@@ -174,10 +196,9 @@ export default function ProductsScreen() {
       setDraftImageBase64(previewProcessedB64);
     } else {
       setDraftImageUri(previewOriginalUri);
-      setDraftImageBase64(previewOriginalB64);
+      setDraftImageBase64(null);
     }
-    setPreviewVisible(false);
-    setModalVisible(true);
+    setShowPreview(false);
   }
 
   function validate(): boolean {
@@ -202,10 +223,14 @@ export default function ProductsScreen() {
     if (!validate()) return;
     setIsSaving(true);
     try {
+      let imageBase64 = draftImageBase64;
+      if (!imageBase64 && draftImageUri && !draftImageUri.startsWith('data:')) {
+        imageBase64 = await uriToBase64(draftImageUri);
+      }
       const payload = {
         name: draftName.trim(),
         price: parseFloat(draftPrice),
-        imageBase64: draftImageBase64,
+        imageBase64,
       };
       if (editingProduct) {
         const updated = await updateProduct(editingProduct.id, payload);
@@ -366,104 +391,6 @@ export default function ProductsScreen() {
         {listContent()}
       </View>
 
-      {/* Image Preview / Background Removal Modal */}
-      <Modal
-        visible={previewVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setPreviewVisible(false);
-          setModalVisible(true);
-        }}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => {
-            setPreviewVisible(false);
-            setModalVisible(true);
-          }}
-        >
-          <Pressable style={[styles.modalSheet, styles.previewSheet]} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Preview Photo</Text>
-
-            <View style={styles.previewImageWrap}>
-              <Image
-                source={{
-                  uri: previewProcessedB64
-                    ? `data:image/png;base64,${previewProcessedB64}`
-                    : (previewOriginalUri ?? undefined),
-                }}
-                style={styles.previewImage}
-                resizeMode="contain"
-              />
-            </View>
-
-            {previewProcessedB64 && (
-              <Text style={styles.previewToggleLabel}>Showing: background removed</Text>
-            )}
-
-            {removeBgError && (
-              <Text
-                style={[styles.fieldError, { textAlign: 'center', marginBottom: D.spacing.sm }]}
-              >
-                {removeBgError}
-              </Text>
-            )}
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.removeBgButton,
-                isRemovingBg && { opacity: 0.7 },
-                pressed && !isRemovingBg && { opacity: 0.85 },
-              ]}
-              onPress={() => void handleRemoveBackground()}
-              disabled={isRemovingBg}
-              accessibilityRole="button"
-              accessibilityLabel="Remove background"
-            >
-              {isRemovingBg ? (
-                <ActivityIndicator size="small" color={colors.accent.primary} />
-              ) : (
-                <>
-                  <Ionicons
-                    name="cut-outline"
-                    size={16}
-                    color={colors.accent.primary}
-                    style={{ marginRight: D.spacing.xs }}
-                  />
-                  <Text style={styles.removeBgButtonText}>
-                    {previewProcessedB64 ? 'Remove Background Again' : 'Remove Background'}
-                  </Text>
-                </>
-              )}
-            </Pressable>
-
-            <View style={styles.modalActions}>
-              <Pressable
-                style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.7 }]}
-                onPress={() => confirmImageChoice(false)}
-                accessibilityRole="button"
-              >
-                <Text style={styles.cancelButtonText}>Use Original</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.saveButton,
-                  !previewProcessedB64 && styles.saveButtonDisabled,
-                  pressed && !!previewProcessedB64 && { opacity: 0.85 },
-                ]}
-                onPress={() => confirmImageChoice(true)}
-                disabled={!previewProcessedB64}
-                accessibilityRole="button"
-                accessibilityLabel="Use background-removed image"
-              >
-                <Text style={styles.saveButtonText}>Use Processed</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
       {/* Delete confirmation */}
       <Modal
         visible={confirmDeleteId !== null}
@@ -511,121 +438,196 @@ export default function ProductsScreen() {
             style={styles.modalKAV}
           >
             <Pressable
-              style={[
-                styles.modalSheet,
-                !isWeb && {
-                  paddingTop: insets.top + D.spacing.sm,
-                  paddingBottom: insets.bottom + D.spacing.md,
-                },
-              ]}
+              style={[styles.modalSheet, !isWeb && { paddingBottom: insets.bottom + D.spacing.md }]}
               onPress={() => {}}
             >
-              {isWeb && <View style={styles.modalHandle} />}
+              {!isWeb && <View style={styles.modalHandle} />}
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={!isWeb && styles.modalScrollContent}
               >
-                <Text style={styles.modalTitle}>
-                  {editingProduct ? 'Edit Product' : 'New Product'}
-                </Text>
+                {showPreview ? (
+                  <>
+                    <Text style={styles.modalTitle}>Preview Photo</Text>
 
-                {/* Photo picker */}
-                <Pressable
-                  style={({ pressed }) => [styles.imagePicker, pressed && { opacity: 0.8 }]}
-                  onPress={() => void pickImage()}
-                  accessibilityRole="button"
-                  accessibilityLabel="Pick product photo"
-                >
-                  {draftImageUri ? (
-                    <Image
-                      source={{ uri: draftImageUri }}
-                      style={styles.imagePickerPreview}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.imagePickerPlaceholder}>
-                      <Ionicons name="camera-outline" size={28} color={colors.text.muted} />
-                      <Text style={styles.imagePickerLabel}>Tap to add photo</Text>
+                    <View style={styles.previewImageWrap}>
+                      <Image
+                        source={{
+                          uri: previewProcessedB64
+                            ? `data:image/png;base64,${previewProcessedB64}`
+                            : (previewOriginalUri ?? undefined),
+                        }}
+                        style={styles.previewImage}
+                        resizeMode="contain"
+                      />
                     </View>
-                  )}
-                  {draftImageUri && (
-                    <View style={styles.imagePickerOverlay}>
-                      <Ionicons name="camera-outline" size={20} color="#fff" />
-                    </View>
-                  )}
-                </Pressable>
 
-                {/* Name */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Product Name</Text>
-                  <TextInput
-                    style={[styles.textInput, nameError ? styles.textInputError : null]}
-                    placeholder="e.g. Artisan Coffee Blend"
-                    placeholderTextColor={colors.text.muted}
-                    value={draftName}
-                    onChangeText={(t) => {
-                      setDraftName(t);
-                      if (nameError) setNameError('');
-                    }}
-                    autoCorrect={false}
-                  />
-                  {nameError ? <Text style={styles.fieldError}>{nameError}</Text> : null}
-                </View>
-
-                {/* Price */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Price (USD)</Text>
-                  <View style={styles.priceInputRow}>
-                    <View style={styles.priceCurrencyBadge}>
-                      <Text style={styles.priceCurrencyText}>$</Text>
-                    </View>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        styles.priceInput,
-                        priceError ? styles.textInputError : null,
-                      ]}
-                      placeholder="0.00"
-                      placeholderTextColor={colors.text.muted}
-                      value={draftPrice}
-                      onChangeText={(t) => {
-                        setDraftPrice(t);
-                        if (priceError) setPriceError('');
-                      }}
-                      keyboardType="decimal-pad"
-                    />
-                  </View>
-                  {priceError ? <Text style={styles.fieldError}>{priceError}</Text> : null}
-                </View>
-
-                {/* Actions */}
-                <View style={styles.modalActions}>
-                  <Pressable
-                    style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.7 }]}
-                    onPress={closeModal}
-                    accessibilityRole="button"
-                    disabled={isSaving}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.saveButton,
-                      isSaving && { opacity: 0.7 },
-                      pressed && !isSaving && { opacity: 0.85 },
-                    ]}
-                    onPress={() => void saveProduct()}
-                    accessibilityRole="button"
-                    accessibilityLabel="Save product"
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text style={styles.saveButtonText}>Save Product</Text>
+                    {previewProcessedB64 && (
+                      <Text style={styles.previewToggleLabel}>Showing: background removed</Text>
                     )}
-                  </Pressable>
-                </View>
+
+                    {removeBgError && (
+                      <Text
+                        style={[
+                          styles.fieldError,
+                          { textAlign: 'center', marginBottom: D.spacing.sm },
+                        ]}
+                      >
+                        {removeBgError}
+                      </Text>
+                    )}
+
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.removeBgButton,
+                        isRemovingBg && { opacity: 0.7 },
+                        pressed && !isRemovingBg && { opacity: 0.85 },
+                      ]}
+                      onPress={() => void handleRemoveBackground()}
+                      disabled={isRemovingBg}
+                    >
+                      {isRemovingBg ? (
+                        <ActivityIndicator size="small" color={colors.accent.primary} />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name="cut-outline"
+                            size={16}
+                            color={colors.accent.primary}
+                            style={{ marginRight: D.spacing.xs }}
+                          />
+                          <Text style={styles.removeBgButtonText}>
+                            {previewProcessedB64 ? 'Remove Background Again' : 'Remove Background'}
+                          </Text>
+                        </>
+                      )}
+                    </Pressable>
+
+                    <View style={styles.modalActions}>
+                      <Pressable
+                        style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.7 }]}
+                        onPress={() => confirmImageChoice(false)}
+                      >
+                        <Text style={styles.cancelButtonText}>Use Original</Text>
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.saveButton,
+                          !previewProcessedB64 && styles.saveButtonDisabled,
+                          pressed && !!previewProcessedB64 && { opacity: 0.85 },
+                        ]}
+                        onPress={() => confirmImageChoice(true)}
+                        disabled={!previewProcessedB64}
+                      >
+                        <Text style={styles.saveButtonText}>Use Processed</Text>
+                      </Pressable>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.modalTitle}>
+                      {editingProduct ? 'Edit Product' : 'New Product'}
+                    </Text>
+
+                    {/* Photo picker */}
+                    <Pressable
+                      style={({ pressed }) => [styles.imagePicker, pressed && { opacity: 0.8 }]}
+                      onPress={() => (isWeb ? void pickImage() : showPhotoSourcePicker())}
+                      accessibilityRole="button"
+                      accessibilityLabel="Pick product photo"
+                    >
+                      {draftImageUri ? (
+                        <Image
+                          source={{ uri: draftImageUri }}
+                          style={styles.imagePickerPreview}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.imagePickerPlaceholder}>
+                          <Ionicons name="camera-outline" size={28} color={colors.text.muted} />
+                          <Text style={styles.imagePickerLabel}>Tap to add photo</Text>
+                        </View>
+                      )}
+                      {draftImageUri && (
+                        <View style={styles.imagePickerOverlay}>
+                          <Ionicons name="camera-outline" size={20} color="#fff" />
+                        </View>
+                      )}
+                    </Pressable>
+
+                    {/* Name */}
+                    <View style={styles.fieldGroup}>
+                      <Text style={styles.fieldLabel}>Product Name</Text>
+                      <TextInput
+                        style={[styles.textInput, nameError ? styles.textInputError : null]}
+                        placeholder="e.g. Artisan Coffee Blend"
+                        placeholderTextColor={colors.text.muted}
+                        value={draftName}
+                        onChangeText={(t) => {
+                          setDraftName(t);
+                          if (nameError) setNameError('');
+                        }}
+                        autoCorrect={false}
+                      />
+                      {nameError ? <Text style={styles.fieldError}>{nameError}</Text> : null}
+                    </View>
+
+                    {/* Price */}
+                    <View style={styles.fieldGroup}>
+                      <Text style={styles.fieldLabel}>Price (USD)</Text>
+                      <View style={styles.priceInputRow}>
+                        <View style={styles.priceCurrencyBadge}>
+                          <Text style={styles.priceCurrencyText}>$</Text>
+                        </View>
+                        <TextInput
+                          style={[
+                            styles.textInput,
+                            styles.priceInput,
+                            priceError ? styles.textInputError : null,
+                          ]}
+                          placeholder="0.00"
+                          placeholderTextColor={colors.text.muted}
+                          value={draftPrice}
+                          onChangeText={(t) => {
+                            setDraftPrice(t);
+                            if (priceError) setPriceError('');
+                          }}
+                          keyboardType="decimal-pad"
+                        />
+                      </View>
+                      {priceError ? <Text style={styles.fieldError}>{priceError}</Text> : null}
+                    </View>
+
+                    {/* Actions */}
+                    <View style={styles.modalActions}>
+                      <Pressable
+                        style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.7 }]}
+                        onPress={closeModal}
+                        accessibilityRole="button"
+                        disabled={isSaving}
+                      >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.saveButton,
+                          isSaving && { opacity: 0.7 },
+                          pressed && !isSaving && { opacity: 0.85 },
+                        ]}
+                        onPress={() => void saveProduct()}
+                        accessibilityRole="button"
+                        accessibilityLabel="Save product"
+                        disabled={isSaving}
+                      >
+                        {isSaving ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={styles.saveButtonText}>Save Product</Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  </>
+                )}
               </ScrollView>
             </Pressable>
           </KeyboardAvoidingView>
@@ -801,29 +803,28 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     modalScrollContent: {
       flexGrow: 1,
-      justifyContent: 'center',
       paddingVertical: D.spacing.lg,
     },
     // ── Modal ────────────────────────────────────────────────────────────────
     modalOverlay: {
       flex: 1,
-      backgroundColor: isWeb ? 'rgba(0,0,0,0.55)' : colors.bg.base,
-      justifyContent: isWeb ? 'center' : 'flex-start',
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: isWeb ? 'center' : 'flex-end',
       alignItems: 'center',
       padding: isWeb ? D.spacing.md : 0,
     },
     modalKAV: {
       width: '100%',
       maxWidth: isWeb ? 520 : undefined,
-      flex: isWeb ? undefined : 1,
     },
     modalSheet: {
       backgroundColor: colors.bg.surface,
       borderRadius: isWeb ? D.radius.xl : undefined,
+      borderTopLeftRadius: isWeb ? undefined : D.radius.xl,
+      borderTopRightRadius: isWeb ? undefined : D.radius.xl,
       paddingHorizontal: D.spacing.md,
       paddingTop: D.spacing.sm,
-      flex: isWeb ? undefined : 1,
-      maxHeight: isWeb ? '90%' : undefined,
+      maxHeight: isWeb ? '90%' : '92%',
       width: '100%',
       ...D.shadow.modal,
     },
