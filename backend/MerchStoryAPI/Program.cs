@@ -6,6 +6,7 @@ using MerchStoryAPI.Gallery;
 using MerchStoryAPI.ImageGeneration;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Products;
+using MerchStoryAPI.ReferenceImages;
 using MerchStoryAPI.Shop;
 using MerchStoryAPI.Social;
 using MerchStoryImageGeneration.Extensions;
@@ -41,7 +42,9 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        o => o.UseVector()));
 
 builder.Services.AddIdentity<AppUser, IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>()
@@ -74,6 +77,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddScoped<FacebookSocialPostSyncService>();
 builder.Services.AddMerchStoryImageGeneration();
+builder.Services.AddSingleton<IClipEmbeddingService, ClipEmbeddingService>();
 
 var app = builder.Build();
 
@@ -104,6 +108,7 @@ app.MapProductEndpoints();
 app.MapFacebookEndpoints();
 app.MapSocialEndpoints();
 app.MapImageGenerationEndpoints();
+app.MapReferenceImageEndpoints();
 
 app.Run();
 

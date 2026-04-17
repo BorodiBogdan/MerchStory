@@ -28,7 +28,9 @@ import {
   deleteProduct,
   fetchProducts,
   type ProductItem,
+  type ReferenceImage,
   removeBackground,
+  searchReferenceImages,
   updateProduct,
 } from '@/utils/api';
 
@@ -67,6 +69,12 @@ export default function ProductsScreen() {
   const [removeBgError, setRemoveBgError] = useState<string | null>(null);
   const [priceError, setPriceError] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Reference image similarity search
+  const [isFindingSimilar, setIsFindingSimilar] = useState(false);
+  const [similarResults, setSimilarResults] = useState<ReferenceImage[] | null>(null);
+  const [similarError, setSimilarError] = useState<string | null>(null);
+  const [showSimilarModal, setShowSimilarModal] = useState(false);
 
   // Responsive column count
   const numColumns = isWeb ? (screenWidth < 600 ? 2 : screenWidth < 1024 ? 3 : 4) : 2;
@@ -188,6 +196,30 @@ export default function ProductsScreen() {
     } finally {
       setIsRemovingBg(false);
     }
+  }
+
+  async function handleFindSimilar() {
+    if (!previewOriginalUri) return;
+    setIsFindingSimilar(true);
+    setSimilarError(null);
+    try {
+      const b64 = previewOriginalB64 ?? (await uriToBase64(previewOriginalUri));
+      if (!previewOriginalB64) setPreviewOriginalB64(b64);
+      const results = await searchReferenceImages(b64);
+      setSimilarResults(results);
+      setShowSimilarModal(true);
+    } catch (err: unknown) {
+      setSimilarError(err instanceof Error ? err.message : 'Similarity search failed.');
+    } finally {
+      setIsFindingSimilar(false);
+    }
+  }
+
+  function selectReferenceImage(ref: ReferenceImage) {
+    setDraftImageUri(`data:image/png;base64,${ref.imageBase64}`);
+    setDraftImageBase64(ref.imageBase64);
+    setShowSimilarModal(false);
+    setShowPreview(false);
   }
 
   function confirmImageChoice(useProcessed: boolean) {
@@ -503,6 +535,43 @@ export default function ProductsScreen() {
                       )}
                     </Pressable>
 
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.findSimilarButton,
+                        isFindingSimilar && { opacity: 0.7 },
+                        pressed && !isFindingSimilar && { opacity: 0.85 },
+                      ]}
+                      onPress={() => void handleFindSimilar()}
+                      disabled={isFindingSimilar}
+                    >
+                      {isFindingSimilar ? (
+                        <ActivityIndicator size="small" color={colors.accent.secondary} />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name="search-outline"
+                            size={16}
+                            color={colors.accent.secondary}
+                            style={{ marginRight: D.spacing.xs }}
+                          />
+                          <Text style={styles.findSimilarButtonText}>
+                            Find Professional Reference
+                          </Text>
+                        </>
+                      )}
+                    </Pressable>
+
+                    {similarError && (
+                      <Text
+                        style={[
+                          styles.fieldError,
+                          { textAlign: 'center', marginBottom: D.spacing.sm },
+                        ]}
+                      >
+                        {similarError}
+                      </Text>
+                    )}
+
                     <View style={styles.modalActions}>
                       <Pressable
                         style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.7 }]}
@@ -631,6 +700,86 @@ export default function ProductsScreen() {
               </ScrollView>
             </Pressable>
           </KeyboardAvoidingView>
+        </Pressable>
+      </Modal>
+
+      {/* Reference image similarity results — rendered LAST so it stacks above the Add/Edit modal on web */}
+      <Modal
+        visible={showSimilarModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSimilarModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowSimilarModal(false)}>
+          <Pressable
+            style={[
+              styles.modalSheet,
+              { maxHeight: '80%' },
+              !isWeb && { paddingBottom: insets.bottom + D.spacing.md },
+            ]}
+            onPress={() => {}}
+          >
+            {!isWeb && <View style={styles.modalHandle} />}
+            <Text style={styles.modalTitle}>Professional References</Text>
+            <Text style={[styles.fieldLabel, { marginBottom: D.spacing.md }]}>
+              Tap a photo to use it as your product reference image.
+            </Text>
+            {similarResults?.length === 0 ? (
+              <Text style={[styles.errorText, { marginBottom: D.spacing.lg }]}>
+                No similar products found in the reference library.
+              </Text>
+            ) : (
+              <FlatList
+                data={similarResults ?? []}
+                keyExtractor={(item) => item.id}
+                numColumns={2}
+                columnWrapperStyle={{ gap: D.spacing.sm, marginBottom: D.spacing.sm }}
+                renderItem={({ item }) => (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.productCard,
+                      { flex: 1 },
+                      pressed && styles.cardPressed,
+                    ]}
+                    onPress={() => selectReferenceImage(item)}
+                  >
+                    <View
+                      style={{
+                        height: 100,
+                        backgroundColor: colors.bg.elevated,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <Image
+                        source={{ uri: `data:image/png;base64,${item.imageBase64}` }}
+                        style={StyleSheet.absoluteFill}
+                        resizeMode="cover"
+                      />
+                    </View>
+                    <View style={styles.productInfo}>
+                      <Text style={styles.productName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={[styles.priceText, { color: colors.text.muted }]}>
+                        {Math.round(item.similarity * 100)}% match
+                      </Text>
+                    </View>
+                  </Pressable>
+                )}
+                showsVerticalScrollIndicator={false}
+              />
+            )}
+            <Pressable
+              style={({ pressed }) => [
+                styles.cancelButton,
+                { marginTop: D.spacing.sm },
+                pressed && { opacity: 0.7 },
+              ]}
+              onPress={() => setShowSimilarModal(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
         </Pressable>
       </Modal>
     </View>
@@ -1072,6 +1221,22 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     saveButtonDisabled: {
       opacity: 0.4,
+    },
+    findSimilarButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 11,
+      paddingHorizontal: D.spacing.md,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.accent.secondary,
+      marginBottom: D.spacing.sm,
+    },
+    findSimilarButtonText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.accent.secondary,
     },
   });
 }

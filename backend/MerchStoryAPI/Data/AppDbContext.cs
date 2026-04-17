@@ -21,9 +21,13 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
     public DbSet<SocialPost> SocialPosts => this.Set<SocialPost>();
 
+    public DbSet<ReferenceImage> ReferenceImages => this.Set<ReferenceImage>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        builder.HasPostgresExtension("vector");
 
         builder.Entity<RefreshToken>(entity =>
         {
@@ -116,6 +120,20 @@ public class AppDbContext : IdentityDbContext<AppUser>
                   .WithMany()
                   .HasForeignKey(sp => sp.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ReferenceImage>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            entity.Property(r => r.Name).HasMaxLength(200).IsRequired();
+            entity.Property(r => r.Category).HasMaxLength(100);
+            entity.Property(r => r.ImageBase64).HasColumnType("text").IsRequired();
+            entity.Property(r => r.Embedding).HasColumnType("vector(512)").IsRequired();
+            entity.HasIndex(r => r.Embedding)
+                  .HasMethod("hnsw")
+                  .HasOperators("vector_cosine_ops")
+                  .HasStorageParameter("m", 16)
+                  .HasStorageParameter("ef_construction", 64);
         });
     }
 }
