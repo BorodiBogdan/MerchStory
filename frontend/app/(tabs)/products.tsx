@@ -496,7 +496,158 @@ export default function ProductsScreen() {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={!isWeb && styles.modalScrollContent}
               >
-                {showPreview ? (
+                {showSimilarModal ? (
+                  <>
+                    <View style={styles.similarHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.similarTitle}>Professional References</Text>
+                        <Text style={styles.similarSubtitle}>
+                          Tap a photo to use it as your product reference image.
+                        </Text>
+                      </View>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.similarCloseBtn,
+                          pressed && { opacity: 0.6 },
+                        ]}
+                        onPress={() => setShowSimilarModal(false)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Close"
+                        hitSlop={8}
+                      >
+                        <Ionicons name="close" size={20} color={colors.text.secondary} />
+                      </Pressable>
+                    </View>
+
+                    {similarResults?.length === 0 ? (
+                      <View style={styles.similarEmpty}>
+                        <Ionicons name="search-outline" size={36} color={colors.text.muted} />
+                        <Text style={styles.errorText}>
+                          No similar products found in the reference library.
+                        </Text>
+                      </View>
+                    ) : (
+                      (() => {
+                        const all = similarResults ?? [];
+                        const totalPages = Math.max(1, Math.ceil(all.length / SIMILAR_PAGE_SIZE));
+                        const page = Math.min(similarPage, totalPages - 1);
+                        const pageItems = all.slice(
+                          page * SIMILAR_PAGE_SIZE,
+                          page * SIMILAR_PAGE_SIZE + SIMILAR_PAGE_SIZE
+                        );
+                        const numCols = isWeb ? 4 : 2;
+                        return (
+                          <>
+                            <View style={styles.similarGrid}>
+                              {pageItems.map((item) => (
+                                <Pressable
+                                  key={item.id}
+                                  style={({ pressed }) => [
+                                    styles.similarCard,
+                                    {
+                                      flexBasis: `${100 / numCols}%`,
+                                      maxWidth: `${100 / numCols}%`,
+                                    },
+                                    pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+                                  ]}
+                                  onPress={() => selectReferenceImage(item)}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Use ${item.name}`}
+                                >
+                                  <View style={styles.similarCardInner}>
+                                    <View style={styles.similarImageWrap}>
+                                      <Image
+                                        source={{
+                                          uri: `data:image/png;base64,${item.imageBase64}`,
+                                        }}
+                                        style={styles.similarImage}
+                                        resizeMode="contain"
+                                      />
+                                      <View style={styles.similarMatchBadge}>
+                                        <Text style={styles.similarMatchText}>
+                                          {Math.round(item.similarity * 100)}%
+                                        </Text>
+                                      </View>
+                                    </View>
+                                    <View style={styles.similarCardBody}>
+                                      <Text style={styles.similarCardName} numberOfLines={2}>
+                                        {item.name}
+                                      </Text>
+                                      {item.category && (
+                                        <Text style={styles.similarCardCategory} numberOfLines={1}>
+                                          {item.category}
+                                        </Text>
+                                      )}
+                                    </View>
+                                  </View>
+                                </Pressable>
+                              ))}
+                            </View>
+
+                            {totalPages > 1 && (
+                              <View style={styles.paginationBar}>
+                                <Pressable
+                                  style={({ pressed }) => [
+                                    styles.pageButton,
+                                    page === 0 && styles.pageButtonDisabled,
+                                    pressed && page !== 0 && { opacity: 0.7 },
+                                  ]}
+                                  disabled={page === 0}
+                                  onPress={() => setSimilarPage((p) => Math.max(0, p - 1))}
+                                  accessibilityLabel="Previous page"
+                                >
+                                  <Ionicons
+                                    name="chevron-back"
+                                    size={18}
+                                    color={page === 0 ? colors.text.muted : colors.text.primary}
+                                  />
+                                </Pressable>
+
+                                <View style={styles.pageDots}>
+                                  {Array.from({ length: totalPages }).map((_, i) => (
+                                    <Pressable
+                                      key={i}
+                                      onPress={() => setSimilarPage(i)}
+                                      style={[styles.pageDot, i === page && styles.pageDotActive]}
+                                      accessibilityLabel={`Go to page ${i + 1}`}
+                                    />
+                                  ))}
+                                </View>
+
+                                <Text style={styles.pageIndicator}>
+                                  {page + 1} / {totalPages}
+                                </Text>
+
+                                <Pressable
+                                  style={({ pressed }) => [
+                                    styles.pageButton,
+                                    page >= totalPages - 1 && styles.pageButtonDisabled,
+                                    pressed && page < totalPages - 1 && { opacity: 0.7 },
+                                  ]}
+                                  disabled={page >= totalPages - 1}
+                                  onPress={() =>
+                                    setSimilarPage((p) => Math.min(totalPages - 1, p + 1))
+                                  }
+                                  accessibilityLabel="Next page"
+                                >
+                                  <Ionicons
+                                    name="chevron-forward"
+                                    size={18}
+                                    color={
+                                      page >= totalPages - 1
+                                        ? colors.text.muted
+                                        : colors.text.primary
+                                    }
+                                  />
+                                </Pressable>
+                              </View>
+                            )}
+                          </>
+                        );
+                      })()
+                    )}
+                  </>
+                ) : showPreview ? (
                   <>
                     <Text style={styles.modalTitle}>Preview Photo</Text>
 
@@ -718,161 +869,6 @@ export default function ProductsScreen() {
               </ScrollView>
             </Pressable>
           </KeyboardAvoidingView>
-        </Pressable>
-      </Modal>
-
-      {/* Reference image similarity results — rendered LAST so it stacks above the Add/Edit modal on web */}
-      <Modal
-        visible={showSimilarModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowSimilarModal(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowSimilarModal(false)}>
-          <Pressable
-            style={[styles.similarSheet, !isWeb && { paddingBottom: insets.bottom + D.spacing.md }]}
-            onPress={() => {}}
-          >
-            {!isWeb && <View style={styles.modalHandle} />}
-
-            <View style={styles.similarHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.similarTitle}>Professional References</Text>
-                <Text style={styles.similarSubtitle}>
-                  Tap a photo to use it as your product reference image.
-                </Text>
-              </View>
-              <Pressable
-                style={({ pressed }) => [styles.similarCloseBtn, pressed && { opacity: 0.6 }]}
-                onPress={() => setShowSimilarModal(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-                hitSlop={8}
-              >
-                <Ionicons name="close" size={20} color={colors.text.secondary} />
-              </Pressable>
-            </View>
-
-            {similarResults?.length === 0 ? (
-              <View style={styles.similarEmpty}>
-                <Ionicons name="search-outline" size={36} color={colors.text.muted} />
-                <Text style={styles.errorText}>
-                  No similar products found in the reference library.
-                </Text>
-              </View>
-            ) : (
-              (() => {
-                const all = similarResults ?? [];
-                const totalPages = Math.max(1, Math.ceil(all.length / SIMILAR_PAGE_SIZE));
-                const page = Math.min(similarPage, totalPages - 1);
-                const pageItems = all.slice(
-                  page * SIMILAR_PAGE_SIZE,
-                  page * SIMILAR_PAGE_SIZE + SIMILAR_PAGE_SIZE
-                );
-                const numCols = isWeb ? 4 : 2;
-                return (
-                  <>
-                    <View style={styles.similarGrid}>
-                      {pageItems.map((item) => (
-                        <Pressable
-                          key={item.id}
-                          style={({ pressed }) => [
-                            styles.similarCard,
-                            {
-                              flexBasis: `${100 / numCols}%`,
-                              maxWidth: `${100 / numCols}%`,
-                            },
-                            pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
-                          ]}
-                          onPress={() => selectReferenceImage(item)}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Use ${item.name}`}
-                        >
-                          <View style={styles.similarCardInner}>
-                            <View style={styles.similarImageWrap}>
-                              <Image
-                                source={{ uri: `data:image/png;base64,${item.imageBase64}` }}
-                                style={styles.similarImage}
-                                resizeMode="contain"
-                              />
-                              <View style={styles.similarMatchBadge}>
-                                <Text style={styles.similarMatchText}>
-                                  {Math.round(item.similarity * 100)}%
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.similarCardBody}>
-                              <Text style={styles.similarCardName} numberOfLines={2}>
-                                {item.name}
-                              </Text>
-                              {item.category && (
-                                <Text style={styles.similarCardCategory} numberOfLines={1}>
-                                  {item.category}
-                                </Text>
-                              )}
-                            </View>
-                          </View>
-                        </Pressable>
-                      ))}
-                    </View>
-
-                    {totalPages > 1 && (
-                      <View style={styles.paginationBar}>
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.pageButton,
-                            page === 0 && styles.pageButtonDisabled,
-                            pressed && page !== 0 && { opacity: 0.7 },
-                          ]}
-                          disabled={page === 0}
-                          onPress={() => setSimilarPage((p) => Math.max(0, p - 1))}
-                          accessibilityLabel="Previous page"
-                        >
-                          <Ionicons
-                            name="chevron-back"
-                            size={18}
-                            color={page === 0 ? colors.text.muted : colors.text.primary}
-                          />
-                        </Pressable>
-
-                        <View style={styles.pageDots}>
-                          {Array.from({ length: totalPages }).map((_, i) => (
-                            <Pressable
-                              key={i}
-                              onPress={() => setSimilarPage(i)}
-                              style={[styles.pageDot, i === page && styles.pageDotActive]}
-                              accessibilityLabel={`Go to page ${i + 1}`}
-                            />
-                          ))}
-                        </View>
-
-                        <Text style={styles.pageIndicator}>
-                          {page + 1} / {totalPages}
-                        </Text>
-
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.pageButton,
-                            page >= totalPages - 1 && styles.pageButtonDisabled,
-                            pressed && page < totalPages - 1 && { opacity: 0.7 },
-                          ]}
-                          disabled={page >= totalPages - 1}
-                          onPress={() => setSimilarPage((p) => Math.min(totalPages - 1, p + 1))}
-                          accessibilityLabel="Next page"
-                        >
-                          <Ionicons
-                            name="chevron-forward"
-                            size={18}
-                            color={page >= totalPages - 1 ? colors.text.muted : colors.text.primary}
-                          />
-                        </Pressable>
-                      </View>
-                    )}
-                  </>
-                );
-              })()
-            )}
-          </Pressable>
         </Pressable>
       </Modal>
     </View>
