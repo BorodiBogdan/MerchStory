@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,6 +22,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { D } from '@/constants/design';
+import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import {
   createProduct,
@@ -44,6 +45,8 @@ export default function ProductsScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width: screenWidth } = useWindowDimensions();
+  const router = useRouter();
+  const { isAdmin } = useAuth();
 
   const insets = useSafeAreaInsets();
 
@@ -409,15 +412,27 @@ export default function ProductsScreen() {
               {products.length} {products.length === 1 ? 'item' : 'items'} in catalog
             </Text>
           </View>
-          <Pressable
-            style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
-            onPress={openAddModal}
-            accessibilityRole="button"
-            accessibilityLabel="Add product"
-          >
-            <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 4 }} />
-            <Text style={styles.addButtonText}>Add Product</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: D.spacing.xs }}>
+            {isAdmin && (
+              <Pressable
+                style={({ pressed }) => [styles.adminButton, pressed && { opacity: 0.7 }]}
+                onPress={() => router.push('/add-products-professional')}
+                accessibilityRole="button"
+                accessibilityLabel="Admin: add professional reference photo"
+              >
+                <Ionicons name="shield-checkmark-outline" size={16} color={colors.accent.primary} />
+              </Pressable>
+            )}
+            <Pressable
+              style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
+              onPress={openAddModal}
+              accessibilityRole="button"
+              accessibilityLabel="Add product"
+            >
+              <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 4 }} />
+              <Text style={styles.addButtonText}>Add Product</Text>
+            </Pressable>
+          </View>
         </View>
 
         {listContent()}
@@ -828,6 +843,16 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     addButtonPressed: {
       opacity: 0.85,
+    },
+    adminButton: {
+      width: 38,
+      height: 38,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.accent.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.accent.dim,
     },
     addButtonText: {
       color: '#fff',

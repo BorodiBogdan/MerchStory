@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using Microsoft.EntityFrameworkCore;
@@ -15,10 +16,16 @@ public static class ReferenceImageRoutes
         // Admin endpoint — add a new reference image with its CLIP embedding
         group.MapPost("/", async (
             AddReferenceImageRequest request,
+            ClaimsPrincipal user,
             AppDbContext db,
             IClipEmbeddingService clipService,
             ILogger<Program> logger) =>
         {
+            if (!string.Equals(user.FindFirstValue("is_admin"), "true", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.Forbid();
+            }
+
             if (string.IsNullOrWhiteSpace(request.Name))
             {
                 return Results.BadRequest("Name is required.");
@@ -57,7 +64,7 @@ public static class ReferenceImageRoutes
             return Results.Created(
                 $"/reference-images/{referenceImage.Id}",
                 new { referenceImage.Id, referenceImage.Name, referenceImage.Category, referenceImage.CreatedAt });
-        });
+        }).RequireAuthorization();
 
         // User endpoint — search for visually similar reference images
         group.MapPost("/search", async (

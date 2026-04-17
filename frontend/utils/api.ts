@@ -101,6 +101,7 @@ export interface AuthResponse {
   email: string;
   userName: string;
   isShopSetupComplete: boolean;
+  isAdmin: boolean;
 }
 
 export interface BrandColor {
@@ -575,6 +576,35 @@ export interface ReferenceImage {
   category: string | null;
   imageBase64: string;
   similarity: number;
+}
+
+export interface AddReferenceImagePayload {
+  name: string;
+  category?: string | null;
+  imageBase64: string;
+}
+
+export async function addReferenceImage(payload: AddReferenceImagePayload): Promise<{
+  id: string;
+  name: string;
+  category: string | null;
+  createdAt: string;
+}> {
+  const response = await fetchWithAuth(`${API_URL}/reference-images/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to add reference image (${response.status})`);
+  }
+  return response.json() as Promise<{
+    id: string;
+    name: string;
+    category: string | null;
+    createdAt: string;
+  }>;
 }
 
 export async function searchReferenceImages(

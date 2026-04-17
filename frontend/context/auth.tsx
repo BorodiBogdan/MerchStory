@@ -31,6 +31,7 @@ interface AuthUser {
   email: string;
   userName: string;
   isShopSetupComplete: boolean;
+  isAdmin: boolean;
 }
 
 interface AuthState {
@@ -38,6 +39,7 @@ interface AuthState {
   email: string | null;
   userName: string | null;
   isShopSetupComplete: boolean;
+  isAdmin: boolean;
   isLoading: boolean;
 }
 
@@ -56,6 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email: null,
     userName: null,
     isShopSetupComplete: false,
+    isAdmin: false,
     isLoading: true,
   });
 
@@ -71,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: user.email,
             userName: user.userName,
             isShopSetupComplete: user.isShopSetupComplete ?? false,
+            isAdmin: user.isAdmin ?? false,
             isLoading: false,
           });
         } else {
@@ -90,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: data.email,
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
+      isAdmin: data.isAdmin,
     };
     await storage.setItem(TOKEN_KEY, data.token);
     await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
@@ -99,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: data.email,
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
+      isAdmin: data.isAdmin,
       isLoading: false,
     });
   }
@@ -110,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: data.email,
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
+      isAdmin: data.isAdmin,
     };
     await storage.setItem(TOKEN_KEY, data.token);
     await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
@@ -119,6 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: data.email,
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
+      isAdmin: data.isAdmin,
       isLoading: false,
     });
   }
@@ -132,6 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: null,
       userName: null,
       isShopSetupComplete: false,
+      isAdmin: false,
       isLoading: false,
     });
   }
