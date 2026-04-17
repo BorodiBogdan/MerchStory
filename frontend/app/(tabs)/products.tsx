@@ -78,6 +78,8 @@ export default function ProductsScreen() {
   const [similarResults, setSimilarResults] = useState<ReferenceImage[] | null>(null);
   const [similarError, setSimilarError] = useState<string | null>(null);
   const [showSimilarModal, setShowSimilarModal] = useState(false);
+  const [similarPage, setSimilarPage] = useState(0);
+  const SIMILAR_PAGE_SIZE = 4;
 
   // Responsive column count
   const numColumns = isWeb ? (screenWidth < 600 ? 2 : screenWidth < 1024 ? 3 : 4) : 2;
@@ -210,6 +212,7 @@ export default function ProductsScreen() {
       if (!previewOriginalB64) setPreviewOriginalB64(b64);
       const results = await searchReferenceImages(b64);
       setSimilarResults(results);
+      setSimilarPage(0);
       setShowSimilarModal(true);
     } catch (err: unknown) {
       setSimilarError(err instanceof Error ? err.message : 'Similarity search failed.');
@@ -722,78 +725,153 @@ export default function ProductsScreen() {
       <Modal
         visible={showSimilarModal}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowSimilarModal(false)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowSimilarModal(false)}>
           <Pressable
-            style={[
-              styles.modalSheet,
-              { maxHeight: '80%' },
-              !isWeb && { paddingBottom: insets.bottom + D.spacing.md },
-            ]}
+            style={[styles.similarSheet, !isWeb && { paddingBottom: insets.bottom + D.spacing.md }]}
             onPress={() => {}}
           >
             {!isWeb && <View style={styles.modalHandle} />}
-            <Text style={styles.modalTitle}>Professional References</Text>
-            <Text style={[styles.fieldLabel, { marginBottom: D.spacing.md }]}>
-              Tap a photo to use it as your product reference image.
-            </Text>
+
+            <View style={styles.similarHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.similarTitle}>Professional References</Text>
+                <Text style={styles.similarSubtitle}>
+                  Tap a photo to use it as your product reference image.
+                </Text>
+              </View>
+              <Pressable
+                style={({ pressed }) => [styles.similarCloseBtn, pressed && { opacity: 0.6 }]}
+                onPress={() => setShowSimilarModal(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={20} color={colors.text.secondary} />
+              </Pressable>
+            </View>
+
             {similarResults?.length === 0 ? (
-              <Text style={[styles.errorText, { marginBottom: D.spacing.lg }]}>
-                No similar products found in the reference library.
-              </Text>
+              <View style={styles.similarEmpty}>
+                <Ionicons name="search-outline" size={36} color={colors.text.muted} />
+                <Text style={styles.errorText}>
+                  No similar products found in the reference library.
+                </Text>
+              </View>
             ) : (
-              <FlatList
-                data={similarResults ?? []}
-                keyExtractor={(item) => item.id}
-                numColumns={2}
-                columnWrapperStyle={{ gap: D.spacing.sm, marginBottom: D.spacing.sm }}
-                renderItem={({ item }) => (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.productCard,
-                      { flex: 1 },
-                      pressed && styles.cardPressed,
-                    ]}
-                    onPress={() => selectReferenceImage(item)}
-                  >
-                    <View
-                      style={{
-                        height: 100,
-                        backgroundColor: colors.bg.elevated,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <Image
-                        source={{ uri: `data:image/png;base64,${item.imageBase64}` }}
-                        style={StyleSheet.absoluteFill}
-                        resizeMode="cover"
-                      />
+              (() => {
+                const all = similarResults ?? [];
+                const totalPages = Math.max(1, Math.ceil(all.length / SIMILAR_PAGE_SIZE));
+                const page = Math.min(similarPage, totalPages - 1);
+                const pageItems = all.slice(
+                  page * SIMILAR_PAGE_SIZE,
+                  page * SIMILAR_PAGE_SIZE + SIMILAR_PAGE_SIZE
+                );
+                const numCols = isWeb ? 4 : 2;
+                return (
+                  <>
+                    <View style={styles.similarGrid}>
+                      {pageItems.map((item) => (
+                        <Pressable
+                          key={item.id}
+                          style={({ pressed }) => [
+                            styles.similarCard,
+                            {
+                              flexBasis: `${100 / numCols}%`,
+                              maxWidth: `${100 / numCols}%`,
+                            },
+                            pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+                          ]}
+                          onPress={() => selectReferenceImage(item)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Use ${item.name}`}
+                        >
+                          <View style={styles.similarCardInner}>
+                            <View style={styles.similarImageWrap}>
+                              <Image
+                                source={{ uri: `data:image/png;base64,${item.imageBase64}` }}
+                                style={styles.similarImage}
+                                resizeMode="contain"
+                              />
+                              <View style={styles.similarMatchBadge}>
+                                <Text style={styles.similarMatchText}>
+                                  {Math.round(item.similarity * 100)}%
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={styles.similarCardBody}>
+                              <Text style={styles.similarCardName} numberOfLines={2}>
+                                {item.name}
+                              </Text>
+                              {item.category && (
+                                <Text style={styles.similarCardCategory} numberOfLines={1}>
+                                  {item.category}
+                                </Text>
+                              )}
+                            </View>
+                          </View>
+                        </Pressable>
+                      ))}
                     </View>
-                    <View style={styles.productInfo}>
-                      <Text style={styles.productName} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      <Text style={[styles.priceText, { color: colors.text.muted }]}>
-                        {Math.round(item.similarity * 100)}% match
-                      </Text>
-                    </View>
-                  </Pressable>
-                )}
-                showsVerticalScrollIndicator={false}
-              />
+
+                    {totalPages > 1 && (
+                      <View style={styles.paginationBar}>
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.pageButton,
+                            page === 0 && styles.pageButtonDisabled,
+                            pressed && page !== 0 && { opacity: 0.7 },
+                          ]}
+                          disabled={page === 0}
+                          onPress={() => setSimilarPage((p) => Math.max(0, p - 1))}
+                          accessibilityLabel="Previous page"
+                        >
+                          <Ionicons
+                            name="chevron-back"
+                            size={18}
+                            color={page === 0 ? colors.text.muted : colors.text.primary}
+                          />
+                        </Pressable>
+
+                        <View style={styles.pageDots}>
+                          {Array.from({ length: totalPages }).map((_, i) => (
+                            <Pressable
+                              key={i}
+                              onPress={() => setSimilarPage(i)}
+                              style={[styles.pageDot, i === page && styles.pageDotActive]}
+                              accessibilityLabel={`Go to page ${i + 1}`}
+                            />
+                          ))}
+                        </View>
+
+                        <Text style={styles.pageIndicator}>
+                          {page + 1} / {totalPages}
+                        </Text>
+
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.pageButton,
+                            page >= totalPages - 1 && styles.pageButtonDisabled,
+                            pressed && page < totalPages - 1 && { opacity: 0.7 },
+                          ]}
+                          disabled={page >= totalPages - 1}
+                          onPress={() => setSimilarPage((p) => Math.min(totalPages - 1, p + 1))}
+                          accessibilityLabel="Next page"
+                        >
+                          <Ionicons
+                            name="chevron-forward"
+                            size={18}
+                            color={page >= totalPages - 1 ? colors.text.muted : colors.text.primary}
+                          />
+                        </Pressable>
+                      </View>
+                    )}
+                  </>
+                );
+              })()
             )}
-            <Pressable
-              style={({ pressed }) => [
-                styles.cancelButton,
-                { marginTop: D.spacing.sm },
-                pressed && { opacity: 0.7 },
-              ]}
-              onPress={() => setShowSimilarModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1262,6 +1340,159 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.medium,
       color: colors.accent.secondary,
+    },
+    // ── Professional References modal ────────────────────────────────────
+    similarSheet: {
+      backgroundColor: colors.bg.surface,
+      borderRadius: isWeb ? D.radius.xl : undefined,
+      borderTopLeftRadius: isWeb ? undefined : D.radius.xl,
+      borderTopRightRadius: isWeb ? undefined : D.radius.xl,
+      paddingHorizontal: D.spacing.lg,
+      paddingTop: isWeb ? D.spacing.lg : D.spacing.sm,
+      paddingBottom: D.spacing.lg,
+      width: '100%',
+      maxWidth: isWeb ? 880 : undefined,
+      maxHeight: isWeb ? '90%' : '92%',
+      ...D.shadow.modal,
+    },
+    similarHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      marginBottom: D.spacing.lg,
+      gap: D.spacing.md,
+    },
+    similarTitle: {
+      fontSize: D.fontSize.xl,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.3,
+      marginBottom: 4,
+    },
+    similarSubtitle: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      lineHeight: 20,
+    },
+    similarCloseBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.elevated,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    similarEmpty: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: D.spacing['2xl'],
+      gap: D.spacing.sm,
+    },
+    similarGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginHorizontal: -D.spacing.xs,
+      marginBottom: D.spacing.md,
+    },
+    similarCard: {
+      padding: D.spacing.xs,
+    },
+    similarCardInner: {
+      backgroundColor: colors.bg.elevated,
+      borderRadius: D.radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      overflow: 'hidden',
+      ...D.shadow.sm,
+    },
+    similarImageWrap: {
+      width: '100%',
+      aspectRatio: 1,
+      backgroundColor: colors.bg.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative',
+    },
+    similarImage: {
+      width: '100%',
+      height: '100%',
+    },
+    similarMatchBadge: {
+      position: 'absolute',
+      top: D.spacing.xs,
+      right: D.spacing.xs,
+      backgroundColor: colors.accent.primary,
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: 3,
+      borderRadius: D.radius.pill,
+      ...D.shadow.sm,
+    },
+    similarMatchText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: '#fff',
+      letterSpacing: 0.2,
+    },
+    similarCardBody: {
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: D.spacing.sm,
+      gap: 2,
+    },
+    similarCardName: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+      lineHeight: 18,
+    },
+    similarCardCategory: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      textTransform: 'capitalize',
+    },
+    paginationBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: D.spacing.sm,
+      paddingTop: D.spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: colors.border.default,
+    },
+    pageButton: {
+      width: 36,
+      height: 36,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.bg.elevated,
+    },
+    pageButtonDisabled: {
+      opacity: 0.4,
+    },
+    pageDots: {
+      flexDirection: 'row',
+      gap: 6,
+      alignItems: 'center',
+      paddingHorizontal: D.spacing.sm,
+    },
+    pageDot: {
+      width: 7,
+      height: 7,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.border.default,
+    },
+    pageDotActive: {
+      backgroundColor: colors.accent.primary,
+      width: 20,
+    },
+    pageIndicator: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.muted,
+      minWidth: 40,
+      textAlign: 'center',
     },
   });
 }
