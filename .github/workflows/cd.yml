@@ -22,13 +22,16 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Log in to ACR
+        run: az acr login --name merchstoryacr
+
       - name: Build and push image to ACR
         run: |
-          az acr build \
-            --registry merchstoryacr \
-            --image merchstory-api:${{ github.sha }} \
-            --file backend/MerchStoryAPI/Dockerfile \
+          docker build \
+            -f backend/MerchStoryAPI/Dockerfile \
+            -t merchstoryacr.azurecr.io/merchstory-api:${{ github.sha }} \
             ./backend
+          docker push merchstoryacr.azurecr.io/merchstory-api:${{ github.sha }}
 
       - name: Deploy new revision to Container Apps
         run: |
