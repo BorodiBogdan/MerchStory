@@ -8,7 +8,7 @@ This file gives Claude Code the context needed to make good decisions across all
 **MerchStory** is a mobile app that turns raw product photos into professional AI-generated ads, catalogs, and wallpapers for small/local retailers, with one-tap publishing to social channels. See [docs/project-description.md](docs/project-description.md) for the full product spec and build phases.
 
 ---
-
+testests
 ## Monorepo Structure
 
 ```
