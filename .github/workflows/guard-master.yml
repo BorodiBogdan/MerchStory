@@ -1,0 +1,19 @@
+name: Guard master
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  require-dev-source:
+    name: PR must come from dev
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source branch
+        run: |
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "::error::PRs to master must come from 'dev'. Got '${{ github.head_ref }}'."
+            exit 1
+          fi
+          echo "OK: PR source is 'dev'."
