@@ -20,7 +20,7 @@ testests
 │   │   ├── Models/                   # AppUser, RefreshToken, ShopProfile, Product,
 │   │   │                             #   GeneratedImage, ReferenceImage, SocialPost
 │   │   ├── Migrations/               # EF Core migrations (pgvector-enabled)
-│   │   ├── Shop/                     # ShopRoutes — shop profile (brand colors, contact, logo)
+│   │   ├── Shop/                     # ShopRouasdasdasdtes — shop profile (brand colors, contact, logo)
 │   │   ├── Products/                 # ProductRoutes — product CRUD, image upload
 │   │   ├── Gallery/                  # GalleryRoutes — user's generated-asset library
 │   │   ├── ImageGeneration/          # ImageGenerationRoutes, CatalogCompositor, Fonts/
