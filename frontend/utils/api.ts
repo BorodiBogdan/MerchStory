@@ -317,6 +317,12 @@ export interface GenerateAnnouncementImageParams {
   format: string;
   brandContextFields?: string[];
   productImages?: string[];
+  // Job Post only
+  jobTitle?: string;
+  jobSchedule?: string;
+  jobSalary?: string;
+  jobImageStyle?: 'with-person' | 'text-only';
+  jobRequirements?: string[];
 }
 
 export async function generateCatalogImage(

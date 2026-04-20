@@ -318,6 +318,10 @@ const POST_TYPES: {
     placeholder: 'e.g. 20% off all clothing this weekend only!',
   },
 ];
+const JOB_IMAGE_STYLE_OPTIONS = [
+  { value: 'text-only', label: 'Text only' },
+  { value: 'with-person', label: 'With person' },
+];
 const TONE_OPTIONS = [
   { value: 'Professional', label: 'Professional' },
   { value: 'Friendly', label: 'Friendly' },
@@ -1586,6 +1590,17 @@ export default function StudioScreen() {
   const [annoKept, setAnnoKept] = useState(false);
   const [promotionSelected, setPromotionSelected] = useState<Set<string>>(new Set());
 
+  // Job Post sub-form state
+  const [jobTitle, setJobTitle] = useState('');
+  const [jobSchedule, setJobSchedule] = useState('');
+  const [jobSalary, setJobSalary] = useState('');
+  const [jobImageStyle, setJobImageStyle] = useState<'with-person' | 'text-only'>('text-only');
+  const [jobRequirementsText, setJobRequirementsText] = useState('');
+
+  const isJobPost = postType === 'Job Post';
+  const jobPostReady = jobTitle.trim().length > 0 && jobSchedule.trim().length > 0;
+  const annoReady = isJobPost ? jobPostReady : content.trim().length > 0;
+
   // ── Brand context state ──────────────────────────────────────────────────────
   const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
   const [catalogContextFields, setCatalogContextFields] = useState<string[]>([]);
@@ -1621,7 +1636,7 @@ export default function StudioScreen() {
   }, [postType]);
 
   async function handleAnnoGenerate() {
-    if (!content.trim()) return;
+    if (!annoReady) return;
     setAnnoGenerating(true);
     setAnnoError(null);
     setAnnoResult(null);
@@ -1634,6 +1649,13 @@ export default function StudioScreen() {
               .map((p) => p.imageBase64!)
           : undefined;
 
+      const jobRequirementsList = isJobPost
+        ? jobRequirementsText
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+        : [];
+
       setAnnoResult(
         await generateAnnouncementImage({
           postType,
@@ -1642,6 +1664,12 @@ export default function StudioScreen() {
           format: annoFormat,
           brandContextFields: annoContextFields.length > 0 ? annoContextFields : undefined,
           productImages: promotionProductImages,
+          jobTitle: isJobPost ? jobTitle.trim() : undefined,
+          jobSchedule: isJobPost ? jobSchedule.trim() : undefined,
+          jobSalary: isJobPost && jobSalary.trim().length > 0 ? jobSalary.trim() : undefined,
+          jobImageStyle: isJobPost ? jobImageStyle : undefined,
+          jobRequirements:
+            isJobPost && jobRequirementsList.length > 0 ? jobRequirementsList : undefined,
         })
       );
     } catch (err) {
@@ -1770,7 +1798,7 @@ export default function StudioScreen() {
       ) : activeTab === 'announcements' ? (
         <GenerateButton
           loading={annoGenerating}
-          disabled={!content.trim()}
+          disabled={!annoReady}
           label="Generate Graphic"
           onPress={handleAnnoGenerate}
         />
@@ -2155,19 +2183,82 @@ export default function StudioScreen() {
               showProducts={false}
             />
           )}
-          <View style={styles.desktopSection}>
-            <Text style={styles.desktopSectionTitle}>Content</Text>
-            <Text style={styles.desktopSectionSub}>Describe what you want to communicate</Text>
-            <TextInput
-              style={[styles.textArea, { marginTop: D.spacing.md }]}
-              placeholder={currentPostType.placeholder}
-              placeholderTextColor={colors.text.muted}
-              value={content}
-              onChangeText={setContent}
-              multiline
-              editable={!annoGenerating}
-            />
-          </View>
+          {isJobPost ? (
+            <View style={styles.desktopSection}>
+              <Text style={styles.desktopSectionTitle}>Job details</Text>
+              <Text style={styles.desktopSectionSub}>
+                The role, schedule, and requirements shown on the graphic
+              </Text>
+              <OptionLabel label="Job title" />
+              <TextInput
+                style={styles.jobInput}
+                placeholder="e.g. Cashier"
+                placeholderTextColor={colors.text.muted}
+                value={jobTitle}
+                onChangeText={setJobTitle}
+                editable={!annoGenerating}
+              />
+              <OptionLabel label="Work schedule" />
+              <TextInput
+                style={styles.jobInput}
+                placeholder="e.g. Part-time, weekends, 3 days/week"
+                placeholderTextColor={colors.text.muted}
+                value={jobSchedule}
+                onChangeText={setJobSchedule}
+                editable={!annoGenerating}
+              />
+              <OptionLabel label="Salary (optional)" />
+              <TextInput
+                style={styles.jobInput}
+                placeholder="e.g. $15/hr or €1,800/month"
+                placeholderTextColor={colors.text.muted}
+                value={jobSalary}
+                onChangeText={setJobSalary}
+                editable={!annoGenerating}
+              />
+              <OptionLabel label="Requirements (optional, one per line)" />
+              <TextInput
+                style={styles.jobTextArea}
+                placeholder={"Driver's license\nCommunication skills\nResponsibility"}
+                placeholderTextColor={colors.text.muted}
+                value={jobRequirementsText}
+                onChangeText={setJobRequirementsText}
+                multiline
+                editable={!annoGenerating}
+              />
+              <OptionLabel label="Image style" />
+              <ChipSelector
+                options={JOB_IMAGE_STYLE_OPTIONS}
+                selected={jobImageStyle}
+                onSelect={(v) => setJobImageStyle(v as 'with-person' | 'text-only')}
+                accessibilityLabel="Job image style"
+              />
+              <OptionLabel label="Additional direction (optional)" />
+              <TextInput
+                style={styles.jobTextArea}
+                placeholder="Any extra context for the designer"
+                placeholderTextColor={colors.text.muted}
+                value={content}
+                onChangeText={setContent}
+                multiline
+                editable={!annoGenerating}
+              />
+            </View>
+          ) : (
+            <View style={styles.desktopSection}>
+              <Text style={styles.desktopSectionTitle}>Content</Text>
+              <Text style={styles.desktopSectionSub}>Describe what you want to communicate</Text>
+              <TextInput
+                style={[styles.textArea, { marginTop: D.spacing.md }]}
+                placeholder={currentPostType.placeholder}
+                placeholderTextColor={colors.text.muted}
+                value={content}
+                onChangeText={setContent}
+                multiline
+                editable={!annoGenerating}
+              />
+            </View>
+          )}
 
           {/* Preview */}
           <View style={styles.desktopSection}>
@@ -3250,18 +3341,78 @@ export default function StudioScreen() {
                 </View>
               </View>
 
-              <View style={styles.mobileSection}>
-                <Text style={styles.sectionTitle}>Content</Text>
-                <TextInput
-                  style={[styles.textArea, { marginTop: D.spacing.sm }]}
-                  placeholder={currentPostType.placeholder}
-                  placeholderTextColor={colors.text.muted}
-                  value={content}
-                  onChangeText={setContent}
-                  multiline
-                  editable={!annoGenerating}
-                />
-              </View>
+              {isJobPost ? (
+                <View style={styles.mobileSection}>
+                  <Text style={styles.sectionTitle}>Job details</Text>
+                  <OptionLabel label="Job title" />
+                  <TextInput
+                    style={styles.jobInput}
+                    placeholder="e.g. Cashier"
+                    placeholderTextColor={colors.text.muted}
+                    value={jobTitle}
+                    onChangeText={setJobTitle}
+                    editable={!annoGenerating}
+                  />
+                  <OptionLabel label="Work schedule" />
+                  <TextInput
+                    style={styles.jobInput}
+                    placeholder="e.g. Part-time, weekends"
+                    placeholderTextColor={colors.text.muted}
+                    value={jobSchedule}
+                    onChangeText={setJobSchedule}
+                    editable={!annoGenerating}
+                  />
+                  <OptionLabel label="Salary (optional)" />
+                  <TextInput
+                    style={styles.jobInput}
+                    placeholder="e.g. $15/hr"
+                    placeholderTextColor={colors.text.muted}
+                    value={jobSalary}
+                    onChangeText={setJobSalary}
+                    editable={!annoGenerating}
+                  />
+                  <OptionLabel label="Requirements (one per line)" />
+                  <TextInput
+                    style={styles.jobTextArea}
+                    placeholder={"Driver's license\nCommunication skills"}
+                    placeholderTextColor={colors.text.muted}
+                    value={jobRequirementsText}
+                    onChangeText={setJobRequirementsText}
+                    multiline
+                    editable={!annoGenerating}
+                  />
+                  <OptionLabel label="Image style" />
+                  <ChipSelector
+                    options={JOB_IMAGE_STYLE_OPTIONS}
+                    selected={jobImageStyle}
+                    onSelect={(v) => setJobImageStyle(v as 'with-person' | 'text-only')}
+                    accessibilityLabel="Job image style"
+                  />
+                  <OptionLabel label="Additional direction (optional)" />
+                  <TextInput
+                    style={styles.jobTextArea}
+                    placeholder="Any extra context"
+                    placeholderTextColor={colors.text.muted}
+                    value={content}
+                    onChangeText={setContent}
+                    multiline
+                    editable={!annoGenerating}
+                  />
+                </View>
+              ) : (
+                <View style={styles.mobileSection}>
+                  <Text style={styles.sectionTitle}>Content</Text>
+                  <TextInput
+                    style={[styles.textArea, { marginTop: D.spacing.sm }]}
+                    placeholder={currentPostType.placeholder}
+                    placeholderTextColor={colors.text.muted}
+                    value={content}
+                    onChangeText={setContent}
+                    multiline
+                    editable={!annoGenerating}
+                  />
+                </View>
+              )}
 
               <View style={styles.mobileSection}>
                 <Text style={styles.sectionTitle}>Style</Text>
@@ -3308,7 +3459,7 @@ export default function StudioScreen() {
 
               <GenerateButton
                 loading={annoGenerating}
-                disabled={!content.trim()}
+                disabled={!annoReady}
                 label="Generate Graphic"
                 onPress={handleAnnoGenerate}
               />
@@ -4174,6 +4325,31 @@ function makeStyles(
       padding: D.spacing.md,
       fontSize: D.fontSize.base,
       minHeight: isDesktop ? 140 : 100,
+      textAlignVertical: 'top',
+      color: colors.text.primary,
+      backgroundColor: colors.bg.base,
+      outlineStyle: 'none' as never,
+    },
+    jobInput: {
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      borderRadius: D.radius.md,
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: 10,
+      fontSize: D.fontSize.sm,
+      height: 40,
+      color: colors.text.primary,
+      backgroundColor: colors.bg.base,
+      outlineStyle: 'none' as never,
+    },
+    jobTextArea: {
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      borderRadius: D.radius.md,
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: 10,
+      fontSize: D.fontSize.sm,
+      minHeight: 72,
       textAlignVertical: 'top',
       color: colors.text.primary,
       backgroundColor: colors.bg.base,

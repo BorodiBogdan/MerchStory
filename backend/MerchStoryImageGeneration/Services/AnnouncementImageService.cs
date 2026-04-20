@@ -53,19 +53,84 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
         "Make it unmistakably about news or an event — not a sale.";
 
     // ── Job Post ─────────────────────────────────────────────────────────────────
-    private static string BuildJobPostPrompt(AnnouncementImageRequest r) =>
-        "You are a professional social media graphic designer specializing in recruitment visuals for small retail businesses. " +
-        "Produce modern, welcoming hiring graphics that attract qualified candidates. " +
-        "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
-        BrandContextBlock(r.BrandContext) +
-        LogoBlock(r.LogoBase64) +
-        $"Create a {r.Tone.ToLowerInvariant()} job-posting social media graphic in {r.Format} format. " +
-        $"Job details: \"{r.Content}\". " +
-        "Design requirements: a prominent \"We're Hiring\" or \"Join Our Team\" hook as the hero headline; " +
-        "the role title clearly visible as a secondary headline; " +
-        "a short, friendly CTA (e.g. \"Apply Today\" or \"DM us to apply\"); " +
-        "professional yet approachable tone — avoid corporate coldness; " +
-        "clean layout with good whitespace so the role stands out immediately.";
+    private static string BuildJobPostPrompt(AnnouncementImageRequest r)
+    {
+        var hasStructured = !string.IsNullOrWhiteSpace(r.JobTitle)
+                            && !string.IsNullOrWhiteSpace(r.JobSchedule);
+
+        if (!hasStructured)
+        {
+            // Backward-compatible fallback: legacy free-text prompt.
+            return "You are a professional social media graphic designer specializing in recruitment visuals for small retail businesses. " +
+                   "Produce modern, welcoming hiring graphics that attract qualified candidates. " +
+                   "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
+                   BrandContextBlock(r.BrandContext) +
+                   LogoBlock(r.LogoBase64) +
+                   $"Create a {r.Tone.ToLowerInvariant()} job-posting social media graphic in {r.Format} format. " +
+                   $"Job details: \"{r.Content}\". " +
+                   "Design requirements: a prominent \"We're Hiring\" or \"Join Our Team\" hook as the hero headline; " +
+                   "the role title clearly visible as a secondary headline; " +
+                   "a short, friendly CTA (e.g. \"Apply Today\" or \"DM us to apply\"); " +
+                   "professional yet approachable tone — avoid corporate coldness; " +
+                   "clean layout with good whitespace so the role stands out immediately.";
+        }
+
+        var jobDetailLines = new List<string>
+        {
+            $"- Job title: {r.JobTitle}",
+            $"- Work schedule: {r.JobSchedule}",
+        };
+        if (!string.IsNullOrWhiteSpace(r.JobSalary))
+        {
+            jobDetailLines.Add($"- Salary: {r.JobSalary}");
+        }
+
+        var jobDetailsBlock = "Job details:\n" + string.Join("\n", jobDetailLines) + "\n\n";
+
+        var cleanRequirements = r.JobRequirements?
+            .Where(req => !string.IsNullOrWhiteSpace(req))
+            .Select(req => req.Trim())
+            .ToList();
+
+        var requirementsBlock = cleanRequirements is { Count: > 0 }
+            ? "Requirements (render these as a clearly visible bulleted 'Requirements:' list on the graphic, one item per line):\n"
+              + string.Join("\n", cleanRequirements.Select(req => $"- {req}"))
+              + "\n\n"
+            : string.Empty;
+
+        var directionBlock = string.IsNullOrWhiteSpace(r.Content)
+            ? string.Empty
+            : $"Additional direction from the user: \"{r.Content}\".\n\n";
+
+        var isWithPerson = string.Equals(r.JobImageStyle, "with-person", StringComparison.OrdinalIgnoreCase);
+
+        var styleBlock = isWithPerson
+            ? "Visual style: WITH PERSON. " +
+              "The hero of the graphic must be a realistic, respectful depiction of a person actively performing the advertised role " +
+              "(matching the job title above — e.g. a barista pulling espresso for a barista role, a mechanic under a hood for a mechanic role). " +
+              "Overlay the job title, work schedule, and salary (if provided) in a clearly readable panel or banner over the image — " +
+              "the text must remain legible against the photo (use a semi-transparent panel or strong contrast). " +
+              "Keep the 'We're Hiring' / 'Join Our Team' hook visible and a short CTA (e.g. 'Apply Today'). "
+            : "Visual style: TEXT ONLY. " +
+              "Do NOT include any people, faces, or human figures. " +
+              "Use a clean typographic / graphic layout where the job details are the hero: " +
+              "a prominent 'We're Hiring' or 'Join Our Team' hook, the job title as a large secondary headline, " +
+              "the work schedule and salary (if provided) as clearly grouped supporting text, " +
+              "and a short CTA (e.g. 'Apply Today'). Rely on brand colors, shapes, and iconography — never stock photos of people. ";
+
+        return "You are a professional social media graphic designer specializing in recruitment visuals for small retail businesses. " +
+               "Produce modern, welcoming hiring graphics that attract qualified candidates. " +
+               "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
+               BrandContextBlock(r.BrandContext) +
+               LogoBlock(r.LogoBase64) +
+               $"Create a {r.Tone.ToLowerInvariant()} job-posting social media graphic in {r.Format} format.\n\n" +
+               jobDetailsBlock +
+               requirementsBlock +
+               directionBlock +
+               styleBlock +
+               "Professional yet approachable tone — avoid corporate coldness. " +
+               "Clean layout with good whitespace so the role stands out immediately.";
+    }
 
     // ── Info ─────────────────────────────────────────────────────────────────────
     private static string BuildInfoPrompt(AnnouncementImageRequest r) =>
@@ -112,8 +177,11 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
             ? string.Empty
             : "Brand logo: a logo image has been provided as an inline image. " +
               "Place it in a natural brand position (e.g. top corner or header area). " +
-              "Reproduce it pixel-perfect — do NOT recolor, rescale disproportionately, " +
-              "reinterpret, or alter it in any way.\n\n";
+              "ABSOLUTE RULE: reproduce the logo pixel-perfect — do NOT recolor, restyle, " +
+              "redraw, reinterpret, regenerate, crop, or alter it in any way for any reason, " +
+              "including matching brand colors or the overall image style. " +
+              "The logo is always used EXACTLY as provided. " +
+              "If the logo already contains the brand name, do NOT add the brand name again as separate text.\n\n";
 
     // ── Shared brand context block ────────────────────────────────────────────────
     private static string BrandContextBlock(BrandContext? ctx)
