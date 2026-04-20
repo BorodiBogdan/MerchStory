@@ -17,9 +17,9 @@ jobs:
           ref: dev
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Fast-forward dev to master
+      - name: Reset dev to match master
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git merge --ff-only origin/master
-          git push origin dev
+          git reset --hard origin/master
+          git push origin dev --force-with-lease
