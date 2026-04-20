@@ -1,3 +1,4 @@
+using Azure.Storage.Blobs;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Pgvector;
@@ -28,10 +29,7 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
 
         if (!File.Exists(modelPath))
         {
-            throw new FileNotFoundException(
-                $"CLIP model not found at '{modelPath}'. " +
-                "Download clip_vision_model.onnx from https://huggingface.co/Qdrant/clip-ViT-B-32-vision and place it at the configured path.",
-                modelPath);
+            EnsureModelDownloaded(configuration, modelPath, logger);
         }
 
         var options = new Microsoft.ML.OnnxRuntime.SessionOptions();
@@ -61,6 +59,27 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
     }
 
     public void Dispose() => this.session.Dispose();
+
+    private static void EnsureModelDownloaded(IConfiguration configuration, string modelPath, ILogger logger)
+    {
+        string? blobConnection = configuration["Azure:BlobConnectionString"];
+        string? container = configuration["Clip:ModelBlobContainer"];
+        string? blobName = configuration["Clip:ModelBlobName"];
+
+        if (string.IsNullOrEmpty(blobConnection) || string.IsNullOrEmpty(container) || string.IsNullOrEmpty(blobName))
+        {
+            throw new FileNotFoundException(
+                $"CLIP model not found at '{modelPath}' and Blob download is not configured " +
+                "(set Azure:BlobConnectionString, Clip:ModelBlobContainer, Clip:ModelBlobName).",
+                modelPath);
+        }
+
+        logger.LogInformation("Downloading CLIP model from blob {Container}/{Blob} to {Path}", container, blobName, modelPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
+        var blobClient = new BlobClient(blobConnection, container, blobName);
+        blobClient.DownloadTo(modelPath);
+        logger.LogInformation("CLIP model downloaded ({Size} bytes)", new FileInfo(modelPath).Length);
+    }
 
     private static float[] L2Normalize(float[] v)
     {
