@@ -33,24 +33,27 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
     private static string BuildPrompt(AnnouncementImageRequest r) => r.PostType switch
     {
         "Job Post" => BuildJobPostPrompt(r),
-        "Info" => BuildInfoPrompt(r),
         "Promotion" => BuildPromotionPrompt(r),
         _ => BuildAnnouncementPrompt(r),
     };
 
-    // ── Announcement ─────────────────────────────────────────────────────────────
+    // ── Announcement (covers both event news and informational tip-cards) ────────
     private static string BuildAnnouncementPrompt(AnnouncementImageRequest r) =>
         "You are a professional social media graphic designer for small retail businesses. " +
-        "Produce clean, modern, event-announcement graphics that communicate news clearly and drive action. " +
+        "Produce clean, modern announcement graphics that communicate news or useful information clearly. " +
         "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
         BrandContextBlock(r.BrandContext) +
         LogoBlock(r.LogoBase64) +
         $"Create a {r.Tone.ToLowerInvariant()} announcement social media graphic in {r.Format} format. " +
-        $"Announcement: \"{r.Content}\". " +
-        "Design requirements: bold, readable headline that dominates the layout; " +
-        "supporting date/time/location details if mentioned; clear call-to-action area at the bottom; " +
-        "clean background that does not compete with the text. " +
-        "Make it unmistakably about news or an event — not a sale.";
+        $"Announcement content: \"{r.Content}\". " +
+        "Read the content and pick the right treatment: " +
+        "if it describes an event or news (opening hours, new arrival, upcoming event), " +
+        "use a bold headline that dominates the layout, with supporting date/time/location details if mentioned. " +
+        "If it describes a tip, fact, or educational piece of information, " +
+        "treat it as a tip card / info card — short punchy headline capturing the key insight, " +
+        "supporting body copy that elaborates briefly, and room for a simple icon or illustration. " +
+        "In both cases: clean background that does not compete with the text, " +
+        "clear hierarchy, and this is NOT a sale or promotion — do not add discount language or urgency CTAs.";
 
     // ── Job Post ─────────────────────────────────────────────────────────────────
     private static string BuildJobPostPrompt(AnnouncementImageRequest r)
@@ -110,13 +113,23 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
               "(matching the job title above — e.g. a barista pulling espresso for a barista role, a mechanic under a hood for a mechanic role). " +
               "Overlay the job title, work schedule, and salary (if provided) in a clearly readable panel or banner over the image — " +
               "the text must remain legible against the photo (use a semi-transparent panel or strong contrast). " +
-              "Keep the 'We're Hiring' / 'Join Our Team' hook visible and a short CTA (e.g. 'Apply Today'). "
+              "Keep the 'We're Hiring' / 'Join Our Team' hook visible. "
             : "Visual style: TEXT ONLY. " +
               "Do NOT include any people, faces, or human figures. " +
               "Use a clean typographic / graphic layout where the job details are the hero: " +
               "a prominent 'We're Hiring' or 'Join Our Team' hook, the job title as a large secondary headline, " +
-              "the work schedule and salary (if provided) as clearly grouped supporting text, " +
-              "and a short CTA (e.g. 'Apply Today'). Rely on brand colors, shapes, and iconography — never stock photos of people. ";
+              "and the work schedule and salary (if provided) as clearly grouped supporting text. " +
+              "Rely on brand colors, shapes, and iconography — never stock photos of people. ";
+
+        // STRICT: no invented CTAs. Only render application instructions if the user explicitly asked for them.
+        var ctaRule =
+            "Call-to-action policy: this is an informational announcement. " +
+            "Do NOT invent or add any call-to-action, application instruction, contact method, or phrases like " +
+            "'Apply Today', 'Apply Now', 'DM us to apply', 'Click the link', 'Follow the link', 'Send an email', " +
+            "'Call us', 'Visit our website', 'Scan the QR', or similar. " +
+            "ONLY include an application instruction if the user's 'Additional direction' above explicitly requests one " +
+            "(for example: 'apply by email at jobs@example.com') — and in that case, render exactly what the user asked for, nothing more. " +
+            "If no such direction is provided, leave the graphic free of any apply-instruction text. ";
 
         return "You are a professional social media graphic designer specializing in recruitment visuals for small retail businesses. " +
                "Produce modern, welcoming hiring graphics that attract qualified candidates. " +
@@ -128,24 +141,10 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
                requirementsBlock +
                directionBlock +
                styleBlock +
+               ctaRule +
                "Professional yet approachable tone — avoid corporate coldness. " +
                "Clean layout with good whitespace so the role stands out immediately.";
     }
-
-    // ── Info ─────────────────────────────────────────────────────────────────────
-    private static string BuildInfoPrompt(AnnouncementImageRequest r) =>
-        "You are a professional social media graphic designer for small retail businesses. " +
-        "Produce clean, educational tip-card or info-card graphics that are easy to scan at a glance. " +
-        "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
-        BrandContextBlock(r.BrandContext) +
-        LogoBlock(r.LogoBase64) +
-        $"Create a {r.Tone.ToLowerInvariant()} informational social media graphic in {r.Format} format. " +
-        $"Key information: \"{r.Content}\". " +
-        "Design requirements: treat this as a tip card or fact card — " +
-        "a short, punchy headline that captures the key insight; " +
-        "supporting body copy that elaborates briefly; " +
-        "icon-friendly layout (leave room for a simple icon or illustration area); " +
-        "clean, structured, minimal clutter — the information must be the hero, not decoration.";
 
     // ── Promotion ────────────────────────────────────────────────────────────────
     private static string BuildPromotionPrompt(AnnouncementImageRequest r)

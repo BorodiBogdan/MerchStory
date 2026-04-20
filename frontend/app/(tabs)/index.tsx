@@ -55,7 +55,7 @@ const DESKTOP_BREAKPOINT = 860;
 type StudioTab = 'catalog' | 'announcements' | 'video';
 type CatalogMode = 'generate' | 'on-wallpaper';
 type WallpaperStage = 'none' | 'generating' | 'preview' | 'confirmed';
-type PostType = 'Announcement' | 'Job Post' | 'Info' | 'Promotion';
+type PostType = 'Announcement' | 'Job Post' | 'Promotion';
 type ContextItem = { key: string; label: string };
 
 // ─── Text style presets (style only — color is chosen separately) ──────────────
@@ -300,17 +300,13 @@ const POST_TYPES: {
   {
     type: 'Announcement',
     icon: 'megaphone-outline',
-    placeholder: "e.g. We're open this Sunday from 9am to 6pm…",
+    placeholder:
+      "e.g. We're open this Sunday from 9am to 6pm — or — Did you know we offer free gift wrapping?",
   },
   {
     type: 'Job Post',
     icon: 'briefcase-outline',
     placeholder: 'e.g. Looking for a part-time cashier, 3 days/week…',
-  },
-  {
-    type: 'Info',
-    icon: 'information-circle-outline',
-    placeholder: 'e.g. Did you know we offer free gift wrapping?',
   },
   {
     type: 'Promotion',
@@ -2236,7 +2232,7 @@ export default function StudioScreen() {
               <OptionLabel label="Additional direction (optional)" />
               <TextInput
                 style={styles.jobTextArea}
-                placeholder="Any extra context for the designer"
+                placeholder={'e.g. "Apply by email at jobs@example.com" or "Call 555-1234"'}
                 placeholderTextColor={colors.text.muted}
                 value={content}
                 onChangeText={setContent}
@@ -3391,7 +3387,7 @@ export default function StudioScreen() {
                   <OptionLabel label="Additional direction (optional)" />
                   <TextInput
                     style={styles.jobTextArea}
-                    placeholder="Any extra context"
+                    placeholder={'e.g. "Apply by email at jobs@example.com"'}
                     placeholderTextColor={colors.text.muted}
                     value={content}
                     onChangeText={setContent}
