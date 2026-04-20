@@ -32,6 +32,7 @@
     <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
     <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.4" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.22.2" />
   </ItemGroup>
 
   <ItemGroup>
