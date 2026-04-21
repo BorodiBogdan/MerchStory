@@ -31,6 +31,7 @@ import { ChipSelector } from '@/components/ui/ChipSelector';
 import { GalleryImage } from '@/components/ui/GalleryImage';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
+import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
 import { D } from '@/constants/design';
 import type { GenerationType } from '@/constants/generationTypes';
@@ -38,7 +39,6 @@ import { useTheme } from '@/context/theme';
 import {
   fetchGallery,
   fetchGalleryImage,
-  fetchProducts,
   type GalleryItem,
   generateAnnouncementImage,
   generateCatalogImage,
@@ -54,6 +54,18 @@ import {
 } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
 import * as galleryImageCache from '@/utils/galleryImageCache';
+import * as productImageCache from '@/utils/productImageCache';
+import * as productsCache from '@/utils/productsCache';
+
+async function loadProductImageBase64(id: string): Promise<string | null> {
+  try {
+    const entry = await productImageCache.load(id);
+    const comma = entry.uri.indexOf(',');
+    return comma >= 0 ? entry.uri.slice(comma + 1) : null;
+  } catch {
+    return null;
+  }
+}
 
 const isWeb = Platform.OS === 'web';
 const SIDEBAR_WIDTH = 320;
@@ -730,7 +742,6 @@ function ProductCard({
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
 }) {
-  const imageUri = product.imageBase64 ? `data:image/jpeg;base64,${product.imageBase64}` : null;
   return (
     <Pressable
       style={[styles.productCard, { width: cardWidth }, selected && styles.productCardSelected]}
@@ -739,13 +750,7 @@ function ProductCard({
       accessibilityState={{ checked: selected }}
     >
       <View style={styles.productImageBox}>
-        {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.productImage} resizeMode="cover" />
-        ) : (
-          <View style={styles.productImagePlaceholder}>
-            <Ionicons name="image-outline" size={24} color={colors.text.muted} />
-          </View>
-        )}
+        <ProductImage id={product.id} style={styles.productImage} resizeMode="cover" />
         {selected && (
           <View style={styles.selectedOverlay}>
             <Ionicons name="checkmark-circle" size={22} color={colors.accent.primary} />
@@ -973,24 +978,11 @@ function ChooseProductsSection({
             >
               {selectedProducts.slice(0, 5).map((p, i) => (
                 <View key={p.id} style={{ flex: 1, position: 'relative' }}>
-                  {p.imageBase64 ? (
-                    <Image
-                      source={{ uri: `data:image/jpeg;base64,${p.imageBase64}` }}
-                      style={{ width: '100%', height: '100%' }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        flex: 1,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: colors.bg.elevated,
-                      }}
-                    >
-                      <Ionicons name="image-outline" size={16} color={colors.text.muted} />
-                    </View>
-                  )}
+                  <ProductImage
+                    id={p.id}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                  />
                   {i === 4 && selectedProducts.length > 5 && (
                     <View
                       style={{
@@ -1165,8 +1157,9 @@ export default function StudioScreen() {
   }, [selectedPresetId, selectedColor]);
 
   // ── Catalog state ────────────────────────────────────────────────────────────
-  const [products, setProducts] = useState<ProductItem[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  const productsCacheState = productsCache.useProductsCache();
+  const products = productsCacheState.items;
+  const loadingProducts = productsCacheState.loading && !productsCacheState.initialized;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [layout, setLayout] = useState('Showcase');
   const [colorTheme, setColorTheme] = useState('Brand Colors');
@@ -1179,11 +1172,7 @@ export default function StudioScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setLoadingProducts(true);
-      fetchProducts({ pageSize: 100 })
-        .then((res) => setProducts(res.items))
-        .catch(() => {})
-        .finally(() => setLoadingProducts(false));
+      void productsCache.ensureLoaded({});
 
       getShopProfile()
         .then((profile) => {
@@ -1218,13 +1207,16 @@ export default function StudioScreen() {
     setCatalogResult(null);
     setCatalogKept(false);
     try {
+      const productsWithImages = await Promise.all(
+        chosen.map(async (p) => ({
+          name: p.name,
+          price: p.price,
+          imageBase64: await loadProductImageBase64(p.id),
+        }))
+      );
       setCatalogResult(
         await generateCatalogImage({
-          products: chosen.map((p) => ({
-            name: p.name,
-            price: p.price,
-            imageBase64: p.imageBase64,
-          })),
+          products: productsWithImages,
           layout,
           colorTheme,
           format: catalogFormat,
@@ -1298,13 +1290,16 @@ export default function StudioScreen() {
     setWallpaperOnResult(null);
     setWallpaperOnKept(false);
     try {
+      const productsWithImages = await Promise.all(
+        chosen.map(async (p) => ({
+          name: p.name,
+          price: p.price,
+          imageBase64: await loadProductImageBase64(p.id),
+        }))
+      );
       setWallpaperOnResult(
         await generateCatalogOnWallpaper({
-          products: chosen.map((p) => ({
-            name: p.name,
-            price: p.price,
-            imageBase64: p.imageBase64,
-          })),
+          products: productsWithImages,
           wallpaperBase64,
           layout,
           showPrices,
@@ -1458,9 +1453,13 @@ export default function StudioScreen() {
     try {
       const promotionProductImages =
         postType === 'Promotion' && promotionSelected.size > 0
-          ? products
-              .filter((p) => promotionSelected.has(p.id) && p.imageBase64)
-              .map((p) => p.imageBase64!)
+          ? (
+              await Promise.all(
+                products
+                  .filter((p) => promotionSelected.has(p.id))
+                  .map((p) => loadProductImageBase64(p.id))
+              )
+            ).filter((b64): b64 is string => !!b64)
           : undefined;
 
       const jobRequirementsList = isJobPost

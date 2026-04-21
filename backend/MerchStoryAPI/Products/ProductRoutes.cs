@@ -71,14 +71,38 @@ public static class ProductRoutes
 
             int total = await query.CountAsync();
 
-            List<ProductResponse> products = await query
+            List<ProductMetadata> products = await query
                 .OrderByDescending(p => p.CreatedAt)
                 .Skip((resolvedPage - 1) * resolvedPageSize)
                 .Take(resolvedPageSize)
-                .Select(p => new ProductResponse(p.Id, p.Name, p.Price, p.ImageBase64, p.Category, p.CreatedAt, p.UpdatedAt))
+                .Select(p => new ProductMetadata(p.Id, p.Name, p.Price, p.Category, p.CreatedAt, p.UpdatedAt, "image/png"))
                 .ToListAsync();
 
-            return Results.Ok(new PagedResponse<ProductResponse>(products, total, resolvedPage, resolvedPageSize));
+            return Results.Ok(new PagedResponse<ProductMetadata>(products, total, resolvedPage, resolvedPageSize));
+        });
+
+        group.MapGet("/{id:guid}/image", async (
+            Guid id,
+            ClaimsPrincipal principal,
+            AppDbContext db) =>
+        {
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var image = await db.Products
+                .Where(p => p.Id == id && p.UserId == userId)
+                .Select(p => new { p.ImageBase64 })
+                .SingleOrDefaultAsync();
+
+            if (image is null)
+            {
+                return Results.NotFound();
+            }
+
+            return Results.Ok(new ProductImageBytes(image.ImageBase64 ?? string.Empty, "image/png"));
         });
 
         group.MapGet("/categories", async (
@@ -278,6 +302,10 @@ public static class ProductRoutes
 internal sealed record ProductRequest(string Name, decimal Price, string? ImageBase64, string? Category);
 
 internal sealed record ProductResponse(Guid Id, string Name, decimal Price, string? ImageBase64, string? Category, DateTime CreatedAt, DateTime UpdatedAt);
+
+internal sealed record ProductMetadata(Guid Id, string Name, decimal Price, string? Category, DateTime CreatedAt, DateTime UpdatedAt, string MimeType);
+
+internal sealed record ProductImageBytes(string ImageBase64, string MimeType);
 
 internal sealed record RemoveBackgroundRequest(string ImageBase64);
 

@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Pagination } from '@/components/ui/Pagination';
 import { ProductFilterBar, ProductFilterState } from '@/components/ui/ProductFilterBar';
+import { ProductImage } from '@/components/ui/ProductImage';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
@@ -30,6 +31,7 @@ import {
   createProduct,
   deleteProduct,
   fetchProductCategories,
+  type ProductDetail,
   type ProductFilters,
   type ProductItem,
   type ReferenceImage,
@@ -37,7 +39,20 @@ import {
   searchReferenceImages,
   updateProduct,
 } from '@/utils/api';
+import * as productImageCache from '@/utils/productImageCache';
 import * as productsCache from '@/utils/productsCache';
+
+function toMetadata(detail: ProductDetail): ProductItem {
+  return {
+    id: detail.id,
+    name: detail.name,
+    price: detail.price,
+    category: detail.category,
+    createdAt: detail.createdAt,
+    updatedAt: detail.updatedAt,
+    mimeType: 'image/png',
+  };
+}
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1200;
@@ -170,11 +185,20 @@ export default function ProductsScreen() {
     setDraftCategory(product.category ?? '');
     setCategoryDropdownOpen(false);
     setAddingNewCategory(false);
-    setDraftImageUri(product.imageBase64 ? `data:image/png;base64,${product.imageBase64}` : null);
-    setDraftImageBase64(product.imageBase64);
+    setDraftImageUri(null);
+    setDraftImageBase64(null);
     setNameError('');
     setPriceError('');
     setModalVisible(true);
+
+    productImageCache
+      .load(product.id)
+      .then((entry) => {
+        setDraftImageUri(entry.uri);
+        const comma = entry.uri.indexOf(',');
+        setDraftImageBase64(comma >= 0 ? entry.uri.slice(comma + 1) : null);
+      })
+      .catch(() => {});
   }
 
   function closeModal() {
@@ -323,10 +347,18 @@ export default function ProductsScreen() {
       };
       if (editingProduct) {
         const updated = await updateProduct(editingProduct.id, payload);
-        productsCache.upsertItem(updated);
+        if (updated.imageBase64) {
+          productImageCache.prime(updated.id, updated.imageBase64, 'image/png');
+        } else {
+          productImageCache.evict(updated.id);
+        }
+        productsCache.upsertItem(toMetadata(updated));
       } else {
         const created = await createProduct(payload);
-        productsCache.addItem(created);
+        if (created.imageBase64) {
+          productImageCache.prime(created.id, created.imageBase64, 'image/png');
+        }
+        productsCache.addItem(toMetadata(created));
       }
       loadCategories();
       closeModal();
@@ -339,6 +371,7 @@ export default function ProductsScreen() {
 
   async function handleDelete(id: string) {
     productsCache.removeItem(id);
+    productImageCache.evict(id);
     try {
       await deleteProduct(id);
     } catch {
@@ -358,17 +391,7 @@ export default function ProductsScreen() {
       accessibilityLabel={`Edit ${item.name}`}
     >
       <View style={[styles.productImageArea, { height: cardWidth }]}>
-        {item.imageBase64 ? (
-          <Image
-            source={{ uri: `data:image/png;base64,${item.imageBase64}` }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.productImagePlaceholder}>
-            <Ionicons name="cube-outline" size={36} color={colors.text.muted} />
-          </View>
-        )}
+        <ProductImage id={item.id} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <Pressable
           style={({ pressed }) => [styles.deleteButton, pressed && { opacity: 0.7 }]}
           onPress={(e) => {

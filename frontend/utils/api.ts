@@ -590,10 +590,25 @@ export interface ProductItem {
   id: string;
   name: string;
   price: number;
+  category: string | null;
+  createdAt: string;
+  updatedAt: string;
+  mimeType: string;
+}
+
+export interface ProductDetail {
+  id: string;
+  name: string;
+  price: number;
   imageBase64: string | null;
   category: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProductImageBytes {
+  imageBase64: string;
+  mimeType: string;
 }
 
 export interface ProductPayload {
@@ -644,6 +659,14 @@ export async function fetchProducts(filters: ProductFilters = {}): Promise<Paged
   return coercePaged<ProductItem>(body, filters.page, filters.pageSize);
 }
 
+export async function fetchProductImage(id: string): Promise<ProductImageBytes> {
+  const response = await fetchWithAuth(`${API_URL}/products/${id}/image`, {});
+  if (!response.ok) {
+    throw new Error(`Failed to load image (${response.status})`);
+  }
+  return response.json() as Promise<ProductImageBytes>;
+}
+
 export async function fetchProductCategories(): Promise<string[]> {
   const response = await fetchWithAuth(`${API_URL}/products/categories`, {});
 
@@ -654,7 +677,7 @@ export async function fetchProductCategories(): Promise<string[]> {
   return response.json() as Promise<string[]>;
 }
 
-export async function createProduct(payload: ProductPayload): Promise<ProductItem> {
+export async function createProduct(payload: ProductPayload): Promise<ProductDetail> {
   const response = await fetchWithAuth(`${API_URL}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -666,10 +689,10 @@ export async function createProduct(payload: ProductPayload): Promise<ProductIte
     throw new Error(err || `Failed to create product (${response.status})`);
   }
 
-  return response.json() as Promise<ProductItem>;
+  return response.json() as Promise<ProductDetail>;
 }
 
-export async function updateProduct(id: string, payload: ProductPayload): Promise<ProductItem> {
+export async function updateProduct(id: string, payload: ProductPayload): Promise<ProductDetail> {
   const response = await fetchWithAuth(`${API_URL}/products/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -681,7 +704,7 @@ export async function updateProduct(id: string, payload: ProductPayload): Promis
     throw new Error(err || `Failed to update product (${response.status})`);
   }
 
-  return response.json() as Promise<ProductItem>;
+  return response.json() as Promise<ProductDetail>;
 }
 
 export async function deleteProduct(id: string): Promise<void> {
