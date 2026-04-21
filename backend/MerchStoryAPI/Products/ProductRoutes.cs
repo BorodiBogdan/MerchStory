@@ -14,6 +14,65 @@ public static class ProductRoutes
 
         group.MapGet("/", async (
             ClaimsPrincipal principal,
+            AppDbContext db,
+            string? search,
+            string? category,
+            string? categories,
+            decimal? minPrice,
+            decimal? maxPrice) =>
+        {
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            IQueryable<Product> query = db.Products.Where(p => p.UserId == userId);
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                string pattern = $"%{search.Trim()}%";
+                query = query.Where(p => EF.Functions.ILike(p.Name, pattern));
+            }
+
+            List<string> categoryList = new();
+            if (!string.IsNullOrWhiteSpace(categories))
+            {
+                categoryList.AddRange(
+                    categories.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                              .Select(c => c.ToLowerInvariant()));
+            }
+
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                categoryList.Add(category.Trim().ToLowerInvariant());
+            }
+
+            if (categoryList.Count > 0)
+            {
+                query = query.Where(p => p.Category != null && categoryList.Contains(p.Category.ToLower()));
+            }
+
+            if (minPrice.HasValue)
+            {
+                query = query.Where(p => p.Price >= minPrice.Value);
+            }
+
+            if (maxPrice.HasValue)
+            {
+                query = query.Where(p => p.Price <= maxPrice.Value);
+            }
+
+            List<ProductResponse> products = await query
+                .OrderByDescending(p => p.CreatedAt)
+                .Select(p => new ProductResponse(p.Id, p.Name, p.Price, p.ImageBase64, p.Category, p.CreatedAt, p.UpdatedAt))
+                .ToListAsync();
+
+            return Results.Ok(products);
+        });
+
+        group.MapGet("/categories", async (
+            ClaimsPrincipal principal,
             AppDbContext db) =>
         {
             string? userId = GetUserId(principal);
@@ -22,13 +81,14 @@ public static class ProductRoutes
                 return Results.Unauthorized();
             }
 
-            List<ProductResponse> products = await db.Products
-                .Where(p => p.UserId == userId)
-                .OrderByDescending(p => p.CreatedAt)
-                .Select(p => new ProductResponse(p.Id, p.Name, p.Price, p.ImageBase64, p.CreatedAt, p.UpdatedAt))
+            List<string> categories = await db.Products
+                .Where(p => p.UserId == userId && p.Category != null && p.Category != string.Empty)
+                .Select(p => p.Category!)
+                .Distinct()
+                .OrderBy(c => c)
                 .ToListAsync();
 
-            return Results.Ok(products);
+            return Results.Ok(categories);
         });
 
         group.MapPost("/", async (
@@ -60,6 +120,7 @@ public static class ProductRoutes
                 Name = request.Name.Trim(),
                 Price = request.Price,
                 ImageBase64 = request.ImageBase64,
+                Category = NormalizeCategory(request.Category),
                 CreatedAt = now,
                 UpdatedAt = now,
             };
@@ -69,7 +130,7 @@ public static class ProductRoutes
 
             return Results.Created(
                 $"/products/{product.Id}",
-                new ProductResponse(product.Id, product.Name, product.Price, product.ImageBase64, product.CreatedAt, product.UpdatedAt));
+                new ProductResponse(product.Id, product.Name, product.Price, product.ImageBase64, product.Category, product.CreatedAt, product.UpdatedAt));
         });
 
         group.MapPut("/{id:guid}", async (
@@ -105,11 +166,12 @@ public static class ProductRoutes
             product.Name = request.Name.Trim();
             product.Price = request.Price;
             product.ImageBase64 = request.ImageBase64;
+            product.Category = NormalizeCategory(request.Category);
             product.UpdatedAt = DateTime.UtcNow;
 
             await db.SaveChangesAsync();
 
-            return Results.Ok(new ProductResponse(product.Id, product.Name, product.Price, product.ImageBase64, product.CreatedAt, product.UpdatedAt));
+            return Results.Ok(new ProductResponse(product.Id, product.Name, product.Price, product.ImageBase64, product.Category, product.CreatedAt, product.UpdatedAt));
         });
 
         group.MapDelete("/{id:guid}", async (
@@ -190,11 +252,22 @@ public static class ProductRoutes
     private static string? GetUserId(ClaimsPrincipal principal) =>
         principal.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+    private static string? NormalizeCategory(string? category)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            return null;
+        }
+
+        string trimmed = category.Trim();
+        return trimmed.Length > 100 ? trimmed[..100] : trimmed;
+    }
 }
 
-internal sealed record ProductRequest(string Name, decimal Price, string? ImageBase64);
+internal sealed record ProductRequest(string Name, decimal Price, string? ImageBase64, string? Category);
 
-internal sealed record ProductResponse(Guid Id, string Name, decimal Price, string? ImageBase64, DateTime CreatedAt, DateTime UpdatedAt);
+internal sealed record ProductResponse(Guid Id, string Name, decimal Price, string? ImageBase64, string? Category, DateTime CreatedAt, DateTime UpdatedAt);
 
 internal sealed record RemoveBackgroundRequest(string ImageBase64);
 
