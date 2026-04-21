@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using MerchStoryAPI.Common;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +20,9 @@ public static class ProductRoutes
             string? category,
             string? categories,
             decimal? minPrice,
-            decimal? maxPrice) =>
+            decimal? maxPrice,
+            int? page,
+            int? pageSize) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -63,12 +66,43 @@ public static class ProductRoutes
                 query = query.Where(p => p.Price <= maxPrice.Value);
             }
 
-            List<ProductResponse> products = await query
+            int resolvedPage = Math.Max(1, page ?? 1);
+            int resolvedPageSize = Math.Clamp(pageSize ?? 24, 1, 100);
+
+            int total = await query.CountAsync();
+
+            List<ProductMetadata> products = await query
                 .OrderByDescending(p => p.CreatedAt)
-                .Select(p => new ProductResponse(p.Id, p.Name, p.Price, p.ImageBase64, p.Category, p.CreatedAt, p.UpdatedAt))
+                .Skip((resolvedPage - 1) * resolvedPageSize)
+                .Take(resolvedPageSize)
+                .Select(p => new ProductMetadata(p.Id, p.Name, p.Price, p.Category, p.CreatedAt, p.UpdatedAt, "image/png"))
                 .ToListAsync();
 
-            return Results.Ok(products);
+            return Results.Ok(new PagedResponse<ProductMetadata>(products, total, resolvedPage, resolvedPageSize));
+        });
+
+        group.MapGet("/{id:guid}/image", async (
+            Guid id,
+            ClaimsPrincipal principal,
+            AppDbContext db) =>
+        {
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var image = await db.Products
+                .Where(p => p.Id == id && p.UserId == userId)
+                .Select(p => new { p.ImageBase64 })
+                .SingleOrDefaultAsync();
+
+            if (image is null)
+            {
+                return Results.NotFound();
+            }
+
+            return Results.Ok(new ProductImageBytes(image.ImageBase64 ?? string.Empty, "image/png"));
         });
 
         group.MapGet("/categories", async (
@@ -268,6 +302,10 @@ public static class ProductRoutes
 internal sealed record ProductRequest(string Name, decimal Price, string? ImageBase64, string? Category);
 
 internal sealed record ProductResponse(Guid Id, string Name, decimal Price, string? ImageBase64, string? Category, DateTime CreatedAt, DateTime UpdatedAt);
+
+internal sealed record ProductMetadata(Guid Id, string Name, decimal Price, string? Category, DateTime CreatedAt, DateTime UpdatedAt, string MimeType);
+
+internal sealed record ProductImageBytes(string ImageBase64, string MimeType);
 
 internal sealed record RemoveBackgroundRequest(string ImageBase64);
 

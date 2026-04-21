@@ -27,7 +27,12 @@ public class AppDbContext : IdentityDbContext<AppUser>
     {
         base.OnModelCreating(builder);
 
-        builder.HasPostgresExtension("vector");
+        bool isRelational = this.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+
+        if (isRelational)
+        {
+            builder.HasPostgresExtension("vector");
+        }
 
         builder.Entity<RefreshToken>(entity =>
         {
@@ -130,12 +135,20 @@ public class AppDbContext : IdentityDbContext<AppUser>
             entity.Property(r => r.Name).HasMaxLength(200).IsRequired();
             entity.Property(r => r.Category).HasMaxLength(100);
             entity.Property(r => r.ImageBase64).HasColumnType("text").IsRequired();
-            entity.Property(r => r.Embedding).HasColumnType("vector(512)").IsRequired();
-            entity.HasIndex(r => r.Embedding)
-                  .HasMethod("hnsw")
-                  .HasOperators("vector_cosine_ops")
-                  .HasStorageParameter("m", 16)
-                  .HasStorageParameter("ef_construction", 64);
+
+            if (isRelational)
+            {
+                entity.Property(r => r.Embedding).HasColumnType("vector(512)").IsRequired();
+                entity.HasIndex(r => r.Embedding)
+                      .HasMethod("hnsw")
+                      .HasOperators("vector_cosine_ops")
+                      .HasStorageParameter("m", 16)
+                      .HasStorageParameter("ef_construction", 64);
+            }
+            else
+            {
+                entity.Ignore(r => r.Embedding);
+            }
         });
     }
 }
