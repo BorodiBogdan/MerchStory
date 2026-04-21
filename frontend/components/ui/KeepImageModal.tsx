@@ -21,9 +21,22 @@ interface KeepImageModalProps {
   defaultName?: string;
   onCancel: () => void;
   onConfirm: (name: string) => Promise<void> | void;
+  title?: string;
+  body?: string;
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
+  submitLabel?: string;
 }
 
-export function KeepImageModal({ visible, defaultName, onCancel, onConfirm }: KeepImageModalProps) {
+export function KeepImageModal({
+  visible,
+  defaultName,
+  onCancel,
+  onConfirm,
+  title = 'Name this image',
+  body = 'Give it a descriptive name so you can find it later.',
+  icon = 'bookmark-outline',
+  submitLabel = 'Save',
+}: KeepImageModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [name, setName] = useState('');
@@ -64,10 +77,10 @@ export function KeepImageModal({ visible, defaultName, onCancel, onConfirm }: Ke
       <Pressable style={styles.overlay} onPress={saving ? undefined : onCancel}>
         <Pressable style={styles.dialog} onPress={() => {}}>
           <View style={styles.iconWrap}>
-            <Ionicons name="bookmark-outline" size={26} color={colors.accent.primary} />
+            <Ionicons name={icon} size={26} color={colors.accent.primary} />
           </View>
-          <Text style={styles.title}>Name this image</Text>
-          <Text style={styles.body}>Give it a descriptive name so you can find it later.</Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.body}>{body}</Text>
 
           <TextInput
             style={styles.input as any}
@@ -106,7 +119,7 @@ export function KeepImageModal({ visible, defaultName, onCancel, onConfirm }: Ke
               {saving ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.saveText}>Save</Text>
+                <Text style={styles.saveText}>{submitLabel}</Text>
               )}
             </Pressable>
           </View>

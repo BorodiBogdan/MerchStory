@@ -152,6 +152,22 @@ export function addItem(item: GalleryItem): void {
   notify();
 }
 
+export function upsertItem(updated: GalleryItem): void {
+  const idx = state.items.findIndex((i) => i.id === updated.id);
+  if (idx === -1) return;
+  const nextItems = state.items.slice();
+  nextItems[idx] = updated;
+  const pageItems = state.pages[state.page];
+  const nextPages = pageItems
+    ? {
+        ...state.pages,
+        [state.page]: pageItems.map((it) => (it.id === updated.id ? updated : it)),
+      }
+    : state.pages;
+  state = { ...state, items: nextItems, pages: nextPages };
+  notify();
+}
+
 export function removeItem(id: string): void {
   const next = state.items.filter((i) => i.id !== id);
   if (next.length === state.items.length) return;

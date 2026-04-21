@@ -164,6 +164,57 @@ public static class GalleryRoutes
             return Results.Ok(new GalleryImageBytes(image.ImageBase64, image.MimeType));
         });
 
+        group.MapPatch("/{id:guid}", async (
+            Guid id,
+            UpdateGalleryItemRequest req,
+            ClaimsPrincipal principal,
+            AppDbContext db) =>
+        {
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            string name = (req.Name ?? string.Empty).Trim();
+            if (name.Length == 0)
+            {
+                return Results.BadRequest(new { detail = "Name is required." });
+            }
+
+            if (name.Length > 80)
+            {
+                return Results.BadRequest(new { detail = "Name must be 80 characters or fewer." });
+            }
+
+            GeneratedImage? image = await db.GeneratedImages
+                .SingleOrDefaultAsync(g => g.Id == id && g.UserId == userId);
+            if (image is null)
+            {
+                return Results.NotFound();
+            }
+
+            if (!string.Equals(image.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                bool nameTaken = await db.GeneratedImages
+                    .AnyAsync(g => g.UserId == userId && g.Id != id && g.Name.ToLower() == name.ToLower());
+                if (nameTaken)
+                {
+                    return Results.Conflict(new { detail = "You already have an image with that name." });
+                }
+            }
+
+            image.Name = name;
+            await db.SaveChangesAsync();
+
+            return Results.Ok(new GalleryItemMetadata(
+                image.Id,
+                image.MimeType,
+                image.CreatedAt,
+                image.Name,
+                image.GenerationType));
+        });
+
         group.MapDelete("/{id:guid}", async (
             Guid id,
             ClaimsPrincipal principal,
@@ -209,3 +260,5 @@ internal sealed record SaveImageRequest(
     string MimeType,
     string GenerationType,
     string Name);
+
+internal sealed record UpdateGalleryItemRequest(string Name);

@@ -17,11 +17,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GalleryFilterBar, type GalleryFilterState } from '@/components/ui/GalleryFilterBar';
 import { GalleryImage } from '@/components/ui/GalleryImage';
+import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { Pagination } from '@/components/ui/Pagination';
 import { D } from '@/constants/design';
 import { GENERATION_TYPE_LABELS } from '@/constants/generationTypes';
 import { useTheme } from '@/context/theme';
-import { deleteGalleryItem, type GalleryItem } from '@/utils/api';
+import { deleteGalleryItem, type GalleryItem, updateGalleryItemName } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
 import * as galleryImageCache from '@/utils/galleryImageCache';
 
@@ -66,6 +67,7 @@ export default function GalleryScreen() {
   const slideAnim = useMemo(() => new Animated.Value(0), []);
   const [lightboxItem, setLightboxItem] = useState<GalleryItem | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<GalleryItem | null>(null);
   const [filters, setFilters] = useState<GalleryFilterState>(EMPTY_FILTERS);
 
   const numColumns = isWeb ? (screenWidth < 600 ? 2 : screenWidth < 1024 ? 3 : 4) : 2;
@@ -114,6 +116,14 @@ export default function GalleryScreen() {
     }
   }
 
+  async function handleRename(newName: string) {
+    if (!editingItem) return;
+    const updated = await updateGalleryItemName(editingItem.id, newName);
+    galleryCache.upsertItem(updated);
+    if (lightboxItem?.id === updated.id) setLightboxItem(updated);
+    setEditingItem(null);
+  }
+
   const renderPhoto = ({ item }: { item: GalleryItem }) => (
     <Pressable
       style={({ pressed }) => [
@@ -134,18 +144,32 @@ export default function GalleryScreen() {
             </Text>
           </View>
         )}
-        <Pressable
-          style={({ pressed }) => [styles.deleteButton, pressed && { opacity: 0.7 }]}
-          onPress={(e) => {
-            e.stopPropagation?.();
-            setConfirmDeleteId(item.id);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Delete image"
-          hitSlop={8}
-        >
-          <Ionicons name="trash-outline" size={13} color="#fff" />
-        </Pressable>
+        <View style={styles.cardActions}>
+          <Pressable
+            style={({ pressed }) => [styles.editButton, pressed && { opacity: 0.7 }]}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              setEditingItem(item);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Rename image"
+            hitSlop={8}
+          >
+            <Ionicons name="pencil-outline" size={13} color="#fff" />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.deleteButton, pressed && { opacity: 0.7 }]}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              setConfirmDeleteId(item.id);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Delete image"
+            hitSlop={8}
+          >
+            <Ionicons name="trash-outline" size={13} color="#fff" />
+          </Pressable>
+        </View>
       </View>
       <View style={styles.photoMeta}>
         <Text style={styles.photoName} numberOfLines={1}>
@@ -353,6 +377,17 @@ export default function GalleryScreen() {
           </>
         )}
       </View>
+
+      <KeepImageModal
+        visible={editingItem !== null}
+        defaultName={editingItem?.name ?? ''}
+        onCancel={() => setEditingItem(null)}
+        onConfirm={handleRename}
+        title="Rename image"
+        body="Change the name used to search for and identify this image."
+        icon="pencil-outline"
+        submitLabel="Save"
+      />
 
       {/* Delete confirmation */}
       <Modal
@@ -577,10 +612,22 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: '#fff',
       letterSpacing: 0.3,
     },
-    deleteButton: {
+    cardActions: {
       position: 'absolute',
       top: D.spacing.xs,
       right: D.spacing.xs,
+      flexDirection: 'row',
+      gap: 4,
+    },
+    editButton: {
+      width: 26,
+      height: 26,
+      borderRadius: D.radius.pill,
+      backgroundColor: 'rgba(0,0,0,0.65)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    deleteButton: {
       width: 26,
       height: 26,
       borderRadius: D.radius.pill,

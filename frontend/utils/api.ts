@@ -546,6 +546,26 @@ export async function fetchGallery(filters: GalleryFilters = {}): Promise<Paged<
   return coercePaged<GalleryItem>(body, filters.page, filters.pageSize);
 }
 
+export async function updateGalleryItemName(id: string, name: string): Promise<GalleryItem> {
+  const response = await fetchWithAuth(`${API_URL}/gallery/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+
+  if (response.status === 409) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new GalleryNameConflictError(body.detail);
+  }
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(body.detail ?? `Failed to rename image (${response.status})`);
+  }
+
+  return response.json() as Promise<GalleryItem>;
+}
+
 export async function fetchGalleryImage(id: string): Promise<GalleryImageBytes> {
   const response = await fetchWithAuth(`${API_URL}/gallery/${id}/image`, {});
   if (!response.ok) {
