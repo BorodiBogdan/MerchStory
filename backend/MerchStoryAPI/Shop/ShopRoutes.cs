@@ -97,6 +97,16 @@ public static class ShopRoutes
                 return Results.BadRequest("Email must be a valid email address.");
             }
 
+            if (!TryParseCurrency(request.Currency, out Currency currency))
+            {
+                return Results.BadRequest("Invalid Currency. Allowed values: USD, EUR, RON.");
+            }
+
+            if (!TryParseLanguage(request.GenerationLanguage, out AppLanguage generationLanguage))
+            {
+                return Results.BadRequest("Invalid GenerationLanguage. Allowed values: EN, RO.");
+            }
+
             string[] validAddresses = request.Addresses.Where(a => !string.IsNullOrWhiteSpace(a)).ToArray();
             if (validAddresses.Length == 0)
             {
@@ -127,6 +137,8 @@ public static class ShopRoutes
                     InstagramHandle = request.InstagramHandle?.Trim(),
                     FacebookHandle = request.FacebookHandle?.Trim(),
                     TikTokHandle = request.TikTokHandle?.Trim(),
+                    Currency = currency,
+                    GenerationLanguage = generationLanguage,
                     CreatedAt = now,
                     UpdatedAt = now,
                 };
@@ -151,6 +163,8 @@ public static class ShopRoutes
             existing.InstagramHandle = request.InstagramHandle?.Trim();
             existing.FacebookHandle = request.FacebookHandle?.Trim();
             existing.TikTokHandle = request.TikTokHandle?.Trim();
+            existing.Currency = currency;
+            existing.GenerationLanguage = generationLanguage;
             existing.UpdatedAt = now;
 
             await db.SaveChangesAsync();
@@ -199,6 +213,30 @@ public static class ShopRoutes
         });
     }
 
+    internal static bool TryParseCurrency(string? value, out Currency currency)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            currency = Currency.USD;
+            return true;
+        }
+
+        return Enum.TryParse(value.Trim(), ignoreCase: true, out currency)
+            && Enum.IsDefined(currency);
+    }
+
+    internal static bool TryParseLanguage(string? value, out AppLanguage language)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            language = AppLanguage.EN;
+            return true;
+        }
+
+        return Enum.TryParse(value.Trim(), ignoreCase: true, out language)
+            && Enum.IsDefined(language);
+    }
+
     private static string? GetUserId(ClaimsPrincipal principal) =>
         principal.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
@@ -234,6 +272,8 @@ public static class ShopRoutes
             p.InstagramHandle,
             p.FacebookHandle,
             p.TikTokHandle,
+            p.Currency.ToString(),
+            p.GenerationLanguage.ToString(),
             p.CreatedAt,
             p.UpdatedAt);
     }

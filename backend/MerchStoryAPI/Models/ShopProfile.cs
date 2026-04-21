@@ -41,6 +41,11 @@ public class ShopProfile
 
     public string? TikTokHandle { get; set; }
 
+    // Preferences
+    public Currency Currency { get; set; } = Currency.USD;
+
+    public AppLanguage GenerationLanguage { get; set; } = AppLanguage.EN;
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
