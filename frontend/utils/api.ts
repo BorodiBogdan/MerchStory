@@ -440,11 +440,15 @@ export async function generateCatalogOnWallpaper(
 
 export interface GalleryItem {
   id: string;
-  imageBase64: string;
   mimeType: string;
   createdAt: string;
   name: string;
   generationType: GenerationType | null;
+}
+
+export interface GalleryImageBytes {
+  imageBase64: string;
+  mimeType: string;
 }
 
 export interface GalleryFilters {
@@ -540,6 +544,14 @@ export async function fetchGallery(filters: GalleryFilters = {}): Promise<Paged<
 
   const body = (await response.json()) as unknown;
   return coercePaged<GalleryItem>(body, filters.page, filters.pageSize);
+}
+
+export async function fetchGalleryImage(id: string): Promise<GalleryImageBytes> {
+  const response = await fetchWithAuth(`${API_URL}/gallery/${id}/image`, {});
+  if (!response.ok) {
+    throw new Error(`Failed to load image (${response.status})`);
+  }
+  return response.json() as Promise<GalleryImageBytes>;
 }
 
 export async function deleteGalleryItem(id: string): Promise<void> {

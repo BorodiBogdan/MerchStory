@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GalleryImage } from '@/components/ui/GalleryImage';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
@@ -30,6 +31,7 @@ import {
   saveToGallery,
 } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
+import * as galleryImageCache from '@/utils/galleryImageCache';
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1200;
@@ -136,6 +138,7 @@ export default function WallpapersScreen() {
     if (lightboxItem?.id === id) setLightboxItem(null);
     setItems((prev) => prev.filter((item) => item.id !== id));
     galleryCache.removeItem(id);
+    galleryImageCache.evict(id);
     try {
       await deleteGalleryItem(id);
     } catch {
@@ -189,6 +192,7 @@ export default function WallpapersScreen() {
       'wallpaper',
       name
     );
+    galleryImageCache.prime(saved.id, generatedResult.imageBase64, generatedResult.mimeType);
     galleryCache.addItem(saved);
     setItems((prev) => [saved, ...prev]);
     setIsKept(true);
@@ -220,11 +224,7 @@ export default function WallpapersScreen() {
       accessibilityLabel="View wallpaper"
     >
       <View style={[styles.photoImageArea, { height: cardWidth }]}>
-        <Image
-          source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-        />
+        <GalleryImage id={item.id} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <Pressable
           style={({ pressed }) => [styles.deleteButton, pressed && { opacity: 0.7 }]}
           onPress={(e) => {
@@ -611,10 +611,8 @@ export default function WallpapersScreen() {
             </View>
             {lightboxItem && (
               <View style={styles.lightboxImageWrapper}>
-                <Image
-                  source={{
-                    uri: `data:${lightboxItem.mimeType};base64,${lightboxItem.imageBase64}`,
-                  }}
+                <GalleryImage
+                  id={lightboxItem.id}
                   style={styles.lightboxImage}
                   resizeMode="contain"
                   accessibilityLabel="Full size wallpaper"

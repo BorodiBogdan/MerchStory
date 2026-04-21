@@ -28,6 +28,7 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
+import { GalleryImage } from '@/components/ui/GalleryImage';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
 import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
@@ -36,6 +37,7 @@ import type { GenerationType } from '@/constants/generationTypes';
 import { useTheme } from '@/context/theme';
 import {
   fetchGallery,
+  fetchGalleryImage,
   fetchProducts,
   type GalleryItem,
   generateAnnouncementImage,
@@ -51,6 +53,7 @@ import {
   type TextStyleOptions,
 } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
+import * as galleryImageCache from '@/utils/galleryImageCache';
 
 const isWeb = Platform.OS === 'web';
 const SIDEBAR_WIDTH = 320;
@@ -1325,13 +1328,19 @@ export default function StudioScreen() {
       .finally(() => setWallpaperPickerLoading(false));
   }
 
-  function pickWallpaperFromLibrary(item: GalleryItem) {
-    setWallpaperBase64(item.imageBase64);
-    setWallpaperStage('confirmed');
-    setWallpaperOnResult(null);
-    setWallpaperOnError(null);
-    setWallpaperPickerVisible(false);
-    setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+  async function pickWallpaperFromLibrary(item: GalleryItem) {
+    try {
+      const bytes = await fetchGalleryImage(item.id);
+      galleryImageCache.prime(item.id, bytes.imageBase64, bytes.mimeType);
+      setWallpaperBase64(bytes.imageBase64);
+      setWallpaperStage('confirmed');
+      setWallpaperOnResult(null);
+      setWallpaperOnError(null);
+      setWallpaperPickerVisible(false);
+      setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+    } catch (err) {
+      setWallpaperError(err instanceof Error ? err.message : 'Failed to load wallpaper.');
+    }
   }
 
   // ── Announcements state ──────────────────────────────────────────────────────
@@ -1392,6 +1401,7 @@ export default function StudioScreen() {
         pendingKeep.generationType,
         name
       );
+      galleryImageCache.prime(saved.id, pendingKeep.imageBase64, pendingKeep.mimeType);
       galleryCache.addItem(saved);
       pendingKeep.onSaved();
       setPendingKeep(null);
@@ -2550,8 +2560,8 @@ export default function StudioScreen() {
                         })}
                         onPress={() => pickWallpaperFromLibrary(item)}
                       >
-                        <Image
-                          source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
+                        <GalleryImage
+                          id={item.id}
                           style={{ width: '100%', height: '100%' }}
                           resizeMode="contain"
                         />
@@ -3699,8 +3709,8 @@ export default function StudioScreen() {
                     })}
                     onPress={() => pickWallpaperFromLibrary(item)}
                   >
-                    <Image
-                      source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
+                    <GalleryImage
+                      id={item.id}
                       style={{ width: '100%', height: '100%' }}
                       resizeMode="contain"
                     />

@@ -63,9 +63,8 @@ public static class GalleryRoutes
 
             return Results.Created(
                 $"/gallery/{created.Id}",
-                new GalleryItemResponse(
+                new GalleryItemMetadata(
                     created.Id,
-                    created.ImageBase64,
                     created.MimeType,
                     created.CreatedAt,
                     created.Name,
@@ -125,20 +124,44 @@ public static class GalleryRoutes
 
             int total = await q.CountAsync();
 
-            List<GalleryItemResponse> items = await q
+            // List returns metadata only — image bytes are served by /gallery/{id}/image
+            List<GalleryItemMetadata> items = await q
                 .OrderByDescending(g => g.CreatedAt)
                 .Skip((resolvedPage - 1) * resolvedPageSize)
                 .Take(resolvedPageSize)
-                .Select(g => new GalleryItemResponse(
+                .Select(g => new GalleryItemMetadata(
                     g.Id,
-                    g.ImageBase64,
                     g.MimeType,
                     g.CreatedAt,
                     g.Name,
                     g.GenerationType))
                 .ToListAsync();
 
-            return Results.Ok(new PagedResponse<GalleryItemResponse>(items, total, resolvedPage, resolvedPageSize));
+            return Results.Ok(new PagedResponse<GalleryItemMetadata>(items, total, resolvedPage, resolvedPageSize));
+        });
+
+        group.MapGet("/{id:guid}/image", async (
+            Guid id,
+            ClaimsPrincipal principal,
+            AppDbContext db) =>
+        {
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var image = await db.GeneratedImages
+                .Where(g => g.Id == id && g.UserId == userId)
+                .Select(g => new { g.ImageBase64, g.MimeType })
+                .SingleOrDefaultAsync();
+
+            if (image is null)
+            {
+                return Results.NotFound();
+            }
+
+            return Results.Ok(new GalleryImageBytes(image.ImageBase64, image.MimeType));
         });
 
         group.MapDelete("/{id:guid}", async (
@@ -172,13 +195,14 @@ public static class GalleryRoutes
         ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
 }
 
-internal sealed record GalleryItemResponse(
+internal sealed record GalleryItemMetadata(
     Guid Id,
-    string ImageBase64,
     string MimeType,
     DateTime CreatedAt,
     string Name,
     string? GenerationType);
+
+internal sealed record GalleryImageBytes(string ImageBase64, string MimeType);
 
 internal sealed record SaveImageRequest(
     string ImageBase64,

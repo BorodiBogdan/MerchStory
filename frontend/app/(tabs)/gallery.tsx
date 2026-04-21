@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   Animated,
   FlatList,
-  Image,
   Modal,
   Platform,
   Pressable,
@@ -17,12 +16,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GalleryFilterBar, type GalleryFilterState } from '@/components/ui/GalleryFilterBar';
+import { GalleryImage } from '@/components/ui/GalleryImage';
 import { Pagination } from '@/components/ui/Pagination';
 import { D } from '@/constants/design';
 import { GENERATION_TYPE_LABELS } from '@/constants/generationTypes';
 import { useTheme } from '@/context/theme';
 import { deleteGalleryItem, type GalleryItem } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
+import * as galleryImageCache from '@/utils/galleryImageCache';
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1200;
@@ -105,6 +106,7 @@ export default function GalleryScreen() {
   async function handleDelete(id: string) {
     if (lightboxItem?.id === id) setLightboxItem(null);
     galleryCache.removeItem(id);
+    galleryImageCache.evict(id);
     try {
       await deleteGalleryItem(id);
     } catch {
@@ -124,11 +126,7 @@ export default function GalleryScreen() {
       accessibilityLabel={`View ${item.name || 'image'}`}
     >
       <View style={[styles.photoImageArea, { height: cardWidth }]}>
-        <Image
-          source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-        />
+        <GalleryImage id={item.id} style={StyleSheet.absoluteFill} resizeMode="cover" />
         {item.generationType && (
           <View style={styles.typeBadge}>
             <Text style={styles.typeBadgeText} numberOfLines={1}>
@@ -439,10 +437,8 @@ export default function GalleryScreen() {
 
             {lightboxItem && (
               <View style={styles.lightboxImageWrapper}>
-                <Image
-                  source={{
-                    uri: `data:${lightboxItem.mimeType};base64,${lightboxItem.imageBase64}`,
-                  }}
+                <GalleryImage
+                  id={lightboxItem.id}
                   style={styles.lightboxImage}
                   resizeMode="contain"
                   accessibilityLabel="Full size image"
