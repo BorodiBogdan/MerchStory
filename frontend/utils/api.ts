@@ -509,6 +509,7 @@ export interface ProductItem {
   name: string;
   price: number;
   imageBase64: string | null;
+  category: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -517,16 +518,53 @@ export interface ProductPayload {
   name: string;
   price: number;
   imageBase64: string | null;
+  category: string | null;
 }
 
-export async function fetchProducts(): Promise<ProductItem[]> {
-  const response = await fetchWithAuth(`${API_URL}/products`, {});
+export interface ProductFilters {
+  search?: string;
+  categories?: string[];
+  minPrice?: number;
+  maxPrice?: number;
+}
+
+export async function fetchProducts(filters: ProductFilters = {}): Promise<ProductItem[]> {
+  const params = new URLSearchParams();
+  if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());
+  if (filters.categories && filters.categories.length > 0) {
+    params.set(
+      'categories',
+      filters.categories
+        .map((c) => c.trim())
+        .filter(Boolean)
+        .join(',')
+    );
+  }
+  if (filters.minPrice !== undefined && !Number.isNaN(filters.minPrice)) {
+    params.set('minPrice', String(filters.minPrice));
+  }
+  if (filters.maxPrice !== undefined && !Number.isNaN(filters.maxPrice)) {
+    params.set('maxPrice', String(filters.maxPrice));
+  }
+  const qs = params.toString();
+  const url = qs ? `${API_URL}/products?${qs}` : `${API_URL}/products`;
+  const response = await fetchWithAuth(url, {});
 
   if (!response.ok) {
     throw new Error(`Failed to load products (${response.status})`);
   }
 
   return response.json() as Promise<ProductItem[]>;
+}
+
+export async function fetchProductCategories(): Promise<string[]> {
+  const response = await fetchWithAuth(`${API_URL}/products/categories`, {});
+
+  if (!response.ok) {
+    throw new Error(`Failed to load product categories (${response.status})`);
+  }
+
+  return response.json() as Promise<string[]>;
 }
 
 export async function createProduct(payload: ProductPayload): Promise<ProductItem> {

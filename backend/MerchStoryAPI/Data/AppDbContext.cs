@@ -92,8 +92,10 @@ public class AppDbContext : IdentityDbContext<AppUser>
             entity.Property(p => p.Name).HasMaxLength(200).IsRequired();
             entity.Property(p => p.Price).HasColumnType("numeric(18,2)").IsRequired();
             entity.Property(p => p.ImageBase64).HasColumnType("text");
+            entity.Property(p => p.Category).HasMaxLength(100);
 
             entity.HasIndex(p => p.UserId);
+            entity.HasIndex(p => new { p.UserId, p.Category });
 
             entity.HasOne(p => p.User)
                   .WithMany()

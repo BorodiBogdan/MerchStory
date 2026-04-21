@@ -29,6 +29,7 @@ import ReAnimated, {
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
+import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import {
@@ -781,33 +782,11 @@ function ChooseProductsSection({
   showProducts: boolean;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [search, setSearch] = useState('');
   const { width: screenWidth } = useWindowDimensions();
 
   const closePicker = () => {
-    setSearch('');
     setPickerOpen(false);
   };
-
-  const filtered = search.trim()
-    ? products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
-    : products;
-
-  // Sizing
-  const DIALOG_MAX = 860;
-  const dialogWidth = Math.min(screenWidth - 96, DIALOG_MAX);
-  const MODAL_COLS_DESKTOP = 4;
-  const MODAL_COLS_MOBILE = 2;
-  const modalCols = isDesktop ? MODAL_COLS_DESKTOP : MODAL_COLS_MOBILE;
-  const modalPad = D.spacing.lg;
-  const modalGap = D.spacing.sm;
-  const modalThumbWidth = isDesktop
-    ? Math.floor(
-        (dialogWidth - modalPad * 2 - modalGap * (MODAL_COLS_DESKTOP - 1)) / MODAL_COLS_DESKTOP
-      )
-    : Math.floor(
-        (screenWidth - modalPad * 2 - modalGap * (MODAL_COLS_MOBILE - 1)) / MODAL_COLS_MOBILE
-      );
 
   // Desktop inline card width: 4 cards in available panel space
   const panelInner = screenWidth - SIDEBAR_WIDTH - 1 - 64;
@@ -819,237 +798,14 @@ function ChooseProductsSection({
   const inlineProducts = products.slice(0, DESKTOP_INLINE_LIMIT);
   const selectedProducts = products.filter((p) => selected.has(p.id));
 
-  // ── Shared modal content ──────────────────────────────────────────────────────
-  const modalBody = (
-    <>
-      {/* Search */}
-      <View style={{ paddingHorizontal: modalPad, paddingBottom: D.spacing.sm }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: colors.bg.input,
-            borderRadius: D.radius.md,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            paddingHorizontal: D.spacing.md,
-            gap: D.spacing.sm,
-            height: 40,
-          }}
-        >
-          <Ionicons name="search-outline" size={16} color={colors.text.muted} />
-          <TextInput
-            style={
-              {
-                flex: 1,
-                color: colors.text.primary,
-                fontSize: D.fontSize.sm,
-                outline: 'none',
-              } as any
-            }
-            placeholder="Search products…"
-            placeholderTextColor={colors.text.muted}
-            value={search}
-            onChangeText={setSearch}
-          />
-          {search.length > 0 && (
-            <Pressable onPress={() => setSearch('')} hitSlop={8}>
-              <Ionicons name="close-circle" size={16} color={colors.text.muted} />
-            </Pressable>
-          )}
-        </View>
-      </View>
-
-      {/* Grid */}
-      {filtered.length === 0 ? (
-        <View style={{ alignItems: 'center', paddingVertical: D.spacing['2xl'] }}>
-          <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-          <Text
-            style={{ color: colors.text.muted, marginTop: D.spacing.sm, fontSize: D.fontSize.sm }}
-          >
-            {search ? 'No products match your search.' : 'No products yet.'}
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          numColumns={modalCols}
-          key={modalCols}
-          contentContainerStyle={{ padding: modalPad, gap: modalGap }}
-          columnWrapperStyle={{ gap: modalGap }}
-          renderItem={({ item }) => {
-            const isSel = selected.has(item.id);
-            return (
-              <Pressable
-                style={({ pressed }) => ({
-                  width: modalThumbWidth,
-                  borderRadius: D.radius.md,
-                  overflow: 'hidden',
-                  borderWidth: 1.5,
-                  borderColor: isSel ? colors.accent.primary : colors.border.subtle,
-                  backgroundColor: isSel ? colors.accent.dim : colors.bg.base,
-                  opacity: pressed ? 0.85 : 1,
-                })}
-                onPress={() => toggleProduct(item.id)}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: isSel }}
-              >
-                <View style={{ width: '100%', aspectRatio: 1, position: 'relative' }}>
-                  {item.imageBase64 ? (
-                    <Image
-                      source={{ uri: `data:image/jpeg;base64,${item.imageBase64}` }}
-                      style={{ width: '100%', height: '100%' }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        flex: 1,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: colors.bg.surface,
-                      }}
-                    >
-                      <Ionicons name="image-outline" size={24} color={colors.text.muted} />
-                    </View>
-                  )}
-                  {isSel && (
-                    <View
-                      style={{
-                        position: 'absolute',
-                        top: D.spacing.xs,
-                        right: D.spacing.xs,
-                        backgroundColor: 'rgba(255,255,255,0.92)',
-                        borderRadius: D.radius.pill,
-                      }}
-                    >
-                      <Ionicons name="checkmark-circle" size={20} color={colors.accent.primary} />
-                    </View>
-                  )}
-                </View>
-                <View style={{ padding: D.spacing.sm }}>
-                  <Text
-                    style={{
-                      fontSize: D.fontSize.sm,
-                      fontWeight: D.fontWeight.medium,
-                      color: colors.text.primary,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {item.name}
-                  </Text>
-                  <Text
-                    style={{
-                      fontSize: D.fontSize.xs,
-                      color: colors.accent.primary,
-                      fontWeight: D.fontWeight.semibold,
-                      marginTop: 2,
-                    }}
-                  >
-                    ${item.price.toFixed(2)}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          }}
-        />
-      )}
-
-      {/* Done bar */}
-      <View
-        style={{
-          borderTopWidth: 1,
-          borderTopColor: colors.border.subtle,
-          paddingHorizontal: modalPad,
-          paddingVertical: D.spacing.md,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          backgroundColor: colors.bg.surface,
-        }}
-      >
-        <Text style={{ fontSize: D.fontSize.sm, color: colors.text.secondary }}>
-          {selectedCount > 0
-            ? `${selectedCount} product${selectedCount !== 1 ? 's' : ''} selected`
-            : 'Tap products to select'}
-        </Text>
-        <Pressable
-          style={({ pressed }) => ({
-            backgroundColor: colors.accent.primary,
-            borderRadius: D.radius.md,
-            paddingHorizontal: D.spacing.lg,
-            paddingVertical: D.spacing.sm,
-            opacity: pressed ? 0.85 : 1,
-          })}
-          onPress={closePicker}
-          accessibilityRole="button"
-        >
-          <Text
-            style={{ color: '#fff', fontSize: D.fontSize.sm, fontWeight: D.fontWeight.semibold }}
-          >
-            {selectedCount > 0 ? `Done (${selectedCount})` : 'Done'}
-          </Text>
-        </Pressable>
-      </View>
-    </>
-  );
-
   const picker = (
-    <Modal
+    <ProductPickerModal
       visible={pickerOpen}
-      transparent={isDesktop}
-      animationType={isDesktop ? 'fade' : 'slide'}
-      onRequestClose={closePicker}
-    >
-      {isDesktop ? (
-        <Pressable style={styles.pickerOverlay} onPress={closePicker}>
-          <Pressable
-            style={[styles.pickerDialog, { maxHeight: '88%' as DimensionValue }]}
-            onPress={() => {}}
-          >
-            <View style={styles.pickerHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pickerTitle}>Choose Products</Text>
-                <Text style={styles.pickerSubtitle}>{subtitle}</Text>
-              </View>
-              {selectedCount > 0 && (
-                <View style={styles.countBadge}>
-                  <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
-                </View>
-              )}
-              <Pressable
-                style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
-                onPress={closePicker}
-              >
-                <Ionicons name="close" size={18} color={colors.text.secondary} />
-              </Pressable>
-            </View>
-            {modalBody}
-          </Pressable>
-        </Pressable>
-      ) : (
-        <View style={styles.pickerFullScreen}>
-          <View style={styles.pickerHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.pickerTitle}>Choose Products</Text>
-            </View>
-            {selectedCount > 0 && (
-              <View style={[styles.countBadge, { marginRight: D.spacing.sm }]}>
-                <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
-              </View>
-            )}
-            <Pressable
-              style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
-              onPress={closePicker}
-            >
-              <Ionicons name="close" size={18} color={colors.text.secondary} />
-            </Pressable>
-          </View>
-          {modalBody}
-        </View>
-      )}
-    </Modal>
+      onClose={closePicker}
+      selected={selected}
+      onToggle={toggleProduct}
+      subtitle={subtitle}
+    />
   );
 
   // ── Desktop layout ────────────────────────────────────────────────────────────

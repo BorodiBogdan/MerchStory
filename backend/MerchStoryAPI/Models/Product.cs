@@ -14,6 +14,8 @@ public class Product
 
     public string? ImageBase64 { get; set; }
 
+    public string? Category { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
