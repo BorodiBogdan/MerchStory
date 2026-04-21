@@ -98,6 +98,9 @@ export interface GenerateImageResponse {
   mimeType: string;
 }
 
+export type Currency = 'USD' | 'EUR' | 'RON';
+export type AppLanguage = 'EN' | 'RO';
+
 export interface AuthResponse {
   token: string;
   refreshToken: string;
@@ -105,6 +108,7 @@ export interface AuthResponse {
   userName: string;
   isShopSetupComplete: boolean;
   isAdmin: boolean;
+  preferredLanguage: AppLanguage;
 }
 
 export interface BrandColor {
@@ -128,12 +132,24 @@ export interface ShopProfilePayload {
   instagramHandle?: string | null;
   facebookHandle?: string | null;
   tikTokHandle?: string | null;
+  currency: Currency;
+  generationLanguage: AppLanguage;
 }
 
 export interface ShopProfileResponse extends ShopProfilePayload {
   id: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export async function updateAppLanguage(language: AppLanguage): Promise<{ language: AppLanguage }> {
+  const response = await fetchWithAuth(`${API_URL}/auth/language`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language }),
+  });
+  if (!response.ok) throw new Error(`Failed to update language (${response.status})`);
+  return response.json() as Promise<{ language: AppLanguage }>;
 }
 
 export interface SocialStatus {
@@ -302,6 +318,7 @@ export interface CatalogImageProduct {
   name: string;
   price: number;
   imageBase64: string | null;
+  currency?: Currency;
 }
 
 export interface GenerateCatalogImageParams {
@@ -311,6 +328,8 @@ export interface GenerateCatalogImageParams {
   format: string;
   showPrices: boolean;
   brandContextFields?: string[];
+  currency?: Currency;
+  language?: AppLanguage;
 }
 
 export interface GenerateAnnouncementImageParams {
@@ -326,6 +345,7 @@ export interface GenerateAnnouncementImageParams {
   jobSalary?: string;
   jobImageStyle?: 'with-person' | 'text-only';
   jobRequirements?: string[];
+  language?: AppLanguage;
 }
 
 export async function generateCatalogImage(
@@ -371,6 +391,7 @@ export interface GenerateWallpaperParams {
   format: string;
   includeLogo: boolean;
   brandContextFields?: string[];
+  language?: AppLanguage;
 }
 
 export interface TextStyleOptions {
@@ -590,6 +611,7 @@ export interface ProductItem {
   id: string;
   name: string;
   price: number;
+  currency: Currency;
   category: string | null;
   createdAt: string;
   updatedAt: string;
@@ -600,6 +622,7 @@ export interface ProductDetail {
   id: string;
   name: string;
   price: number;
+  currency: Currency;
   imageBase64: string | null;
   category: string | null;
   createdAt: string;
@@ -614,8 +637,32 @@ export interface ProductImageBytes {
 export interface ProductPayload {
   name: string;
   price: number;
+  currency?: Currency;
   imageBase64: string | null;
   category: string | null;
+}
+
+export function currencySymbol(currency: Currency | string | null | undefined): string {
+  switch ((currency ?? 'USD').toUpperCase()) {
+    case 'EUR':
+      return '€';
+    case 'RON':
+      return 'lei';
+    default:
+      return '$';
+  }
+}
+
+export function formatPrice(
+  amount: number,
+  currency: Currency | string | null | undefined
+): string {
+  const normalized = (currency ?? 'USD').toUpperCase();
+  const symbol = currencySymbol(normalized);
+  if (normalized === 'RON') {
+    return `${amount.toFixed(2)} ${symbol}`;
+  }
+  return `${symbol}${amount.toFixed(2)}`;
 }
 
 export interface ProductFilters {

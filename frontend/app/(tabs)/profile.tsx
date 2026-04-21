@@ -22,12 +22,16 @@ import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
+import { useI18n } from '@/i18n';
 import {
+  type AppLanguage,
   BrandColor,
+  type Currency,
   disconnectSocial,
   getFacebookConnectUrl,
   getSocialStatus,
   ShopProfileResponse,
+  updateAppLanguage,
   updateShopProfile,
 } from '@/utils/api';
 
@@ -117,6 +121,48 @@ export default function ProfileScreen() {
   const { colors } = useTheme();
   const { email: accountEmail } = useAuth();
   const { profile, setProfile, isProfileLoading, refreshProfile } = useShop();
+  const { language: appLanguage, setLanguage: setAppLanguage, t } = useI18n();
+
+  async function handleAppLanguageChange(next: AppLanguage) {
+    if (next === appLanguage) return;
+    await setAppLanguage(next);
+    try {
+      await updateAppLanguage(next);
+    } catch {
+      // non-critical: local preference is already saved
+    }
+  }
+
+  async function handlePreferenceSave(patch: {
+    currency?: Currency;
+    generationLanguage?: AppLanguage;
+  }) {
+    if (!profile) return;
+    try {
+      const updated = await updateShopProfile({
+        brandName: profile.brandName,
+        logoBase64: profile.logoBase64 ?? null,
+        brandColors: profile.brandColors,
+        slogan: profile.slogan ?? null,
+        businessDomain: profile.businessDomain,
+        otherDomain: profile.otherDomain ?? null,
+        targetAudience: profile.targetAudience ?? null,
+        shopType: profile.shopType ?? null,
+        competitors: profile.competitors ?? null,
+        phoneNumber: profile.phoneNumber,
+        email: profile.email,
+        addresses: profile.addresses ?? [],
+        instagramHandle: profile.instagramHandle ?? null,
+        facebookHandle: profile.facebookHandle ?? null,
+        tikTokHandle: profile.tikTokHandle ?? null,
+        currency: patch.currency ?? profile.currency,
+        generationLanguage: patch.generationLanguage ?? profile.generationLanguage,
+      });
+      setProfile(updated);
+    } catch {
+      // ignore; user can retry
+    }
+  }
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [draft, setDraft] = useState<DraftState | null>(null);
@@ -314,6 +360,8 @@ export default function ProfileScreen() {
         instagramHandle: draft.instagramHandle.trim() || null,
         facebookHandle: draft.facebookHandle.trim() || null,
         tikTokHandle: draft.tikTokHandle.trim() || null,
+        currency: profile.currency,
+        generationLanguage: profile.generationLanguage,
       });
       setProfile(updated);
       setDraft(null);
@@ -494,6 +542,77 @@ export default function ProfileScreen() {
               {isEditing ? 'Cancel' : 'Edit'}
             </Text>
           </Pressable>
+        </View>
+
+        {/* ── Preferences ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('preferences')}</Text>
+
+          <View style={[styles.infoRow]}>
+            <Text style={styles.infoLabel}>{t('appLanguage')}</Text>
+            <View style={styles.prefChipRow}>
+              {(['EN', 'RO'] as AppLanguage[]).map((code) => {
+                const isSel = appLanguage === code;
+                return (
+                  <Pressable
+                    key={code}
+                    onPress={() => void handleAppLanguageChange(code)}
+                    style={[styles.prefChip, isSel && styles.prefChipSelected]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSel }}
+                  >
+                    <Text style={[styles.prefChipText, isSel && styles.prefChipTextSelected]}>
+                      {code === 'EN' ? t('english') : t('romanian')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={[styles.infoRow]}>
+            <Text style={styles.infoLabel}>{t('generationLanguage')}</Text>
+            <View style={styles.prefChipRow}>
+              {(['EN', 'RO'] as AppLanguage[]).map((code) => {
+                const isSel = profile.generationLanguage === code;
+                return (
+                  <Pressable
+                    key={code}
+                    onPress={() => void handlePreferenceSave({ generationLanguage: code })}
+                    style={[styles.prefChip, isSel && styles.prefChipSelected]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSel }}
+                  >
+                    <Text style={[styles.prefChipText, isSel && styles.prefChipTextSelected]}>
+                      {code === 'EN' ? t('english') : t('romanian')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={[styles.infoRow, styles.infoRowLast]}>
+            <Text style={styles.infoLabel}>{t('defaultCurrency')}</Text>
+            <View style={styles.prefChipRow}>
+              {(['USD', 'EUR', 'RON'] as Currency[]).map((code) => {
+                const isSel = profile.currency === code;
+                return (
+                  <Pressable
+                    key={code}
+                    onPress={() => void handlePreferenceSave({ currency: code })}
+                    style={[styles.prefChip, isSel && styles.prefChipSelected]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSel }}
+                  >
+                    <Text style={[styles.prefChipText, isSel && styles.prefChipTextSelected]}>
+                      {code}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
         </View>
 
         {/* ── Visual Identity ── */}
@@ -1221,6 +1340,33 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.text.muted,
     },
     chipTextActive: {
+      color: colors.accent.primary,
+      fontWeight: D.fontWeight.semibold,
+    },
+    prefChipRow: {
+      flexDirection: 'row',
+      gap: D.spacing.xs,
+      flex: 1,
+      justifyContent: 'flex-end',
+      flexWrap: 'wrap',
+    },
+    prefChip: {
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: 6,
+      borderRadius: D.radius.pill,
+      borderWidth: 1.5,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.elevated,
+    },
+    prefChipSelected: {
+      borderColor: colors.accent.primary,
+      backgroundColor: colors.accent.dim,
+    },
+    prefChipText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+    },
+    prefChipTextSelected: {
       color: colors.accent.primary,
       fontWeight: D.fontWeight.semibold,
     },

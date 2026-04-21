@@ -2,11 +2,16 @@ import React, { createContext, useContext, useState } from 'react';
 
 import { type BrandColor } from '../utils/api';
 
+export type Currency = 'USD' | 'EUR' | 'RON';
+export type GenerationLanguage = 'EN' | 'RO';
+
 export interface SetupStep1Data {
   brandName: string;
   logoUri: string | null;
   brandColors: BrandColor[];
   slogan: string;
+  currency: Currency;
+  generationLanguage: GenerationLanguage;
 }
 
 export interface SetupStep2Data {
@@ -41,6 +46,8 @@ const defaultData: SetupData = {
   logoUri: null,
   brandColors: [{ hex: '#6366F1', percentage: 100 }],
   slogan: '',
+  currency: 'USD',
+  generationLanguage: 'EN',
   businessDomain: '',
   otherDomain: '',
   targetAudience: '',

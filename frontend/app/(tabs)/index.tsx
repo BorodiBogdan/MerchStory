@@ -40,6 +40,7 @@ import { useTheme } from '@/context/theme';
 import {
   fetchGallery,
   fetchGalleryImage,
+  formatPrice,
   type GalleryItem,
   generateAnnouncementImage,
   generateCatalogImage,
@@ -761,7 +762,7 @@ function ProductCard({
         <Text style={styles.productName} numberOfLines={1}>
           {product.name}
         </Text>
-        <Text style={styles.productPrice}>${product.price.toFixed(2)}</Text>
+        <Text style={styles.productPrice}>{formatPrice(product.price, product.currency)}</Text>
       </View>
     </Pressable>
   );
@@ -1208,9 +1209,11 @@ export default function StudioScreen() {
         chosen.map(async (p) => ({
           name: p.name,
           price: p.price,
+          currency: p.currency,
           imageBase64: await loadProductImageBase64(p.id),
         }))
       );
+      const catalogCurrency = chosen[0].currency;
       setCatalogResult(
         await generateCatalogImage({
           products: productsWithImages,
@@ -1219,6 +1222,7 @@ export default function StudioScreen() {
           format: catalogFormat,
           showPrices,
           brandContextFields: catalogContextFields.length > 0 ? catalogContextFields : undefined,
+          currency: catalogCurrency,
         })
       );
     } catch (err) {
@@ -1291,6 +1295,7 @@ export default function StudioScreen() {
         chosen.map(async (p) => ({
           name: p.name,
           price: p.price,
+          currency: p.currency,
           imageBase64: await loadProductImageBase64(p.id),
         }))
       );

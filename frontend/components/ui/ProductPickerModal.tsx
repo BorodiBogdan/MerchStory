@@ -15,7 +15,7 @@ import {
 import { D } from '@/constants/design';
 import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
-import { ProductFilters, ProductItem } from '@/utils/api';
+import { formatPrice, ProductFilters, ProductItem } from '@/utils/api';
 import * as productsCache from '@/utils/productsCache';
 
 import { ProductFilterBar, ProductFilterState } from './ProductFilterBar';
@@ -89,6 +89,13 @@ export function ProductPickerModal({
 
   const selectedCount = selected.size;
 
+  const lockedCurrency = useMemo(() => {
+    for (const p of products) {
+      if (selected.has(p.id)) return p.currency;
+    }
+    return null;
+  }, [products, selected]);
+
   const DIALOG_MAX = 960;
   const dialogWidth = Math.min(screenWidth - 96, DIALOG_MAX);
   const MODAL_COLS_DESKTOP = 4;
@@ -121,6 +128,14 @@ export function ProductPickerModal({
           layout={isDesktop ? 'auto' : 'compact'}
           resultCount={loading ? undefined : total}
         />
+        {lockedCurrency !== null ? (
+          <View style={styles.currencyNotice}>
+            <Ionicons name="lock-closed-outline" size={14} color={colors.accent.primary} />
+            <Text style={styles.currencyNoticeText}>
+              Catalogs mix one currency only — locked to {lockedCurrency}.
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {loading ? (
@@ -153,6 +168,7 @@ export function ProductPickerModal({
           }
           renderItem={({ item }) => {
             const isSel = selected.has(item.id);
+            const mismatch = lockedCurrency !== null && !isSel && item.currency !== lockedCurrency;
             return (
               <Pressable
                 style={({ pressed }) => ({
@@ -162,11 +178,15 @@ export function ProductPickerModal({
                   borderWidth: 1.5,
                   borderColor: isSel ? colors.accent.primary : colors.border.subtle,
                   backgroundColor: isSel ? colors.accent.dim : colors.bg.base,
-                  opacity: pressed ? 0.85 : 1,
+                  opacity: mismatch ? 0.35 : pressed ? 0.85 : 1,
                 })}
+                disabled={mismatch}
                 onPress={() => onToggle(item.id)}
                 accessibilityRole="checkbox"
-                accessibilityState={{ checked: isSel }}
+                accessibilityState={{ checked: isSel, disabled: mismatch }}
+                accessibilityHint={
+                  mismatch ? `Only ${lockedCurrency} products can be selected.` : undefined
+                }
               >
                 <View style={{ width: '100%', aspectRatio: 1, position: 'relative' }}>
                   <ProductImage
@@ -189,7 +209,7 @@ export function ProductPickerModal({
                   <Text style={styles.cardName} numberOfLines={1}>
                     {item.name}
                   </Text>
-                  <Text style={styles.cardPrice}>${item.price.toFixed(2)}</Text>
+                  <Text style={styles.cardPrice}>{formatPrice(item.price, item.currency)}</Text>
                 </View>
               </Pressable>
             );
@@ -359,6 +379,21 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.accent.primary,
       fontWeight: D.fontWeight.semibold,
       marginTop: 2,
+    },
+    currencyNotice: {
+      marginTop: D.spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: D.spacing.xs,
+      paddingHorizontal: D.spacing.sm,
+      borderRadius: D.radius.sm,
+      backgroundColor: colors.accent.dim,
+    },
+    currencyNoticeText: {
+      fontSize: D.fontSize.xs,
+      color: colors.accent.primary,
+      fontWeight: D.fontWeight.medium,
     },
     footer: {
       borderTopWidth: 1,

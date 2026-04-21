@@ -107,6 +107,8 @@ export default function Step3Screen() {
         instagramHandle: instagramHandle.trim() || null,
         facebookHandle: facebookHandle.trim() || null,
         tikTokHandle: tikTokHandle.trim() || null,
+        currency: data.currency,
+        generationLanguage: data.generationLanguage,
       });
       await completeShopSetup();
       if (Platform.OS !== 'web') {

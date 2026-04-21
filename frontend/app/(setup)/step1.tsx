@@ -5,14 +5,26 @@ import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ChipSelector } from '@/components/ui/ChipSelector';
 import { FloatingInput } from '@/components/ui/FloatingInput';
 import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { SetupShell } from '@/components/ui/SetupShell';
 import { StepProgress } from '@/components/ui/StepProgress';
 import { D } from '@/constants/design';
-import { useSetup } from '@/context/setup';
+import { type Currency, type GenerationLanguage, useSetup } from '@/context/setup';
 import { useTheme } from '@/context/theme';
 import { type BrandColor } from '@/utils/api';
+
+const CURRENCY_OPTIONS = [
+  { value: 'USD', label: 'USD ($)' },
+  { value: 'EUR', label: 'EUR (€)' },
+  { value: 'RON', label: 'RON (lei)' },
+];
+
+const GENERATION_LANGUAGE_OPTIONS = [
+  { value: 'EN', label: 'English' },
+  { value: 'RO', label: 'Română' },
+];
 
 export default function Step1Screen() {
   const { colors } = useTheme();
@@ -23,6 +35,10 @@ export default function Step1Screen() {
   const [slogan, setSlogan] = useState(data.slogan);
   const [brandColors, setBrandColors] = useState<BrandColor[]>(data.brandColors);
   const [logoUri, setLogoUri] = useState<string | null>(data.logoUri);
+  const [currency, setCurrency] = useState<Currency>(data.currency);
+  const [generationLanguage, setGenerationLanguage] = useState<GenerationLanguage>(
+    data.generationLanguage
+  );
   const [brandNameError, setBrandNameError] = useState<string | null>(null);
 
   const totalPct = brandColors.reduce((sum, c) => sum + c.percentage, 0);
@@ -67,6 +83,8 @@ export default function Step1Screen() {
       slogan,
       brandColors,
       logoUri,
+      currency,
+      generationLanguage,
     });
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -180,6 +198,28 @@ export default function Step1Screen() {
             <Text style={styles.addColorText}>Add color</Text>
           </Pressable>
         )}
+      </View>
+
+      {/* Default currency */}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Default Currency</Text>
+        <ChipSelector
+          options={CURRENCY_OPTIONS}
+          selected={currency}
+          onSelect={(v) => setCurrency((v || 'USD') as Currency)}
+          accessibilityLabel="Default currency"
+        />
+      </View>
+
+      {/* Generation language */}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Language of Generated Ads & Catalogs</Text>
+        <ChipSelector
+          options={GENERATION_LANGUAGE_OPTIONS}
+          selected={generationLanguage}
+          onSelect={(v) => setGenerationLanguage((v || 'EN') as GenerationLanguage)}
+          accessibilityLabel="Language of generated content"
+        />
       </View>
 
       <Pressable

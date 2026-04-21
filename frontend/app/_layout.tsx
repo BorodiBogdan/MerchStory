@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { AuthProvider } from '@/context/auth';
 import { ShopProvider } from '@/context/shop';
 import { ThemeProvider, useTheme } from '@/context/theme';
+import { I18nProvider } from '@/i18n';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -39,11 +40,13 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <ShopProvider>
-          <RootLayoutNav />
-        </ShopProvider>
-      </AuthProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <ShopProvider>
+            <RootLayoutNav />
+          </ShopProvider>
+        </AuthProvider>
+      </I18nProvider>
     </ThemeProvider>
   );
 }

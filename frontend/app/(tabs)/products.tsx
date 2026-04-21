@@ -30,7 +30,10 @@ import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
 import {
   createProduct,
+  type Currency,
+  currencySymbol,
   deleteProduct,
+  formatPrice,
   type ProductDetail,
   type ProductFilters,
   type ProductItem,
@@ -47,12 +50,15 @@ function toMetadata(detail: ProductDetail): ProductItem {
     id: detail.id,
     name: detail.name,
     price: detail.price,
+    currency: detail.currency,
     category: detail.category,
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt,
     mimeType: 'image/png',
   };
 }
+
+const CURRENCY_CHOICES: Currency[] = ['USD', 'EUR', 'RON'];
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1200;
@@ -86,13 +92,14 @@ export default function ProductsScreen() {
     minPrice: '',
     maxPrice: '',
   });
-  const { categories, refreshCategories } = useShop();
+  const { profile: shopProfile, categories, refreshCategories } = useShop();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draftPrice, setDraftPrice] = useState('');
+  const [draftCurrency, setDraftCurrency] = useState<Currency>('USD');
   const [draftCategory, setDraftCategory] = useState('');
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [addingNewCategory, setAddingNewCategory] = useState(false);
@@ -157,10 +164,13 @@ export default function ProductsScreen() {
     void productsCache.setFiltersAndReload(toApiFilters(next));
   }
 
+  const shopCurrency = (shopProfile?.currency ?? 'USD') as Currency;
+
   function openAddModal() {
     setEditingProduct(null);
     setDraftName('');
     setDraftPrice('');
+    setDraftCurrency(shopCurrency);
     setDraftCategory('');
     setCategoryDropdownOpen(false);
     setAddingNewCategory(false);
@@ -175,6 +185,7 @@ export default function ProductsScreen() {
     setEditingProduct(product);
     setDraftName(product.name);
     setDraftPrice(String(product.price));
+    setDraftCurrency((product.currency ?? shopCurrency) as Currency);
     setDraftCategory(product.category ?? '');
     setCategoryDropdownOpen(false);
     setAddingNewCategory(false);
@@ -335,6 +346,7 @@ export default function ProductsScreen() {
       const payload = {
         name: draftName.trim(),
         price: parseFloat(draftPrice),
+        currency: draftCurrency,
         imageBase64,
         category: trimmedCategory.length > 0 ? trimmedCategory : null,
       };
@@ -409,7 +421,7 @@ export default function ProductsScreen() {
           {item.name}
         </Text>
         <View style={styles.priceBadge}>
-          <Text style={styles.priceText}>${item.price.toFixed(2)}</Text>
+          <Text style={styles.priceText}>{formatPrice(item.price, item.currency)}</Text>
         </View>
       </View>
     </Pressable>
@@ -1104,12 +1116,50 @@ export default function ProductsScreen() {
                       )}
                     </View>
 
+                    {/* Currency */}
+                    <View style={styles.fieldGroup}>
+                      <Text style={styles.fieldLabel}>Currency</Text>
+                      <View style={styles.priceInputRow}>
+                        {CURRENCY_CHOICES.map((c) => {
+                          const selected = draftCurrency === c;
+                          return (
+                            <Pressable
+                              key={c}
+                              onPress={() => setDraftCurrency(c)}
+                              style={[
+                                styles.priceCurrencyBadge,
+                                { marginRight: 8 },
+                                selected && {
+                                  borderColor: colors.accent.primary,
+                                  backgroundColor: colors.accent.dim,
+                                },
+                              ]}
+                              accessibilityRole="radio"
+                              accessibilityState={{ selected }}
+                              accessibilityLabel={`Currency ${c}`}
+                            >
+                              <Text
+                                style={[
+                                  styles.priceCurrencyText,
+                                  selected && { color: colors.accent.primary },
+                                ]}
+                              >
+                                {c}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+
                     {/* Price */}
                     <View style={styles.fieldGroup}>
-                      <Text style={styles.fieldLabel}>Price (USD)</Text>
+                      <Text style={styles.fieldLabel}>Price ({draftCurrency})</Text>
                       <View style={styles.priceInputRow}>
                         <View style={styles.priceCurrencyBadge}>
-                          <Text style={styles.priceCurrencyText}>$</Text>
+                          <Text style={styles.priceCurrencyText}>
+                            {currencySymbol(draftCurrency)}
+                          </Text>
                         </View>
                         <TextInput
                           style={[
