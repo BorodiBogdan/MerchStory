@@ -42,8 +42,11 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
         string logoNote = !string.IsNullOrWhiteSpace(r.LogoBase64)
             ? "Brand logo: a logo image has been provided as the first inline image. " +
               "Place it in a natural brand position (e.g. top corner or header area). " +
-              "Reproduce it pixel-perfect — do NOT recolor, rescale disproportionately, " +
-              "reinterpret, or alter it in any way.\n\n"
+              "ABSOLUTE RULE: reproduce the logo pixel-perfect — do NOT recolor, restyle, " +
+              "redraw, reinterpret, regenerate, crop, or alter it in any way for any reason, " +
+              "including matching brand colors or the overall image style. " +
+              "The logo is always used EXACTLY as provided. " +
+              "If the logo already contains the brand name, do NOT add the brand name again as separate text.\n\n"
             : string.Empty;
 
         string imageNote = r.Products.Any(p => !string.IsNullOrWhiteSpace(p.ImageBase64))

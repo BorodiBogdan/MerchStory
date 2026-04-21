@@ -29,6 +29,7 @@ import ReAnimated, {
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
+import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import {
@@ -55,7 +56,7 @@ const DESKTOP_BREAKPOINT = 860;
 type StudioTab = 'catalog' | 'announcements' | 'video';
 type CatalogMode = 'generate' | 'on-wallpaper';
 type WallpaperStage = 'none' | 'generating' | 'preview' | 'confirmed';
-type PostType = 'Announcement' | 'Job Post' | 'Info' | 'Promotion';
+type PostType = 'Announcement' | 'Job Post' | 'Promotion';
 type ContextItem = { key: string; label: string };
 
 // ─── Text style presets (style only — color is chosen separately) ──────────────
@@ -300,7 +301,8 @@ const POST_TYPES: {
   {
     type: 'Announcement',
     icon: 'megaphone-outline',
-    placeholder: "e.g. We're open this Sunday from 9am to 6pm…",
+    placeholder:
+      "e.g. We're open this Sunday from 9am to 6pm — or — Did you know we offer free gift wrapping?",
   },
   {
     type: 'Job Post',
@@ -308,15 +310,14 @@ const POST_TYPES: {
     placeholder: 'e.g. Looking for a part-time cashier, 3 days/week…',
   },
   {
-    type: 'Info',
-    icon: 'information-circle-outline',
-    placeholder: 'e.g. Did you know we offer free gift wrapping?',
-  },
-  {
     type: 'Promotion',
     icon: 'pricetag-outline',
     placeholder: 'e.g. 20% off all clothing this weekend only!',
   },
+];
+const JOB_IMAGE_STYLE_OPTIONS = [
+  { value: 'text-only', label: 'Text only' },
+  { value: 'with-person', label: 'With person' },
 ];
 const TONE_OPTIONS = [
   { value: 'Professional', label: 'Professional' },
@@ -781,33 +782,11 @@ function ChooseProductsSection({
   showProducts: boolean;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [search, setSearch] = useState('');
   const { width: screenWidth } = useWindowDimensions();
 
   const closePicker = () => {
-    setSearch('');
     setPickerOpen(false);
   };
-
-  const filtered = search.trim()
-    ? products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
-    : products;
-
-  // Sizing
-  const DIALOG_MAX = 860;
-  const dialogWidth = Math.min(screenWidth - 96, DIALOG_MAX);
-  const MODAL_COLS_DESKTOP = 4;
-  const MODAL_COLS_MOBILE = 2;
-  const modalCols = isDesktop ? MODAL_COLS_DESKTOP : MODAL_COLS_MOBILE;
-  const modalPad = D.spacing.lg;
-  const modalGap = D.spacing.sm;
-  const modalThumbWidth = isDesktop
-    ? Math.floor(
-        (dialogWidth - modalPad * 2 - modalGap * (MODAL_COLS_DESKTOP - 1)) / MODAL_COLS_DESKTOP
-      )
-    : Math.floor(
-        (screenWidth - modalPad * 2 - modalGap * (MODAL_COLS_MOBILE - 1)) / MODAL_COLS_MOBILE
-      );
 
   // Desktop inline card width: 4 cards in available panel space
   const panelInner = screenWidth - SIDEBAR_WIDTH - 1 - 64;
@@ -819,237 +798,14 @@ function ChooseProductsSection({
   const inlineProducts = products.slice(0, DESKTOP_INLINE_LIMIT);
   const selectedProducts = products.filter((p) => selected.has(p.id));
 
-  // ── Shared modal content ──────────────────────────────────────────────────────
-  const modalBody = (
-    <>
-      {/* Search */}
-      <View style={{ paddingHorizontal: modalPad, paddingBottom: D.spacing.sm }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: colors.bg.input,
-            borderRadius: D.radius.md,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            paddingHorizontal: D.spacing.md,
-            gap: D.spacing.sm,
-            height: 40,
-          }}
-        >
-          <Ionicons name="search-outline" size={16} color={colors.text.muted} />
-          <TextInput
-            style={
-              {
-                flex: 1,
-                color: colors.text.primary,
-                fontSize: D.fontSize.sm,
-                outline: 'none',
-              } as any
-            }
-            placeholder="Search products…"
-            placeholderTextColor={colors.text.muted}
-            value={search}
-            onChangeText={setSearch}
-          />
-          {search.length > 0 && (
-            <Pressable onPress={() => setSearch('')} hitSlop={8}>
-              <Ionicons name="close-circle" size={16} color={colors.text.muted} />
-            </Pressable>
-          )}
-        </View>
-      </View>
-
-      {/* Grid */}
-      {filtered.length === 0 ? (
-        <View style={{ alignItems: 'center', paddingVertical: D.spacing['2xl'] }}>
-          <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-          <Text
-            style={{ color: colors.text.muted, marginTop: D.spacing.sm, fontSize: D.fontSize.sm }}
-          >
-            {search ? 'No products match your search.' : 'No products yet.'}
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          numColumns={modalCols}
-          key={modalCols}
-          contentContainerStyle={{ padding: modalPad, gap: modalGap }}
-          columnWrapperStyle={{ gap: modalGap }}
-          renderItem={({ item }) => {
-            const isSel = selected.has(item.id);
-            return (
-              <Pressable
-                style={({ pressed }) => ({
-                  width: modalThumbWidth,
-                  borderRadius: D.radius.md,
-                  overflow: 'hidden',
-                  borderWidth: 1.5,
-                  borderColor: isSel ? colors.accent.primary : colors.border.subtle,
-                  backgroundColor: isSel ? colors.accent.dim : colors.bg.base,
-                  opacity: pressed ? 0.85 : 1,
-                })}
-                onPress={() => toggleProduct(item.id)}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: isSel }}
-              >
-                <View style={{ width: '100%', aspectRatio: 1, position: 'relative' }}>
-                  {item.imageBase64 ? (
-                    <Image
-                      source={{ uri: `data:image/jpeg;base64,${item.imageBase64}` }}
-                      style={{ width: '100%', height: '100%' }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        flex: 1,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: colors.bg.surface,
-                      }}
-                    >
-                      <Ionicons name="image-outline" size={24} color={colors.text.muted} />
-                    </View>
-                  )}
-                  {isSel && (
-                    <View
-                      style={{
-                        position: 'absolute',
-                        top: D.spacing.xs,
-                        right: D.spacing.xs,
-                        backgroundColor: 'rgba(255,255,255,0.92)',
-                        borderRadius: D.radius.pill,
-                      }}
-                    >
-                      <Ionicons name="checkmark-circle" size={20} color={colors.accent.primary} />
-                    </View>
-                  )}
-                </View>
-                <View style={{ padding: D.spacing.sm }}>
-                  <Text
-                    style={{
-                      fontSize: D.fontSize.sm,
-                      fontWeight: D.fontWeight.medium,
-                      color: colors.text.primary,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {item.name}
-                  </Text>
-                  <Text
-                    style={{
-                      fontSize: D.fontSize.xs,
-                      color: colors.accent.primary,
-                      fontWeight: D.fontWeight.semibold,
-                      marginTop: 2,
-                    }}
-                  >
-                    ${item.price.toFixed(2)}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          }}
-        />
-      )}
-
-      {/* Done bar */}
-      <View
-        style={{
-          borderTopWidth: 1,
-          borderTopColor: colors.border.subtle,
-          paddingHorizontal: modalPad,
-          paddingVertical: D.spacing.md,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          backgroundColor: colors.bg.surface,
-        }}
-      >
-        <Text style={{ fontSize: D.fontSize.sm, color: colors.text.secondary }}>
-          {selectedCount > 0
-            ? `${selectedCount} product${selectedCount !== 1 ? 's' : ''} selected`
-            : 'Tap products to select'}
-        </Text>
-        <Pressable
-          style={({ pressed }) => ({
-            backgroundColor: colors.accent.primary,
-            borderRadius: D.radius.md,
-            paddingHorizontal: D.spacing.lg,
-            paddingVertical: D.spacing.sm,
-            opacity: pressed ? 0.85 : 1,
-          })}
-          onPress={closePicker}
-          accessibilityRole="button"
-        >
-          <Text
-            style={{ color: '#fff', fontSize: D.fontSize.sm, fontWeight: D.fontWeight.semibold }}
-          >
-            {selectedCount > 0 ? `Done (${selectedCount})` : 'Done'}
-          </Text>
-        </Pressable>
-      </View>
-    </>
-  );
-
   const picker = (
-    <Modal
+    <ProductPickerModal
       visible={pickerOpen}
-      transparent={isDesktop}
-      animationType={isDesktop ? 'fade' : 'slide'}
-      onRequestClose={closePicker}
-    >
-      {isDesktop ? (
-        <Pressable style={styles.pickerOverlay} onPress={closePicker}>
-          <Pressable
-            style={[styles.pickerDialog, { maxHeight: '88%' as DimensionValue }]}
-            onPress={() => {}}
-          >
-            <View style={styles.pickerHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pickerTitle}>Choose Products</Text>
-                <Text style={styles.pickerSubtitle}>{subtitle}</Text>
-              </View>
-              {selectedCount > 0 && (
-                <View style={styles.countBadge}>
-                  <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
-                </View>
-              )}
-              <Pressable
-                style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
-                onPress={closePicker}
-              >
-                <Ionicons name="close" size={18} color={colors.text.secondary} />
-              </Pressable>
-            </View>
-            {modalBody}
-          </Pressable>
-        </Pressable>
-      ) : (
-        <View style={styles.pickerFullScreen}>
-          <View style={styles.pickerHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.pickerTitle}>Choose Products</Text>
-            </View>
-            {selectedCount > 0 && (
-              <View style={[styles.countBadge, { marginRight: D.spacing.sm }]}>
-                <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
-              </View>
-            )}
-            <Pressable
-              style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
-              onPress={closePicker}
-            >
-              <Ionicons name="close" size={18} color={colors.text.secondary} />
-            </Pressable>
-          </View>
-          {modalBody}
-        </View>
-      )}
-    </Modal>
+      onClose={closePicker}
+      selected={selected}
+      onToggle={toggleProduct}
+      subtitle={subtitle}
+    />
   );
 
   // ── Desktop layout ────────────────────────────────────────────────────────────
@@ -1586,6 +1342,17 @@ export default function StudioScreen() {
   const [annoKept, setAnnoKept] = useState(false);
   const [promotionSelected, setPromotionSelected] = useState<Set<string>>(new Set());
 
+  // Job Post sub-form state
+  const [jobTitle, setJobTitle] = useState('');
+  const [jobSchedule, setJobSchedule] = useState('');
+  const [jobSalary, setJobSalary] = useState('');
+  const [jobImageStyle, setJobImageStyle] = useState<'with-person' | 'text-only'>('text-only');
+  const [jobRequirementsText, setJobRequirementsText] = useState('');
+
+  const isJobPost = postType === 'Job Post';
+  const jobPostReady = jobTitle.trim().length > 0 && jobSchedule.trim().length > 0;
+  const annoReady = isJobPost ? jobPostReady : content.trim().length > 0;
+
   // ── Brand context state ──────────────────────────────────────────────────────
   const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
   const [catalogContextFields, setCatalogContextFields] = useState<string[]>([]);
@@ -1621,7 +1388,7 @@ export default function StudioScreen() {
   }, [postType]);
 
   async function handleAnnoGenerate() {
-    if (!content.trim()) return;
+    if (!annoReady) return;
     setAnnoGenerating(true);
     setAnnoError(null);
     setAnnoResult(null);
@@ -1634,6 +1401,13 @@ export default function StudioScreen() {
               .map((p) => p.imageBase64!)
           : undefined;
 
+      const jobRequirementsList = isJobPost
+        ? jobRequirementsText
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+        : [];
+
       setAnnoResult(
         await generateAnnouncementImage({
           postType,
@@ -1642,6 +1416,12 @@ export default function StudioScreen() {
           format: annoFormat,
           brandContextFields: annoContextFields.length > 0 ? annoContextFields : undefined,
           productImages: promotionProductImages,
+          jobTitle: isJobPost ? jobTitle.trim() : undefined,
+          jobSchedule: isJobPost ? jobSchedule.trim() : undefined,
+          jobSalary: isJobPost && jobSalary.trim().length > 0 ? jobSalary.trim() : undefined,
+          jobImageStyle: isJobPost ? jobImageStyle : undefined,
+          jobRequirements:
+            isJobPost && jobRequirementsList.length > 0 ? jobRequirementsList : undefined,
         })
       );
     } catch (err) {
@@ -1770,7 +1550,7 @@ export default function StudioScreen() {
       ) : activeTab === 'announcements' ? (
         <GenerateButton
           loading={annoGenerating}
-          disabled={!content.trim()}
+          disabled={!annoReady}
           label="Generate Graphic"
           onPress={handleAnnoGenerate}
         />
@@ -2155,19 +1935,82 @@ export default function StudioScreen() {
               showProducts={false}
             />
           )}
-          <View style={styles.desktopSection}>
-            <Text style={styles.desktopSectionTitle}>Content</Text>
-            <Text style={styles.desktopSectionSub}>Describe what you want to communicate</Text>
-            <TextInput
-              style={[styles.textArea, { marginTop: D.spacing.md }]}
-              placeholder={currentPostType.placeholder}
-              placeholderTextColor={colors.text.muted}
-              value={content}
-              onChangeText={setContent}
-              multiline
-              editable={!annoGenerating}
-            />
-          </View>
+          {isJobPost ? (
+            <View style={styles.desktopSection}>
+              <Text style={styles.desktopSectionTitle}>Job details</Text>
+              <Text style={styles.desktopSectionSub}>
+                The role, schedule, and requirements shown on the graphic
+              </Text>
+              <OptionLabel label="Job title" />
+              <TextInput
+                style={styles.jobInput}
+                placeholder="e.g. Cashier"
+                placeholderTextColor={colors.text.muted}
+                value={jobTitle}
+                onChangeText={setJobTitle}
+                editable={!annoGenerating}
+              />
+              <OptionLabel label="Work schedule" />
+              <TextInput
+                style={styles.jobInput}
+                placeholder="e.g. Part-time, weekends, 3 days/week"
+                placeholderTextColor={colors.text.muted}
+                value={jobSchedule}
+                onChangeText={setJobSchedule}
+                editable={!annoGenerating}
+              />
+              <OptionLabel label="Salary (optional)" />
+              <TextInput
+                style={styles.jobInput}
+                placeholder="e.g. $15/hr or €1,800/month"
+                placeholderTextColor={colors.text.muted}
+                value={jobSalary}
+                onChangeText={setJobSalary}
+                editable={!annoGenerating}
+              />
+              <OptionLabel label="Requirements (optional, one per line)" />
+              <TextInput
+                style={styles.jobTextArea}
+                placeholder={"Driver's license\nCommunication skills\nResponsibility"}
+                placeholderTextColor={colors.text.muted}
+                value={jobRequirementsText}
+                onChangeText={setJobRequirementsText}
+                multiline
+                editable={!annoGenerating}
+              />
+              <OptionLabel label="Image style" />
+              <ChipSelector
+                options={JOB_IMAGE_STYLE_OPTIONS}
+                selected={jobImageStyle}
+                onSelect={(v) => setJobImageStyle(v as 'with-person' | 'text-only')}
+                accessibilityLabel="Job image style"
+              />
+              <OptionLabel label="Additional direction (optional)" />
+              <TextInput
+                style={styles.jobTextArea}
+                placeholder={'e.g. "Apply by email at jobs@example.com" or "Call 555-1234"'}
+                placeholderTextColor={colors.text.muted}
+                value={content}
+                onChangeText={setContent}
+                multiline
+                editable={!annoGenerating}
+              />
+            </View>
+          ) : (
+            <View style={styles.desktopSection}>
+              <Text style={styles.desktopSectionTitle}>Content</Text>
+              <Text style={styles.desktopSectionSub}>Describe what you want to communicate</Text>
+              <TextInput
+                style={[styles.textArea, { marginTop: D.spacing.md }]}
+                placeholder={currentPostType.placeholder}
+                placeholderTextColor={colors.text.muted}
+                value={content}
+                onChangeText={setContent}
+                multiline
+                editable={!annoGenerating}
+              />
+            </View>
+          )}
 
           {/* Preview */}
           <View style={styles.desktopSection}>
@@ -3250,18 +3093,78 @@ export default function StudioScreen() {
                 </View>
               </View>
 
-              <View style={styles.mobileSection}>
-                <Text style={styles.sectionTitle}>Content</Text>
-                <TextInput
-                  style={[styles.textArea, { marginTop: D.spacing.sm }]}
-                  placeholder={currentPostType.placeholder}
-                  placeholderTextColor={colors.text.muted}
-                  value={content}
-                  onChangeText={setContent}
-                  multiline
-                  editable={!annoGenerating}
-                />
-              </View>
+              {isJobPost ? (
+                <View style={styles.mobileSection}>
+                  <Text style={styles.sectionTitle}>Job details</Text>
+                  <OptionLabel label="Job title" />
+                  <TextInput
+                    style={styles.jobInput}
+                    placeholder="e.g. Cashier"
+                    placeholderTextColor={colors.text.muted}
+                    value={jobTitle}
+                    onChangeText={setJobTitle}
+                    editable={!annoGenerating}
+                  />
+                  <OptionLabel label="Work schedule" />
+                  <TextInput
+                    style={styles.jobInput}
+                    placeholder="e.g. Part-time, weekends"
+                    placeholderTextColor={colors.text.muted}
+                    value={jobSchedule}
+                    onChangeText={setJobSchedule}
+                    editable={!annoGenerating}
+                  />
+                  <OptionLabel label="Salary (optional)" />
+                  <TextInput
+                    style={styles.jobInput}
+                    placeholder="e.g. $15/hr"
+                    placeholderTextColor={colors.text.muted}
+                    value={jobSalary}
+                    onChangeText={setJobSalary}
+                    editable={!annoGenerating}
+                  />
+                  <OptionLabel label="Requirements (one per line)" />
+                  <TextInput
+                    style={styles.jobTextArea}
+                    placeholder={"Driver's license\nCommunication skills"}
+                    placeholderTextColor={colors.text.muted}
+                    value={jobRequirementsText}
+                    onChangeText={setJobRequirementsText}
+                    multiline
+                    editable={!annoGenerating}
+                  />
+                  <OptionLabel label="Image style" />
+                  <ChipSelector
+                    options={JOB_IMAGE_STYLE_OPTIONS}
+                    selected={jobImageStyle}
+                    onSelect={(v) => setJobImageStyle(v as 'with-person' | 'text-only')}
+                    accessibilityLabel="Job image style"
+                  />
+                  <OptionLabel label="Additional direction (optional)" />
+                  <TextInput
+                    style={styles.jobTextArea}
+                    placeholder={'e.g. "Apply by email at jobs@example.com"'}
+                    placeholderTextColor={colors.text.muted}
+                    value={content}
+                    onChangeText={setContent}
+                    multiline
+                    editable={!annoGenerating}
+                  />
+                </View>
+              ) : (
+                <View style={styles.mobileSection}>
+                  <Text style={styles.sectionTitle}>Content</Text>
+                  <TextInput
+                    style={[styles.textArea, { marginTop: D.spacing.sm }]}
+                    placeholder={currentPostType.placeholder}
+                    placeholderTextColor={colors.text.muted}
+                    value={content}
+                    onChangeText={setContent}
+                    multiline
+                    editable={!annoGenerating}
+                  />
+                </View>
+              )}
 
               <View style={styles.mobileSection}>
                 <Text style={styles.sectionTitle}>Style</Text>
@@ -3308,7 +3211,7 @@ export default function StudioScreen() {
 
               <GenerateButton
                 loading={annoGenerating}
-                disabled={!content.trim()}
+                disabled={!annoReady}
                 label="Generate Graphic"
                 onPress={handleAnnoGenerate}
               />
@@ -4174,6 +4077,31 @@ function makeStyles(
       padding: D.spacing.md,
       fontSize: D.fontSize.base,
       minHeight: isDesktop ? 140 : 100,
+      textAlignVertical: 'top',
+      color: colors.text.primary,
+      backgroundColor: colors.bg.base,
+      outlineStyle: 'none' as never,
+    },
+    jobInput: {
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      borderRadius: D.radius.md,
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: 10,
+      fontSize: D.fontSize.sm,
+      height: 40,
+      color: colors.text.primary,
+      backgroundColor: colors.bg.base,
+      outlineStyle: 'none' as never,
+    },
+    jobTextArea: {
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      borderRadius: D.radius.md,
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: 10,
+      fontSize: D.fontSize.sm,
+      minHeight: 72,
       textAlignVertical: 'top',
       color: colors.text.primary,
       backgroundColor: colors.bg.base,

@@ -21,13 +21,16 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ProductFilterBar, ProductFilterState } from '@/components/ui/ProductFilterBar';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import {
   createProduct,
   deleteProduct,
+  fetchProductCategories,
   fetchProducts,
+  type ProductFilters,
   type ProductItem,
   type ReferenceImage,
   removeBackground,
@@ -54,11 +57,22 @@ export default function ProductsScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [filters, setFilters] = useState<ProductFilterState>({
+    search: '',
+    categories: [],
+    minPrice: '',
+    maxPrice: '',
+  });
+  const [categories, setCategories] = useState<string[]>([]);
+
   const [modalVisible, setModalVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draftPrice, setDraftPrice] = useState('');
+  const [draftCategory, setDraftCategory] = useState('');
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [addingNewCategory, setAddingNewCategory] = useState(false);
   const [draftImageUri, setDraftImageUri] = useState<string | null>(null);
   const [draftImageBase64, setDraftImageBase64] = useState<string | null>(null);
   const [nameError, setNameError] = useState('');
@@ -81,35 +95,61 @@ export default function ProductsScreen() {
   const [similarPage, setSimilarPage] = useState(0);
   const SIMILAR_PAGE_SIZE = 4;
 
+  const useSidebar = isWeb && screenWidth >= 900;
+  const SIDEBAR_WIDTH = 260;
+  const SIDEBAR_GAP = D.spacing.lg;
+
   // Responsive column count
-  const numColumns = isWeb ? (screenWidth < 600 ? 2 : screenWidth < 1024 ? 3 : 4) : 2;
-
-  // Card width based on actual rendered container
+  const baseWidth = Math.min(screenWidth, MAX_CONTENT_WIDTH);
   const hPadding = isWeb ? WEB_H_PADDING : MOBILE_H_PADDING;
-  const effectiveWidth = Math.min(screenWidth, MAX_CONTENT_WIDTH) - hPadding * 2;
-  const cardWidth = (effectiveWidth - GAP * (numColumns - 1)) / numColumns;
+  const gridInnerWidth = useSidebar
+    ? baseWidth - hPadding * 2 - SIDEBAR_WIDTH - SIDEBAR_GAP
+    : baseWidth - hPadding * 2;
+  const numColumns = isWeb ? (gridInnerWidth < 420 ? 2 : gridInnerWidth < 720 ? 3 : 4) : 2;
+  const cardWidth = (gridInnerWidth - GAP * (numColumns - 1)) / numColumns;
 
-  function loadProducts() {
+  const loadProducts = useCallback((f: ProductFilterState) => {
+    const apiFilters: ProductFilters = {};
+    if (f.search) apiFilters.search = f.search;
+    if (f.categories.length > 0) apiFilters.categories = f.categories;
+    if (f.minPrice) {
+      const n = Number(f.minPrice);
+      if (!Number.isNaN(n)) apiFilters.minPrice = n;
+    }
+    if (f.maxPrice) {
+      const n = Number(f.maxPrice);
+      if (!Number.isNaN(n)) apiFilters.maxPrice = n;
+    }
     setIsLoading(true);
     setError(null);
-    fetchProducts()
+    fetchProducts(apiFilters)
       .then(setProducts)
       .catch((err: unknown) =>
         setError(err instanceof Error ? err.message : 'Failed to load products.')
       )
       .finally(() => setIsLoading(false));
-  }
+  }, []);
+
+  const loadCategories = useCallback(() => {
+    fetchProductCategories()
+      .then(setCategories)
+      .catch(() => {});
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadProducts();
-    }, [])
+      loadProducts(filters);
+      loadCategories();
+    }, [filters, loadProducts, loadCategories])
   );
 
   function openAddModal() {
     setEditingProduct(null);
     setDraftName('');
     setDraftPrice('');
+    setDraftCategory('');
+    setCategoryDropdownOpen(false);
+    setAddingNewCategory(false);
     setDraftImageUri(null);
     setDraftImageBase64(null);
     setNameError('');
@@ -121,6 +161,9 @@ export default function ProductsScreen() {
     setEditingProduct(product);
     setDraftName(product.name);
     setDraftPrice(String(product.price));
+    setDraftCategory(product.category ?? '');
+    setCategoryDropdownOpen(false);
+    setAddingNewCategory(false);
     setDraftImageUri(product.imageBase64 ? `data:image/png;base64,${product.imageBase64}` : null);
     setDraftImageBase64(product.imageBase64);
     setNameError('');
@@ -265,10 +308,12 @@ export default function ProductsScreen() {
       if (!imageBase64 && draftImageUri && !draftImageUri.startsWith('data:')) {
         imageBase64 = await uriToBase64(draftImageUri);
       }
+      const trimmedCategory = draftCategory.trim();
       const payload = {
         name: draftName.trim(),
         price: parseFloat(draftPrice),
         imageBase64,
+        category: trimmedCategory.length > 0 ? trimmedCategory : null,
       };
       if (editingProduct) {
         const updated = await updateProduct(editingProduct.id, payload);
@@ -277,6 +322,7 @@ export default function ProductsScreen() {
         const created = await createProduct(payload);
         setProducts((prev) => [created, ...prev]);
       }
+      loadCategories();
       closeModal();
     } catch (err: unknown) {
       setNameError(err instanceof Error ? err.message : 'Save failed. Please try again.');
@@ -290,9 +336,7 @@ export default function ProductsScreen() {
     try {
       await deleteProduct(id);
     } catch {
-      fetchProducts()
-        .then(setProducts)
-        .catch(() => {});
+      loadProducts(filters);
     }
   }
 
@@ -333,6 +377,11 @@ export default function ProductsScreen() {
         </Pressable>
       </View>
       <View style={styles.productInfo}>
+        {item.category ? (
+          <Text style={styles.categoryPill} numberOfLines={1}>
+            {item.category}
+          </Text>
+        ) : null}
         <Text style={styles.productName} numberOfLines={2}>
           {item.name}
         </Text>
@@ -363,7 +412,7 @@ export default function ProductsScreen() {
           <Text style={styles.errorText}>{error}</Text>
           <Pressable
             style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
-            onPress={loadProducts}
+            onPress={() => loadProducts(filters)}
           >
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
@@ -371,6 +420,31 @@ export default function ProductsScreen() {
       );
     }
     if (products.length === 0) {
+      const isFiltered = !!(
+        filters.search ||
+        filters.categories.length > 0 ||
+        filters.minPrice ||
+        filters.maxPrice
+      );
+      if (isFiltered) {
+        return (
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="search-outline" size={48} color={colors.accent.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>No products match</Text>
+            <Text style={styles.emptySubtitle}>
+              Try adjusting your search, category, or price range.
+            </Text>
+            <Pressable
+              style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
+              onPress={() => setFilters({ search: '', categories: [], minPrice: '', maxPrice: '' })}
+            >
+              <Text style={styles.retryText}>Clear filters</Text>
+            </Pressable>
+          </View>
+        );
+      }
       return (
         <View style={styles.emptyState}>
           <View style={styles.emptyIconCircle}>
@@ -398,7 +472,7 @@ export default function ProductsScreen() {
         numColumns={numColumns}
         key={numColumns}
         renderItem={renderProduct}
-        contentContainerStyle={styles.grid}
+        contentContainerStyle={[styles.grid, useSidebar && { paddingHorizontal: 0 }]}
         columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
         showsVerticalScrollIndicator={false}
       />
@@ -438,7 +512,45 @@ export default function ProductsScreen() {
           </View>
         </View>
 
-        {listContent()}
+        {(() => {
+          const showFilter =
+            products.length > 0 ||
+            filters.search ||
+            filters.categories.length > 0 ||
+            filters.minPrice ||
+            filters.maxPrice;
+          const useSidebar = isWeb && screenWidth >= 900;
+          if (!showFilter) return listContent();
+          if (useSidebar) {
+            return (
+              <View style={styles.sidebarLayout}>
+                <View style={styles.sidebar}>
+                  <ProductFilterBar
+                    value={filters}
+                    onChange={setFilters}
+                    categories={categories}
+                    layout="vertical"
+                    resultCount={isLoading ? undefined : products.length}
+                  />
+                </View>
+                <View style={styles.sidebarContent}>{listContent()}</View>
+              </View>
+            );
+          }
+          return (
+            <>
+              <View style={styles.filterBarWrap}>
+                <ProductFilterBar
+                  value={filters}
+                  onChange={setFilters}
+                  categories={categories}
+                  resultCount={isLoading ? undefined : products.length}
+                />
+              </View>
+              {listContent()}
+            </>
+          );
+        })()}
       </View>
 
       {/* Delete confirmation */}
@@ -810,6 +922,146 @@ export default function ProductsScreen() {
                       {nameError ? <Text style={styles.fieldError}>{nameError}</Text> : null}
                     </View>
 
+                    {/* Category */}
+                    <View style={styles.fieldGroup}>
+                      <Text style={styles.fieldLabel}>Category</Text>
+                      {addingNewCategory ? (
+                        <View style={styles.categoryInputRow}>
+                          <TextInput
+                            style={[styles.textInput, { flex: 1 }]}
+                            placeholder="Type a new category"
+                            placeholderTextColor={colors.text.muted}
+                            value={draftCategory}
+                            onChangeText={setDraftCategory}
+                            autoCorrect={false}
+                            autoCapitalize="words"
+                            autoFocus
+                            maxLength={100}
+                          />
+                          <Pressable
+                            onPress={() => {
+                              setAddingNewCategory(false);
+                              setDraftCategory('');
+                            }}
+                            style={({ pressed }) => [
+                              styles.categoryCancelBtn,
+                              pressed && { opacity: 0.7 },
+                            ]}
+                            accessibilityLabel="Cancel new category"
+                          >
+                            <Ionicons name="close" size={18} color={colors.text.secondary} />
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <Pressable
+                          onPress={() => setCategoryDropdownOpen((v) => !v)}
+                          style={({ pressed }) => [
+                            styles.categorySelectBtn,
+                            categoryDropdownOpen && styles.categorySelectBtnOpen,
+                            pressed && { opacity: 0.85 },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityState={{ expanded: categoryDropdownOpen }}
+                        >
+                          <Text
+                            style={[
+                              styles.categorySelectText,
+                              !draftCategory && styles.categorySelectPlaceholder,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {draftCategory || 'Select a category'}
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            {draftCategory ? (
+                              <Pressable
+                                onPress={() => setDraftCategory('')}
+                                hitSlop={6}
+                                accessibilityLabel="Clear category"
+                              >
+                                <Ionicons name="close-circle" size={16} color={colors.text.muted} />
+                              </Pressable>
+                            ) : null}
+                            <Ionicons
+                              name={categoryDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                              size={16}
+                              color={colors.text.secondary}
+                            />
+                          </View>
+                        </Pressable>
+                      )}
+
+                      {categoryDropdownOpen && !addingNewCategory && (
+                        <View style={styles.categoryDropdown}>
+                          <ScrollView
+                            style={{ maxHeight: 200 }}
+                            nestedScrollEnabled
+                            keyboardShouldPersistTaps="handled"
+                          >
+                            {categories.length === 0 ? (
+                              <Text style={styles.categoryDropdownEmpty}>
+                                No categories yet — add your first below.
+                              </Text>
+                            ) : (
+                              categories.map((c) => {
+                                const isSel =
+                                  c.toLowerCase() === draftCategory.trim().toLowerCase();
+                                return (
+                                  <Pressable
+                                    key={c}
+                                    onPress={() => {
+                                      setDraftCategory(c);
+                                      setCategoryDropdownOpen(false);
+                                    }}
+                                    style={({ pressed }) => [
+                                      styles.categoryDropdownItem,
+                                      isSel && styles.categoryDropdownItemSelected,
+                                      pressed && { backgroundColor: colors.bg.elevated },
+                                    ]}
+                                    accessibilityRole="menuitem"
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.categoryDropdownItemText,
+                                        isSel && { color: colors.accent.primary },
+                                      ]}
+                                    >
+                                      {c}
+                                    </Text>
+                                    {isSel && (
+                                      <Ionicons
+                                        name="checkmark"
+                                        size={16}
+                                        color={colors.accent.primary}
+                                      />
+                                    )}
+                                  </Pressable>
+                                );
+                              })
+                            )}
+                          </ScrollView>
+                          <Pressable
+                            onPress={() => {
+                              setCategoryDropdownOpen(false);
+                              setDraftCategory('');
+                              setAddingNewCategory(true);
+                            }}
+                            style={({ pressed }) => [
+                              styles.categoryAddNewRow,
+                              pressed && { opacity: 0.7 },
+                            ]}
+                          >
+                            <Ionicons
+                              name="add-circle-outline"
+                              size={16}
+                              color={colors.accent.primary}
+                            />
+                            <Text style={styles.categoryAddNewText}>New category</Text>
+                          </Pressable>
+                        </View>
+                      )}
+                    </View>
+
                     {/* Price */}
                     <View style={styles.fieldGroup}>
                       <Text style={styles.fieldLabel}>Price (USD)</Text>
@@ -976,6 +1228,118 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     productInfo: {
       padding: D.spacing.sm,
       gap: D.spacing.xs,
+    },
+    categoryPill: {
+      fontSize: 10,
+      color: colors.accent.primary,
+      fontWeight: D.fontWeight.semibold,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    filterBarWrap: {
+      paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
+      paddingBottom: D.spacing.xs,
+    },
+    sidebarLayout: {
+      flex: 1,
+      flexDirection: 'row',
+      paddingHorizontal: WEB_H_PADDING,
+      gap: D.spacing.lg,
+      paddingBottom: D.spacing.lg,
+    },
+    sidebar: {
+      width: 260,
+      flexShrink: 0,
+    },
+    sidebarContent: {
+      flex: 1,
+      minWidth: 0,
+    },
+    categorySelectBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.bg.input,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      borderRadius: D.radius.md,
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: 12,
+      gap: D.spacing.sm,
+    },
+    categorySelectBtnOpen: {
+      borderColor: colors.accent.primary,
+      backgroundColor: colors.bg.inputFocus,
+    },
+    categorySelectText: {
+      flex: 1,
+      fontSize: D.fontSize.base,
+      color: colors.text.primary,
+    },
+    categorySelectPlaceholder: {
+      color: colors.text.muted,
+    },
+    categoryDropdown: {
+      marginTop: D.spacing.xs,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.bg.surface,
+      overflow: 'hidden',
+      ...D.shadow.sm,
+    },
+    categoryDropdownEmpty: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      fontStyle: 'italic',
+      padding: D.spacing.md,
+    },
+    categoryDropdownItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+      paddingHorizontal: D.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    categoryDropdownItemSelected: {
+      backgroundColor: colors.accent.dim,
+    },
+    categoryDropdownItemText: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.primary,
+      fontWeight: D.fontWeight.medium,
+    },
+    categoryAddNewRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      paddingVertical: 10,
+      paddingHorizontal: D.spacing.md,
+      backgroundColor: colors.bg.elevated,
+      borderTopWidth: 1,
+      borderTopColor: colors.border.default,
+    },
+    categoryAddNewText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.accent.primary,
+    },
+    categoryInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.xs,
+    },
+    categoryCancelBtn: {
+      width: 40,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.surface,
     },
     productName: {
       fontSize: D.fontSize.sm,

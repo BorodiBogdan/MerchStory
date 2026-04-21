@@ -92,7 +92,28 @@ public static class ImageGenerationRoutes
             AppDbContext db,
             ILogger<Program> logger) =>
         {
-            if (string.IsNullOrWhiteSpace(request.Content))
+            bool isJobPost = string.Equals(request.PostType, "Job Post", StringComparison.OrdinalIgnoreCase);
+
+            if (isJobPost)
+            {
+                if (string.IsNullOrWhiteSpace(request.JobTitle))
+                {
+                    return Results.BadRequest(new { error = "Job title is required for job posts." });
+                }
+
+                if (string.IsNullOrWhiteSpace(request.JobSchedule))
+                {
+                    return Results.BadRequest(new { error = "Work schedule is required for job posts." });
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.JobImageStyle)
+                    && !string.Equals(request.JobImageStyle, "with-person", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(request.JobImageStyle, "text-only", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Results.BadRequest(new { error = "Job image style must be 'with-person' or 'text-only'." });
+                }
+            }
+            else if (string.IsNullOrWhiteSpace(request.Content))
             {
                 return Results.BadRequest(new { error = "Content must not be empty." });
             }
@@ -277,8 +298,25 @@ internal sealed record AnnouncementImageApiRequest(
     string Tone,
     string Format,
     List<string>? BrandContextFields,
-    List<string>? ProductImages = null)
+    List<string>? ProductImages = null,
+    string? JobTitle = null,
+    string? JobSchedule = null,
+    string? JobSalary = null,
+    string? JobImageStyle = null,
+    List<string>? JobRequirements = null)
 {
     public AnnouncementImageRequest ToServiceRequest(BrandContext? brandContext, string? logoBase64 = null) =>
-        new(this.PostType, this.Content, this.Tone, this.Format, brandContext, this.ProductImages, logoBase64);
+        new(
+            this.PostType,
+            this.Content ?? string.Empty,
+            this.Tone,
+            this.Format,
+            brandContext,
+            this.ProductImages,
+            logoBase64,
+            this.JobTitle,
+            this.JobSchedule,
+            this.JobSalary,
+            this.JobImageStyle,
+            this.JobRequirements);
 }
