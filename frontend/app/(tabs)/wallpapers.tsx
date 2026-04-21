@@ -29,6 +29,7 @@ import {
   generateWallpaper,
   saveToGallery,
 } from '@/utils/api';
+import * as galleryCache from '@/utils/galleryCache';
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1200;
@@ -114,9 +115,9 @@ export default function WallpapersScreen() {
     let active = true;
     setIsLoading(true);
     setError(null);
-    fetchGallery({ types: ['wallpaper'] })
-      .then((data) => {
-        if (active) setItems(data);
+    fetchGallery({ types: ['wallpaper'], pageSize: 100 })
+      .then((res) => {
+        if (active) setItems(res.items);
       })
       .catch((err: unknown) => {
         if (active) setError(err instanceof Error ? err.message : 'Failed to load wallpapers.');
@@ -134,11 +135,12 @@ export default function WallpapersScreen() {
   async function handleDelete(id: string) {
     if (lightboxItem?.id === id) setLightboxItem(null);
     setItems((prev) => prev.filter((item) => item.id !== id));
+    galleryCache.removeItem(id);
     try {
       await deleteGalleryItem(id);
     } catch {
-      fetchGallery({ types: ['wallpaper'] })
-        .then(setItems)
+      fetchGallery({ types: ['wallpaper'], pageSize: 100 })
+        .then((res) => setItems(res.items))
         .catch(() => {});
     }
   }
@@ -181,14 +183,18 @@ export default function WallpapersScreen() {
 
   async function handleConfirmKeep(name: string) {
     if (!generatedResult) return;
-    await saveToGallery(generatedResult.imageBase64, generatedResult.mimeType, 'wallpaper', name);
+    const saved = await saveToGallery(
+      generatedResult.imageBase64,
+      generatedResult.mimeType,
+      'wallpaper',
+      name
+    );
+    galleryCache.addItem(saved);
+    setItems((prev) => [saved, ...prev]);
     setIsKept(true);
     setKeepModalVisible(false);
     setGenerateStage('input');
     setGeneratedResult(null);
-    fetchGallery({ types: ['wallpaper'] })
-      .then(setItems)
-      .catch(() => {});
   }
 
   function handleCloseSheet() {

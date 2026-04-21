@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { DateField } from '@/components/ui/DateField';
 import { D } from '@/constants/design';
 import {
   GENERATION_TYPE_LABELS,
@@ -34,20 +35,6 @@ interface GalleryFilterBarProps {
 }
 
 const DESKTOP_BREAKPOINT = 900;
-const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-function sanitizeDate(input: string): string {
-  // allow user typing — trim to 10 chars, keep only digits and dashes
-  return input.replace(/[^0-9-]/g, '').slice(0, 10);
-}
-
-function isValidDate(s: string): boolean {
-  if (!s) return true;
-  const m = DATE_RE.exec(s);
-  if (!m) return false;
-  const d = new Date(s);
-  return !Number.isNaN(d.getTime());
-}
 
 export function GalleryFilterBar({
   value,
@@ -215,38 +202,20 @@ export function GalleryFilterBar({
     </View>
   );
 
-  const fromInvalid = !isValidDate(value.from);
-  const toInvalid = !isValidDate(value.to);
-
   const dateRange = (
     <View style={styles.dateRow}>
-      <View style={[styles.dateInputWrapper, fromInvalid && styles.dateInputInvalid]}>
-        <Text style={styles.dateLabel}>From</Text>
-        <TextInput
-          style={styles.dateInput as any}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={colors.text.muted}
-          value={value.from}
-          onChangeText={(t) => onChange({ ...value, from: sanitizeDate(t) })}
-          autoCapitalize="none"
-          autoCorrect={false}
-          inputMode="numeric"
-        />
-      </View>
-      <View style={styles.dateDash} />
-      <View style={[styles.dateInputWrapper, toInvalid && styles.dateInputInvalid]}>
-        <Text style={styles.dateLabel}>To</Text>
-        <TextInput
-          style={styles.dateInput as any}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={colors.text.muted}
-          value={value.to}
-          onChangeText={(t) => onChange({ ...value, to: sanitizeDate(t) })}
-          autoCapitalize="none"
-          autoCorrect={false}
-          inputMode="numeric"
-        />
-      </View>
+      <DateField
+        label="From"
+        value={value.from}
+        onChange={(next) => onChange({ ...value, from: next })}
+        maxDate={value.to || undefined}
+      />
+      <DateField
+        label="To"
+        value={value.to}
+        onChange={(next) => onChange({ ...value, to: next })}
+        minDate={value.from || undefined}
+      />
     </View>
   );
 
@@ -546,36 +515,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       alignItems: 'center',
       gap: D.spacing.xs,
     },
-    dateInputWrapper: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      height: 40,
-      borderRadius: D.radius.md,
-      borderWidth: 1,
-      borderColor: colors.border.default,
-      backgroundColor: colors.bg.input,
-      paddingHorizontal: D.spacing.md,
-      gap: D.spacing.xs,
-    },
-    dateInputInvalid: {
-      borderColor: '#EF4444',
-    },
-    dateLabel: {
-      fontSize: D.fontSize.xs,
-      color: colors.text.muted,
-      fontWeight: D.fontWeight.medium,
-      textTransform: 'uppercase',
-      letterSpacing: 0.3,
-    },
-    dateInput: {
-      flex: 1,
-      color: colors.text.primary,
-      fontSize: D.fontSize.sm,
-      paddingVertical: 0,
-      ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
-    },
-    dateDash: { width: 8, height: 1, backgroundColor: colors.border.default },
     clearBtn: {
       flexDirection: 'row',
       alignItems: 'center',

@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Image,
   Modal,
@@ -16,10 +17,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GalleryFilterBar, type GalleryFilterState } from '@/components/ui/GalleryFilterBar';
+import { Pagination } from '@/components/ui/Pagination';
 import { D } from '@/constants/design';
 import { GENERATION_TYPE_LABELS } from '@/constants/generationTypes';
 import { useTheme } from '@/context/theme';
-import { deleteGalleryItem, fetchGallery, type GalleryItem } from '@/utils/api';
+import { deleteGalleryItem, type GalleryItem } from '@/utils/api';
+import * as galleryCache from '@/utils/galleryCache';
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1200;
@@ -36,6 +39,17 @@ const EMPTY_FILTERS: GalleryFilterState = { search: '', types: [], from: '', to:
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+type GalleryTab = 'photos' | 'videos';
+
+function toApiFilters(f: GalleryFilterState) {
+  return {
+    types: f.types,
+    search: f.search,
+    from: DATE_RE.test(f.from) ? f.from : undefined,
+    to: DATE_RE.test(f.to) ? f.to : undefined,
+  };
+}
+
 export default function GalleryScreen() {
   const { colors } = useTheme();
   const router = useRouter();
@@ -44,9 +58,11 @@ export default function GalleryScreen() {
 
   const insets = useSafeAreaInsets();
 
-  const [items, setItems] = useState<GalleryItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const cache = galleryCache.useGalleryCache();
+  const { items, total, page, pageSize, loading, loadingMore, error } = cache;
+
+  const [activeTab, setActiveTab] = useState<GalleryTab>('photos');
+  const slideAnim = useMemo(() => new Animated.Value(0), []);
   const [lightboxItem, setLightboxItem] = useState<GalleryItem | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [filters, setFilters] = useState<GalleryFilterState>(EMPTY_FILTERS);
@@ -59,44 +75,40 @@ export default function GalleryScreen() {
   const effectiveWidth = Math.min(screenWidth, MAX_CONTENT_WIDTH) - hPadding * 2 - sidebarReserved;
   const cardWidth = (effectiveWidth - GAP * (numColumns - 1)) / numColumns;
 
-  const reload = useCallback((next: GalleryFilterState, signal?: { active: boolean }) => {
-    setIsLoading(true);
-    setError(null);
-    return fetchGallery({
-      types: next.types,
-      search: next.search,
-      from: DATE_RE.test(next.from) ? next.from : undefined,
-      to: DATE_RE.test(next.to) ? next.to : undefined,
-    })
-      .then((data) => {
-        if (!signal || signal.active) setItems(data);
-      })
-      .catch((err: unknown) => {
-        if (!signal || signal.active)
-          setError(err instanceof Error ? err.message : 'Failed to load gallery.');
-      })
-      .finally(() => {
-        if (!signal || signal.active) setIsLoading(false);
-      });
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
-      const signal = { active: true };
-      void reload(filters, signal);
-      return () => {
-        signal.active = false;
-      };
-    }, [filters, reload])
+      if (activeTab === 'photos') {
+        void galleryCache.ensureLoaded(toApiFilters(filters));
+      }
+    }, [activeTab, filters])
   );
+
+  function handleFiltersChange(next: GalleryFilterState) {
+    setFilters(next);
+    if (activeTab === 'photos') {
+      void galleryCache.setFiltersAndReload(toApiFilters(next));
+    }
+  }
+
+  function switchTab(tab: GalleryTab) {
+    setActiveTab(tab);
+    Animated.timing(slideAnim, {
+      toValue: tab === 'photos' ? 0 : 1,
+      duration: D.duration.normal,
+      useNativeDriver: false,
+    }).start();
+    if (tab === 'photos') {
+      void galleryCache.ensureLoaded(toApiFilters(filters));
+    }
+  }
 
   async function handleDelete(id: string) {
     if (lightboxItem?.id === id) setLightboxItem(null);
-    setItems((prev) => prev.filter((item) => item.id !== id));
+    galleryCache.removeItem(id);
     try {
       await deleteGalleryItem(id);
     } catch {
-      void reload(filters);
+      void galleryCache.refresh();
     }
   }
 
@@ -165,7 +177,7 @@ export default function GalleryScreen() {
       {hasActiveFilters ? (
         <Pressable
           style={({ pressed }) => [styles.emptyButton, pressed && styles.emptyButtonPressed]}
-          onPress={() => setFilters(EMPTY_FILTERS)}
+          onPress={() => handleFiltersChange(EMPTY_FILTERS)}
           accessibilityRole="button"
           accessibilityLabel="Clear filters"
         >
@@ -186,15 +198,42 @@ export default function GalleryScreen() {
     </View>
   );
 
-  const listContent = () => {
-    if (isLoading && items.length === 0) {
+  const videosContent = (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIconCircle}>
+        <Ionicons name="videocam-outline" size={48} color={colors.accent.primary} />
+      </View>
+      <View style={styles.comingSoonBadge}>
+        <Text style={styles.comingSoonBadgeText}>In Development</Text>
+      </View>
+      <Text style={styles.emptyTitle}>Video Generation</Text>
+      <Text style={styles.emptySubtitle}>Coming soon — AI-powered video ads are on the way</Text>
+    </View>
+  );
+
+  const listFooter = isWeb ? (
+    <Pagination
+      page={page}
+      pageSize={pageSize}
+      total={total}
+      onPageChange={(p) => void galleryCache.goToPage(p)}
+      disabled={loading}
+    />
+  ) : loadingMore ? (
+    <View style={styles.footerLoader}>
+      <ActivityIndicator size="small" color={colors.accent.primary} />
+    </View>
+  ) : null;
+
+  const photosContent = () => {
+    if (loading && items.length === 0) {
       return (
         <View style={styles.centerFill}>
           <ActivityIndicator size="large" color={colors.accent.primary} />
         </View>
       );
     }
-    if (error) {
+    if (error && items.length === 0) {
       return (
         <View style={styles.centerFill}>
           <Ionicons
@@ -206,7 +245,7 @@ export default function GalleryScreen() {
           <Text style={styles.errorText}>{error}</Text>
           <Pressable
             style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
-            onPress={() => reload(filters)}
+            onPress={() => void galleryCache.refresh()}
           >
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
@@ -224,9 +263,17 @@ export default function GalleryScreen() {
         contentContainerStyle={styles.grid}
         columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
         showsVerticalScrollIndicator={false}
+        onEndReached={!isWeb ? () => void galleryCache.loadMore() : undefined}
+        onEndReachedThreshold={0.4}
+        ListFooterComponent={listFooter}
       />
     );
   };
+
+  const segmentIndicatorLeft = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['1%', '51%'],
+  });
 
   return (
     <View style={styles.root}>
@@ -238,28 +285,73 @@ export default function GalleryScreen() {
           </View>
         </View>
 
-        {useSidebar ? (
+        {/* Photos / Videos toggle */}
+        <View style={styles.segmentWrapper}>
+          <View style={styles.segmentTrack}>
+            <Animated.View style={[styles.segmentIndicator, { left: segmentIndicatorLeft }]} />
+            <Pressable
+              style={styles.segmentButton}
+              onPress={() => switchTab('photos')}
+              accessibilityRole="button"
+              accessibilityLabel="Photos tab"
+            >
+              <Ionicons
+                name={activeTab === 'photos' ? 'images' : 'images-outline'}
+                size={15}
+                color={activeTab === 'photos' ? '#fff' : colors.text.secondary}
+                style={{ marginRight: 5 }}
+              />
+              <Text
+                style={[styles.segmentLabel, activeTab === 'photos' && styles.segmentLabelActive]}
+              >
+                Photos
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.segmentButton}
+              onPress={() => switchTab('videos')}
+              accessibilityRole="button"
+              accessibilityLabel="Videos tab"
+            >
+              <Ionicons
+                name={activeTab === 'videos' ? 'videocam' : 'videocam-outline'}
+                size={15}
+                color={activeTab === 'videos' ? '#fff' : colors.text.secondary}
+                style={{ marginRight: 5 }}
+              />
+              <Text
+                style={[styles.segmentLabel, activeTab === 'videos' && styles.segmentLabelActive]}
+              >
+                Videos
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {activeTab === 'videos' ? (
+          videosContent
+        ) : useSidebar ? (
           <View style={styles.sidebarLayout}>
             <View style={styles.sidebar}>
               <GalleryFilterBar
                 value={filters}
-                onChange={setFilters}
+                onChange={handleFiltersChange}
                 layout="vertical"
-                resultCount={isLoading ? undefined : items.length}
+                resultCount={loading ? undefined : total}
               />
             </View>
-            <View style={styles.sidebarContent}>{listContent()}</View>
+            <View style={styles.sidebarContent}>{photosContent()}</View>
           </View>
         ) : (
           <>
             <View style={styles.filterBarWrap}>
               <GalleryFilterBar
                 value={filters}
-                onChange={setFilters}
-                resultCount={isLoading ? undefined : items.length}
+                onChange={handleFiltersChange}
+                resultCount={loading ? undefined : total}
               />
             </View>
-            {listContent()}
+            {photosContent()}
           </>
         )}
       </View>
@@ -391,6 +483,44 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.sm,
       color: colors.text.muted,
       marginTop: 2,
+    },
+    segmentWrapper: {
+      paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
+      marginBottom: D.spacing.md,
+    },
+    segmentTrack: {
+      flexDirection: 'row',
+      backgroundColor: colors.bg.elevated,
+      borderRadius: D.radius.pill,
+      padding: 3,
+      position: 'relative',
+      height: 40,
+      maxWidth: isWeb ? 320 : undefined,
+    },
+    segmentIndicator: {
+      position: 'absolute',
+      top: 3,
+      width: '48%',
+      height: 34,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.primary,
+      ...D.shadow.glow,
+    },
+    segmentButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1,
+    },
+    segmentLabel: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
+    },
+    segmentLabelActive: {
+      color: '#fff',
+      fontWeight: D.fontWeight.semibold,
     },
     filterBarWrap: {
       paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
@@ -546,7 +676,23 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.semibold,
     },
-    // ── Lightbox ─────────────────────────────────────────────────────────────
+    comingSoonBadge: {
+      backgroundColor: colors.accent.dim,
+      borderRadius: D.radius.pill,
+      paddingVertical: 4,
+      paddingHorizontal: D.spacing.md,
+      marginBottom: D.spacing.md,
+    },
+    comingSoonBadgeText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.accent.secondary,
+      letterSpacing: 0.5,
+    },
+    footerLoader: {
+      paddingVertical: D.spacing.md,
+      alignItems: 'center',
+    },
     lightboxOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.92)',
@@ -601,7 +747,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flex: isWeb ? 1 : undefined,
       borderRadius: isWeb ? D.radius.lg : 0,
     },
-    // ── Confirm delete dialog ─────────────────────────────────────────────
     confirmOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.6)',

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using MerchStoryAPI.Common;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +20,9 @@ public static class ProductRoutes
             string? category,
             string? categories,
             decimal? minPrice,
-            decimal? maxPrice) =>
+            decimal? maxPrice,
+            int? page,
+            int? pageSize) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -63,12 +66,19 @@ public static class ProductRoutes
                 query = query.Where(p => p.Price <= maxPrice.Value);
             }
 
+            int resolvedPage = Math.Max(1, page ?? 1);
+            int resolvedPageSize = Math.Clamp(pageSize ?? 24, 1, 100);
+
+            int total = await query.CountAsync();
+
             List<ProductResponse> products = await query
                 .OrderByDescending(p => p.CreatedAt)
+                .Skip((resolvedPage - 1) * resolvedPageSize)
+                .Take(resolvedPageSize)
                 .Select(p => new ProductResponse(p.Id, p.Name, p.Price, p.ImageBase64, p.Category, p.CreatedAt, p.UpdatedAt))
                 .ToListAsync();
 
-            return Results.Ok(products);
+            return Results.Ok(new PagedResponse<ProductResponse>(products, total, resolvedPage, resolvedPageSize));
         });
 
         group.MapGet("/categories", async (

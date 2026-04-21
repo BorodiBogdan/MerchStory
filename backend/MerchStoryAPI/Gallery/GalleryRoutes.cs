@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using MerchStoryAPI.Common;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using Microsoft.EntityFrameworkCore;
@@ -47,7 +48,7 @@ public static class GalleryRoutes
                 return Results.Conflict(new { detail = "You already have an image with that name." });
             }
 
-            db.GeneratedImages.Add(new GeneratedImage
+            GeneratedImage created = new()
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
@@ -56,10 +57,19 @@ public static class GalleryRoutes
                 CreatedAt = DateTime.UtcNow,
                 GenerationType = req.GenerationType,
                 Name = name,
-            });
+            };
+            db.GeneratedImages.Add(created);
             await db.SaveChangesAsync();
 
-            return Results.Created();
+            return Results.Created(
+                $"/gallery/{created.Id}",
+                new GalleryItemResponse(
+                    created.Id,
+                    created.ImageBase64,
+                    created.MimeType,
+                    created.CreatedAt,
+                    created.Name,
+                    created.GenerationType));
         });
 
         group.MapGet("/", async (
@@ -68,7 +78,9 @@ public static class GalleryRoutes
             string? type,
             DateTime? from,
             DateTime? to,
-            string? search) =>
+            string? search,
+            int? page,
+            int? pageSize) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -108,8 +120,15 @@ public static class GalleryRoutes
                 q = q.Where(g => EF.Functions.ILike(g.Name, pattern));
             }
 
+            int resolvedPage = Math.Max(1, page ?? 1);
+            int resolvedPageSize = Math.Clamp(pageSize ?? 24, 1, 100);
+
+            int total = await q.CountAsync();
+
             List<GalleryItemResponse> items = await q
                 .OrderByDescending(g => g.CreatedAt)
+                .Skip((resolvedPage - 1) * resolvedPageSize)
+                .Take(resolvedPageSize)
                 .Select(g => new GalleryItemResponse(
                     g.Id,
                     g.ImageBase64,
@@ -119,7 +138,7 @@ public static class GalleryRoutes
                     g.GenerationType))
                 .ToListAsync();
 
-            return Results.Ok(items);
+            return Results.Ok(new PagedResponse<GalleryItemResponse>(items, total, resolvedPage, resolvedPageSize));
         });
 
         group.MapDelete("/{id:guid}", async (

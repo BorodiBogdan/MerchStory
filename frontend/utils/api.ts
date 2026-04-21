@@ -452,6 +452,40 @@ export interface GalleryFilters {
   from?: string;
   to?: string;
   search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface Paged<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+function coercePaged<T>(body: unknown, reqPage?: number, reqPageSize?: number): Paged<T> {
+  if (Array.isArray(body)) {
+    const arr = body as T[];
+    return {
+      items: arr,
+      total: arr.length,
+      page: reqPage ?? 1,
+      pageSize: reqPageSize ?? arr.length,
+    };
+  }
+  if (body && typeof body === 'object' && Array.isArray((body as { items?: unknown }).items)) {
+    const paged = body as Paged<T>;
+    return {
+      items: paged.items ?? [],
+      total: typeof paged.total === 'number' ? paged.total : (paged.items?.length ?? 0),
+      page: typeof paged.page === 'number' ? paged.page : (reqPage ?? 1),
+      pageSize:
+        typeof paged.pageSize === 'number'
+          ? paged.pageSize
+          : (reqPageSize ?? paged.items?.length ?? 0),
+    };
+  }
+  return { items: [], total: 0, page: reqPage ?? 1, pageSize: reqPageSize ?? 0 };
 }
 
 export class GalleryNameConflictError extends Error {
@@ -466,7 +500,7 @@ export async function saveToGallery(
   mimeType: string,
   generationType: GenerationType,
   name: string
-): Promise<void> {
+): Promise<GalleryItem> {
   const response = await fetchWithAuth(`${API_URL}/gallery/save`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -482,9 +516,11 @@ export async function saveToGallery(
     const body = (await response.json().catch(() => ({}))) as { detail?: string };
     throw new Error(body.detail ?? `Failed to save image (${response.status})`);
   }
+
+  return response.json() as Promise<GalleryItem>;
 }
 
-export async function fetchGallery(filters: GalleryFilters = {}): Promise<GalleryItem[]> {
+export async function fetchGallery(filters: GalleryFilters = {}): Promise<Paged<GalleryItem>> {
   const params = new URLSearchParams();
   if (filters.types && filters.types.length > 0) {
     params.set('type', filters.types.join(','));
@@ -492,6 +528,8 @@ export async function fetchGallery(filters: GalleryFilters = {}): Promise<Galler
   if (filters.from) params.set('from', filters.from);
   if (filters.to) params.set('to', filters.to);
   if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());
+  if (filters.page && filters.page > 0) params.set('page', String(filters.page));
+  if (filters.pageSize && filters.pageSize > 0) params.set('pageSize', String(filters.pageSize));
   const qs = params.toString();
   const url = qs ? `${API_URL}/gallery?${qs}` : `${API_URL}/gallery`;
   const response = await fetchWithAuth(url, {});
@@ -500,7 +538,8 @@ export async function fetchGallery(filters: GalleryFilters = {}): Promise<Galler
     throw new Error(`Failed to load gallery (${response.status})`);
   }
 
-  return response.json() as Promise<GalleryItem[]>;
+  const body = (await response.json()) as unknown;
+  return coercePaged<GalleryItem>(body, filters.page, filters.pageSize);
 }
 
 export async function deleteGalleryItem(id: string): Promise<void> {
@@ -537,9 +576,11 @@ export interface ProductFilters {
   categories?: string[];
   minPrice?: number;
   maxPrice?: number;
+  page?: number;
+  pageSize?: number;
 }
 
-export async function fetchProducts(filters: ProductFilters = {}): Promise<ProductItem[]> {
+export async function fetchProducts(filters: ProductFilters = {}): Promise<Paged<ProductItem>> {
   const params = new URLSearchParams();
   if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());
   if (filters.categories && filters.categories.length > 0) {
@@ -557,6 +598,8 @@ export async function fetchProducts(filters: ProductFilters = {}): Promise<Produ
   if (filters.maxPrice !== undefined && !Number.isNaN(filters.maxPrice)) {
     params.set('maxPrice', String(filters.maxPrice));
   }
+  if (filters.page && filters.page > 0) params.set('page', String(filters.page));
+  if (filters.pageSize && filters.pageSize > 0) params.set('pageSize', String(filters.pageSize));
   const qs = params.toString();
   const url = qs ? `${API_URL}/products?${qs}` : `${API_URL}/products`;
   const response = await fetchWithAuth(url, {});
@@ -565,7 +608,8 @@ export async function fetchProducts(filters: ProductFilters = {}): Promise<Produ
     throw new Error(`Failed to load products (${response.status})`);
   }
 
-  return response.json() as Promise<ProductItem[]>;
+  const body = (await response.json()) as unknown;
+  return coercePaged<ProductItem>(body, filters.page, filters.pageSize);
 }
 
 export async function fetchProductCategories(): Promise<string[]> {

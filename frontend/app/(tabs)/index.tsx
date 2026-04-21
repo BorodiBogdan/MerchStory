@@ -50,6 +50,7 @@ import {
   type ShopProfileResponse,
   type TextStyleOptions,
 } from '@/utils/api';
+import * as galleryCache from '@/utils/galleryCache';
 
 const isWeb = Platform.OS === 'web';
 const SIDEBAR_WIDTH = 320;
@@ -1176,8 +1177,8 @@ export default function StudioScreen() {
   useFocusEffect(
     useCallback(() => {
       setLoadingProducts(true);
-      fetchProducts()
-        .then(setProducts)
+      fetchProducts({ pageSize: 100 })
+        .then((res) => setProducts(res.items))
         .catch(() => {})
         .finally(() => setLoadingProducts(false));
 
@@ -1318,8 +1319,8 @@ export default function StudioScreen() {
   function openWallpaperPicker() {
     setWallpaperPickerVisible(true);
     setWallpaperPickerLoading(true);
-    fetchGallery({ types: ['wallpaper'] })
-      .then(setWallpaperPickerItems)
+    fetchGallery({ types: ['wallpaper'], pageSize: 12 })
+      .then((res) => setWallpaperPickerItems(res.items))
       .catch(() => setWallpaperPickerItems([]))
       .finally(() => setWallpaperPickerLoading(false));
   }
@@ -1385,12 +1386,13 @@ export default function StudioScreen() {
   const handleKeepConfirm = useCallback(
     async (name: string) => {
       if (!pendingKeep) return;
-      await saveToGallery(
+      const saved = await saveToGallery(
         pendingKeep.imageBase64,
         pendingKeep.mimeType,
         pendingKeep.generationType,
         name
       );
+      galleryCache.addItem(saved);
       pendingKeep.onSaved();
       setPendingKeep(null);
     },

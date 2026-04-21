@@ -80,9 +80,9 @@ export function ProductPickerModal({
       }
       setLoading(true);
       try {
-        const items = await fetchProducts(apiFilters);
-        setProducts(items);
-        onProductsLoaded?.(items);
+        const res = await fetchProducts({ ...apiFilters, pageSize: 100 });
+        setProducts(res.items);
+        onProductsLoaded?.(res.items);
       } catch {
         setProducts([]);
       } finally {
