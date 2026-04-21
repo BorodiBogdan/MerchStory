@@ -2,6 +2,9 @@ import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+// ── Gallery ──────────────────────────────────────────────────────────────────
+import type { GenerationType } from '@/constants/generationTypes';
+
 function getApiUrl(): string {
   // In production, always use the explicit env var regardless of platform
   if (!__DEV__) {
@@ -435,33 +438,63 @@ export async function generateCatalogOnWallpaper(
   return response.json() as Promise<GenerateImageResponse>;
 }
 
-// ── Gallery ──────────────────────────────────────────────────────────────────
-
 export interface GalleryItem {
   id: string;
   imageBase64: string;
   mimeType: string;
   createdAt: string;
+  name: string;
+  generationType: GenerationType | null;
+}
+
+export interface GalleryFilters {
+  types?: GenerationType[];
+  from?: string;
+  to?: string;
+  search?: string;
+}
+
+export class GalleryNameConflictError extends Error {
+  constructor(message = 'You already have an image with that name.') {
+    super(message);
+    this.name = 'GalleryNameConflictError';
+  }
 }
 
 export async function saveToGallery(
   imageBase64: string,
   mimeType: string,
-  generationType: string
+  generationType: GenerationType,
+  name: string
 ): Promise<void> {
   const response = await fetchWithAuth(`${API_URL}/gallery/save`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64, mimeType, generationType }),
+    body: JSON.stringify({ imageBase64, mimeType, generationType, name }),
   });
 
+  if (response.status === 409) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new GalleryNameConflictError(body.detail);
+  }
+
   if (!response.ok) {
-    throw new Error(`Failed to save image (${response.status})`);
+    const body = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(body.detail ?? `Failed to save image (${response.status})`);
   }
 }
 
-export async function fetchGallery(): Promise<GalleryItem[]> {
-  const response = await fetchWithAuth(`${API_URL}/gallery`, {});
+export async function fetchGallery(filters: GalleryFilters = {}): Promise<GalleryItem[]> {
+  const params = new URLSearchParams();
+  if (filters.types && filters.types.length > 0) {
+    params.set('type', filters.types.join(','));
+  }
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+  if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());
+  const qs = params.toString();
+  const url = qs ? `${API_URL}/gallery?${qs}` : `${API_URL}/gallery`;
+  const response = await fetchWithAuth(url, {});
 
   if (!response.ok) {
     throw new Error(`Failed to load gallery (${response.status})`);
@@ -477,28 +510,6 @@ export async function deleteGalleryItem(id: string): Promise<void> {
 
   if (!response.ok && response.status !== 404) {
     throw new Error(`Failed to delete image (${response.status})`);
-  }
-}
-
-// ── Wallpapers ────────────────────────────────────────────────────────────────
-
-export async function fetchWallpapers(): Promise<GalleryItem[]> {
-  const response = await fetchWithAuth(`${API_URL}/wallpapers`, {});
-
-  if (!response.ok) {
-    throw new Error(`Failed to load wallpapers (${response.status})`);
-  }
-
-  return response.json() as Promise<GalleryItem[]>;
-}
-
-export async function deleteWallpaper(id: string): Promise<void> {
-  const response = await fetchWithAuth(`${API_URL}/wallpapers/${id}`, {
-    method: 'DELETE',
-  });
-
-  if (!response.ok && response.status !== 404) {
-    throw new Error(`Failed to delete wallpaper (${response.status})`);
   }
 }
 

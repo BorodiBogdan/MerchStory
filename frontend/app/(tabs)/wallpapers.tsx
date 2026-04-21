@@ -18,11 +18,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import {
-  deleteWallpaper,
-  fetchWallpapers,
+  deleteGalleryItem,
+  fetchGallery,
   type GalleryItem,
   type GenerateImageResponse,
   generateWallpaper,
@@ -99,6 +100,7 @@ export default function WallpapersScreen() {
   const [generatedResult, setGeneratedResult] = useState<GenerateImageResponse | null>(null);
   const [isKept, setIsKept] = useState(false);
   const [keepError, setKeepError] = useState<string | null>(null);
+  const [keepModalVisible, setKeepModalVisible] = useState(false);
 
   const promptRef = useRef(prompt);
   promptRef.current = prompt;
@@ -112,7 +114,7 @@ export default function WallpapersScreen() {
     let active = true;
     setIsLoading(true);
     setError(null);
-    fetchWallpapers()
+    fetchGallery({ types: ['wallpaper'] })
       .then((data) => {
         if (active) setItems(data);
       })
@@ -133,9 +135,9 @@ export default function WallpapersScreen() {
     if (lightboxItem?.id === id) setLightboxItem(null);
     setItems((prev) => prev.filter((item) => item.id !== id));
     try {
-      await deleteWallpaper(id);
+      await deleteGalleryItem(id);
     } catch {
-      fetchWallpapers()
+      fetchGallery({ types: ['wallpaper'] })
         .then(setItems)
         .catch(() => {});
     }
@@ -168,17 +170,25 @@ export default function WallpapersScreen() {
     }
   }
 
-  async function handleKeep() {
+  function handleKeep() {
     if (!generatedResult || isKept) return;
-    try {
-      await saveToGallery(generatedResult.imageBase64, generatedResult.mimeType, 'wallpaper');
-      setIsKept(true);
-      fetchWallpapers()
-        .then(setItems)
-        .catch(() => {});
-    } catch {
-      setKeepError('Failed to save. Try again.');
-    }
+    setKeepError(null);
+    // Close the generate sheet before opening the Keep modal — react-native-web
+    // doesn't reliably stack simultaneous Modals.
+    setGenerateSheetVisible(false);
+    setKeepModalVisible(true);
+  }
+
+  async function handleConfirmKeep(name: string) {
+    if (!generatedResult) return;
+    await saveToGallery(generatedResult.imageBase64, generatedResult.mimeType, 'wallpaper', name);
+    setIsKept(true);
+    setKeepModalVisible(false);
+    setGenerateStage('input');
+    setGeneratedResult(null);
+    fetchGallery({ types: ['wallpaper'] })
+      .then(setItems)
+      .catch(() => {});
   }
 
   function handleCloseSheet() {
@@ -189,6 +199,7 @@ export default function WallpapersScreen() {
     setIsKept(false);
     setGenerateError(null);
     setKeepError(null);
+    setKeepModalVisible(false);
   }
 
   const renderItem = ({ item }: { item: GalleryItem }) => (
@@ -514,6 +525,13 @@ export default function WallpapersScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      <KeepImageModal
+        visible={keepModalVisible}
+        defaultName={`Wallpaper ${new Date().toISOString().slice(0, 10)}`}
+        onCancel={() => setKeepModalVisible(false)}
+        onConfirm={handleConfirmKeep}
+      />
 
       {/* Delete confirmation */}
       <Modal

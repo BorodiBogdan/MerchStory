@@ -28,13 +28,15 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
+import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
 import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
 import { D } from '@/constants/design';
+import type { GenerationType } from '@/constants/generationTypes';
 import { useTheme } from '@/context/theme';
 import {
+  fetchGallery,
   fetchProducts,
-  fetchWallpapers,
   type GalleryItem,
   generateAnnouncementImage,
   generateCatalogImage,
@@ -1316,7 +1318,7 @@ export default function StudioScreen() {
   function openWallpaperPicker() {
     setWallpaperPickerVisible(true);
     setWallpaperPickerLoading(true);
-    fetchWallpapers()
+    fetchGallery({ types: ['wallpaper'] })
       .then(setWallpaperPickerItems)
       .catch(() => setWallpaperPickerItems([]))
       .finally(() => setWallpaperPickerLoading(false));
@@ -1357,6 +1359,54 @@ export default function StudioScreen() {
   const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
   const [catalogContextFields, setCatalogContextFields] = useState<string[]>([]);
   const [annoContextFields, setAnnoContextFields] = useState<string[]>([]);
+
+  // ── Keep-image modal (shared across generators) ──────────────────────────────
+  const [pendingKeep, setPendingKeep] = useState<{
+    imageBase64: string;
+    mimeType: string;
+    generationType: GenerationType;
+    defaultName: string;
+    onSaved: () => void;
+  } | null>(null);
+
+  const requestKeep = useCallback(
+    (params: {
+      imageBase64: string;
+      mimeType: string;
+      generationType: GenerationType;
+      defaultName: string;
+      onSaved: () => void;
+    }) => {
+      setPendingKeep(params);
+    },
+    []
+  );
+
+  const handleKeepConfirm = useCallback(
+    async (name: string) => {
+      if (!pendingKeep) return;
+      await saveToGallery(
+        pendingKeep.imageBase64,
+        pendingKeep.mimeType,
+        pendingKeep.generationType,
+        name
+      );
+      pendingKeep.onSaved();
+      setPendingKeep(null);
+    },
+    [pendingKeep]
+  );
+
+  const autoKeepName = useCallback(
+    (label: string) => `${label} ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+    []
+  );
+
+  const postTypeToGenType = useCallback((pt: PostType): GenerationType => {
+    if (pt === 'Job Post') return 'job-post';
+    if (pt === 'Promotion') return 'promotion';
+    return 'announcement';
+  }, []);
 
   const contextItems = useMemo(
     () => (shopProfile ? deriveContextItems(shopProfile) : []),
@@ -1628,18 +1678,15 @@ export default function StudioScreen() {
                     emptyTitle="Your catalog will appear here"
                     emptyHint="Select products on the left, configure options, then hit Generate."
                     filename="catalog"
-                    onKeep={async () => {
+                    onKeep={() => {
                       if (!catalogResult) return;
-                      try {
-                        await saveToGallery(
-                          catalogResult.imageBase64,
-                          catalogResult.mimeType,
-                          'catalog'
-                        );
-                        setCatalogKept(true);
-                      } catch (err) {
-                        console.error('Failed to save catalog:', err);
-                      }
+                      requestKeep({
+                        imageBase64: catalogResult.imageBase64,
+                        mimeType: catalogResult.mimeType,
+                        generationType: 'catalog',
+                        defaultName: autoKeepName('Catalog'),
+                        onSaved: () => setCatalogKept(true),
+                      });
                     }}
                     isKept={catalogKept}
                     colors={colors}
@@ -1732,19 +1779,21 @@ export default function StudioScreen() {
                           styles.wallpaperConfirmBtn,
                           { backgroundColor: colors.accent.primary },
                         ]}
-                        onPress={async () => {
+                        onPress={() => {
                           setWallpaperBase64(wallpaperPreview);
                           setWallpaperStage('confirmed');
                           setWallpaperPreview(null);
                           setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                          try {
-                            const b64 = wallpaperPreview.startsWith('data:')
-                              ? wallpaperPreview.split(',')[1]
-                              : wallpaperPreview;
-                            await saveToGallery(b64, 'image/png', 'wallpaper');
-                          } catch (err) {
-                            console.error('Failed to save wallpaper:', err);
-                          }
+                          const b64 = wallpaperPreview.startsWith('data:')
+                            ? wallpaperPreview.split(',')[1]
+                            : wallpaperPreview;
+                          requestKeep({
+                            imageBase64: b64,
+                            mimeType: 'image/png',
+                            generationType: 'wallpaper',
+                            defaultName: autoKeepName('Wallpaper'),
+                            onSaved: () => {},
+                          });
                         }}
                         accessibilityRole="button"
                       >
@@ -1869,18 +1918,15 @@ export default function StudioScreen() {
                     emptyTitle="Result will appear here"
                     emptyHint="Pick a wallpaper, select products, configure options, then hit Place on Wallpaper."
                     filename="wallpaper-composite"
-                    onKeep={async () => {
+                    onKeep={() => {
                       if (!wallpaperOnResult) return;
-                      try {
-                        await saveToGallery(
-                          wallpaperOnResult.imageBase64,
-                          wallpaperOnResult.mimeType,
-                          'catalog-on-wallpaper'
-                        );
-                        setWallpaperOnKept(true);
-                      } catch (err) {
-                        console.error('Failed to save wallpaper composite:', err);
-                      }
+                      requestKeep({
+                        imageBase64: wallpaperOnResult.imageBase64,
+                        mimeType: wallpaperOnResult.mimeType,
+                        generationType: 'catalog-on-wallpaper',
+                        defaultName: autoKeepName('Catalog on Wallpaper'),
+                        onSaved: () => setWallpaperOnKept(true),
+                      });
                     }}
                     isKept={wallpaperOnKept}
                     colors={colors}
@@ -2024,18 +2070,15 @@ export default function StudioScreen() {
                 emptyTitle="Your graphic will appear here"
                 emptyHint="Fill in the content and style options, then hit Generate."
                 filename="announcement"
-                onKeep={async () => {
+                onKeep={() => {
                   if (!annoResult) return;
-                  try {
-                    await saveToGallery(
-                      annoResult.imageBase64,
-                      annoResult.mimeType,
-                      'announcement'
-                    );
-                    setAnnoKept(true);
-                  } catch (err) {
-                    console.error('Failed to save announcement:', err);
-                  }
+                  requestKeep({
+                    imageBase64: annoResult.imageBase64,
+                    mimeType: annoResult.mimeType,
+                    generationType: postTypeToGenType(postType),
+                    defaultName: autoKeepName(postType),
+                    onSaved: () => setAnnoKept(true),
+                  });
                 }}
                 isKept={annoKept}
                 colors={colors}
@@ -2367,23 +2410,21 @@ export default function StudioScreen() {
                         },
                         pressed && { opacity: 0.75 },
                       ]}
-                      onPress={async () => {
+                      onPress={() => {
                         if (!wallpaperGenResult || wallpaperGenKept) return;
                         setWallpaperBase64(wallpaperGenResult.imageBase64);
                         setWallpaperStage('confirmed');
                         setWallpaperGenKept(true);
                         setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                        try {
-                          await saveToGallery(
-                            wallpaperGenResult.imageBase64,
-                            wallpaperGenResult.mimeType,
-                            'wallpaper'
-                          );
-                        } catch (err) {
-                          console.error('Failed to save wallpaper:', err);
-                        }
                         setWallpaperGenModalVisible(false);
                         setWallpaperGenModalStage('input');
+                        requestKeep({
+                          imageBase64: wallpaperGenResult.imageBase64,
+                          mimeType: wallpaperGenResult.mimeType,
+                          generationType: 'wallpaper',
+                          defaultName: autoKeepName('Wallpaper'),
+                          onSaved: () => {},
+                        });
                       }}
                       disabled={wallpaperGenKept}
                       accessibilityRole="button"
@@ -2520,6 +2561,13 @@ export default function StudioScreen() {
             </Pressable>
           </Pressable>
         </Modal>
+
+        <KeepImageModal
+          visible={pendingKeep !== null}
+          defaultName={pendingKeep?.defaultName}
+          onCancel={() => setPendingKeep(null)}
+          onConfirm={handleKeepConfirm}
+        />
       </>
     );
   }
@@ -2695,18 +2743,15 @@ export default function StudioScreen() {
                             },
                             pressed && { opacity: 0.75 },
                           ]}
-                          onPress={async () => {
+                          onPress={() => {
                             if (catalogKept) return;
-                            try {
-                              await saveToGallery(
-                                catalogResult.imageBase64,
-                                catalogResult.mimeType,
-                                'catalog'
-                              );
-                              setCatalogKept(true);
-                            } catch (err) {
-                              console.error('Failed to save catalog:', err);
-                            }
+                            requestKeep({
+                              imageBase64: catalogResult.imageBase64,
+                              mimeType: catalogResult.mimeType,
+                              generationType: 'catalog',
+                              defaultName: autoKeepName('Catalog'),
+                              onSaved: () => setCatalogKept(true),
+                            });
                           }}
                           accessibilityRole="button"
                         >
@@ -2824,19 +2869,21 @@ export default function StudioScreen() {
                               styles.wallpaperConfirmBtn,
                               { backgroundColor: colors.accent.primary },
                             ]}
-                            onPress={async () => {
+                            onPress={() => {
                               setWallpaperBase64(wallpaperPreview);
                               setWallpaperStage('confirmed');
                               setWallpaperPreview(null);
                               setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                              try {
-                                const b64 = wallpaperPreview.startsWith('data:')
-                                  ? wallpaperPreview.split(',')[1]
-                                  : wallpaperPreview;
-                                await saveToGallery(b64, 'image/png', 'wallpaper');
-                              } catch (err) {
-                                console.error('Failed to save wallpaper:', err);
-                              }
+                              const b64 = wallpaperPreview.startsWith('data:')
+                                ? wallpaperPreview.split(',')[1]
+                                : wallpaperPreview;
+                              requestKeep({
+                                imageBase64: b64,
+                                mimeType: 'image/png',
+                                generationType: 'wallpaper',
+                                defaultName: autoKeepName('Wallpaper'),
+                                onSaved: () => {},
+                              });
                             }}
                             accessibilityRole="button"
                           >
@@ -3020,16 +3067,13 @@ export default function StudioScreen() {
                           ]}
                           onPress={async () => {
                             if (wallpaperOnKept) return;
-                            try {
-                              await saveToGallery(
-                                wallpaperOnResult.imageBase64,
-                                wallpaperOnResult.mimeType,
-                                'catalog-on-wallpaper'
-                              );
-                              setWallpaperOnKept(true);
-                            } catch (err) {
-                              console.error('Failed to save wallpaper composite:', err);
-                            }
+                            requestKeep({
+                              imageBase64: wallpaperOnResult.imageBase64,
+                              mimeType: wallpaperOnResult.mimeType,
+                              generationType: 'catalog-on-wallpaper',
+                              defaultName: autoKeepName('Catalog on Wallpaper'),
+                              onSaved: () => setWallpaperOnKept(true),
+                            });
                           }}
                           accessibilityRole="button"
                         >
@@ -3233,16 +3277,13 @@ export default function StudioScreen() {
                       ]}
                       onPress={async () => {
                         if (annoKept) return;
-                        try {
-                          await saveToGallery(
-                            annoResult.imageBase64,
-                            annoResult.mimeType,
-                            'announcement'
-                          );
-                          setAnnoKept(true);
-                        } catch (err) {
-                          console.error('Failed to save announcement:', err);
-                        }
+                        requestKeep({
+                          imageBase64: annoResult.imageBase64,
+                          mimeType: annoResult.mimeType,
+                          generationType: postTypeToGenType(postType),
+                          defaultName: autoKeepName(postType),
+                          onSaved: () => setAnnoKept(true),
+                        });
                       }}
                       accessibilityRole="button"
                     >
@@ -3527,23 +3568,21 @@ export default function StudioScreen() {
                       },
                       pressed && { opacity: 0.75 },
                     ]}
-                    onPress={async () => {
+                    onPress={() => {
                       if (!wallpaperGenResult || wallpaperGenKept) return;
                       setWallpaperBase64(wallpaperGenResult.imageBase64);
                       setWallpaperStage('confirmed');
                       setWallpaperGenKept(true);
                       setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                      try {
-                        await saveToGallery(
-                          wallpaperGenResult.imageBase64,
-                          wallpaperGenResult.mimeType,
-                          'wallpaper'
-                        );
-                      } catch (err) {
-                        console.error('Failed to save wallpaper:', err);
-                      }
                       setWallpaperGenModalVisible(false);
                       setWallpaperGenModalStage('input');
+                      requestKeep({
+                        imageBase64: wallpaperGenResult.imageBase64,
+                        mimeType: wallpaperGenResult.mimeType,
+                        generationType: 'wallpaper',
+                        defaultName: autoKeepName('Wallpaper'),
+                        onSaved: () => {},
+                      });
                     }}
                     disabled={wallpaperGenKept}
                     accessibilityRole="button"
@@ -3670,6 +3709,13 @@ export default function StudioScreen() {
           )}
         </View>
       </Modal>
+
+      <KeepImageModal
+        visible={pendingKeep !== null}
+        defaultName={pendingKeep?.defaultName}
+        onCancel={() => setPendingKeep(null)}
+        onConfirm={handleKeepConfirm}
+      />
     </KeyboardAvoidingView>
   );
 }
