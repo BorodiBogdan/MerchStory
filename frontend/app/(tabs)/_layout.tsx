@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs, useRouter } from 'expo-router';
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -16,19 +16,13 @@ import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
-import { getShopProfile } from '@/utils/api';
 
 export default function TabLayout() {
   const { token, isLoading, isShopSetupComplete, signOut } = useAuth();
   const { colors, colorScheme, toggleTheme } = useTheme();
-  const { shopLogoUri, setShopLogoUri } = useShop();
+  const { profile } = useShop();
+  const shopLogoUri = profile?.logoBase64 ?? null;
 
-  useEffect(() => {
-    if (!token) return;
-    getShopProfile()
-      .then((profile) => setShopLogoUri(profile?.logoBase64 ?? null))
-      .catch(() => {});
-  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
 

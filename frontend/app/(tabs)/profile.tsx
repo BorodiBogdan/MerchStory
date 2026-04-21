@@ -26,7 +26,6 @@ import {
   BrandColor,
   disconnectSocial,
   getFacebookConnectUrl,
-  getShopProfile,
   getSocialStatus,
   ShopProfileResponse,
   updateShopProfile,
@@ -117,14 +116,13 @@ function computeIsDirty(draft: DraftState | null, profile: ShopProfileResponse |
 export default function ProfileScreen() {
   const { colors } = useTheme();
   const { email: accountEmail } = useAuth();
-  const { setShopLogoUri } = useShop();
+  const { profile, setProfile, isProfileLoading, refreshProfile } = useShop();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [profile, setProfile] = useState<ShopProfileResponse | null>(null);
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(isProfileLoading);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [colorPickerModal, setColorPickerModal] = useState<{ index: number; hex: string } | null>(
@@ -149,25 +147,33 @@ export default function ProfileScreen() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  useEffect(() => {
+    setIsLoading(isProfileLoading);
+  }, [isProfileLoading]);
+
   useFocusEffect(
     useCallback(() => {
-      void loadProfile();
+      void loadSocialStatus();
     }, [])
   );
 
-  async function loadProfile() {
-    setIsLoading(true);
-    setLoadError(null);
+  async function loadSocialStatus() {
     try {
-      const [p, social] = await Promise.all([getShopProfile(), getSocialStatus()]);
-      setProfile(p);
+      const social = await getSocialStatus();
       setSocialStatus({
         facebook: social.facebookConnected ? 'connected' : undefined,
       });
+    } catch {
+      // non-fatal
+    }
+  }
+
+  async function retryLoadProfile() {
+    setLoadError(null);
+    try {
+      await refreshProfile();
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load profile');
-    } finally {
-      setIsLoading(false);
     }
   }
 
@@ -310,7 +316,6 @@ export default function ProfileScreen() {
         tikTokHandle: draft.tikTokHandle.trim() || null,
       });
       setProfile(updated);
-      setShopLogoUri(updated.logoBase64 ?? null);
       setDraft(null);
       setIsEditing(false);
       if (Platform.OS !== 'web') {
@@ -344,7 +349,7 @@ export default function ProfileScreen() {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>{loadError ?? 'Profile not found'}</Text>
-        <Pressable onPress={loadProfile} style={styles.retryButton}>
+        <Pressable onPress={retryLoadProfile} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </Pressable>
       </View>

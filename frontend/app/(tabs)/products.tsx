@@ -26,11 +26,11 @@ import { ProductFilterBar, ProductFilterState } from '@/components/ui/ProductFil
 import { ProductImage } from '@/components/ui/ProductImage';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
+import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
 import {
   createProduct,
   deleteProduct,
-  fetchProductCategories,
   type ProductDetail,
   type ProductFilters,
   type ProductItem,
@@ -86,7 +86,7 @@ export default function ProductsScreen() {
     minPrice: '',
     maxPrice: '',
   });
-  const [categories, setCategories] = useState<string[]>([]);
+  const { categories, refreshCategories } = useShop();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -146,17 +146,10 @@ export default function ProductsScreen() {
     return apiFilters;
   }, []);
 
-  const loadCategories = useCallback(() => {
-    fetchProductCategories()
-      .then(setCategories)
-      .catch(() => {});
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
       void productsCache.ensureLoaded(toApiFilters(filters));
-      loadCategories();
-    }, [filters, loadCategories, toApiFilters])
+    }, [filters, toApiFilters])
   );
 
   function handleFiltersChange(next: ProductFilterState) {
@@ -360,7 +353,7 @@ export default function ProductsScreen() {
         }
         productsCache.addItem(toMetadata(created));
       }
-      loadCategories();
+      void refreshCategories();
       closeModal();
     } catch (err: unknown) {
       setNameError(err instanceof Error ? err.message : 'Save failed. Please try again.');
@@ -374,6 +367,7 @@ export default function ProductsScreen() {
     productImageCache.evict(id);
     try {
       await deleteProduct(id);
+      void refreshCategories();
     } catch {
       void productsCache.refresh();
     }

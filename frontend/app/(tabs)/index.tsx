@@ -35,6 +35,7 @@ import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
 import { D } from '@/constants/design';
 import type { GenerationType } from '@/constants/generationTypes';
+import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
 import {
   fetchGallery,
@@ -45,7 +46,6 @@ import {
   generateCatalogOnWallpaper,
   type GenerateImageResponse,
   generateWallpaper,
-  getShopProfile,
   type PlacementZone,
   type ProductItem,
   saveToGallery,
@@ -1048,6 +1048,7 @@ function ChooseProductsSection({
 // ─── Main screen ───────────────────────────────────────────────────────────────
 export default function StudioScreen() {
   const { colors } = useTheme();
+  const { profile: shopProfile } = useShop();
   const { width: screenWidth } = useWindowDimensions();
   const isDesktop = isWeb && screenWidth >= DESKTOP_BREAKPOINT;
   const styles = useMemo(
@@ -1173,19 +1174,15 @@ export default function StudioScreen() {
   useFocusEffect(
     useCallback(() => {
       void productsCache.ensureLoaded({});
-
-      getShopProfile()
-        .then((profile) => {
-          setShopProfile(profile);
-          if (profile) {
-            const allKeys = deriveContextItems(profile).map((i) => i.key);
-            setCatalogContextFields(allKeys);
-            setAnnoContextFields(allKeys);
-          }
-        })
-        .catch(() => {});
     }, [])
   );
+
+  useEffect(() => {
+    if (!shopProfile) return;
+    const allKeys = deriveContextItems(shopProfile).map((i) => i.key);
+    setCatalogContextFields(allKeys);
+    setAnnoContextFields(allKeys);
+  }, [shopProfile]);
 
   function toggleProduct(id: string) {
     setSelected((prev) => {
@@ -1361,7 +1358,6 @@ export default function StudioScreen() {
   const annoReady = isJobPost ? jobPostReady : content.trim().length > 0;
 
   // ── Brand context state ──────────────────────────────────────────────────────
-  const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
   const [catalogContextFields, setCatalogContextFields] = useState<string[]>([]);
   const [annoContextFields, setAnnoContextFields] = useState<string[]>([]);
 

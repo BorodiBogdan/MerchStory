@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   DimensionValue,
@@ -13,8 +13,9 @@ import {
 } from 'react-native';
 
 import { D } from '@/constants/design';
+import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
-import { fetchProductCategories, ProductFilters, ProductItem } from '@/utils/api';
+import { ProductFilters, ProductItem } from '@/utils/api';
 import * as productsCache from '@/utils/productsCache';
 
 import { ProductFilterBar, ProductFilterState } from './ProductFilterBar';
@@ -63,6 +64,7 @@ export function ProductPickerModal({
   onProductsLoaded,
 }: ProductPickerModalProps) {
   const { colors } = useTheme();
+  const { categories } = useShop();
   const { width: screenWidth } = useWindowDimensions();
   const isDesktop = screenWidth >= DESKTOP_BREAKPOINT;
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -71,22 +73,11 @@ export function ProductPickerModal({
   const { items: products, loading, loadingMore, total } = cache;
 
   const [filters, setFilters] = useState<ProductFilterState>(EMPTY_FILTERS);
-  const [categories, setCategories] = useState<string[]>([]);
-
-  const loadCategories = useCallback(async () => {
-    try {
-      const cats = await fetchProductCategories();
-      setCategories(cats);
-    } catch {
-      // non-fatal
-    }
-  }, []);
 
   useEffect(() => {
     if (!visible) return;
-    loadCategories();
     void productsCache.setFiltersAndReload(toApiFilters(filters));
-  }, [visible, filters, loadCategories]);
+  }, [visible, filters]);
 
   useEffect(() => {
     if (!visible) setFilters(EMPTY_FILTERS);
