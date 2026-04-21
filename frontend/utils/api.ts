@@ -2,6 +2,9 @@ import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+// ── Gallery ──────────────────────────────────────────────────────────────────
+import type { GenerationType } from '@/constants/generationTypes';
+
 function getApiUrl(): string {
   // In production, always use the explicit env var regardless of platform
   if (!__DEV__) {
@@ -435,39 +438,140 @@ export async function generateCatalogOnWallpaper(
   return response.json() as Promise<GenerateImageResponse>;
 }
 
-// ── Gallery ──────────────────────────────────────────────────────────────────
-
 export interface GalleryItem {
   id: string;
-  imageBase64: string;
   mimeType: string;
   createdAt: string;
+  name: string;
+  generationType: GenerationType | null;
+}
+
+export interface GalleryImageBytes {
+  imageBase64: string;
+  mimeType: string;
+}
+
+export interface GalleryFilters {
+  types?: GenerationType[];
+  from?: string;
+  to?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface Paged<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+function coercePaged<T>(body: unknown, reqPage?: number, reqPageSize?: number): Paged<T> {
+  if (Array.isArray(body)) {
+    const arr = body as T[];
+    return {
+      items: arr,
+      total: arr.length,
+      page: reqPage ?? 1,
+      pageSize: reqPageSize ?? arr.length,
+    };
+  }
+  if (body && typeof body === 'object' && Array.isArray((body as { items?: unknown }).items)) {
+    const paged = body as Paged<T>;
+    return {
+      items: paged.items ?? [],
+      total: typeof paged.total === 'number' ? paged.total : (paged.items?.length ?? 0),
+      page: typeof paged.page === 'number' ? paged.page : (reqPage ?? 1),
+      pageSize:
+        typeof paged.pageSize === 'number'
+          ? paged.pageSize
+          : (reqPageSize ?? paged.items?.length ?? 0),
+    };
+  }
+  return { items: [], total: 0, page: reqPage ?? 1, pageSize: reqPageSize ?? 0 };
+}
+
+export class GalleryNameConflictError extends Error {
+  constructor(message = 'You already have an image with that name.') {
+    super(message);
+    this.name = 'GalleryNameConflictError';
+  }
 }
 
 export async function saveToGallery(
   imageBase64: string,
   mimeType: string,
-  generationType: string
-): Promise<void> {
+  generationType: GenerationType,
+  name: string
+): Promise<GalleryItem> {
   const response = await fetchWithAuth(`${API_URL}/gallery/save`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64, mimeType, generationType }),
+    body: JSON.stringify({ imageBase64, mimeType, generationType, name }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to save image (${response.status})`);
+  if (response.status === 409) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new GalleryNameConflictError(body.detail);
   }
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(body.detail ?? `Failed to save image (${response.status})`);
+  }
+
+  return response.json() as Promise<GalleryItem>;
 }
 
-export async function fetchGallery(): Promise<GalleryItem[]> {
-  const response = await fetchWithAuth(`${API_URL}/gallery`, {});
+export async function fetchGallery(filters: GalleryFilters = {}): Promise<Paged<GalleryItem>> {
+  const params = new URLSearchParams();
+  if (filters.types && filters.types.length > 0) {
+    params.set('type', filters.types.join(','));
+  }
+  if (filters.from) params.set('from', filters.from);
+  if (filters.to) params.set('to', filters.to);
+  if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());
+  if (filters.page && filters.page > 0) params.set('page', String(filters.page));
+  if (filters.pageSize && filters.pageSize > 0) params.set('pageSize', String(filters.pageSize));
+  const qs = params.toString();
+  const url = qs ? `${API_URL}/gallery?${qs}` : `${API_URL}/gallery`;
+  const response = await fetchWithAuth(url, {});
 
   if (!response.ok) {
     throw new Error(`Failed to load gallery (${response.status})`);
   }
 
-  return response.json() as Promise<GalleryItem[]>;
+  const body = (await response.json()) as unknown;
+  return coercePaged<GalleryItem>(body, filters.page, filters.pageSize);
+}
+
+export async function updateGalleryItemName(id: string, name: string): Promise<GalleryItem> {
+  const response = await fetchWithAuth(`${API_URL}/gallery/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+
+  if (response.status === 409) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new GalleryNameConflictError(body.detail);
+  }
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(body.detail ?? `Failed to rename image (${response.status})`);
+  }
+
+  return response.json() as Promise<GalleryItem>;
+}
+
+export async function fetchGalleryImage(id: string): Promise<GalleryImageBytes> {
+  const response = await fetchWithAuth(`${API_URL}/gallery/${id}/image`, {});
+  if (!response.ok) {
+    throw new Error(`Failed to load image (${response.status})`);
+  }
+  return response.json() as Promise<GalleryImageBytes>;
 }
 
 export async function deleteGalleryItem(id: string): Promise<void> {
@@ -480,31 +584,19 @@ export async function deleteGalleryItem(id: string): Promise<void> {
   }
 }
 
-// ── Wallpapers ────────────────────────────────────────────────────────────────
-
-export async function fetchWallpapers(): Promise<GalleryItem[]> {
-  const response = await fetchWithAuth(`${API_URL}/wallpapers`, {});
-
-  if (!response.ok) {
-    throw new Error(`Failed to load wallpapers (${response.status})`);
-  }
-
-  return response.json() as Promise<GalleryItem[]>;
-}
-
-export async function deleteWallpaper(id: string): Promise<void> {
-  const response = await fetchWithAuth(`${API_URL}/wallpapers/${id}`, {
-    method: 'DELETE',
-  });
-
-  if (!response.ok && response.status !== 404) {
-    throw new Error(`Failed to delete wallpaper (${response.status})`);
-  }
-}
-
 // ── Products ─────────────────────────────────────────────────────────────────
 
 export interface ProductItem {
+  id: string;
+  name: string;
+  price: number;
+  category: string | null;
+  createdAt: string;
+  updatedAt: string;
+  mimeType: string;
+}
+
+export interface ProductDetail {
   id: string;
   name: string;
   price: number;
@@ -512,6 +604,11 @@ export interface ProductItem {
   category: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProductImageBytes {
+  imageBase64: string;
+  mimeType: string;
 }
 
 export interface ProductPayload {
@@ -526,9 +623,11 @@ export interface ProductFilters {
   categories?: string[];
   minPrice?: number;
   maxPrice?: number;
+  page?: number;
+  pageSize?: number;
 }
 
-export async function fetchProducts(filters: ProductFilters = {}): Promise<ProductItem[]> {
+export async function fetchProducts(filters: ProductFilters = {}): Promise<Paged<ProductItem>> {
   const params = new URLSearchParams();
   if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());
   if (filters.categories && filters.categories.length > 0) {
@@ -546,6 +645,8 @@ export async function fetchProducts(filters: ProductFilters = {}): Promise<Produ
   if (filters.maxPrice !== undefined && !Number.isNaN(filters.maxPrice)) {
     params.set('maxPrice', String(filters.maxPrice));
   }
+  if (filters.page && filters.page > 0) params.set('page', String(filters.page));
+  if (filters.pageSize && filters.pageSize > 0) params.set('pageSize', String(filters.pageSize));
   const qs = params.toString();
   const url = qs ? `${API_URL}/products?${qs}` : `${API_URL}/products`;
   const response = await fetchWithAuth(url, {});
@@ -554,7 +655,16 @@ export async function fetchProducts(filters: ProductFilters = {}): Promise<Produ
     throw new Error(`Failed to load products (${response.status})`);
   }
 
-  return response.json() as Promise<ProductItem[]>;
+  const body = (await response.json()) as unknown;
+  return coercePaged<ProductItem>(body, filters.page, filters.pageSize);
+}
+
+export async function fetchProductImage(id: string): Promise<ProductImageBytes> {
+  const response = await fetchWithAuth(`${API_URL}/products/${id}/image`, {});
+  if (!response.ok) {
+    throw new Error(`Failed to load image (${response.status})`);
+  }
+  return response.json() as Promise<ProductImageBytes>;
 }
 
 export async function fetchProductCategories(): Promise<string[]> {
@@ -567,7 +677,7 @@ export async function fetchProductCategories(): Promise<string[]> {
   return response.json() as Promise<string[]>;
 }
 
-export async function createProduct(payload: ProductPayload): Promise<ProductItem> {
+export async function createProduct(payload: ProductPayload): Promise<ProductDetail> {
   const response = await fetchWithAuth(`${API_URL}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -579,10 +689,10 @@ export async function createProduct(payload: ProductPayload): Promise<ProductIte
     throw new Error(err || `Failed to create product (${response.status})`);
   }
 
-  return response.json() as Promise<ProductItem>;
+  return response.json() as Promise<ProductDetail>;
 }
 
-export async function updateProduct(id: string, payload: ProductPayload): Promise<ProductItem> {
+export async function updateProduct(id: string, payload: ProductPayload): Promise<ProductDetail> {
   const response = await fetchWithAuth(`${API_URL}/products/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -594,7 +704,7 @@ export async function updateProduct(id: string, payload: ProductPayload): Promis
     throw new Error(err || `Failed to update product (${response.status})`);
   }
 
-  return response.json() as Promise<ProductItem>;
+  return response.json() as Promise<ProductDetail>;
 }
 
 export async function deleteProduct(id: string): Promise<void> {

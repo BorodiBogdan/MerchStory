@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace MerchStoryAPI.Models;
 
 public class GeneratedImage
@@ -15,4 +17,7 @@ public class GeneratedImage
     public DateTime CreatedAt { get; set; }
 
     public string? GenerationType { get; set; }
+
+    [MaxLength(80)]
+    public string Name { get; set; } = string.Empty;
 }

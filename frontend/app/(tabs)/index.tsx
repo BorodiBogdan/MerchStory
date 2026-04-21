@@ -28,13 +28,17 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
+import { GalleryImage } from '@/components/ui/GalleryImage';
+import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
+import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
 import { D } from '@/constants/design';
+import type { GenerationType } from '@/constants/generationTypes';
 import { useTheme } from '@/context/theme';
 import {
-  fetchProducts,
-  fetchWallpapers,
+  fetchGallery,
+  fetchGalleryImage,
   type GalleryItem,
   generateAnnouncementImage,
   generateCatalogImage,
@@ -48,6 +52,20 @@ import {
   type ShopProfileResponse,
   type TextStyleOptions,
 } from '@/utils/api';
+import * as galleryCache from '@/utils/galleryCache';
+import * as galleryImageCache from '@/utils/galleryImageCache';
+import * as productImageCache from '@/utils/productImageCache';
+import * as productsCache from '@/utils/productsCache';
+
+async function loadProductImageBase64(id: string): Promise<string | null> {
+  try {
+    const entry = await productImageCache.load(id);
+    const comma = entry.uri.indexOf(',');
+    return comma >= 0 ? entry.uri.slice(comma + 1) : null;
+  } catch {
+    return null;
+  }
+}
 
 const isWeb = Platform.OS === 'web';
 const SIDEBAR_WIDTH = 320;
@@ -724,7 +742,6 @@ function ProductCard({
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
 }) {
-  const imageUri = product.imageBase64 ? `data:image/jpeg;base64,${product.imageBase64}` : null;
   return (
     <Pressable
       style={[styles.productCard, { width: cardWidth }, selected && styles.productCardSelected]}
@@ -733,13 +750,7 @@ function ProductCard({
       accessibilityState={{ checked: selected }}
     >
       <View style={styles.productImageBox}>
-        {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.productImage} resizeMode="cover" />
-        ) : (
-          <View style={styles.productImagePlaceholder}>
-            <Ionicons name="image-outline" size={24} color={colors.text.muted} />
-          </View>
-        )}
+        <ProductImage id={product.id} style={styles.productImage} resizeMode="cover" />
         {selected && (
           <View style={styles.selectedOverlay}>
             <Ionicons name="checkmark-circle" size={22} color={colors.accent.primary} />
@@ -967,24 +978,11 @@ function ChooseProductsSection({
             >
               {selectedProducts.slice(0, 5).map((p, i) => (
                 <View key={p.id} style={{ flex: 1, position: 'relative' }}>
-                  {p.imageBase64 ? (
-                    <Image
-                      source={{ uri: `data:image/jpeg;base64,${p.imageBase64}` }}
-                      style={{ width: '100%', height: '100%' }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        flex: 1,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: colors.bg.elevated,
-                      }}
-                    >
-                      <Ionicons name="image-outline" size={16} color={colors.text.muted} />
-                    </View>
-                  )}
+                  <ProductImage
+                    id={p.id}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                  />
                   {i === 4 && selectedProducts.length > 5 && (
                     <View
                       style={{
@@ -1159,8 +1157,9 @@ export default function StudioScreen() {
   }, [selectedPresetId, selectedColor]);
 
   // ── Catalog state ────────────────────────────────────────────────────────────
-  const [products, setProducts] = useState<ProductItem[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  const productsCacheState = productsCache.useProductsCache();
+  const products = productsCacheState.items;
+  const loadingProducts = productsCacheState.loading && !productsCacheState.initialized;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [layout, setLayout] = useState('Showcase');
   const [colorTheme, setColorTheme] = useState('Brand Colors');
@@ -1173,11 +1172,7 @@ export default function StudioScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setLoadingProducts(true);
-      fetchProducts()
-        .then(setProducts)
-        .catch(() => {})
-        .finally(() => setLoadingProducts(false));
+      void productsCache.ensureLoaded({});
 
       getShopProfile()
         .then((profile) => {
@@ -1212,13 +1207,16 @@ export default function StudioScreen() {
     setCatalogResult(null);
     setCatalogKept(false);
     try {
+      const productsWithImages = await Promise.all(
+        chosen.map(async (p) => ({
+          name: p.name,
+          price: p.price,
+          imageBase64: await loadProductImageBase64(p.id),
+        }))
+      );
       setCatalogResult(
         await generateCatalogImage({
-          products: chosen.map((p) => ({
-            name: p.name,
-            price: p.price,
-            imageBase64: p.imageBase64,
-          })),
+          products: productsWithImages,
           layout,
           colorTheme,
           format: catalogFormat,
@@ -1292,13 +1290,16 @@ export default function StudioScreen() {
     setWallpaperOnResult(null);
     setWallpaperOnKept(false);
     try {
+      const productsWithImages = await Promise.all(
+        chosen.map(async (p) => ({
+          name: p.name,
+          price: p.price,
+          imageBase64: await loadProductImageBase64(p.id),
+        }))
+      );
       setWallpaperOnResult(
         await generateCatalogOnWallpaper({
-          products: chosen.map((p) => ({
-            name: p.name,
-            price: p.price,
-            imageBase64: p.imageBase64,
-          })),
+          products: productsWithImages,
           wallpaperBase64,
           layout,
           showPrices,
@@ -1316,19 +1317,25 @@ export default function StudioScreen() {
   function openWallpaperPicker() {
     setWallpaperPickerVisible(true);
     setWallpaperPickerLoading(true);
-    fetchWallpapers()
-      .then(setWallpaperPickerItems)
+    fetchGallery({ types: ['wallpaper'], pageSize: 12 })
+      .then((res) => setWallpaperPickerItems(res.items))
       .catch(() => setWallpaperPickerItems([]))
       .finally(() => setWallpaperPickerLoading(false));
   }
 
-  function pickWallpaperFromLibrary(item: GalleryItem) {
-    setWallpaperBase64(item.imageBase64);
-    setWallpaperStage('confirmed');
-    setWallpaperOnResult(null);
-    setWallpaperOnError(null);
-    setWallpaperPickerVisible(false);
-    setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+  async function pickWallpaperFromLibrary(item: GalleryItem) {
+    try {
+      const bytes = await fetchGalleryImage(item.id);
+      galleryImageCache.prime(item.id, bytes.imageBase64, bytes.mimeType);
+      setWallpaperBase64(bytes.imageBase64);
+      setWallpaperStage('confirmed');
+      setWallpaperOnResult(null);
+      setWallpaperOnError(null);
+      setWallpaperPickerVisible(false);
+      setPlacementZone(DEFAULT_PLACEMENT_ZONE);
+    } catch (err) {
+      setWallpaperError(err instanceof Error ? err.message : 'Failed to load wallpaper.');
+    }
   }
 
   // ── Announcements state ──────────────────────────────────────────────────────
@@ -1357,6 +1364,56 @@ export default function StudioScreen() {
   const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
   const [catalogContextFields, setCatalogContextFields] = useState<string[]>([]);
   const [annoContextFields, setAnnoContextFields] = useState<string[]>([]);
+
+  // ── Keep-image modal (shared across generators) ──────────────────────────────
+  const [pendingKeep, setPendingKeep] = useState<{
+    imageBase64: string;
+    mimeType: string;
+    generationType: GenerationType;
+    defaultName: string;
+    onSaved: () => void;
+  } | null>(null);
+
+  const requestKeep = useCallback(
+    (params: {
+      imageBase64: string;
+      mimeType: string;
+      generationType: GenerationType;
+      defaultName: string;
+      onSaved: () => void;
+    }) => {
+      setPendingKeep(params);
+    },
+    []
+  );
+
+  const handleKeepConfirm = useCallback(
+    async (name: string) => {
+      if (!pendingKeep) return;
+      const saved = await saveToGallery(
+        pendingKeep.imageBase64,
+        pendingKeep.mimeType,
+        pendingKeep.generationType,
+        name
+      );
+      galleryImageCache.prime(saved.id, pendingKeep.imageBase64, pendingKeep.mimeType);
+      galleryCache.addItem(saved);
+      pendingKeep.onSaved();
+      setPendingKeep(null);
+    },
+    [pendingKeep]
+  );
+
+  const autoKeepName = useCallback(
+    (label: string) => `${label} ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+    []
+  );
+
+  const postTypeToGenType = useCallback((pt: PostType): GenerationType => {
+    if (pt === 'Job Post') return 'job-post';
+    if (pt === 'Promotion') return 'promotion';
+    return 'announcement';
+  }, []);
 
   const contextItems = useMemo(
     () => (shopProfile ? deriveContextItems(shopProfile) : []),
@@ -1396,9 +1453,13 @@ export default function StudioScreen() {
     try {
       const promotionProductImages =
         postType === 'Promotion' && promotionSelected.size > 0
-          ? products
-              .filter((p) => promotionSelected.has(p.id) && p.imageBase64)
-              .map((p) => p.imageBase64!)
+          ? (
+              await Promise.all(
+                products
+                  .filter((p) => promotionSelected.has(p.id))
+                  .map((p) => loadProductImageBase64(p.id))
+              )
+            ).filter((b64): b64 is string => !!b64)
           : undefined;
 
       const jobRequirementsList = isJobPost
@@ -1628,18 +1689,15 @@ export default function StudioScreen() {
                     emptyTitle="Your catalog will appear here"
                     emptyHint="Select products on the left, configure options, then hit Generate."
                     filename="catalog"
-                    onKeep={async () => {
+                    onKeep={() => {
                       if (!catalogResult) return;
-                      try {
-                        await saveToGallery(
-                          catalogResult.imageBase64,
-                          catalogResult.mimeType,
-                          'catalog'
-                        );
-                        setCatalogKept(true);
-                      } catch (err) {
-                        console.error('Failed to save catalog:', err);
-                      }
+                      requestKeep({
+                        imageBase64: catalogResult.imageBase64,
+                        mimeType: catalogResult.mimeType,
+                        generationType: 'catalog',
+                        defaultName: autoKeepName('Catalog'),
+                        onSaved: () => setCatalogKept(true),
+                      });
                     }}
                     isKept={catalogKept}
                     colors={colors}
@@ -1732,19 +1790,21 @@ export default function StudioScreen() {
                           styles.wallpaperConfirmBtn,
                           { backgroundColor: colors.accent.primary },
                         ]}
-                        onPress={async () => {
+                        onPress={() => {
                           setWallpaperBase64(wallpaperPreview);
                           setWallpaperStage('confirmed');
                           setWallpaperPreview(null);
                           setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                          try {
-                            const b64 = wallpaperPreview.startsWith('data:')
-                              ? wallpaperPreview.split(',')[1]
-                              : wallpaperPreview;
-                            await saveToGallery(b64, 'image/png', 'wallpaper');
-                          } catch (err) {
-                            console.error('Failed to save wallpaper:', err);
-                          }
+                          const b64 = wallpaperPreview.startsWith('data:')
+                            ? wallpaperPreview.split(',')[1]
+                            : wallpaperPreview;
+                          requestKeep({
+                            imageBase64: b64,
+                            mimeType: 'image/png',
+                            generationType: 'wallpaper',
+                            defaultName: autoKeepName('Wallpaper'),
+                            onSaved: () => {},
+                          });
                         }}
                         accessibilityRole="button"
                       >
@@ -1869,18 +1929,15 @@ export default function StudioScreen() {
                     emptyTitle="Result will appear here"
                     emptyHint="Pick a wallpaper, select products, configure options, then hit Place on Wallpaper."
                     filename="wallpaper-composite"
-                    onKeep={async () => {
+                    onKeep={() => {
                       if (!wallpaperOnResult) return;
-                      try {
-                        await saveToGallery(
-                          wallpaperOnResult.imageBase64,
-                          wallpaperOnResult.mimeType,
-                          'catalog-on-wallpaper'
-                        );
-                        setWallpaperOnKept(true);
-                      } catch (err) {
-                        console.error('Failed to save wallpaper composite:', err);
-                      }
+                      requestKeep({
+                        imageBase64: wallpaperOnResult.imageBase64,
+                        mimeType: wallpaperOnResult.mimeType,
+                        generationType: 'catalog-on-wallpaper',
+                        defaultName: autoKeepName('Catalog on Wallpaper'),
+                        onSaved: () => setWallpaperOnKept(true),
+                      });
                     }}
                     isKept={wallpaperOnKept}
                     colors={colors}
@@ -2024,18 +2081,15 @@ export default function StudioScreen() {
                 emptyTitle="Your graphic will appear here"
                 emptyHint="Fill in the content and style options, then hit Generate."
                 filename="announcement"
-                onKeep={async () => {
+                onKeep={() => {
                   if (!annoResult) return;
-                  try {
-                    await saveToGallery(
-                      annoResult.imageBase64,
-                      annoResult.mimeType,
-                      'announcement'
-                    );
-                    setAnnoKept(true);
-                  } catch (err) {
-                    console.error('Failed to save announcement:', err);
-                  }
+                  requestKeep({
+                    imageBase64: annoResult.imageBase64,
+                    mimeType: annoResult.mimeType,
+                    generationType: postTypeToGenType(postType),
+                    defaultName: autoKeepName(postType),
+                    onSaved: () => setAnnoKept(true),
+                  });
                 }}
                 isKept={annoKept}
                 colors={colors}
@@ -2367,23 +2421,21 @@ export default function StudioScreen() {
                         },
                         pressed && { opacity: 0.75 },
                       ]}
-                      onPress={async () => {
+                      onPress={() => {
                         if (!wallpaperGenResult || wallpaperGenKept) return;
                         setWallpaperBase64(wallpaperGenResult.imageBase64);
                         setWallpaperStage('confirmed');
                         setWallpaperGenKept(true);
                         setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                        try {
-                          await saveToGallery(
-                            wallpaperGenResult.imageBase64,
-                            wallpaperGenResult.mimeType,
-                            'wallpaper'
-                          );
-                        } catch (err) {
-                          console.error('Failed to save wallpaper:', err);
-                        }
                         setWallpaperGenModalVisible(false);
                         setWallpaperGenModalStage('input');
+                        requestKeep({
+                          imageBase64: wallpaperGenResult.imageBase64,
+                          mimeType: wallpaperGenResult.mimeType,
+                          generationType: 'wallpaper',
+                          defaultName: autoKeepName('Wallpaper'),
+                          onSaved: () => {},
+                        });
                       }}
                       disabled={wallpaperGenKept}
                       accessibilityRole="button"
@@ -2507,8 +2559,8 @@ export default function StudioScreen() {
                         })}
                         onPress={() => pickWallpaperFromLibrary(item)}
                       >
-                        <Image
-                          source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
+                        <GalleryImage
+                          id={item.id}
                           style={{ width: '100%', height: '100%' }}
                           resizeMode="contain"
                         />
@@ -2520,6 +2572,13 @@ export default function StudioScreen() {
             </Pressable>
           </Pressable>
         </Modal>
+
+        <KeepImageModal
+          visible={pendingKeep !== null}
+          defaultName={pendingKeep?.defaultName}
+          onCancel={() => setPendingKeep(null)}
+          onConfirm={handleKeepConfirm}
+        />
       </>
     );
   }
@@ -2695,18 +2754,15 @@ export default function StudioScreen() {
                             },
                             pressed && { opacity: 0.75 },
                           ]}
-                          onPress={async () => {
+                          onPress={() => {
                             if (catalogKept) return;
-                            try {
-                              await saveToGallery(
-                                catalogResult.imageBase64,
-                                catalogResult.mimeType,
-                                'catalog'
-                              );
-                              setCatalogKept(true);
-                            } catch (err) {
-                              console.error('Failed to save catalog:', err);
-                            }
+                            requestKeep({
+                              imageBase64: catalogResult.imageBase64,
+                              mimeType: catalogResult.mimeType,
+                              generationType: 'catalog',
+                              defaultName: autoKeepName('Catalog'),
+                              onSaved: () => setCatalogKept(true),
+                            });
                           }}
                           accessibilityRole="button"
                         >
@@ -2824,19 +2880,21 @@ export default function StudioScreen() {
                               styles.wallpaperConfirmBtn,
                               { backgroundColor: colors.accent.primary },
                             ]}
-                            onPress={async () => {
+                            onPress={() => {
                               setWallpaperBase64(wallpaperPreview);
                               setWallpaperStage('confirmed');
                               setWallpaperPreview(null);
                               setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                              try {
-                                const b64 = wallpaperPreview.startsWith('data:')
-                                  ? wallpaperPreview.split(',')[1]
-                                  : wallpaperPreview;
-                                await saveToGallery(b64, 'image/png', 'wallpaper');
-                              } catch (err) {
-                                console.error('Failed to save wallpaper:', err);
-                              }
+                              const b64 = wallpaperPreview.startsWith('data:')
+                                ? wallpaperPreview.split(',')[1]
+                                : wallpaperPreview;
+                              requestKeep({
+                                imageBase64: b64,
+                                mimeType: 'image/png',
+                                generationType: 'wallpaper',
+                                defaultName: autoKeepName('Wallpaper'),
+                                onSaved: () => {},
+                              });
                             }}
                             accessibilityRole="button"
                           >
@@ -3020,16 +3078,13 @@ export default function StudioScreen() {
                           ]}
                           onPress={async () => {
                             if (wallpaperOnKept) return;
-                            try {
-                              await saveToGallery(
-                                wallpaperOnResult.imageBase64,
-                                wallpaperOnResult.mimeType,
-                                'catalog-on-wallpaper'
-                              );
-                              setWallpaperOnKept(true);
-                            } catch (err) {
-                              console.error('Failed to save wallpaper composite:', err);
-                            }
+                            requestKeep({
+                              imageBase64: wallpaperOnResult.imageBase64,
+                              mimeType: wallpaperOnResult.mimeType,
+                              generationType: 'catalog-on-wallpaper',
+                              defaultName: autoKeepName('Catalog on Wallpaper'),
+                              onSaved: () => setWallpaperOnKept(true),
+                            });
                           }}
                           accessibilityRole="button"
                         >
@@ -3233,16 +3288,13 @@ export default function StudioScreen() {
                       ]}
                       onPress={async () => {
                         if (annoKept) return;
-                        try {
-                          await saveToGallery(
-                            annoResult.imageBase64,
-                            annoResult.mimeType,
-                            'announcement'
-                          );
-                          setAnnoKept(true);
-                        } catch (err) {
-                          console.error('Failed to save announcement:', err);
-                        }
+                        requestKeep({
+                          imageBase64: annoResult.imageBase64,
+                          mimeType: annoResult.mimeType,
+                          generationType: postTypeToGenType(postType),
+                          defaultName: autoKeepName(postType),
+                          onSaved: () => setAnnoKept(true),
+                        });
                       }}
                       accessibilityRole="button"
                     >
@@ -3527,23 +3579,21 @@ export default function StudioScreen() {
                       },
                       pressed && { opacity: 0.75 },
                     ]}
-                    onPress={async () => {
+                    onPress={() => {
                       if (!wallpaperGenResult || wallpaperGenKept) return;
                       setWallpaperBase64(wallpaperGenResult.imageBase64);
                       setWallpaperStage('confirmed');
                       setWallpaperGenKept(true);
                       setPlacementZone(DEFAULT_PLACEMENT_ZONE);
-                      try {
-                        await saveToGallery(
-                          wallpaperGenResult.imageBase64,
-                          wallpaperGenResult.mimeType,
-                          'wallpaper'
-                        );
-                      } catch (err) {
-                        console.error('Failed to save wallpaper:', err);
-                      }
                       setWallpaperGenModalVisible(false);
                       setWallpaperGenModalStage('input');
+                      requestKeep({
+                        imageBase64: wallpaperGenResult.imageBase64,
+                        mimeType: wallpaperGenResult.mimeType,
+                        generationType: 'wallpaper',
+                        defaultName: autoKeepName('Wallpaper'),
+                        onSaved: () => {},
+                      });
                     }}
                     disabled={wallpaperGenKept}
                     accessibilityRole="button"
@@ -3658,8 +3708,8 @@ export default function StudioScreen() {
                     })}
                     onPress={() => pickWallpaperFromLibrary(item)}
                   >
-                    <Image
-                      source={{ uri: `data:${item.mimeType};base64,${item.imageBase64}` }}
+                    <GalleryImage
+                      id={item.id}
                       style={{ width: '100%', height: '100%' }}
                       resizeMode="contain"
                     />
@@ -3670,6 +3720,13 @@ export default function StudioScreen() {
           )}
         </View>
       </Modal>
+
+      <KeepImageModal
+        visible={pendingKeep !== null}
+        defaultName={pendingKeep?.defaultName}
+        onCancel={() => setPendingKeep(null)}
+        onConfirm={handleKeepConfirm}
+      />
     </KeyboardAvoidingView>
   );
 }

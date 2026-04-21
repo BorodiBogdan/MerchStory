@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using MerchStoryAPI.Common;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using Microsoft.EntityFrameworkCore;
@@ -23,7 +24,31 @@ public static class GalleryRoutes
                 return Results.Unauthorized();
             }
 
-            db.GeneratedImages.Add(new GeneratedImage
+            string name = (req.Name ?? string.Empty).Trim();
+            if (name.Length == 0)
+            {
+                return Results.BadRequest(new { detail = "Name is required." });
+            }
+
+            if (name.Length > 80)
+            {
+                return Results.BadRequest(new { detail = "Name must be 80 characters or fewer." });
+            }
+
+            if (string.IsNullOrWhiteSpace(req.GenerationType) ||
+                !GenerationTypes.All.Contains(req.GenerationType))
+            {
+                return Results.BadRequest(new { detail = "Unknown generation type." });
+            }
+
+            bool nameTaken = await db.GeneratedImages
+                .AnyAsync(g => g.UserId == userId && g.Name.ToLower() == name.ToLower());
+            if (nameTaken)
+            {
+                return Results.Conflict(new { detail = "You already have an image with that name." });
+            }
+
+            GeneratedImage created = new()
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
@@ -31,13 +56,92 @@ public static class GalleryRoutes
                 MimeType = req.MimeType,
                 CreatedAt = DateTime.UtcNow,
                 GenerationType = req.GenerationType,
-            });
+                Name = name,
+            };
+            db.GeneratedImages.Add(created);
             await db.SaveChangesAsync();
 
-            return Results.Created();
+            return Results.Created(
+                $"/gallery/{created.Id}",
+                new GalleryItemMetadata(
+                    created.Id,
+                    created.MimeType,
+                    created.CreatedAt,
+                    created.Name,
+                    created.GenerationType));
         });
 
         group.MapGet("/", async (
+            ClaimsPrincipal principal,
+            AppDbContext db,
+            string? type,
+            DateTime? from,
+            DateTime? to,
+            string? search,
+            int? page,
+            int? pageSize) =>
+        {
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            IQueryable<GeneratedImage> q = db.GeneratedImages.Where(g => g.UserId == userId);
+
+            if (!string.IsNullOrWhiteSpace(type))
+            {
+                string[] typeList = type
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(t => GenerationTypes.All.Contains(t))
+                    .ToArray();
+                if (typeList.Length > 0)
+                {
+                    q = q.Where(g => g.GenerationType != null && typeList.Contains(g.GenerationType));
+                }
+            }
+
+            if (from is not null)
+            {
+                DateTime fromUtc = DateTime.SpecifyKind(from.Value.Date, DateTimeKind.Utc);
+                q = q.Where(g => g.CreatedAt >= fromUtc);
+            }
+
+            if (to is not null)
+            {
+                DateTime toUtc = DateTime.SpecifyKind(to.Value.Date.AddDays(1), DateTimeKind.Utc);
+                q = q.Where(g => g.CreatedAt < toUtc);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                string pattern = $"%{search.Trim()}%";
+                q = q.Where(g => EF.Functions.ILike(g.Name, pattern));
+            }
+
+            int resolvedPage = Math.Max(1, page ?? 1);
+            int resolvedPageSize = Math.Clamp(pageSize ?? 24, 1, 100);
+
+            int total = await q.CountAsync();
+
+            // List returns metadata only — image bytes are served by /gallery/{id}/image
+            List<GalleryItemMetadata> items = await q
+                .OrderByDescending(g => g.CreatedAt)
+                .Skip((resolvedPage - 1) * resolvedPageSize)
+                .Take(resolvedPageSize)
+                .Select(g => new GalleryItemMetadata(
+                    g.Id,
+                    g.MimeType,
+                    g.CreatedAt,
+                    g.Name,
+                    g.GenerationType))
+                .ToListAsync();
+
+            return Results.Ok(new PagedResponse<GalleryItemMetadata>(items, total, resolvedPage, resolvedPageSize));
+        });
+
+        group.MapGet("/{id:guid}/image", async (
+            Guid id,
             ClaimsPrincipal principal,
             AppDbContext db) =>
         {
@@ -47,13 +151,68 @@ public static class GalleryRoutes
                 return Results.Unauthorized();
             }
 
-            List<GalleryItemResponse> items = await db.GeneratedImages
-                .Where(g => g.UserId == userId && g.GenerationType != "wallpaper")
-                .OrderByDescending(g => g.CreatedAt)
-                .Select(g => new GalleryItemResponse(g.Id, g.ImageBase64, g.MimeType, g.CreatedAt))
-                .ToListAsync();
+            var image = await db.GeneratedImages
+                .Where(g => g.Id == id && g.UserId == userId)
+                .Select(g => new { g.ImageBase64, g.MimeType })
+                .SingleOrDefaultAsync();
 
-            return Results.Ok(items);
+            if (image is null)
+            {
+                return Results.NotFound();
+            }
+
+            return Results.Ok(new GalleryImageBytes(image.ImageBase64, image.MimeType));
+        });
+
+        group.MapPatch("/{id:guid}", async (
+            Guid id,
+            UpdateGalleryItemRequest req,
+            ClaimsPrincipal principal,
+            AppDbContext db) =>
+        {
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            string name = (req.Name ?? string.Empty).Trim();
+            if (name.Length == 0)
+            {
+                return Results.BadRequest(new { detail = "Name is required." });
+            }
+
+            if (name.Length > 80)
+            {
+                return Results.BadRequest(new { detail = "Name must be 80 characters or fewer." });
+            }
+
+            GeneratedImage? image = await db.GeneratedImages
+                .SingleOrDefaultAsync(g => g.Id == id && g.UserId == userId);
+            if (image is null)
+            {
+                return Results.NotFound();
+            }
+
+            if (!string.Equals(image.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                bool nameTaken = await db.GeneratedImages
+                    .AnyAsync(g => g.UserId == userId && g.Id != id && g.Name.ToLower() == name.ToLower());
+                if (nameTaken)
+                {
+                    return Results.Conflict(new { detail = "You already have an image with that name." });
+                }
+            }
+
+            image.Name = name;
+            await db.SaveChangesAsync();
+
+            return Results.Ok(new GalleryItemMetadata(
+                image.Id,
+                image.MimeType,
+                image.CreatedAt,
+                image.Name,
+                image.GenerationType));
         });
 
         group.MapDelete("/{id:guid}", async (
@@ -80,53 +239,6 @@ public static class GalleryRoutes
 
             return Results.NoContent();
         });
-
-        // ── Wallpapers ────────────────────────────────────────────────────────
-        RouteGroupBuilder wallpapers = app.MapGroup("/wallpapers").RequireAuthorization();
-
-        wallpapers.MapGet("/", async (
-            ClaimsPrincipal principal,
-            AppDbContext db) =>
-        {
-            string? userId = GetUserId(principal);
-            if (userId is null)
-            {
-                return Results.Unauthorized();
-            }
-
-            List<GalleryItemResponse> items = await db.GeneratedImages
-                .Where(g => g.UserId == userId && g.GenerationType == "wallpaper")
-                .OrderByDescending(g => g.CreatedAt)
-                .Select(g => new GalleryItemResponse(g.Id, g.ImageBase64, g.MimeType, g.CreatedAt))
-                .ToListAsync();
-
-            return Results.Ok(items);
-        });
-
-        wallpapers.MapDelete("/{id:guid}", async (
-            Guid id,
-            ClaimsPrincipal principal,
-            AppDbContext db) =>
-        {
-            string? userId = GetUserId(principal);
-            if (userId is null)
-            {
-                return Results.Unauthorized();
-            }
-
-            GeneratedImage? image = await db.GeneratedImages
-                .SingleOrDefaultAsync(g => g.Id == id && g.UserId == userId && g.GenerationType == "wallpaper");
-
-            if (image is null)
-            {
-                return Results.NotFound();
-            }
-
-            db.GeneratedImages.Remove(image);
-            await db.SaveChangesAsync();
-
-            return Results.NoContent();
-        });
     }
 
     private static string? GetUserId(ClaimsPrincipal principal) =>
@@ -134,6 +246,19 @@ public static class GalleryRoutes
         ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
 }
 
-internal sealed record GalleryItemResponse(Guid Id, string ImageBase64, string MimeType, DateTime CreatedAt);
+internal sealed record GalleryItemMetadata(
+    Guid Id,
+    string MimeType,
+    DateTime CreatedAt,
+    string Name,
+    string? GenerationType);
 
-internal sealed record SaveImageRequest(string ImageBase64, string MimeType, string GenerationType);
+internal sealed record GalleryImageBytes(string ImageBase64, string MimeType);
+
+internal sealed record SaveImageRequest(
+    string ImageBase64,
+    string MimeType,
+    string GenerationType,
+    string Name);
+
+internal sealed record UpdateGalleryItemRequest(string Name);

@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   DimensionValue,
   FlatList,
-  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -15,9 +14,11 @@ import {
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
-import { fetchProductCategories, fetchProducts, ProductFilters, ProductItem } from '@/utils/api';
+import { fetchProductCategories, ProductFilters, ProductItem } from '@/utils/api';
+import * as productsCache from '@/utils/productsCache';
 
 import { ProductFilterBar, ProductFilterState } from './ProductFilterBar';
+import { ProductImage } from './ProductImage';
 
 interface ProductPickerModalProps {
   visible: boolean;
@@ -37,6 +38,21 @@ const EMPTY_FILTERS: ProductFilterState = {
   maxPrice: '',
 };
 
+function toApiFilters(f: ProductFilterState): ProductFilters {
+  const apiFilters: ProductFilters = {};
+  if (f.search) apiFilters.search = f.search;
+  if (f.categories.length > 0) apiFilters.categories = f.categories;
+  if (f.minPrice) {
+    const n = Number(f.minPrice);
+    if (!Number.isNaN(n)) apiFilters.minPrice = n;
+  }
+  if (f.maxPrice) {
+    const n = Number(f.maxPrice);
+    if (!Number.isNaN(n)) apiFilters.maxPrice = n;
+  }
+  return apiFilters;
+}
+
 export function ProductPickerModal({
   visible,
   onClose,
@@ -51,10 +67,11 @@ export function ProductPickerModal({
   const isDesktop = screenWidth >= DESKTOP_BREAKPOINT;
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
+  const cache = productsCache.useProductsCache();
+  const { items: products, loading, loadingMore, total } = cache;
+
   const [filters, setFilters] = useState<ProductFilterState>(EMPTY_FILTERS);
-  const [products, setProducts] = useState<ProductItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -65,43 +82,19 @@ export function ProductPickerModal({
     }
   }, []);
 
-  const loadProducts = useCallback(
-    async (f: ProductFilterState) => {
-      const apiFilters: ProductFilters = {};
-      if (f.search) apiFilters.search = f.search;
-      if (f.categories.length > 0) apiFilters.categories = f.categories;
-      if (f.minPrice) {
-        const n = Number(f.minPrice);
-        if (!Number.isNaN(n)) apiFilters.minPrice = n;
-      }
-      if (f.maxPrice) {
-        const n = Number(f.maxPrice);
-        if (!Number.isNaN(n)) apiFilters.maxPrice = n;
-      }
-      setLoading(true);
-      try {
-        const items = await fetchProducts(apiFilters);
-        setProducts(items);
-        onProductsLoaded?.(items);
-      } catch {
-        setProducts([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [onProductsLoaded]
-  );
-
   useEffect(() => {
     if (!visible) return;
     loadCategories();
-    loadProducts(filters);
-  }, [visible, filters, loadCategories, loadProducts]);
+    void productsCache.setFiltersAndReload(toApiFilters(filters));
+  }, [visible, filters, loadCategories]);
 
-  // Reset filters when closing to avoid stale state on next open
   useEffect(() => {
     if (!visible) setFilters(EMPTY_FILTERS);
   }, [visible]);
+
+  useEffect(() => {
+    if (visible && !loading) onProductsLoaded?.(products);
+  }, [visible, loading, products, onProductsLoaded]);
 
   const selectedCount = selected.size;
 
@@ -135,7 +128,7 @@ export function ProductPickerModal({
           onChange={setFilters}
           categories={categories}
           layout={isDesktop ? 'auto' : 'compact'}
-          resultCount={loading ? undefined : products.length}
+          resultCount={loading ? undefined : total}
         />
       </View>
 
@@ -158,6 +151,15 @@ export function ProductPickerModal({
           key={modalCols}
           contentContainerStyle={{ padding: modalPad, gap: modalGap }}
           columnWrapperStyle={{ gap: modalGap }}
+          onEndReached={() => void productsCache.loadMore()}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ paddingVertical: D.spacing.md, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.accent.primary} />
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => {
             const isSel = selected.has(item.id);
             return (
@@ -176,17 +178,11 @@ export function ProductPickerModal({
                 accessibilityState={{ checked: isSel }}
               >
                 <View style={{ width: '100%', aspectRatio: 1, position: 'relative' }}>
-                  {item.imageBase64 ? (
-                    <Image
-                      source={{ uri: `data:image/jpeg;base64,${item.imageBase64}` }}
-                      style={{ width: '100%', height: '100%' }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.noImage}>
-                      <Ionicons name="image-outline" size={24} color={colors.text.muted} />
-                    </View>
-                  )}
+                  <ProductImage
+                    id={item.id}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                  />
                   {isSel && (
                     <View style={styles.checkBadge}>
                       <Ionicons name="checkmark-circle" size={20} color={colors.accent.primary} />
@@ -346,12 +342,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     emptyText: {
       color: colors.text.muted,
       fontSize: D.fontSize.sm,
-    },
-    noImage: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.bg.surface,
     },
     checkBadge: {
       position: 'absolute',

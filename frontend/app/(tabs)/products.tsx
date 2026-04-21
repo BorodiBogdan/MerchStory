@@ -21,7 +21,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Pagination } from '@/components/ui/Pagination';
 import { ProductFilterBar, ProductFilterState } from '@/components/ui/ProductFilterBar';
+import { ProductImage } from '@/components/ui/ProductImage';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
@@ -29,7 +31,7 @@ import {
   createProduct,
   deleteProduct,
   fetchProductCategories,
-  fetchProducts,
+  type ProductDetail,
   type ProductFilters,
   type ProductItem,
   type ReferenceImage,
@@ -37,6 +39,20 @@ import {
   searchReferenceImages,
   updateProduct,
 } from '@/utils/api';
+import * as productImageCache from '@/utils/productImageCache';
+import * as productsCache from '@/utils/productsCache';
+
+function toMetadata(detail: ProductDetail): ProductItem {
+  return {
+    id: detail.id,
+    name: detail.name,
+    price: detail.price,
+    category: detail.category,
+    createdAt: detail.createdAt,
+    updatedAt: detail.updatedAt,
+    mimeType: 'image/png',
+  };
+}
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1200;
@@ -53,9 +69,16 @@ export default function ProductsScreen() {
 
   const insets = useSafeAreaInsets();
 
-  const [products, setProducts] = useState<ProductItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const cache = productsCache.useProductsCache();
+  const {
+    items: products,
+    total: totalProducts,
+    page: currentPage,
+    pageSize: currentPageSize,
+    loading: isLoading,
+    loadingMore,
+    error,
+  } = cache;
 
   const [filters, setFilters] = useState<ProductFilterState>({
     search: '',
@@ -108,7 +131,7 @@ export default function ProductsScreen() {
   const numColumns = isWeb ? (gridInnerWidth < 420 ? 2 : gridInnerWidth < 720 ? 3 : 4) : 2;
   const cardWidth = (gridInnerWidth - GAP * (numColumns - 1)) / numColumns;
 
-  const loadProducts = useCallback((f: ProductFilterState) => {
+  const toApiFilters = useCallback((f: ProductFilterState): ProductFilters => {
     const apiFilters: ProductFilters = {};
     if (f.search) apiFilters.search = f.search;
     if (f.categories.length > 0) apiFilters.categories = f.categories;
@@ -120,14 +143,7 @@ export default function ProductsScreen() {
       const n = Number(f.maxPrice);
       if (!Number.isNaN(n)) apiFilters.maxPrice = n;
     }
-    setIsLoading(true);
-    setError(null);
-    fetchProducts(apiFilters)
-      .then(setProducts)
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : 'Failed to load products.')
-      )
-      .finally(() => setIsLoading(false));
+    return apiFilters;
   }, []);
 
   const loadCategories = useCallback(() => {
@@ -138,10 +154,15 @@ export default function ProductsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadProducts(filters);
+      void productsCache.ensureLoaded(toApiFilters(filters));
       loadCategories();
-    }, [filters, loadProducts, loadCategories])
+    }, [filters, loadCategories, toApiFilters])
   );
+
+  function handleFiltersChange(next: ProductFilterState) {
+    setFilters(next);
+    void productsCache.setFiltersAndReload(toApiFilters(next));
+  }
 
   function openAddModal() {
     setEditingProduct(null);
@@ -164,11 +185,20 @@ export default function ProductsScreen() {
     setDraftCategory(product.category ?? '');
     setCategoryDropdownOpen(false);
     setAddingNewCategory(false);
-    setDraftImageUri(product.imageBase64 ? `data:image/png;base64,${product.imageBase64}` : null);
-    setDraftImageBase64(product.imageBase64);
+    setDraftImageUri(null);
+    setDraftImageBase64(null);
     setNameError('');
     setPriceError('');
     setModalVisible(true);
+
+    productImageCache
+      .load(product.id)
+      .then((entry) => {
+        setDraftImageUri(entry.uri);
+        const comma = entry.uri.indexOf(',');
+        setDraftImageBase64(comma >= 0 ? entry.uri.slice(comma + 1) : null);
+      })
+      .catch(() => {});
   }
 
   function closeModal() {
@@ -317,10 +347,18 @@ export default function ProductsScreen() {
       };
       if (editingProduct) {
         const updated = await updateProduct(editingProduct.id, payload);
-        setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        if (updated.imageBase64) {
+          productImageCache.prime(updated.id, updated.imageBase64, 'image/png');
+        } else {
+          productImageCache.evict(updated.id);
+        }
+        productsCache.upsertItem(toMetadata(updated));
       } else {
         const created = await createProduct(payload);
-        setProducts((prev) => [created, ...prev]);
+        if (created.imageBase64) {
+          productImageCache.prime(created.id, created.imageBase64, 'image/png');
+        }
+        productsCache.addItem(toMetadata(created));
       }
       loadCategories();
       closeModal();
@@ -332,11 +370,12 @@ export default function ProductsScreen() {
   }
 
   async function handleDelete(id: string) {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+    productsCache.removeItem(id);
+    productImageCache.evict(id);
     try {
       await deleteProduct(id);
     } catch {
-      loadProducts(filters);
+      void productsCache.refresh();
     }
   }
 
@@ -352,17 +391,7 @@ export default function ProductsScreen() {
       accessibilityLabel={`Edit ${item.name}`}
     >
       <View style={[styles.productImageArea, { height: cardWidth }]}>
-        {item.imageBase64 ? (
-          <Image
-            source={{ uri: `data:image/png;base64,${item.imageBase64}` }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.productImagePlaceholder}>
-            <Ionicons name="cube-outline" size={36} color={colors.text.muted} />
-          </View>
-        )}
+        <ProductImage id={item.id} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <Pressable
           style={({ pressed }) => [styles.deleteButton, pressed && { opacity: 0.7 }]}
           onPress={(e) => {
@@ -412,7 +441,7 @@ export default function ProductsScreen() {
           <Text style={styles.errorText}>{error}</Text>
           <Pressable
             style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
-            onPress={() => loadProducts(filters)}
+            onPress={() => void productsCache.refresh()}
           >
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
@@ -438,7 +467,9 @@ export default function ProductsScreen() {
             </Text>
             <Pressable
               style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
-              onPress={() => setFilters({ search: '', categories: [], minPrice: '', maxPrice: '' })}
+              onPress={() =>
+                handleFiltersChange({ search: '', categories: [], minPrice: '', maxPrice: '' })
+              }
             >
               <Text style={styles.retryText}>Clear filters</Text>
             </Pressable>
@@ -465,6 +496,20 @@ export default function ProductsScreen() {
         </View>
       );
     }
+    const footer = isWeb ? (
+      <Pagination
+        page={currentPage}
+        pageSize={currentPageSize}
+        total={totalProducts}
+        onPageChange={(p) => void productsCache.goToPage(p)}
+        disabled={isLoading}
+      />
+    ) : loadingMore ? (
+      <View style={{ paddingVertical: D.spacing.md, alignItems: 'center' }}>
+        <ActivityIndicator size="small" color={colors.accent.primary} />
+      </View>
+    ) : null;
+
     return (
       <FlatList
         data={products}
@@ -475,6 +520,9 @@ export default function ProductsScreen() {
         contentContainerStyle={[styles.grid, useSidebar && { paddingHorizontal: 0 }]}
         columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
         showsVerticalScrollIndicator={false}
+        onEndReached={!isWeb ? () => void productsCache.loadMore() : undefined}
+        onEndReachedThreshold={0.4}
+        ListFooterComponent={footer}
       />
     );
   };
@@ -486,7 +534,7 @@ export default function ProductsScreen() {
           <View>
             <Text style={styles.pageTitle}>My Products</Text>
             <Text style={styles.pageSubtitle}>
-              {products.length} {products.length === 1 ? 'item' : 'items'} in catalog
+              {totalProducts} {totalProducts === 1 ? 'item' : 'items'} in catalog
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: D.spacing.xs }}>
@@ -514,7 +562,7 @@ export default function ProductsScreen() {
 
         {(() => {
           const showFilter =
-            products.length > 0 ||
+            totalProducts > 0 ||
             filters.search ||
             filters.categories.length > 0 ||
             filters.minPrice ||
@@ -527,10 +575,10 @@ export default function ProductsScreen() {
                 <View style={styles.sidebar}>
                   <ProductFilterBar
                     value={filters}
-                    onChange={setFilters}
+                    onChange={handleFiltersChange}
                     categories={categories}
                     layout="vertical"
-                    resultCount={isLoading ? undefined : products.length}
+                    resultCount={isLoading ? undefined : totalProducts}
                   />
                 </View>
                 <View style={styles.sidebarContent}>{listContent()}</View>
@@ -542,9 +590,9 @@ export default function ProductsScreen() {
               <View style={styles.filterBarWrap}>
                 <ProductFilterBar
                   value={filters}
-                  onChange={setFilters}
+                  onChange={handleFiltersChange}
                   categories={categories}
-                  resultCount={isLoading ? undefined : products.length}
+                  resultCount={isLoading ? undefined : totalProducts}
                 />
               </View>
               {listContent()}
