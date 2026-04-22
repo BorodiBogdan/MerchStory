@@ -468,7 +468,7 @@ function TextStylePresetPicker({
                 width: 130,
                 borderRadius: 12,
                 overflow: 'hidden',
-                borderWidth: selected ? 2.5 : 1.5,
+                borderWidth: 2.5,
                 borderColor: selected ? colors.accent.primary : colors.border.default,
               }}
             >
@@ -564,38 +564,50 @@ function TextStylePresetPicker({
                       Product Name
                     </Text>
                     <View
-                      style={
-                        preset.priceBadge === 'Pill'
-                          ? {
-                              // Backend draws the pill as a filled shape with no stroke;
-                              // tinted priceColor fill keeps it visible on previewBg
-                              // (which sits in the opposite luminance bucket).
-                              backgroundColor: priceColor + '33',
-                              paddingHorizontal: 16,
-                              paddingVertical: 6,
-                              borderRadius: 999,
-                            }
-                          : undefined
-                      }
+                      style={{
+                        height: 40,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
                     >
-                      <Text
-                        style={{
-                          color: priceColor,
-                          fontSize: 24,
-                          fontFamily: preset.priceFont,
-                          letterSpacing: -0.5,
-                          ...(shadowStyle ?? {}),
-                          ...(hasOutline
+                      <View
+                        style={
+                          preset.priceBadge === 'Pill'
                             ? {
-                                textShadowColor: outlineGlow,
-                                textShadowOffset: { width: 0, height: 0 },
-                                textShadowRadius: 3,
+                                // Backend draws the pill as a filled shape with no stroke;
+                                // tinted priceColor fill keeps it visible on previewBg
+                                // (which sits in the opposite luminance bucket).
+                                backgroundColor: priceColor + '33',
+                                paddingHorizontal: 16,
+                                paddingVertical: 6,
+                                borderRadius: 999,
                               }
-                            : {}),
-                        }}
+                            : undefined
+                        }
                       >
-                        $19.99
-                      </Text>
+                        <Text
+                          style={
+                            {
+                              color: priceColor,
+                              fontSize: 24,
+                              lineHeight: 26,
+                              includeFontPadding: false,
+                              fontFamily: preset.priceFont,
+                              letterSpacing: -0.5,
+                              ...(shadowStyle ?? {}),
+                              ...(hasOutline
+                                ? {
+                                    textShadowColor: outlineGlow,
+                                    textShadowOffset: { width: 0, height: 0 },
+                                    textShadowRadius: 3,
+                                  }
+                                : {}),
+                            } as any
+                          }
+                        >
+                          $19.99
+                        </Text>
+                      </View>
                     </View>
                   </>
                 )}
@@ -759,6 +771,8 @@ function BrandContextSection({
 }) {
   const { colors } = useTheme();
   const t = useT();
+  const { width: screenWidth } = useWindowDimensions();
+  const isDesktop = isWeb && screenWidth >= DESKTOP_BREAKPOINT;
   if (items.length === 0) return null;
   return (
     <>
@@ -772,7 +786,13 @@ function BrandContextSection({
       >
         {t('studio.brandContextHint')}
       </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: D.spacing.xs }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          gap: isDesktop ? D.spacing.xs : D.spacing.sm,
+        }}
+      >
         {items.map((item) => {
           const active = selected.includes(item.key);
           return (
@@ -784,9 +804,9 @@ function BrandContextSection({
               style={({ pressed }) => ({
                 flexDirection: 'row' as const,
                 alignItems: 'center' as const,
-                gap: 4,
-                paddingVertical: 5,
-                paddingHorizontal: D.spacing.sm,
+                gap: isDesktop ? 4 : 6,
+                paddingVertical: isDesktop ? 5 : 9,
+                paddingHorizontal: isDesktop ? D.spacing.sm : D.spacing.md,
                 borderRadius: D.radius.pill,
                 borderWidth: 1,
                 borderColor: active ? colors.accent.primary : colors.border.default,
@@ -799,12 +819,12 @@ function BrandContextSection({
             >
               <Ionicons
                 name={active ? 'checkmark-circle' : 'ellipse-outline'}
-                size={13}
+                size={isDesktop ? 13 : 16}
                 color={active ? colors.accent.primary : colors.text.muted}
               />
               <Text
                 style={{
-                  fontSize: D.fontSize.xs,
+                  fontSize: isDesktop ? D.fontSize.xs : D.fontSize.sm,
                   color: active ? colors.accent.primary : colors.text.secondary,
                   fontWeight: active ? D.fontWeight.medium : D.fontWeight.regular,
                 }}
@@ -950,11 +970,11 @@ function GenerateButton({
           {
             borderRadius: D.radius.pill,
             paddingVertical: 14,
-            paddingHorizontal: D.spacing.lg,
+            paddingHorizontal: D.spacing.md,
             flexDirection: 'row' as const,
             alignItems: 'center' as const,
             justifyContent: 'center' as const,
-            gap: D.spacing.sm,
+            gap: 6,
             backgroundColor: inactive ? colors.bg.elevated : colors.accent.primary,
             borderWidth: inactive ? 1 : 0,
             borderColor: colors.border.default,
@@ -981,11 +1001,15 @@ function GenerateButton({
         <>
           <Ionicons name="sparkles" size={16} color={inactive ? colors.text.muted : '#fff'} />
           <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
             style={{
               color: inactive ? colors.text.muted : '#fff',
               fontSize: D.fontSize.base,
               fontWeight: D.fontWeight.bold,
               letterSpacing: 0.3,
+              flexShrink: 1,
+              minWidth: 0,
             }}
           >
             {label}
@@ -2204,7 +2228,9 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="image-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>{t('studio.import')}</Text>
+                    <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                      {t('studio.import')}
+                    </Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [
@@ -2215,7 +2241,9 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="sparkles-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>{t('studio.generate')}</Text>
+                    <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                      {t('studio.generate')}
+                    </Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [
@@ -2226,7 +2254,9 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="albums-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>{t('studio.myWallpapers')}</Text>
+                    <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                      {t('studio.myWallpapers')}
+                    </Text>
                   </Pressable>
                 </View>
 
@@ -3410,7 +3440,9 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="image-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>{t('studio.import')}</Text>
+                        <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                          {t('studio.import')}
+                        </Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
@@ -3421,7 +3453,9 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="sparkles-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>{t('studio.generate')}</Text>
+                        <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                          {t('studio.generate')}
+                        </Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
@@ -3432,7 +3466,9 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="albums-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>{t('studio.myWallpapers')}</Text>
+                        <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                          {t('studio.myWallpapers')}
+                        </Text>
                       </Pressable>
                     </View>
 
