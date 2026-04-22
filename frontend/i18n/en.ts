@@ -551,6 +551,7 @@ const en = {
   'studio.formatPortrait': 'Portrait 4:5',
   'studio.formatStory': 'Story 9:16',
   'studio.showPrices': 'Show prices',
+  'studio.showProductNames': 'Show product names',
   'studio.fieldBrandName': 'Brand name',
   'studio.fieldSlogan': 'Slogan',
   'studio.fieldLogo': 'Logo',

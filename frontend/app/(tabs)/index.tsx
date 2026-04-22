@@ -80,6 +80,8 @@ type PostType = 'Announcement' | 'Job Post' | 'Promotion';
 type ContextItem = { key: string; label: string };
 
 // ─── Text style presets (style only — color is chosen separately) ──────────────
+// Preview font files must match the backend (CatalogCompositor.LoadEmbeddedFamily)
+// so the sidebar preview renders with the same typeface as the generated image.
 type TextPreset = {
   id: string;
   label: string;
@@ -87,6 +89,8 @@ type TextPreset = {
   fontFamily: string;
   textEffect: string;
   priceBadge: string;
+  nameFont: string;
+  priceFont: string;
 };
 
 const TEXT_PRESETS: TextPreset[] = [
@@ -97,6 +101,8 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Modern',
     textEffect: 'Shadow',
     priceBadge: 'None',
+    nameFont: 'Inter-Regular',
+    priceFont: 'Inter-Bold',
   },
   {
     id: 'bold-shadow',
@@ -105,6 +111,8 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Bold',
     textEffect: 'Shadow',
     priceBadge: 'None',
+    nameFont: 'Montserrat-Bold',
+    priceFont: 'Montserrat-Bold',
   },
   {
     id: 'elegant-clean',
@@ -113,6 +121,8 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Elegant',
     textEffect: 'None',
     priceBadge: 'None',
+    nameFont: 'PlayfairDisplay-Regular',
+    priceFont: 'PlayfairDisplay-Regular',
   },
   {
     id: 'bold-badge',
@@ -121,6 +131,8 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Bold',
     textEffect: 'Shadow',
     priceBadge: 'Pill',
+    nameFont: 'Montserrat-Bold',
+    priceFont: 'Montserrat-Bold',
   },
   {
     id: 'outline',
@@ -129,6 +141,8 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Modern',
     textEffect: 'Outline',
     priceBadge: 'None',
+    nameFont: 'Inter-Regular',
+    priceFont: 'Inter-Bold',
   },
   {
     id: 'friendly-badge',
@@ -137,6 +151,8 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Friendly',
     textEffect: 'Shadow',
     priceBadge: 'Pill',
+    nameFont: 'Lato-Regular',
+    priceFont: 'Lato-Regular',
   },
 ];
 
@@ -204,6 +220,19 @@ function TextStylePresetPicker({
         {TEXT_PRESETS.map((preset) => {
           const selected = preset.id === selectedId;
           const hasShadow = preset.textEffect === 'Shadow';
+          const hasOutline = preset.textEffect === 'Outline';
+          // Single-color glow that reads equally well against light and dark previews
+          // and never matches the selectedColor (so it stays visible for every swatch).
+          // Using textShadowRadius instead of a 4-direction stack avoids the jagged
+          // overdraw artifacts that came from stacking five absolute-positioned Texts.
+          const outlineGlow = 'rgba(120, 120, 120, 0.95)';
+          const shadowStyle = hasShadow
+            ? {
+                textShadowColor: 'rgba(0,0,0,0.4)',
+                textShadowOffset: { width: 2, height: 2 },
+                textShadowRadius: 0,
+              }
+            : undefined;
           return (
             <Pressable
               key={preset.id}
@@ -233,14 +262,15 @@ function TextStylePresetPicker({
                   style={{
                     color: selectedColor,
                     fontSize: 10,
-                    fontWeight: '500',
+                    fontFamily: preset.nameFont,
                     marginBottom: 8,
-                    opacity: 0.75,
-                    ...(hasShadow
+                    opacity: 0.85,
+                    ...(shadowStyle ?? {}),
+                    ...(hasOutline
                       ? {
-                          textShadowColor: 'rgba(0,0,0,0.8)',
-                          textShadowOffset: { width: 1, height: 1 },
-                          textShadowRadius: 2,
+                          textShadowColor: outlineGlow,
+                          textShadowOffset: { width: 0, height: 0 },
+                          textShadowRadius: 1.5,
                         }
                       : {}),
                   }}
@@ -251,12 +281,13 @@ function TextStylePresetPicker({
                   style={
                     preset.priceBadge === 'Pill'
                       ? {
-                          backgroundColor: selectedColor + '25',
-                          paddingHorizontal: 10,
-                          paddingVertical: 3,
-                          borderRadius: 20,
-                          borderWidth: 1,
-                          borderColor: selectedColor + '88',
+                          // Backend draws the pill as a filled shape with no stroke;
+                          // tinted selectedColor fill keeps it visible on previewBg
+                          // (which sits in the opposite luminance bucket).
+                          backgroundColor: selectedColor + '33',
+                          paddingHorizontal: 16,
+                          paddingVertical: 6,
+                          borderRadius: 999,
                         }
                       : undefined
                   }
@@ -265,13 +296,14 @@ function TextStylePresetPicker({
                     style={{
                       color: selectedColor,
                       fontSize: 24,
-                      fontWeight: '900',
+                      fontFamily: preset.priceFont,
                       letterSpacing: -0.5,
-                      ...(hasShadow
+                      ...(shadowStyle ?? {}),
+                      ...(hasOutline
                         ? {
-                            textShadowColor: 'rgba(0,0,0,0.8)',
-                            textShadowOffset: { width: 1.5, height: 1.5 },
-                            textShadowRadius: 2,
+                            textShadowColor: outlineGlow,
+                            textShadowOffset: { width: 0, height: 0 },
+                            textShadowRadius: 3,
                           }
                         : {}),
                     }}
@@ -1263,6 +1295,7 @@ export default function StudioScreen() {
   const [colorTheme, setColorTheme] = useState('Brand Colors');
   const [catalogFormat, setCatalogFormat] = useState('Square');
   const [showPrices, setShowPrices] = useState(true);
+  const [showProductNames, setShowProductNames] = useState(true);
   const [catalogGenerating, setCatalogGenerating] = useState(false);
   const [catalogResult, setCatalogResult] = useState<GenerateImageResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -1401,6 +1434,7 @@ export default function StudioScreen() {
           wallpaperBase64,
           layout,
           showPrices,
+          showProductNames,
           textStyle,
           placementZone,
         })
@@ -1645,6 +1679,15 @@ export default function StudioScreen() {
             <SectionLabel label={t('studio.placementOptions')} />
             <OptionLabel label={t('studio.opt.layout')} />
             <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>{t('studio.showProductNames')}</Text>
+              <Switch
+                value={showProductNames}
+                onValueChange={setShowProductNames}
+                thumbColor={showProductNames ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
               <Switch
@@ -3129,6 +3172,15 @@ export default function StudioScreen() {
                       onSelect={setLayout}
                       accessibilityLabel={t('studio.opt.layout')}
                     />
+                    <View style={styles.toggleRow}>
+                      <Text style={styles.toggleLabel}>{t('studio.showProductNames')}</Text>
+                      <Switch
+                        value={showProductNames}
+                        onValueChange={setShowProductNames}
+                        thumbColor={showProductNames ? colors.accent.primary : colors.text.muted}
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
                     <View style={styles.toggleRow}>
                       <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
                       <Switch
