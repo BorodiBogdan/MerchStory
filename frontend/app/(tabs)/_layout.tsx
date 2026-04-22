@@ -3,7 +3,6 @@ import { Redirect, Tabs, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,16 +15,13 @@ import { HapticTab } from '@/components/haptic-tab';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
-import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 
 export default function TabLayout() {
   const { token, isLoading, isShopSetupComplete } = useAuth();
   const { colors, colorScheme, toggleTheme } = useTheme();
-  const { profile } = useShop();
   const t = useT();
-  const shopLogoUri = profile?.logoBase64 ?? null;
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
   const insets = useSafeAreaInsets();
@@ -79,11 +75,7 @@ export default function TabLayout() {
         accessibilityLabel={t('tabs.profile')}
       >
         <View style={styles.avatarChip}>
-          {shopLogoUri ? (
-            <Image source={{ uri: shopLogoUri }} style={styles.avatarLogo} />
-          ) : (
-            <Ionicons name="person-circle-outline" size={22} color={colors.text.secondary} />
-          )}
+          <Ionicons name="person" size={18} color={colors.accent.primary} />
         </View>
       </Pressable>
     </View>
@@ -209,11 +201,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
-    },
-    avatarLogo: {
-      width: '100%',
-      height: '100%',
-      resizeMode: 'contain',
     },
     tabBar: {
       backgroundColor: colors.bg.surface,
