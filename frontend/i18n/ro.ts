@@ -400,7 +400,7 @@ const ro: Dictionary = {
   'studio.previewEmptyCatalog': 'Catalogul tău va apărea aici',
   'studio.previewEmptyAnnouncement': 'Graficul tău generat va apărea aici',
   'studio.import': 'Importă',
-  'studio.myWallpapers': 'Fundalurile mele',
+  'studio.myWallpapers': 'Fundaluri',
   'studio.keep': 'Păstrează',
   'studio.postTypeAnnouncement': 'Anunț',
   'studio.postTypeJobPost': 'Anunț angajare',

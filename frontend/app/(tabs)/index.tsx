@@ -28,6 +28,7 @@ import ReAnimated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { ChipSelector } from '@/components/ui/ChipSelector';
@@ -1488,6 +1489,7 @@ export default function StudioScreen() {
   const t = useT();
   const { profile: shopProfile } = useShop();
   const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isDesktop = isWeb && screenWidth >= DESKTOP_BREAKPOINT;
   const styles = useMemo(
     () => makeStyles(colors, isDesktop, screenWidth),
@@ -2907,7 +2909,7 @@ export default function StudioScreen() {
                         >
                           <Ionicons
                             name={checked ? 'checkbox' : 'square-outline'}
-                            size={18}
+                            size={isDesktop ? 18 : 24}
                             color={checked ? colors.accent.primary : colors.text.muted}
                           />
                           <Text style={styles.wallpaperGenCheckLabel}>{opt.label}</Text>
@@ -4096,7 +4098,7 @@ export default function StudioScreen() {
                       >
                         <Ionicons
                           name={checked ? 'checkbox' : 'square-outline'}
-                          size={18}
+                          size={isDesktop ? 18 : 24}
                           color={checked ? colors.accent.primary : colors.text.muted}
                         />
                         <Text style={styles.wallpaperGenCheckLabel}>{opt.label}</Text>
@@ -4252,7 +4254,12 @@ export default function StudioScreen() {
         animationType="fade"
         onRequestClose={() => setWallpaperPickerVisible(false)}
       >
-        <View style={styles.pickerFullScreen}>
+        <View
+          style={[
+            styles.pickerFullScreen,
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
+          ]}
+        >
           <View style={styles.pickerHeader}>
             <Text style={styles.pickerTitle}>{t('studio.myWallpapers')}</Text>
             <Pressable
@@ -4286,25 +4293,28 @@ export default function StudioScreen() {
               numColumns={2}
               contentContainerStyle={{ padding: D.spacing.md, gap: D.spacing.sm }}
               columnWrapperStyle={{ gap: D.spacing.sm }}
+              showsVerticalScrollIndicator={false}
               renderItem={({ item }) => {
                 const thumbWidth = (screenWidth - D.spacing.md * 2 - D.spacing.sm) / 2;
+                const thumbHeight = Math.min(thumbWidth * (16 / 9), screenWidth * 0.55);
                 return (
                   <Pressable
                     style={({ pressed }) => ({
                       width: thumbWidth,
-                      aspectRatio: 9 / 16,
+                      height: thumbHeight,
                       borderRadius: D.radius.md,
                       overflow: 'hidden',
                       opacity: pressed ? 0.8 : 1,
                       borderWidth: 1.5,
                       borderColor: colors.border.default,
+                      backgroundColor: colors.bg.elevated,
                     })}
                     onPress={() => pickWallpaperFromLibrary(item)}
                   >
                     <GalleryImage
                       id={item.id}
                       style={{ width: '100%', height: '100%' }}
-                      resizeMode="contain"
+                      resizeMode="cover"
                     />
                   </Pressable>
                 );
@@ -5164,10 +5174,12 @@ function makeStyles(
     },
     wallpaperActionBtn: {
       flex: 1,
+      minWidth: 0,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
+      paddingHorizontal: D.spacing.sm,
       paddingVertical: D.spacing.sm + 2,
       borderRadius: D.radius.md,
       borderWidth: 1.5,
@@ -5180,6 +5192,7 @@ function makeStyles(
       fontWeight: D.fontWeight.semibold,
       color: colors.accent.primary,
       letterSpacing: 0.2,
+      flexShrink: 1,
     },
     wallpaperGenBtn: {
       flexDirection: 'row',
@@ -5306,13 +5319,13 @@ function makeStyles(
     wallpaperGenCheckRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: D.spacing.sm,
-      paddingVertical: 7,
+      gap: isDesktop ? D.spacing.sm : D.spacing.md,
+      paddingVertical: isDesktop ? 7 : 12,
       borderBottomWidth: 1,
       borderBottomColor: colors.border.subtle,
     },
     wallpaperGenCheckLabel: {
-      fontSize: D.fontSize.sm,
+      fontSize: isDesktop ? D.fontSize.sm : D.fontSize.base,
       color: colors.text.primary,
     },
     wallpaperGenError: {

@@ -35,7 +35,7 @@ import * as galleryCache from '@/utils/galleryCache';
 import * as galleryImageCache from '@/utils/galleryImageCache';
 
 const isWeb = Platform.OS === 'web';
-const MAX_CONTENT_WIDTH = 1200;
+const MAX_CONTENT_WIDTH = 1600;
 const WEB_H_PADDING = 32;
 const MOBILE_H_PADDING = D.spacing.md;
 const GAP = D.spacing.sm;
@@ -110,7 +110,15 @@ export default function WallpapersScreen() {
   const promptRef = useRef(prompt);
   promptRef.current = prompt;
 
-  const numColumns = isWeb ? (screenWidth < 600 ? 2 : screenWidth < 1024 ? 3 : 4) : 2;
+  const numColumns = isWeb
+    ? screenWidth < 600
+      ? 2
+      : screenWidth < 1024
+        ? 3
+        : screenWidth < 1500
+          ? 4
+          : 5
+    : 2;
   const hPadding = isWeb ? WEB_H_PADDING : MOBILE_H_PADDING;
   const effectiveWidth = Math.min(screenWidth, MAX_CONTENT_WIDTH) - hPadding * 2;
   const cardWidth = (effectiveWidth - GAP * (numColumns - 1)) / numColumns;
@@ -430,7 +438,7 @@ export default function WallpapersScreen() {
                       >
                         <Ionicons
                           name={checked ? 'checkbox' : 'square-outline'}
-                          size={18}
+                          size={isWeb ? 18 : 24}
                           color={checked ? colors.accent.primary : colors.text.muted}
                         />
                         <Text style={styles.checkLabel}>{opt.label}</Text>
@@ -898,13 +906,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     checkRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: D.spacing.sm,
-      paddingVertical: 7,
+      gap: isWeb ? D.spacing.sm : D.spacing.md,
+      paddingVertical: isWeb ? 7 : 12,
       borderBottomWidth: 1,
       borderBottomColor: colors.border.subtle ?? colors.border.default,
     },
     checkLabel: {
-      fontSize: D.fontSize.sm,
+      fontSize: isWeb ? D.fontSize.sm : D.fontSize.base,
       color: colors.text.primary,
     },
     // Error

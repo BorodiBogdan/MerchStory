@@ -29,7 +29,7 @@ import {
 } from '@/utils/api';
 
 const isWeb = Platform.OS === 'web';
-const MAX_CONTENT_WIDTH = 1200;
+const MAX_CONTENT_WIDTH = 1600;
 const WEB_H_PADDING = 32;
 const MOBILE_H_PADDING = D.spacing.md;
 const GAP = D.spacing.md;
