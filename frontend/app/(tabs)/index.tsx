@@ -771,6 +771,8 @@ function ProductCard({
   cardWidth,
   colors,
   styles,
+  mismatch = false,
+  mismatchHint,
 }: {
   product: ProductItem;
   selected: boolean;
@@ -778,13 +780,22 @@ function ProductCard({
   cardWidth: DimensionValue;
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
+  mismatch?: boolean;
+  mismatchHint?: string;
 }) {
   return (
     <Pressable
-      style={[styles.productCard, { width: cardWidth }, selected && styles.productCardSelected]}
+      style={[
+        styles.productCard,
+        { width: cardWidth },
+        selected && styles.productCardSelected,
+        mismatch && { opacity: 0.35 },
+      ]}
       onPress={onToggle}
+      disabled={mismatch}
       accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected }}
+      accessibilityState={{ checked: selected, disabled: mismatch }}
+      accessibilityHint={mismatch ? mismatchHint : undefined}
     >
       <View style={styles.productImageBox}>
         <ProductImage id={product.id} style={styles.productImage} resizeMode="cover" />
@@ -846,6 +857,7 @@ function ChooseProductsSection({
   const hasMore = products.length > DESKTOP_INLINE_LIMIT;
   const inlineProducts = products.slice(0, DESKTOP_INLINE_LIMIT);
   const selectedProducts = products.filter((p) => selected.has(p.id));
+  const lockedCurrency = selectedProducts.length > 0 ? selectedProducts[0].currency : null;
 
   const picker = (
     <ProductPickerModal
@@ -920,18 +932,32 @@ function ChooseProductsSection({
           </>
         ) : (
           <>
+            {lockedCurrency !== null ? (
+              <View style={styles.currencyNotice}>
+                <Ionicons name="lock-closed-outline" size={14} color={colors.accent.primary} />
+                <Text style={styles.currencyNoticeText}>
+                  {`${t('productPicker.currencyLocked')} ${lockedCurrency}.`}
+                </Text>
+              </View>
+            ) : null}
             <View style={{ flexDirection: 'row', gap: D.spacing.sm }}>
-              {inlineProducts.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  selected={selected.has(p.id)}
-                  onToggle={() => toggleProduct(p.id)}
-                  cardWidth={inlineCardWidth}
-                  colors={colors}
-                  styles={styles}
-                />
-              ))}
+              {inlineProducts.map((p) => {
+                const isSel = selected.has(p.id);
+                const mismatch = lockedCurrency !== null && !isSel && p.currency !== lockedCurrency;
+                return (
+                  <ProductCard
+                    key={p.id}
+                    product={p}
+                    selected={isSel}
+                    onToggle={() => toggleProduct(p.id)}
+                    cardWidth={inlineCardWidth}
+                    colors={colors}
+                    styles={styles}
+                    mismatch={mismatch}
+                    mismatchHint={t('productPicker.currencyMismatch')}
+                  />
+                );
+              })}
             </View>
 
             <Pressable
@@ -4687,6 +4713,23 @@ function makeStyles(
       fontSize: D.fontSize.xs,
       color: colors.text.secondary,
       lineHeight: 16,
+    },
+    currencyNotice: {
+      marginTop: D.spacing.sm,
+      marginBottom: D.spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: D.spacing.xs,
+      paddingHorizontal: D.spacing.sm,
+      borderRadius: D.radius.sm,
+      backgroundColor: colors.accent.dim,
+      alignSelf: 'flex-start',
+    },
+    currencyNoticeText: {
+      fontSize: D.fontSize.xs,
+      color: colors.accent.primary,
+      fontWeight: D.fontWeight.medium,
     },
   });
 }
