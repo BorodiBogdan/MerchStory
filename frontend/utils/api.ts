@@ -417,6 +417,7 @@ export interface GenerateCatalogOnWallpaperParams {
   wallpaperBase64: string;
   layout: string;
   showPrices: boolean;
+  showProductNames: boolean;
   textStyle?: TextStyleOptions;
   placementZone?: PlacementZone;
 }

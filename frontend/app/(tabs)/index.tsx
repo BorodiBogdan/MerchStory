@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -33,6 +33,7 @@ import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
 import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
+import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { D } from '@/constants/design';
 import type { GenerationType } from '@/constants/generationTypes';
 import { useShop } from '@/context/shop';
@@ -80,6 +81,8 @@ type PostType = 'Announcement' | 'Job Post' | 'Promotion';
 type ContextItem = { key: string; label: string };
 
 // ─── Text style presets (style only — color is chosen separately) ──────────────
+// Preview font files must match the backend (CatalogCompositor.LoadEmbeddedFamily)
+// so the sidebar preview renders with the same typeface as the generated image.
 type TextPreset = {
   id: string;
   label: string;
@@ -87,6 +90,8 @@ type TextPreset = {
   fontFamily: string;
   textEffect: string;
   priceBadge: string;
+  nameFont: string;
+  priceFont: string;
 };
 
 const TEXT_PRESETS: TextPreset[] = [
@@ -97,6 +102,8 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Modern',
     textEffect: 'Shadow',
     priceBadge: 'None',
+    nameFont: 'Inter-Regular',
+    priceFont: 'Inter-Bold',
   },
   {
     id: 'bold-shadow',
@@ -105,6 +112,8 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Bold',
     textEffect: 'Shadow',
     priceBadge: 'None',
+    nameFont: 'Montserrat-Bold',
+    priceFont: 'Montserrat-Bold',
   },
   {
     id: 'elegant-clean',
@@ -113,6 +122,8 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Elegant',
     textEffect: 'None',
     priceBadge: 'None',
+    nameFont: 'PlayfairDisplay-Regular',
+    priceFont: 'PlayfairDisplay-Regular',
   },
   {
     id: 'bold-badge',
@@ -121,6 +132,8 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Bold',
     textEffect: 'Shadow',
     priceBadge: 'Pill',
+    nameFont: 'Montserrat-Bold',
+    priceFont: 'Montserrat-Bold',
   },
   {
     id: 'outline',
@@ -129,6 +142,8 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Modern',
     textEffect: 'Outline',
     priceBadge: 'None',
+    nameFont: 'Inter-Regular',
+    priceFont: 'Inter-Bold',
   },
   {
     id: 'friendly-badge',
@@ -137,6 +152,18 @@ const TEXT_PRESETS: TextPreset[] = [
     fontFamily: 'Friendly',
     textEffect: 'Shadow',
     priceBadge: 'Pill',
+    nameFont: 'Lato-Regular',
+    priceFont: 'Lato-Regular',
+  },
+  {
+    id: 'flyer-sticker',
+    label: 'Flyer',
+    i18nKey: 'studio.preset.flyer',
+    fontFamily: 'Bold',
+    textEffect: 'Shadow',
+    priceBadge: 'Sticker',
+    nameFont: 'Montserrat-Bold',
+    priceFont: 'Montserrat-Bold',
   },
 ];
 
@@ -153,57 +180,280 @@ const PRICE_SWATCHES = [
   '#1e1e1e',
 ];
 
-function isColorLight(hex: string): boolean {
+function colorLuminance(hex: string): number {
   const h = hex.replace('#', '');
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+function isColorLight(hex: string): boolean {
   // Perceived luminance
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.45;
+  return colorLuminance(hex) > 0.45;
+}
+
+const PRESET_SWATCH_SET = new Set(PRICE_SWATCHES.map((c) => c.toLowerCase()));
+
+// Circle swatch that opens a custom color picker. Uses the OS-native color picker
+// on web (zero-friction) and a small modal with the RGB picker on native.
+function CustomColorSwatch({
+  value,
+  onChange,
+  colors,
+}: {
+  value: string;
+  onChange: (c: string) => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const isCustom = !PRESET_SWATCH_SET.has(value.toLowerCase());
+  const seed = isCustom && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#808080';
+
+  const RAINBOW = ['#EF4444', '#F59E0B', '#EAB308', '#22C55E', '#3B82F6', '#A855F7'];
+
+  // The web <input type="color"> fires onChange continuously while the OS picker
+  // is open and the cursor moves. Each one triggers a re-render of the whole
+  // studio component (several thousand lines), which drops the cursor to a crawl.
+  // Coalesce into one update per animation frame so React only reconciles at 60fps,
+  // keeping the live preview smooth without starving the picker dialog.
+  const rafIdRef = useRef<number | null>(null);
+  const pendingRef = useRef<string | null>(null);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+  useEffect(
+    () => () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    },
+    []
+  );
+  const handleWebColorInput = useCallback((hex: string) => {
+    pendingRef.current = hex;
+    if (rafIdRef.current !== null) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const next = pendingRef.current;
+      pendingRef.current = null;
+      if (next !== null) onChangeRef.current(next);
+    });
+  }, []);
+
+  return (
+    <>
+      <View
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          overflow: 'hidden',
+          borderWidth: isCustom ? 2.5 : 1,
+          borderColor: isCustom ? colors.accent.primary : colors.border.default,
+          backgroundColor: isCustom ? value : '#fff',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+        }}
+      >
+        {!isCustom && (
+          <View style={{ flexDirection: 'row', width: '100%', height: '100%' }}>
+            {RAINBOW.map((c) => (
+              <View key={c} style={{ flex: 1, backgroundColor: c }} />
+            ))}
+          </View>
+        )}
+        <View
+          style={{
+            position: 'absolute',
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            backgroundColor: 'rgba(255,255,255,0.92)',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          pointerEvents="none"
+        >
+          <Ionicons name="color-palette" size={10} color="#1e1e1e" />
+        </View>
+        {Platform.OS === 'web'
+          ? // Real native color input stretched over the circle. User's click on
+            // the input itself makes Chrome anchor the OS picker to this element.
+            React.createElement('input', {
+              type: 'color',
+              value: seed,
+              onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+                handleWebColorInput(e.target.value.toUpperCase()),
+              'aria-label': 'Pick a custom color',
+              style: {
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                border: 0,
+                padding: 0,
+                margin: 0,
+                cursor: 'pointer',
+                background: 'transparent',
+              },
+            })
+          : null}
+        {Platform.OS !== 'web' && (
+          <Pressable
+            onPress={() => setModalOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Pick a custom color"
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+          />
+        )}
+      </View>
+
+      <Modal
+        visible={modalOpen && Platform.OS !== 'web'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalOpen(false)}
+      >
+        <Pressable
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: D.spacing.lg,
+          }}
+          onPress={() => setModalOpen(false)}
+        >
+          <Pressable
+            style={{
+              width: '100%',
+              maxWidth: 360,
+              backgroundColor: colors.bg.surface,
+              borderRadius: D.radius.xl,
+              padding: D.spacing.lg,
+            }}
+            onPress={() => {}}
+          >
+            <RgbColorPicker label="Custom color" value={value} onChange={onChange} />
+            <Pressable
+              onPress={() => setModalOpen(false)}
+              style={{
+                marginTop: D.spacing.sm,
+                paddingVertical: 12,
+                borderRadius: D.radius.pill,
+                backgroundColor: colors.accent.primary,
+                alignItems: 'center',
+              }}
+            >
+              <Text
+                style={{
+                  color: '#fff',
+                  fontSize: D.fontSize.base,
+                  fontWeight: D.fontWeight.semibold,
+                }}
+              >
+                Done
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+function ColorSwatchRow({
+  value,
+  onChange,
+  colors,
+}: {
+  value: string;
+  onChange: (c: string) => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: D.spacing.md }}>
+      {PRICE_SWATCHES.map((hex) => (
+        <Pressable
+          key={hex}
+          onPress={() => onChange(hex)}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: value === hex }}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 14,
+            backgroundColor: hex,
+            borderWidth: value === hex ? 2.5 : 1,
+            borderColor: value === hex ? colors.accent.primary : colors.border.default,
+          }}
+        />
+      ))}
+      <CustomColorSwatch value={value} onChange={onChange} colors={colors} />
+    </View>
+  );
 }
 
 function TextStylePresetPicker({
   selectedId,
   onSelect,
-  selectedColor,
-  onColorChange,
+  nameColor,
+  onNameColorChange,
+  priceColor,
+  onPriceColorChange,
   colors,
 }: {
   selectedId: string;
   onSelect: (id: string) => void;
-  selectedColor: string;
-  onColorChange: (c: string) => void;
+  nameColor: string;
+  onNameColorChange: (c: string) => void;
+  priceColor: string;
+  onPriceColorChange: (c: string) => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
   const t = useT();
-  const previewBg = isColorLight(selectedColor) ? '#1a1a2e' : '#f0f4ff';
+  // Preview background tracks the name color (the dominant text element) so light
+  // names show on dark and vice versa — same rule as before the split.
+  const previewBg = isColorLight(nameColor) ? '#1a1a2e' : '#f0f4ff';
   return (
     <>
-      <SectionLabel label={t('studio.optColor')} />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: D.spacing.md }}>
-        {PRICE_SWATCHES.map((hex) => (
-          <Pressable
-            key={hex}
-            onPress={() => onColorChange(hex)}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: selectedColor === hex }}
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 14,
-              backgroundColor: hex,
-              borderWidth: selectedColor === hex ? 2.5 : 1,
-              borderColor: selectedColor === hex ? colors.accent.primary : colors.border.default,
-            }}
-          />
-        ))}
-      </View>
+      <OptionLabel label={t('studio.optNameColor')} />
+      <ColorSwatchRow value={nameColor} onChange={onNameColorChange} colors={colors} />
+      <OptionLabel label={t('studio.optPriceColor')} />
+      <ColorSwatchRow value={priceColor} onChange={onPriceColorChange} colors={colors} />
 
       <SectionLabel label={t('studio.optText')} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: D.spacing.sm }}>
         {TEXT_PRESETS.map((preset) => {
           const selected = preset.id === selectedId;
           const hasShadow = preset.textEffect === 'Shadow';
+          const hasOutline = preset.textEffect === 'Outline';
+          const isSticker = preset.priceBadge === 'Sticker';
+          // Single-color glow that reads equally well against light and dark previews
+          // and never matches the selectedColor (so it stays visible for every swatch).
+          // Using textShadowRadius instead of a 4-direction stack avoids the jagged
+          // overdraw artifacts that came from stacking five absolute-positioned Texts.
+          const outlineGlow = 'rgba(120, 120, 120, 0.95)';
+          const shadowStyle = hasShadow
+            ? {
+                textShadowColor: 'rgba(0,0,0,0.4)',
+                textShadowOffset: { width: 2, height: 2 },
+                textShadowRadius: 0,
+              }
+            : undefined;
+          // Sticker-chip colors mirror the backend exactly: fill is always white
+          // (retail-flyer aesthetic), and text renders in the user's picked price
+          // color. Only when the picked color is too close to white (luminance > 0.65,
+          // matching EnsureReadableOn with a white fill) do we flip to dark so the
+          // price stays legible against a white chip.
+          const stickerFill = '#ffffff';
+          const stickerText = colorLuminance(priceColor) > 0.65 ? '#1e1e1e' : priceColor;
           return (
             <Pressable
               key={preset.id}
@@ -228,57 +478,123 @@ function TextStylePresetPicker({
                   height: 88,
                 }}
               >
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: selectedColor,
-                    fontSize: 10,
-                    fontWeight: '500',
-                    marginBottom: 8,
-                    opacity: 0.75,
-                    ...(hasShadow
-                      ? {
-                          textShadowColor: 'rgba(0,0,0,0.8)',
-                          textShadowOffset: { width: 1, height: 1 },
-                          textShadowRadius: 2,
-                        }
-                      : {}),
-                  }}
-                >
-                  Product Name
-                </Text>
-                <View
-                  style={
-                    preset.priceBadge === 'Pill'
-                      ? {
-                          backgroundColor: selectedColor + '25',
-                          paddingHorizontal: 10,
+                {isSticker ? (
+                  // Flyer preview mirrors the actual composition: a mock product tile with
+                  // a white sticker chip overhanging the bottom-right and the name below.
+                  <View style={{ alignItems: 'center', width: '100%' }}>
+                    <View
+                      style={{
+                        width: 54,
+                        height: 38,
+                        borderRadius: 6,
+                        backgroundColor: 'rgba(255,255,255,0.12)',
+                        borderWidth: 1,
+                        borderColor: 'rgba(255,255,255,0.18)',
+                        marginBottom: 6,
+                        position: 'relative',
+                        overflow: 'visible',
+                      }}
+                    >
+                      <View
+                        style={{
+                          position: 'absolute',
+                          right: -10,
+                          bottom: -6,
+                          backgroundColor: stickerFill,
+                          paddingHorizontal: 8,
                           paddingVertical: 3,
-                          borderRadius: 20,
-                          borderWidth: 1,
-                          borderColor: selectedColor + '88',
-                        }
-                      : undefined
-                  }
-                >
-                  <Text
-                    style={{
-                      color: selectedColor,
-                      fontSize: 24,
-                      fontWeight: '900',
-                      letterSpacing: -0.5,
-                      ...(hasShadow
-                        ? {
-                            textShadowColor: 'rgba(0,0,0,0.8)',
-                            textShadowOffset: { width: 1.5, height: 1.5 },
-                            textShadowRadius: 2,
-                          }
-                        : {}),
-                    }}
-                  >
-                    $19.99
-                  </Text>
-                </View>
+                          borderRadius: 6,
+                          shadowColor: '#000',
+                          shadowOpacity: 0.25,
+                          shadowOffset: { width: 1, height: 2 },
+                          shadowRadius: 2,
+                          elevation: 3,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: stickerText,
+                            fontSize: 11,
+                            fontFamily: preset.priceFont,
+                            fontWeight: '700',
+                            letterSpacing: -0.3,
+                          }}
+                        >
+                          $19.99
+                        </Text>
+                      </View>
+                    </View>
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: nameColor,
+                        fontSize: 11,
+                        fontFamily: preset.nameFont,
+                        fontWeight: '700',
+                        ...(shadowStyle ?? {}),
+                      }}
+                    >
+                      Product Name
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: nameColor,
+                        fontSize: 10,
+                        fontFamily: preset.nameFont,
+                        marginBottom: 8,
+                        opacity: 0.85,
+                        ...(shadowStyle ?? {}),
+                        ...(hasOutline
+                          ? {
+                              textShadowColor: outlineGlow,
+                              textShadowOffset: { width: 0, height: 0 },
+                              textShadowRadius: 1.5,
+                            }
+                          : {}),
+                      }}
+                    >
+                      Product Name
+                    </Text>
+                    <View
+                      style={
+                        preset.priceBadge === 'Pill'
+                          ? {
+                              // Backend draws the pill as a filled shape with no stroke;
+                              // tinted priceColor fill keeps it visible on previewBg
+                              // (which sits in the opposite luminance bucket).
+                              backgroundColor: priceColor + '33',
+                              paddingHorizontal: 16,
+                              paddingVertical: 6,
+                              borderRadius: 999,
+                            }
+                          : undefined
+                      }
+                    >
+                      <Text
+                        style={{
+                          color: priceColor,
+                          fontSize: 24,
+                          fontFamily: preset.priceFont,
+                          letterSpacing: -0.5,
+                          ...(shadowStyle ?? {}),
+                          ...(hasOutline
+                            ? {
+                                textShadowColor: outlineGlow,
+                                textShadowOffset: { width: 0, height: 0 },
+                                textShadowRadius: 3,
+                              }
+                            : {}),
+                        }}
+                      >
+                        $19.99
+                      </Text>
+                    </View>
+                  </>
+                )}
               </View>
               <View
                 style={{
@@ -1240,19 +1556,20 @@ export default function StudioScreen() {
 
   // ── Text style state ─────────────────────────────────────────────────────────
   const [selectedPresetId, setSelectedPresetId] = useState<string>('modern-shadow');
-  const [selectedColor, setSelectedColor] = useState<string>('#F59E0B');
+  const [selectedNameColor, setSelectedNameColor] = useState<string>('#F59E0B');
+  const [selectedPriceColor, setSelectedPriceColor] = useState<string>('#F59E0B');
   const textStyle = useMemo<TextStyleOptions>(() => {
     const preset = TEXT_PRESETS.find((p) => p.id === selectedPresetId) ?? TEXT_PRESETS[0];
     return {
       fontFamily: preset.fontFamily,
       fontSize: 'Large',
-      nameColor: selectedColor,
-      priceColor: selectedColor,
+      nameColor: selectedNameColor,
+      priceColor: selectedPriceColor,
       colorMode: 'Solid',
       textEffect: preset.textEffect,
       priceBadge: preset.priceBadge,
     };
-  }, [selectedPresetId, selectedColor]);
+  }, [selectedPresetId, selectedNameColor, selectedPriceColor]);
 
   // ── Catalog state ────────────────────────────────────────────────────────────
   const productsCacheState = productsCache.useProductsCache();
@@ -1263,6 +1580,7 @@ export default function StudioScreen() {
   const [colorTheme, setColorTheme] = useState('Brand Colors');
   const [catalogFormat, setCatalogFormat] = useState('Square');
   const [showPrices, setShowPrices] = useState(true);
+  const [showProductNames, setShowProductNames] = useState(true);
   const [catalogGenerating, setCatalogGenerating] = useState(false);
   const [catalogResult, setCatalogResult] = useState<GenerateImageResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -1401,6 +1719,7 @@ export default function StudioScreen() {
           wallpaperBase64,
           layout,
           showPrices,
+          showProductNames,
           textStyle,
           placementZone,
         })
@@ -1646,6 +1965,15 @@ export default function StudioScreen() {
             <OptionLabel label={t('studio.opt.layout')} />
             <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
             <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>{t('studio.showProductNames')}</Text>
+              <Switch
+                value={showProductNames}
+                onValueChange={setShowProductNames}
+                thumbColor={showProductNames ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
               <Switch
                 value={showPrices}
@@ -1657,8 +1985,10 @@ export default function StudioScreen() {
             <TextStylePresetPicker
               selectedId={selectedPresetId}
               onSelect={setSelectedPresetId}
-              selectedColor={selectedColor}
-              onColorChange={setSelectedColor}
+              nameColor={selectedNameColor}
+              onNameColorChange={setSelectedNameColor}
+              priceColor={selectedPriceColor}
+              onPriceColorChange={setSelectedPriceColor}
               colors={colors}
             />
           </>
@@ -3130,6 +3460,15 @@ export default function StudioScreen() {
                       accessibilityLabel={t('studio.opt.layout')}
                     />
                     <View style={styles.toggleRow}>
+                      <Text style={styles.toggleLabel}>{t('studio.showProductNames')}</Text>
+                      <Switch
+                        value={showProductNames}
+                        onValueChange={setShowProductNames}
+                        thumbColor={showProductNames ? colors.accent.primary : colors.text.muted}
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                    <View style={styles.toggleRow}>
                       <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
                       <Switch
                         value={showPrices}
@@ -3141,8 +3480,10 @@ export default function StudioScreen() {
                     <TextStylePresetPicker
                       selectedId={selectedPresetId}
                       onSelect={setSelectedPresetId}
-                      selectedColor={selectedColor}
-                      onColorChange={setSelectedColor}
+                      nameColor={selectedNameColor}
+                      onNameColorChange={setSelectedNameColor}
+                      priceColor={selectedPriceColor}
+                      onPriceColorChange={setSelectedPriceColor}
                       colors={colors}
                     />
                   </View>

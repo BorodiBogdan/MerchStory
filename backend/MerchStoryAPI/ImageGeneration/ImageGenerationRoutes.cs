@@ -349,6 +349,7 @@ internal sealed record CatalogOnWallpaperApiRequest(
     string WallpaperBase64,
     string Layout,
     bool ShowPrices,
+    bool ShowProductNames = true,
     TextStyleOptions? TextStyle = null,
     PlacementZone? PlacementZone = null);
 

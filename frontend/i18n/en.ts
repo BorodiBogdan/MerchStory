@@ -23,6 +23,9 @@ const en = {
   appLanguage: 'App language',
   generationLanguage: 'Language of generated content',
   defaultCurrency: 'Default currency',
+  appearance: 'Appearance',
+  appearanceLight: 'Light',
+  appearanceDark: 'Dark',
   save: 'Save',
   cancel: 'Cancel',
   english: 'English',
@@ -130,7 +133,7 @@ const en = {
   'tabs.products': 'Products',
   'tabs.analytics': 'Analytics',
   'tabs.home': 'MerchStory home',
-  'tabs.profile': 'Go to profile',
+  'tabs.profile': 'Profile',
 
   // ── Products screen ──────────────────────────────────────────────────────
   'products.pageTitle': 'My Products',
@@ -430,6 +433,8 @@ const en = {
   'studio.optColorTheme': 'Color Theme',
   'studio.optText': 'Text Style',
   'studio.optColor': 'Color',
+  'studio.optNameColor': 'Name color',
+  'studio.optPriceColor': 'Price color',
   'studio.brandContext': 'Brand Context',
   'studio.brandContextHint': 'Choose which brand info to include in the AI prompt',
   // Option labels used via OptionLabel
@@ -509,6 +514,7 @@ const en = {
   'studio.preset.badge': 'Badge',
   'studio.preset.outline': 'Outline',
   'studio.preset.friendly': 'Friendly',
+  'studio.preset.flyer': 'Flyer',
   // Browse products modal (title passed from parent)
   'studio.browseCatalog': 'Browse all products',
   'studio.browseSelected': 'Selected products',
@@ -551,6 +557,7 @@ const en = {
   'studio.formatPortrait': 'Portrait 4:5',
   'studio.formatStory': 'Story 9:16',
   'studio.showPrices': 'Show prices',
+  'studio.showProductNames': 'Show product names',
   'studio.fieldBrandName': 'Brand name',
   'studio.fieldSlogan': 'Slogan',
   'studio.fieldLogo': 'Logo',

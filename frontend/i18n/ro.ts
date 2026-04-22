@@ -25,6 +25,9 @@ const ro: Dictionary = {
   appLanguage: 'Limba aplicației',
   generationLanguage: 'Limba conținutului generat',
   defaultCurrency: 'Monedă implicită',
+  appearance: 'Aspect',
+  appearanceLight: 'Luminos',
+  appearanceDark: 'Întunecat',
   save: 'Salvează',
   cancel: 'Anulează',
   english: 'Engleză',
@@ -134,7 +137,7 @@ const ro: Dictionary = {
   'tabs.products': 'Produse',
   'tabs.analytics': 'Analiză',
   'tabs.home': 'Acasă MerchStory',
-  'tabs.profile': 'Mergi la profil',
+  'tabs.profile': 'Profil',
 
   // ── Products screen ──────────────────────────────────────────────────────
   'products.pageTitle': 'Produsele mele',
@@ -439,6 +442,8 @@ const ro: Dictionary = {
   'studio.optColorTheme': 'Paletă',
   'studio.optText': 'Stil text',
   'studio.optColor': 'Culoare',
+  'studio.optNameColor': 'Culoare nume',
+  'studio.optPriceColor': 'Culoare preț',
   // Option labels
   'studio.opt.layout': 'Aranjament',
   'studio.opt.format': 'Format',
@@ -516,6 +521,7 @@ const ro: Dictionary = {
   'studio.preset.badge': 'Insignă',
   'studio.preset.outline': 'Contur',
   'studio.preset.friendly': 'Prietenos',
+  'studio.preset.flyer': 'Reclamă',
   // Browse products modal
   'studio.browseCatalog': 'Răsfoiește toate produsele',
   'studio.browseSelected': 'Produse selectate',
@@ -558,6 +564,7 @@ const ro: Dictionary = {
   'studio.formatPortrait': 'Portret 4:5',
   'studio.formatStory': 'Story 9:16',
   'studio.showPrices': 'Afișează prețurile',
+  'studio.showProductNames': 'Afișează numele produselor',
   'studio.brandContext': 'Date de brand de inclus',
   'studio.brandContextHint': 'Alege ce date de brand să includă prompt-ul AI',
   'studio.fieldBrandName': 'Numele brandului',
