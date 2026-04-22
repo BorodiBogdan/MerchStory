@@ -11,15 +11,20 @@ import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useSetup } from '@/context/setup';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import { submitShopProfile } from '@/utils/api';
-
-const STEP_LABELS = ['Visual Identity', 'Business DNA', 'Contact & Social'];
 
 export default function Step3Screen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data, updateStep3 } = useSetup();
   const { completeShopSetup } = useAuth();
+  const t = useT();
+  const STEP_LABELS = [
+    t('setup.stepLabel.visual'),
+    t('setup.stepLabel.business'),
+    t('setup.stepLabel.contact'),
+  ];
 
   const [phoneNumber, setPhoneNumber] = useState(data.phoneNumber);
   const [email, setEmail] = useState(data.email);
@@ -66,11 +71,11 @@ export default function Step3Screen() {
   async function handleComplete() {
     let valid = true;
     if (!phoneNumber.trim()) {
-      setPhoneError('Phone number is required');
+      setPhoneError(t('setup.step3.phoneRequired'));
       valid = false;
     }
     if (!email.trim().includes('@')) {
-      setEmailError('Please enter a valid email address');
+      setEmailError(t('setup.step3.emailInvalid'));
       valid = false;
     }
     if (!valid) return;
@@ -116,9 +121,7 @@ export default function Step3Screen() {
       }
       router.replace('/(tabs)');
     } catch (err) {
-      setSubmitError(
-        err instanceof Error ? err.message : 'Something went wrong. Please try again.'
-      );
+      setSubmitError(err instanceof Error ? err.message : t('setup.step3.failed'));
       setIsSubmitting(false);
     }
   }
@@ -128,12 +131,12 @@ export default function Step3Screen() {
       <StepProgress currentStep={3} stepLabels={STEP_LABELS} />
 
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>Contact & Social</Text>
-        <Text style={styles.subtitle}>How customers and our AI can reach your shop.</Text>
+        <Text style={styles.title}>{t('setup.step3.title')}</Text>
+        <Text style={styles.subtitle}>{t('setup.step3.subtitle')}</Text>
       </View>
 
       <FloatingInput
-        label="Phone Number"
+        label={t('setup.step3.phone')}
         value={phoneNumber}
         onChangeText={(v) => {
           setPhoneNumber(v);
@@ -147,7 +150,7 @@ export default function Step3Screen() {
       />
 
       <FloatingInput
-        label="Email"
+        label={t('setup.step3.email')}
         value={email}
         onChangeText={(v) => {
           setEmail(v);
@@ -162,12 +165,18 @@ export default function Step3Screen() {
 
       {/* Addresses */}
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Address{addresses.length > 1 ? 'es' : ''}</Text>
+        <Text style={styles.sectionLabel}>
+          {addresses.length > 1 ? t('setup.step3.addressesPlural') : t('setup.step3.address')}
+        </Text>
         {addresses.map((addr, index) => (
           <View key={index} style={styles.addressRow}>
             <View style={styles.addressInput}>
               <FloatingInput
-                label={addresses.length > 1 ? `Address ${index + 1}` : 'Address'}
+                label={
+                  addresses.length > 1
+                    ? `${t('setup.step3.addressNumbered')} ${index + 1}`
+                    : t('setup.step3.address')
+                }
                 value={addr}
                 onChangeText={(v) => updateAddress(index, v)}
                 accessibilityLabel={`Address ${index + 1}`}
@@ -190,18 +199,20 @@ export default function Step3Screen() {
           onPress={addAddress}
           style={styles.addButton}
           accessibilityRole="button"
-          accessibilityLabel="Add another address"
+          accessibilityLabel={t('setup.step3.addAddress')}
         >
           <Ionicons name="add-circle-outline" size={16} color={colors.accent.primary} />
-          <Text style={styles.addButtonText}>Add another address</Text>
+          <Text style={styles.addButtonText}>{t('setup.step3.addAddress')}</Text>
         </Pressable>
       </View>
 
       {/* Social media */}
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Social Media (optional)</Text>
+        <Text style={styles.sectionLabel}>
+          {`${t('setup.step3.instagram')} · ${t('setup.step3.facebook')} · ${t('setup.step3.tiktok')}`}
+        </Text>
         <FloatingInput
-          label="Instagram"
+          label={t('setup.step3.instagram')}
           value={instagramHandle}
           onChangeText={setInstagramHandle}
           leftIcon="logo-instagram"
@@ -210,7 +221,7 @@ export default function Step3Screen() {
           autoCapitalize="none"
         />
         <FloatingInput
-          label="Facebook"
+          label={t('setup.step3.facebook')}
           value={facebookHandle}
           onChangeText={setFacebookHandle}
           leftIcon="logo-facebook"
@@ -219,7 +230,7 @@ export default function Step3Screen() {
           autoCapitalize="none"
         />
         <FloatingInput
-          label="TikTok"
+          label={t('setup.step3.tiktok')}
           value={tikTokHandle}
           onChangeText={setTikTokHandle}
           leftIcon="logo-tiktok"
@@ -240,20 +251,20 @@ export default function Step3Screen() {
           onPress={handleBack}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('common.back')}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>{t('common.backButton')}</Text>
         </Pressable>
         <Pressable
           onPress={handleComplete}
           disabled={!canSubmit}
           style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
           accessibilityRole="button"
-          accessibilityLabel="Complete setup"
+          accessibilityLabel={t('setup.step3.submit')}
           accessibilityState={{ disabled: !canSubmit, busy: isSubmitting }}
         >
           <Text style={[styles.submitButtonText, !canSubmit && styles.submitButtonTextDisabled]}>
-            {isSubmitting ? 'Setting up…' : 'Complete Setup ✓'}
+            {isSubmitting ? t('setup.step3.submitting') : t('setup.step3.submit')}
           </Text>
         </Pressable>
       </View>

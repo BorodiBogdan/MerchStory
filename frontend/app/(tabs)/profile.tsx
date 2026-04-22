@@ -396,7 +396,7 @@ export default function ProfileScreen() {
   if (loadError || !profile) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{loadError ?? 'Profile not found'}</Text>
+        <Text style={styles.errorText}>{loadError ?? t('profile.notFound')}</Text>
         <Pressable onPress={retryLoadProfile} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </Pressable>
@@ -517,7 +517,7 @@ export default function ProfileScreen() {
                   </View>
                 )}
               </Pressable>
-              <Text style={styles.logoLabel}>Company Logo</Text>
+              <Text style={styles.logoLabel}>{t('profile.companyLogo')}</Text>
             </View>
 
             <View style={styles.headerText}>
@@ -536,10 +536,10 @@ export default function ProfileScreen() {
             onPress={isEditing ? cancelEditing : startEditing}
             style={[styles.editButton, isEditing && styles.cancelButton]}
             accessibilityRole="button"
-            accessibilityLabel={isEditing ? 'Cancel editing' : 'Edit profile'}
+            accessibilityLabel={isEditing ? t('common.cancel') : t('profile.edit')}
           >
             <Text style={[styles.editButtonText, isEditing && styles.cancelButtonText]}>
-              {isEditing ? 'Cancel' : 'Edit'}
+              {isEditing ? t('common.cancel') : t('profile.edit')}
             </Text>
           </Pressable>
         </View>
@@ -617,17 +617,17 @@ export default function ProfileScreen() {
 
         {/* ── Visual Identity ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Visual Identity</Text>
+          <Text style={styles.sectionTitle}>{t('profile.sectionVisual')}</Text>
 
           <InfoRow
-            label="Brand Name"
+            label={t('profile.fieldBrandName')}
             value={profile.brandName}
             draftValue={draft?.brandName}
             onChangeText={(v) => updateDraft({ brandName: v })}
             autoCapitalize="words"
           />
           <InfoRow
-            label="Slogan"
+            label={t('profile.fieldSlogan')}
             value={profile.slogan ?? ''}
             draftValue={draft?.slogan}
             onChangeText={(v) => updateDraft({ slogan: v })}
@@ -636,7 +636,7 @@ export default function ProfileScreen() {
           {/* Brand Colors */}
           {!isEditing && (
             <View style={[styles.infoRow, styles.infoRowLast]}>
-              <Text style={styles.infoLabel}>Brand Colors</Text>
+              <Text style={styles.infoLabel}>{t('profile.fieldBrandColors')}</Text>
               <View style={styles.colorSwatchRow}>
                 {displayColors.map((c, i) => (
                   <View key={i} style={styles.colorChip}>
@@ -723,10 +723,10 @@ export default function ProfileScreen() {
 
         {/* ── Business DNA ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Business DNA</Text>
+          <Text style={styles.sectionTitle}>{t('profile.sectionBusiness')}</Text>
 
           <View style={[styles.infoRow, isEditing && styles.infoRowLast]}>
-            <Text style={styles.infoLabel}>Domain</Text>
+            <Text style={styles.infoLabel}>{t('profile.fieldDomain')}</Text>
             {(isEditing ? draft?.businessDomain : profile.businessDomain) ? (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
@@ -762,11 +762,14 @@ export default function ProfileScreen() {
           )}
 
           {!isEditing && profile.businessDomain === 'Other' && profile.otherDomain && (
-            <InfoRow label="Domain (Other)" value={profile.otherDomain} />
+            <InfoRow
+              label={`${t('profile.fieldDomain')} (${t('setup.step2.domainOther')})`}
+              value={profile.otherDomain}
+            />
           )}
 
           <View style={[styles.infoRow, isEditing && styles.infoRowLast]}>
-            <Text style={styles.infoLabel}>Shop Type</Text>
+            <Text style={styles.infoLabel}>{t('profile.fieldShopType')}</Text>
             {(isEditing ? draft?.shopType : profile.shopType) ? (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
@@ -789,14 +792,14 @@ export default function ProfileScreen() {
           )}
 
           <InfoRow
-            label="Target Audience"
+            label={t('profile.fieldAudience')}
             value={profile.targetAudience ?? ''}
             draftValue={draft?.targetAudience}
             onChangeText={(v) => updateDraft({ targetAudience: v })}
           />
 
           <InfoRow
-            label="Competitors"
+            label={t('profile.fieldCompetitors')}
             value={profile.competitors ?? ''}
             draftValue={draft?.competitors}
             onChangeText={(v) => updateDraft({ competitors: v })}
@@ -807,7 +810,7 @@ export default function ProfileScreen() {
 
         {/* ── Contact & Social ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Contact & Social</Text>
+          <Text style={styles.sectionTitle}>{t('profile.sectionContact')}</Text>
 
           <InfoRow
             label="Phone"
@@ -901,7 +904,7 @@ export default function ProfileScreen() {
         {/* ── Connected Accounts ── */}
         {!isEditing && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Connected Accounts</Text>
+            <Text style={styles.sectionTitle}>{t('profile.sectionConnected')}</Text>
 
             <View style={[styles.socialConnectRow, styles.infoRowLast]}>
               <View style={styles.socialConnectLeft}>
@@ -910,14 +913,14 @@ export default function ProfileScreen() {
               </View>
               {socialStatus.facebook === 'connected' ? (
                 <View style={styles.socialConnectActions}>
-                  <Text style={styles.socialConnectStatus}>✓ Connected</Text>
+                  <Text style={styles.socialConnectStatus}>{t('profile.connected')}</Text>
                   <Pressable
                     onPress={() => void handleDisconnect('facebook')}
                     style={({ pressed }) => [styles.disconnectBtn, pressed && { opacity: 0.7 }]}
                     accessibilityRole="button"
-                    accessibilityLabel="Disconnect Facebook"
+                    accessibilityLabel={t('profile.disconnect')}
                   >
-                    <Text style={styles.disconnectBtnText}>Disconnect</Text>
+                    <Text style={styles.disconnectBtnText}>{t('profile.disconnect')}</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -928,10 +931,10 @@ export default function ProfileScreen() {
                 >
                   <Text style={styles.socialConnectStatus}>
                     {socialStatus.facebook === 'connecting'
-                      ? 'Opening…'
+                      ? t('profile.connecting')
                       : socialStatus.facebook === 'error'
-                        ? 'Failed — retry'
-                        : 'Connect'}
+                        ? t('profile.connectError')
+                        : t('profile.connect')}
                   </Text>
                 </Pressable>
               )}
@@ -959,7 +962,7 @@ export default function ProfileScreen() {
               disabled={!isDirty || isSaving}
               style={[styles.saveButton, (!isDirty || isSaving) && styles.saveButtonDisabled]}
               accessibilityRole="button"
-              accessibilityLabel="Save changes"
+              accessibilityLabel={t('profile.save')}
               accessibilityState={{ disabled: !isDirty || isSaving, busy: isSaving }}
             >
               {isSaving ? (
@@ -971,7 +974,7 @@ export default function ProfileScreen() {
                     (!isDirty || isSaving) && styles.saveButtonTextDisabled,
                   ]}
                 >
-                  Save Changes
+                  {t('profile.save')}
                 </Text>
               )}
             </Pressable>

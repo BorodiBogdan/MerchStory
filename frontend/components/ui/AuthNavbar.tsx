@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 
 const ACCENT = '#6366F1';
 
@@ -17,6 +18,7 @@ interface AuthNavbarProps {
 export function AuthNavbar({ ctaLabel, ctaHref }: AuthNavbarProps) {
   const { colors, colorScheme, toggleTheme } = useTheme();
   const router = useRouter();
+  const t = useT();
   const isDark = colorScheme === 'dark';
   const s = makeStyles(colors, isDark);
 
@@ -28,7 +30,7 @@ export function AuthNavbar({ ctaLabel, ctaHref }: AuthNavbarProps) {
           style={({ pressed }) => [s.logoBtn, pressed && { opacity: 0.75 }]}
           onPress={() => router.push('/')}
           accessibilityRole="button"
-          accessibilityLabel="MerchStory home"
+          accessibilityLabel={t('tabs.home')}
         >
           <View style={s.logoMark}>
             <Ionicons name="color-wand" size={13} color="#fff" />
@@ -44,7 +46,7 @@ export function AuthNavbar({ ctaLabel, ctaHref }: AuthNavbarProps) {
           <Pressable
             onPress={toggleTheme}
             style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.6 }]}
-            accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            accessibilityLabel={isDark ? t('common.lightMode') : t('common.darkMode')}
             accessibilityRole="button"
           >
             <Ionicons

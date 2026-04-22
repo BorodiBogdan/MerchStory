@@ -26,18 +26,19 @@ import { SocialButton } from '@/components/ui/SocialButton';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 
 const isWeb = Platform.OS === 'web';
 
-function validate(email: string, password: string) {
+function validate(email: string, password: string, t: ReturnType<typeof useT>) {
   const errors: { email?: string; password?: string } = {};
   if (!email.trim()) {
-    errors.email = 'Email is required.';
+    errors.email = t('auth.login.emailRequired');
   } else if (!email.includes('@') || !email.includes('.')) {
-    errors.email = 'Enter a valid email address.';
+    errors.email = t('auth.login.emailInvalid');
   }
   if (!password) {
-    errors.password = 'Password is required.';
+    errors.password = t('auth.login.passwordRequired');
   }
   return errors;
 }
@@ -45,6 +46,7 @@ function validate(email: string, password: string) {
 export default function LoginScreen() {
   const { signIn } = useAuth();
   const { colors, colorScheme, toggleTheme } = useTheme();
+  const t = useT();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -72,7 +74,7 @@ export default function LoginScreen() {
   }));
 
   async function handleLogin() {
-    const errors = validate(email, password);
+    const errors = validate(email, password, t);
     if (Object.keys(errors).length > 0) {
       // Bump keys to re-trigger shake on each attempt
       if (errors.email) emailErrorKey.current += 1;
@@ -86,7 +88,7 @@ export default function LoginScreen() {
     try {
       await signIn(email.trim(), password);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Login failed. Please try again.';
+      const msg = err instanceof Error ? err.message : t('auth.login.failed');
       setApiError(msg);
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -107,11 +109,11 @@ export default function LoginScreen() {
   }
 
   function handleSocialPress() {
-    Alert.alert('Coming Soon', 'Social login is not available yet. Stay tuned!');
+    Alert.alert(t('auth.login.socialComingSoonTitle'), t('auth.login.socialComingSoonBody'));
   }
 
   function handleForgotPassword() {
-    Alert.alert('Reset Password', 'Password reset will be available soon.');
+    Alert.alert(t('auth.login.forgotTitle'), t('auth.login.forgotBody'));
   }
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !loading;
@@ -119,14 +121,12 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {isWeb ? (
-        <AuthNavbar ctaLabel="Create account" ctaHref="/(auth)/register" />
+        <AuthNavbar ctaLabel={t('auth.login.createLink')} ctaHref="/(auth)/register" />
       ) : (
         <Pressable
           onPress={toggleTheme}
           style={styles.themeToggle}
-          accessibilityLabel={
-            colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
-          }
+          accessibilityLabel={colorScheme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
           accessibilityRole="button"
         >
           <Ionicons
@@ -152,8 +152,8 @@ export default function LoginScreen() {
             </View>
 
             {/* Heading */}
-            <Text style={styles.heading}>Welcome back</Text>
-            <Text style={styles.subheading}>Sign in to continue creating</Text>
+            <Text style={styles.heading}>{t('auth.login.heading')}</Text>
+            <Text style={styles.subheading}>{t('auth.login.subheading')}</Text>
 
             {/* Social row */}
             <View style={styles.socialRow}>
@@ -174,14 +174,14 @@ export default function LoginScreen() {
             {/* OR divider */}
             <View style={styles.orRow}>
               <View style={styles.orLine} />
-              <Text style={styles.orText}>or</Text>
+              <Text style={styles.orText}>{t('common.or')}</Text>
               <View style={styles.orLine} />
             </View>
 
             {/* Form */}
             <FloatingInput
               key={`email-${emailErrorKey.current}`}
-              label="Email address"
+              label={t('auth.login.emailLabel')}
               value={email}
               onChangeText={handleEmailChange}
               error={fieldErrors.email}
@@ -196,7 +196,7 @@ export default function LoginScreen() {
 
             <FloatingInput
               key={`password-${passwordErrorKey.current}`}
-              label="Password"
+              label={t('auth.login.passwordLabel')}
               value={password}
               onChangeText={handlePasswordChange}
               error={fieldErrors.password}
@@ -226,11 +226,13 @@ export default function LoginScreen() {
                 !canSubmit && styles.primaryButtonDisabled,
                 pressed && canSubmit && styles.primaryButtonPressed,
               ]}
-              accessibilityLabel="Sign in"
+              accessibilityLabel={t('auth.login.submit')}
               accessibilityRole="button"
               accessibilityState={{ disabled: !canSubmit, busy: loading }}
             >
-              <Text style={styles.primaryButtonText}>{loading ? 'Signing in…' : 'Sign in'}</Text>
+              <Text style={styles.primaryButtonText}>
+                {loading ? t('auth.login.submitting') : t('auth.login.submit')}
+              </Text>
             </Pressable>
 
             {/* Forgot password */}
@@ -238,17 +240,17 @@ export default function LoginScreen() {
               onPress={handleForgotPassword}
               style={styles.forgotButton}
               accessibilityRole="button"
-              accessibilityLabel="Forgot password"
+              accessibilityLabel={t('auth.login.forgotLink')}
             >
-              <Text style={styles.forgotText}>Forgot password?</Text>
+              <Text style={styles.forgotText}>{t('auth.login.forgotLink')}</Text>
             </Pressable>
 
             {/* Footer */}
             <View style={styles.footer}>
-              <Text style={styles.footerText}>Don&apos;t have an account?&nbsp;</Text>
+              <Text style={styles.footerText}>{t('auth.login.noAccount')}&nbsp;</Text>
               <Link href="/(auth)/register" asChild>
-                <Pressable accessibilityRole="link" accessibilityLabel="Sign up">
-                  <Text style={styles.footerLink}>Sign up</Text>
+                <Pressable accessibilityRole="link" accessibilityLabel={t('auth.register.submit')}>
+                  <Text style={styles.footerLink}>{t('auth.register.submit')}</Text>
                 </Pressable>
               </Link>
             </View>

@@ -20,8 +20,9 @@ import { GalleryImage } from '@/components/ui/GalleryImage';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { Pagination } from '@/components/ui/Pagination';
 import { D } from '@/constants/design';
-import { GENERATION_TYPE_LABELS } from '@/constants/generationTypes';
+import { GENERATION_TYPE_I18N_KEYS } from '@/constants/generationTypes';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import { deleteGalleryItem, type GalleryItem, updateGalleryItemName } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
 import * as galleryImageCache from '@/utils/galleryImageCache';
@@ -57,6 +58,7 @@ export default function GalleryScreen() {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const t = useT();
 
   const insets = useSafeAreaInsets();
 
@@ -140,7 +142,7 @@ export default function GalleryScreen() {
         {item.generationType && (
           <View style={styles.typeBadge}>
             <Text style={styles.typeBadgeText} numberOfLines={1}>
-              {GENERATION_TYPE_LABELS[item.generationType]}
+              {t(GENERATION_TYPE_I18N_KEYS[item.generationType])}
             </Text>
           </View>
         )}
@@ -173,7 +175,7 @@ export default function GalleryScreen() {
       </View>
       <View style={styles.photoMeta}>
         <Text style={styles.photoName} numberOfLines={1}>
-          {item.name || 'Untitled'}
+          {item.name || t('gallery.untitled')}
         </Text>
         <Text style={styles.photoDate}>{formatDate(item.createdAt)}</Text>
       </View>
@@ -189,12 +191,10 @@ export default function GalleryScreen() {
         <Ionicons name="images-outline" size={48} color={colors.accent.primary} />
       </View>
       <Text style={styles.emptyTitle}>
-        {hasActiveFilters ? 'No images match your filters' : 'No generated images yet'}
+        {hasActiveFilters ? t('gallery.filteredEmptyTitle') : t('gallery.emptyTitle')}
       </Text>
       <Text style={styles.emptySubtitle}>
-        {hasActiveFilters
-          ? 'Try clearing some filters or adjusting your search.'
-          : 'Head to Studio to create your first AI-generated ad'}
+        {hasActiveFilters ? t('gallery.filteredEmptySubtitle') : t('gallery.emptySubtitle')}
       </Text>
       {hasActiveFilters ? (
         <Pressable
@@ -204,7 +204,7 @@ export default function GalleryScreen() {
           accessibilityLabel="Clear filters"
         >
           <Ionicons name="refresh-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.emptyButtonText}>Clear filters</Text>
+          <Text style={styles.emptyButtonText}>{t('gallery.clearFilters')}</Text>
         </Pressable>
       ) : (
         <Pressable
@@ -214,7 +214,7 @@ export default function GalleryScreen() {
           accessibilityLabel="Go to Studio"
         >
           <Ionicons name="sparkles-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.emptyButtonText}>Open Studio</Text>
+          <Text style={styles.emptyButtonText}>{t('gallery.openStudio')}</Text>
         </Pressable>
       )}
     </View>
@@ -226,10 +226,10 @@ export default function GalleryScreen() {
         <Ionicons name="videocam-outline" size={48} color={colors.accent.primary} />
       </View>
       <View style={styles.comingSoonBadge}>
-        <Text style={styles.comingSoonBadgeText}>In Development</Text>
+        <Text style={styles.comingSoonBadgeText}>{t('gallery.videoBadge')}</Text>
       </View>
-      <Text style={styles.emptyTitle}>Video Generation</Text>
-      <Text style={styles.emptySubtitle}>Coming soon — AI-powered video ads are on the way</Text>
+      <Text style={styles.emptyTitle}>{t('gallery.videoTitle')}</Text>
+      <Text style={styles.emptySubtitle}>{t('gallery.videoSubtitle')}</Text>
     </View>
   );
 
@@ -302,8 +302,8 @@ export default function GalleryScreen() {
       <View style={styles.pageContainer}>
         <View style={styles.pageHeader}>
           <View>
-            <Text style={styles.pageTitle}>Gallery</Text>
-            <Text style={styles.pageSubtitle}>Your generated assets</Text>
+            <Text style={styles.pageTitle}>{t('gallery.pageTitle')}</Text>
+            <Text style={styles.pageSubtitle}>{t('gallery.pageSubtitle')}</Text>
           </View>
         </View>
 
@@ -326,7 +326,7 @@ export default function GalleryScreen() {
               <Text
                 style={[styles.segmentLabel, activeTab === 'photos' && styles.segmentLabelActive]}
               >
-                Photos
+                {t('gallery.photosTab')}
               </Text>
             </Pressable>
             <Pressable
@@ -344,7 +344,7 @@ export default function GalleryScreen() {
               <Text
                 style={[styles.segmentLabel, activeTab === 'videos' && styles.segmentLabelActive]}
               >
-                Videos
+                {t('gallery.videosTab')}
               </Text>
             </Pressable>
           </View>
@@ -401,16 +401,14 @@ export default function GalleryScreen() {
             <View style={styles.confirmIconWrap}>
               <Ionicons name="trash-outline" size={28} color="#EF4444" />
             </View>
-            <Text style={styles.confirmTitle}>Delete image?</Text>
-            <Text style={styles.confirmBody}>
-              This image will be permanently removed from your gallery.
-            </Text>
+            <Text style={styles.confirmTitle}>{t('gallery.deleteConfirm.title')}</Text>
+            <Text style={styles.confirmBody}>{t('gallery.deleteConfirm.body')}</Text>
             <View style={styles.confirmActions}>
               <Pressable
                 style={({ pressed }) => [styles.confirmCancel, pressed && { opacity: 0.7 }]}
                 onPress={() => setConfirmDeleteId(null)}
               >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
+                <Text style={styles.confirmCancelText}>{t('common.cancel')}</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [styles.confirmDelete, pressed && { opacity: 0.8 }]}
@@ -420,7 +418,7 @@ export default function GalleryScreen() {
                   if (id) void handleDelete(id);
                 }}
               >
-                <Text style={styles.confirmDeleteText}>Delete</Text>
+                <Text style={styles.confirmDeleteText}>{t('common.delete')}</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -446,7 +444,7 @@ export default function GalleryScreen() {
                 <Text style={styles.lightboxDate}>
                   {lightboxItem ? formatDate(lightboxItem.createdAt) : ''}
                   {lightboxItem?.generationType
-                    ? ` · ${GENERATION_TYPE_LABELS[lightboxItem.generationType]}`
+                    ? ` · ${t(GENERATION_TYPE_I18N_KEYS[lightboxItem.generationType])}`
                     : ''}
                 </Text>
               </View>

@@ -28,6 +28,7 @@ import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import {
   createProduct,
   type Currency,
@@ -93,6 +94,7 @@ export default function ProductsScreen() {
     maxPrice: '',
   });
   const { profile: shopProfile, categories, refreshCategories } = useShop();
+  const t = useT();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -467,10 +469,8 @@ export default function ProductsScreen() {
             <View style={styles.emptyIconCircle}>
               <Ionicons name="search-outline" size={48} color={colors.accent.primary} />
             </View>
-            <Text style={styles.emptyTitle}>No products match</Text>
-            <Text style={styles.emptySubtitle}>
-              Try adjusting your search, category, or price range.
-            </Text>
+            <Text style={styles.emptyTitle}>{t('products.filteredEmptyTitle')}</Text>
+            <Text style={styles.emptySubtitle}>{t('products.filteredEmptySubtitle')}</Text>
             <Pressable
               style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
               onPress={() =>
@@ -487,17 +487,15 @@ export default function ProductsScreen() {
           <View style={styles.emptyIconCircle}>
             <Ionicons name="pricetag-outline" size={48} color={colors.accent.primary} />
           </View>
-          <Text style={styles.emptyTitle}>No products yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Add your first product to start building your catalog
-          </Text>
+          <Text style={styles.emptyTitle}>{t('products.emptyTitle')}</Text>
+          <Text style={styles.emptySubtitle}>{t('products.emptySubtitle')}</Text>
           <Pressable
             style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
             onPress={openAddModal}
             accessibilityRole="button"
           >
             <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 4 }} />
-            <Text style={styles.addButtonText}>Add Product</Text>
+            <Text style={styles.addButtonText}>{t('products.addButton')}</Text>
           </Pressable>
         </View>
       );
@@ -538,7 +536,7 @@ export default function ProductsScreen() {
       <View style={styles.pageContainer}>
         <View style={styles.pageHeader}>
           <View>
-            <Text style={styles.pageTitle}>My Products</Text>
+            <Text style={styles.pageTitle}>{t('products.pageTitle')}</Text>
             <Text style={styles.pageSubtitle}>
               {totalProducts} {totalProducts === 1 ? 'item' : 'items'} in catalog
             </Text>
@@ -561,7 +559,7 @@ export default function ProductsScreen() {
               accessibilityLabel="Add product"
             >
               <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 4 }} />
-              <Text style={styles.addButtonText}>Add Product</Text>
+              <Text style={styles.addButtonText}>{t('products.addButton')}</Text>
             </Pressable>
           </View>
         </View>
@@ -619,16 +617,14 @@ export default function ProductsScreen() {
             <View style={styles.confirmIconWrap}>
               <Ionicons name="trash-outline" size={28} color="#EF4444" />
             </View>
-            <Text style={styles.confirmTitle}>Delete product?</Text>
-            <Text style={styles.confirmBody}>
-              This product will be permanently removed from your catalog.
-            </Text>
+            <Text style={styles.confirmTitle}>{t('products.deleteConfirm.title')}</Text>
+            <Text style={styles.confirmBody}>{t('products.deleteConfirm.body')}</Text>
             <View style={styles.confirmActions}>
               <Pressable
                 style={({ pressed }) => [styles.confirmCancel, pressed && { opacity: 0.7 }]}
                 onPress={() => setConfirmDeleteId(null)}
               >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
+                <Text style={styles.confirmCancelText}>{t('common.cancel')}</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [styles.confirmDelete, pressed && { opacity: 0.8 }]}
@@ -638,7 +634,7 @@ export default function ProductsScreen() {
                   if (id) void handleDelete(id);
                 }}
               >
-                <Text style={styles.confirmDeleteText}>Delete</Text>
+                <Text style={styles.confirmDeleteText}>{t('common.delete')}</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -930,7 +926,9 @@ export default function ProductsScreen() {
                 ) : (
                   <>
                     <Text style={styles.modalTitle}>
-                      {editingProduct ? 'Edit Product' : 'New Product'}
+                      {editingProduct
+                        ? t('products.modal.editTitle')
+                        : t('products.modal.newTitle')}
                     </Text>
 
                     {/* Photo picker */}
@@ -949,7 +947,9 @@ export default function ProductsScreen() {
                       ) : (
                         <View style={styles.imagePickerPlaceholder}>
                           <Ionicons name="camera-outline" size={28} color={colors.text.muted} />
-                          <Text style={styles.imagePickerLabel}>Tap to add photo</Text>
+                          <Text style={styles.imagePickerLabel}>
+                            {t('products.modal.photoPlaceholder')}
+                          </Text>
                         </View>
                       )}
                       {draftImageUri && (
@@ -961,7 +961,7 @@ export default function ProductsScreen() {
 
                     {/* Name */}
                     <View style={styles.fieldGroup}>
-                      <Text style={styles.fieldLabel}>Product Name</Text>
+                      <Text style={styles.fieldLabel}>{t('products.modal.nameLabel')}</Text>
                       <TextInput
                         style={[styles.textInput, nameError ? styles.textInputError : null]}
                         placeholder="e.g. Artisan Coffee Blend"
@@ -978,7 +978,7 @@ export default function ProductsScreen() {
 
                     {/* Category */}
                     <View style={styles.fieldGroup}>
-                      <Text style={styles.fieldLabel}>Category</Text>
+                      <Text style={styles.fieldLabel}>{t('products.modal.categoryLabel')}</Text>
                       {addingNewCategory ? (
                         <View style={styles.categoryInputRow}>
                           <TextInput
@@ -1024,7 +1024,7 @@ export default function ProductsScreen() {
                             ]}
                             numberOfLines={1}
                           >
-                            {draftCategory || 'Select a category'}
+                            {draftCategory || t('products.modal.categoryPlaceholder')}
                           </Text>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                             {draftCategory ? (
@@ -1110,7 +1110,9 @@ export default function ProductsScreen() {
                               size={16}
                               color={colors.accent.primary}
                             />
-                            <Text style={styles.categoryAddNewText}>New category</Text>
+                            <Text style={styles.categoryAddNewText}>
+                              {t('products.modal.newCategory')}
+                            </Text>
                           </Pressable>
                         </View>
                       )}
@@ -1118,7 +1120,7 @@ export default function ProductsScreen() {
 
                     {/* Currency */}
                     <View style={styles.fieldGroup}>
-                      <Text style={styles.fieldLabel}>Currency</Text>
+                      <Text style={styles.fieldLabel}>{t('products.modal.currencyLabel')}</Text>
                       <View style={styles.priceInputRow}>
                         {CURRENCY_CHOICES.map((c) => {
                           const selected = draftCurrency === c;
@@ -1154,7 +1156,9 @@ export default function ProductsScreen() {
 
                     {/* Price */}
                     <View style={styles.fieldGroup}>
-                      <Text style={styles.fieldLabel}>Price ({draftCurrency})</Text>
+                      <Text
+                        style={styles.fieldLabel}
+                      >{`${t('products.modal.priceLabel')} (${draftCurrency})`}</Text>
                       <View style={styles.priceInputRow}>
                         <View style={styles.priceCurrencyBadge}>
                           <Text style={styles.priceCurrencyText}>
@@ -1188,7 +1192,7 @@ export default function ProductsScreen() {
                         accessibilityRole="button"
                         disabled={isSaving}
                       >
-                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                        <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
@@ -1204,7 +1208,7 @@ export default function ProductsScreen() {
                         {isSaving ? (
                           <ActivityIndicator size="small" color="#fff" />
                         ) : (
-                          <Text style={styles.saveButtonText}>Save Product</Text>
+                          <Text style={styles.saveButtonText}>{t('products.modal.save')}</Text>
                         )}
                       </Pressable>
                     </View>

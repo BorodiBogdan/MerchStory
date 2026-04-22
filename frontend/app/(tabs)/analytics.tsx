@@ -17,6 +17,7 @@ import {
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import {
   type FacebookCommentItem,
   type FacebookMediaItem,
@@ -35,6 +36,7 @@ const GAP = D.spacing.sm;
 
 export default function AnalyticsScreen() {
   const { colors } = useTheme();
+  const t = useT();
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -135,7 +137,7 @@ export default function AnalyticsScreen() {
         </View>
       );
     }
-    return <Text style={styles.noCommentsText}>No comments yet</Text>;
+    return <Text style={styles.noCommentsText}>{t('analytics.noComments')}</Text>;
   }
 
   function openPost(item: FacebookMediaItem) {
@@ -205,7 +207,7 @@ export default function AnalyticsScreen() {
           accessibilityRole="button"
         >
           <Ionicons name="person-outline" size={15} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.connectButtonText}>Go to Profile</Text>
+          <Text style={styles.connectButtonText}>{t('analytics.goToProfile')}</Text>
         </Pressable>
       </View>
     );
@@ -233,7 +235,7 @@ export default function AnalyticsScreen() {
           <View style={styles.emptyIconCircle}>
             <Ionicons name="logo-facebook" size={40} color={colors.accent.primary} />
           </View>
-          <Text style={styles.emptyTitle}>No Facebook photos yet</Text>
+          <Text style={styles.emptyTitle}>{t('analytics.noPhotos')}</Text>
         </View>
       );
     }
@@ -256,10 +258,10 @@ export default function AnalyticsScreen() {
       <View style={styles.pageContainer}>
         <View style={styles.pageHeader}>
           <View style={styles.pageHeaderText}>
-            <Text style={styles.pageTitle}>Analytics</Text>
-            <Text style={styles.pageSubtitle}>Your social media posts</Text>
+            <Text style={styles.pageTitle}>{t('analytics.pageTitle')}</Text>
+            <Text style={styles.pageSubtitle}>{t('analytics.pageSubtitle')}</Text>
             {fbConnected === false && fbPosts.length > 0 ? (
-              <Text style={styles.cachedDataNote}>Showing cached data — reconnect to refresh.</Text>
+              <Text style={styles.cachedDataNote}>{t('analytics.cachedNote')}</Text>
             ) : null}
           </View>
           {fbConnected ? (
@@ -271,7 +273,7 @@ export default function AnalyticsScreen() {
                 (isSyncing || isLoading || pressed) && { opacity: 0.6 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Refresh posts"
+              accessibilityLabel={t('analytics.refresh')}
             >
               {isSyncing ? (
                 <ActivityIndicator size="small" color={colors.accent.primary} />
@@ -363,7 +365,7 @@ export default function AnalyticsScreen() {
                   ) : null}
 
                   <View style={styles.modalCommentsDivider} />
-                  <Text style={styles.modalCommentsTitle}>Comments</Text>
+                  <Text style={styles.modalCommentsTitle}>{t('analytics.comments')}</Text>
 
                   <ScrollView
                     style={styles.modalCommentsScroll}
@@ -410,7 +412,7 @@ export default function AnalyticsScreen() {
                     ) : null}
 
                     <View style={styles.modalCommentsSection}>
-                      <Text style={styles.modalCommentsTitle}>Comments</Text>
+                      <Text style={styles.modalCommentsTitle}>{t('analytics.comments')}</Text>
                       {renderComments()}
                     </View>
                   </View>

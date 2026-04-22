@@ -15,6 +15,7 @@ import {
 import { D } from '@/constants/design';
 import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import { formatPrice, ProductFilters, ProductItem } from '@/utils/api';
 import * as productsCache from '@/utils/productsCache';
 
@@ -59,11 +60,13 @@ export function ProductPickerModal({
   onClose,
   selected,
   onToggle,
-  title = 'Choose Products',
+  title,
   subtitle,
   onProductsLoaded,
 }: ProductPickerModalProps) {
   const { colors } = useTheme();
+  const t = useT();
+  const resolvedTitle = title ?? t('productPicker.defaultTitle');
   const { categories } = useShop();
   const { width: screenWidth } = useWindowDimensions();
   const isDesktop = screenWidth >= DESKTOP_BREAKPOINT;
@@ -132,7 +135,7 @@ export function ProductPickerModal({
           <View style={styles.currencyNotice}>
             <Ionicons name="lock-closed-outline" size={14} color={colors.accent.primary} />
             <Text style={styles.currencyNoticeText}>
-              Catalogs mix one currency only — locked to {lockedCurrency}.
+              {`${t('productPicker.currencyLocked')} ${lockedCurrency}.`}
             </Text>
           </View>
         ) : null}
@@ -146,7 +149,7 @@ export function ProductPickerModal({
         <View style={styles.emptyWrap}>
           <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
           <Text style={styles.emptyText}>
-            {isFiltered ? 'No products match these filters.' : 'No products yet.'}
+            {isFiltered ? t('productPicker.filteredEmpty') : t('productPicker.empty')}
           </Text>
         </View>
       ) : (
@@ -184,9 +187,7 @@ export function ProductPickerModal({
                 onPress={() => onToggle(item.id)}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: isSel, disabled: mismatch }}
-                accessibilityHint={
-                  mismatch ? `Only ${lockedCurrency} products can be selected.` : undefined
-                }
+                accessibilityHint={mismatch ? t('productPicker.currencyMismatch') : undefined}
               >
                 <View style={{ width: '100%', aspectRatio: 1, position: 'relative' }}>
                   <ProductImage
@@ -220,8 +221,8 @@ export function ProductPickerModal({
       <View style={[styles.footer, { paddingHorizontal: modalPad }]}>
         <Text style={styles.footerText}>
           {selectedCount > 0
-            ? `${selectedCount} product${selectedCount !== 1 ? 's' : ''} selected`
-            : 'Tap products to select'}
+            ? `${selectedCount} ${t('productPicker.selected')}`
+            : t('productPicker.prompt')}
         </Text>
         <Pressable
           style={({ pressed }) => [styles.doneBtn, pressed && { opacity: 0.85 }]}
@@ -229,7 +230,9 @@ export function ProductPickerModal({
           accessibilityRole="button"
         >
           <Text style={styles.doneBtnText}>
-            {selectedCount > 0 ? `Done (${selectedCount})` : 'Done'}
+            {selectedCount > 0
+              ? `${t('productPicker.doneButton')} (${selectedCount})`
+              : t('productPicker.doneButton')}
           </Text>
         </Pressable>
       </View>
@@ -239,12 +242,14 @@ export function ProductPickerModal({
   const header = (
     <View style={styles.header}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.title}>{resolvedTitle}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>
       {selectedCount > 0 && (
         <View style={[styles.countBadge, { marginRight: D.spacing.sm }]}>
-          <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+          <Text
+            style={styles.countBadgeText}
+          >{`${selectedCount} ${t('productPicker.selected')}`}</Text>
         </View>
       )}
       <Pressable

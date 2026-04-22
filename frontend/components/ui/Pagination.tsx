@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 
 interface PaginationProps {
   page: number;
@@ -29,6 +30,7 @@ function buildPageList(current: number, last: number): (number | 'gap')[] {
 
 export function Pagination({ page, pageSize, total, onPageChange, disabled }: PaginationProps) {
   const { colors } = useTheme();
+  const t = useT();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
@@ -48,7 +50,7 @@ export function Pagination({ page, pageSize, total, onPageChange, disabled }: Pa
           !canPrev && styles.btnDisabled,
           pressed && canPrev && styles.pressed,
         ]}
-        accessibilityLabel="Previous page"
+        accessibilityLabel={t('pagination.prev')}
         accessibilityRole="button"
       >
         <Ionicons
@@ -89,7 +91,7 @@ export function Pagination({ page, pageSize, total, onPageChange, disabled }: Pa
           !canNext && styles.btnDisabled,
           pressed && canNext && styles.pressed,
         ]}
-        accessibilityLabel="Next page"
+        accessibilityLabel={t('pagination.next')}
         accessibilityRole="button"
       >
         <Ionicons

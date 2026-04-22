@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 
 interface SetupShellProps {
   children: React.ReactNode;
@@ -22,6 +23,7 @@ export function SetupShell({ children }: SetupShellProps) {
   const { colors, colorScheme, toggleTheme } = useTheme();
   const { signOut } = useAuth();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const t = useT();
 
   if (Platform.OS === 'web') {
     const isDark = colorScheme === 'dark';
@@ -104,7 +106,7 @@ export function SetupShell({ children }: SetupShellProps) {
             <button
               style={iconButtonStyle}
               onClick={toggleTheme}
-              aria-label={colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={colorScheme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
             >
               <Ionicons
                 name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
@@ -112,7 +114,11 @@ export function SetupShell({ children }: SetupShellProps) {
                 color={isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)'}
               />
             </button>
-            <button style={iconButtonStyle} onClick={() => signOut()} aria-label="Sign out">
+            <button
+              style={iconButtonStyle}
+              onClick={() => signOut()}
+              aria-label={t('common.signOut')}
+            >
               <Ionicons name="log-out-outline" size={18} color="#EF4444" />
             </button>
           </div>
@@ -130,9 +136,7 @@ export function SetupShell({ children }: SetupShellProps) {
         <Pressable
           onPress={toggleTheme}
           style={styles.iconButton}
-          accessibilityLabel={
-            colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
-          }
+          accessibilityLabel={colorScheme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
           accessibilityRole="button"
         >
           <Ionicons
@@ -144,7 +148,7 @@ export function SetupShell({ children }: SetupShellProps) {
         <Pressable
           onPress={() => signOut()}
           style={styles.iconButton}
-          accessibilityLabel="Sign out"
+          accessibilityLabel={t('common.signOut')}
           accessibilityRole="button"
         >
           <Ionicons name="log-out-outline" size={20} color="#EF4444" />

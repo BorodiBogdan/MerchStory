@@ -11,6 +11,7 @@ import Animated, {
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 
 interface LogoutModalProps {
   visible: boolean;
@@ -20,6 +21,7 @@ interface LogoutModalProps {
 
 export function LogoutModal({ visible, onConfirm, onDismiss }: LogoutModalProps) {
   const { colors } = useTheme();
+  const t = useT();
   const [internalVisible, setInternalVisible] = useState(false);
   const translateY = useSharedValue(500);
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -73,27 +75,25 @@ export function LogoutModal({ visible, onConfirm, onDismiss }: LogoutModalProps)
         <Animated.View style={[styles.card, cardAnimStyle]}>
           <View style={styles.handle} />
 
-          <Text style={styles.title}>Sign out?</Text>
-          <Text style={styles.subtitle}>
-            You&apos;ll need to sign in again to access your account.
-          </Text>
+          <Text style={styles.title}>{t('logout.title')}</Text>
+          <Text style={styles.subtitle}>{t('logout.body')}</Text>
 
           <Pressable
             onPress={handleConfirm}
             style={({ pressed }) => [styles.confirmButton, pressed && styles.confirmPressed]}
-            accessibilityLabel="Confirm sign out"
+            accessibilityLabel={t('logout.confirm')}
             accessibilityRole="button"
           >
-            <Text style={styles.confirmText}>Sign out</Text>
+            <Text style={styles.confirmText}>{t('logout.confirm')}</Text>
           </Pressable>
 
           <Pressable
             onPress={handleDismiss}
             style={({ pressed }) => [styles.cancelButton, pressed && styles.cancelPressed]}
-            accessibilityLabel="Cancel"
+            accessibilityLabel={t('common.cancel')}
             accessibilityRole="button"
           >
-            <Text style={styles.cancelText}>Cancel</Text>
+            <Text style={styles.cancelText}>{t('common.cancel')}</Text>
           </Pressable>
         </Animated.View>
       </View>

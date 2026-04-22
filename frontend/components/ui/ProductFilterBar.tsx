@@ -13,6 +13,7 @@ import {
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 
 export interface ProductFilterState {
   search: string;
@@ -44,6 +45,7 @@ export function ProductFilterBar({
   resultCount,
 }: ProductFilterBarProps) {
   const { colors } = useTheme();
+  const t = useT();
   const { width } = useWindowDimensions();
   const isVertical = layout === 'vertical';
   const isDesktop = layout === 'auto' && width >= DESKTOP_BREAKPOINT;
@@ -105,7 +107,7 @@ export function ProductFilterBar({
       <Ionicons name="search-outline" size={16} color={colors.text.muted} />
       <TextInput
         style={styles.searchInput as any}
-        placeholder="Search by name…"
+        placeholder={t('filters.searchPlaceholder')}
         placeholderTextColor={colors.text.muted}
         value={searchLocal}
         onChangeText={setSearchLocal}
@@ -124,10 +126,10 @@ export function ProductFilterBar({
   const selectedCount = value.categories.length;
   const dropdownLabel =
     selectedCount === 0
-      ? 'All categories'
+      ? t('filters.allCategories')
       : selectedCount === 1
         ? value.categories[0]
-        : `${selectedCount} categories`;
+        : `${selectedCount} ${t('filters.category').toLowerCase()}`;
 
   const verticalCategoryList = (
     <View>
@@ -156,7 +158,7 @@ export function ProductFilterBar({
       {categoryOpen && (
         <View style={styles.dropdownPanel}>
           {categories.length === 0 ? (
-            <Text style={styles.emptyChipsHint}>No categories yet.</Text>
+            <Text style={styles.emptyChipsHint}>{t('filters.noCategoriesHint')}</Text>
           ) : (
             <ScrollView
               style={{ maxHeight: 240 }}
@@ -210,7 +212,7 @@ export function ProductFilterBar({
               style={({ pressed }) => [styles.dropdownFooter, pressed && { opacity: 0.7 }]}
             >
               <Ionicons name="close-circle-outline" size={14} color={colors.accent.primary} />
-              <Text style={styles.dropdownFooterText}>Clear selection</Text>
+              <Text style={styles.dropdownFooterText}>{t('filters.clearAll')}</Text>
             </Pressable>
           )}
         </View>
@@ -221,7 +223,7 @@ export function ProductFilterBar({
   const priceRange = (
     <View style={styles.priceRow}>
       <View style={styles.priceInputWrapper}>
-        <Text style={styles.priceLabel}>Min</Text>
+        <Text style={styles.priceLabel}>{t('filters.min')}</Text>
         <Text style={styles.priceCurrency}>$</Text>
         <TextInput
           style={styles.priceInput as any}
@@ -235,7 +237,7 @@ export function ProductFilterBar({
       </View>
       <View style={styles.priceDash} />
       <View style={styles.priceInputWrapper}>
-        <Text style={styles.priceLabel}>Max</Text>
+        <Text style={styles.priceLabel}>{t('filters.max')}</Text>
         <Text style={styles.priceCurrency}>$</Text>
         <TextInput
           style={styles.priceInput as any}
@@ -254,30 +256,30 @@ export function ProductFilterBar({
     return (
       <View style={styles.verticalContainer}>
         <View style={styles.verticalHeader}>
-          <Text style={styles.verticalTitle}>Filters</Text>
+          <Text style={styles.verticalTitle}>{t('filters.title')}</Text>
           {hasActiveFilters && (
             <Pressable
               onPress={resetAll}
               style={({ pressed }) => [pressed && styles.pressed]}
-              accessibilityLabel="Clear all filters"
+              accessibilityLabel={t('filters.clearAll')}
             >
-              <Text style={styles.clearLink}>Clear all</Text>
+              <Text style={styles.clearLink}>{t('filters.clearAll')}</Text>
             </Pressable>
           )}
         </View>
 
         <View style={styles.verticalSection}>
-          <Text style={styles.verticalLabel}>Search</Text>
+          <Text style={styles.verticalLabel}>{t('filters.search')}</Text>
           {searchField}
         </View>
 
         <View style={styles.verticalSection}>
-          <Text style={styles.verticalLabel}>Category</Text>
+          <Text style={styles.verticalLabel}>{t('filters.category')}</Text>
           {verticalCategoryList}
         </View>
 
         <View style={styles.verticalSection}>
-          <Text style={styles.verticalLabel}>Price range</Text>
+          <Text style={styles.verticalLabel}>{t('filters.priceRange')}</Text>
           {priceRange}
         </View>
 
@@ -304,14 +306,14 @@ export function ProductFilterBar({
               style={({ pressed }) => [styles.clearBtn, pressed && styles.pressed]}
             >
               <Ionicons name="refresh-outline" size={14} color={colors.accent.primary} />
-              <Text style={styles.clearBtnText}>Clear</Text>
+              <Text style={styles.clearBtnText}>{t('filters.clearAll')}</Text>
             </Pressable>
           )}
         </View>
         <View style={styles.desktopChipsRow}>{verticalCategoryList}</View>
         {typeof resultCount === 'number' && (
           <Text style={styles.resultCount}>
-            {resultCount} {resultCount === 1 ? 'product' : 'products'}
+            {resultCount} {resultCount === 1 ? t('filters.resultOne') : t('filters.resultOther')}
           </Text>
         )}
       </View>
@@ -329,7 +331,7 @@ export function ProductFilterBar({
             expanded && styles.filterToggleActive,
             pressed && styles.pressed,
           ]}
-          accessibilityLabel="Toggle filters"
+          accessibilityLabel={t('filters.toggle')}
         >
           <Ionicons
             name="options-outline"
@@ -337,7 +339,7 @@ export function ProductFilterBar({
             color={expanded ? colors.accent.primary : colors.text.secondary}
           />
           <Text style={[styles.filterToggleText, expanded && styles.filterToggleTextActive]}>
-            Filters
+            {t('filters.title')}
           </Text>
           {hasActiveFilters && !expanded && <View style={styles.filterDot} />}
         </Pressable>
@@ -352,7 +354,7 @@ export function ProductFilterBar({
               style={({ pressed }) => [styles.clearBtnMobile, pressed && styles.pressed]}
             >
               <Ionicons name="refresh-outline" size={14} color={colors.accent.primary} />
-              <Text style={styles.clearBtnText}>Clear all filters</Text>
+              <Text style={styles.clearBtnText}>{t('filters.clearAll')}</Text>
             </Pressable>
           )}
         </View>
