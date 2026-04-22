@@ -392,7 +392,7 @@ const en = {
   'studio.previewEmptyCatalog': 'Your catalog will appear here',
   'studio.previewEmptyAnnouncement': 'Your generated graphic will appear here',
   'studio.import': 'Import',
-  'studio.myWallpapers': 'My Wallpapers',
+  'studio.myWallpapers': 'Library',
   'studio.keep': 'Keep',
   'studio.postTypeAnnouncement': 'Announcement',
   'studio.postTypeJobPost': 'Job Post',

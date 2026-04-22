@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
@@ -103,14 +104,9 @@ export default function LandingPage() {
             style={({ pressed }) => [s.logoBtn, pressed && { opacity: 0.75 }]}
             onPress={() => {}}
             accessibilityRole="button"
+            accessibilityLabel="MerchStory home"
           >
-            <View style={s.logoMark}>
-              <Ionicons name="color-wand" size={13} color="#fff" />
-            </View>
-            <Text style={s.logoWordmark}>
-              <Text style={s.logoWordmarkBold}>Merch</Text>
-              <Text style={s.logoWordmarkAccent}>Story</Text>
-            </Text>
+            <BrandLogo size="sm" variant="horizontal" />
           </Pressable>
 
           <View style={s.navRight}>
@@ -341,13 +337,7 @@ export default function LandingPage() {
           <View style={[s.footerBottom, isNarrow && s.footerBottomNarrow]}>
             {/* Logo */}
             <View style={s.footerLogoRow}>
-              <View style={s.logoMark}>
-                <Ionicons name="color-wand" size={11} color="#fff" />
-              </View>
-              <Text style={s.footerLogoText}>
-                <Text style={s.logoWordmarkBold}>Merch</Text>
-                <Text style={s.logoWordmarkAccent}>Story</Text>
-              </Text>
+              <BrandLogo size="xs" variant="horizontal" />
             </View>
 
             <Text style={s.copyright}>

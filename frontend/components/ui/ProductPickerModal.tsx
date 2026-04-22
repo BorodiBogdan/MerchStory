@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { D } from '@/constants/design';
 import { useShop } from '@/context/shop';
@@ -70,6 +71,7 @@ export function ProductPickerModal({
   const { categories } = useShop();
   const { width: screenWidth } = useWindowDimensions();
   const isDesktop = screenWidth >= DESKTOP_BREAKPOINT;
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const cache = productsCache.useProductsCache();
@@ -280,7 +282,7 @@ export function ProductPickerModal({
           </Pressable>
         </Pressable>
       ) : (
-        <View style={styles.fullscreen}>
+        <View style={[styles.fullscreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           {header}
           {body}
         </View>

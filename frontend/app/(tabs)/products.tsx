@@ -69,8 +69,8 @@ function toMetadata(detail: ProductDetail): ProductItem {
 const CURRENCY_CHOICES: Currency[] = ['USD', 'EUR', 'RON'];
 
 const isWeb = Platform.OS === 'web';
-const MAX_CONTENT_WIDTH = 1200;
-const WEB_H_PADDING = 32;
+const MAX_CONTENT_WIDTH = 1600;
+const WEB_H_PADDING = 64;
 const MOBILE_H_PADDING = D.spacing.md;
 const GAP = D.spacing.md;
 
@@ -174,7 +174,15 @@ export default function ProductsScreen() {
   const gridInnerWidth = useSidebar
     ? baseWidth - hPadding * 2 - SIDEBAR_WIDTH - SIDEBAR_GAP
     : baseWidth - hPadding * 2;
-  const numColumns = isWeb ? (gridInnerWidth < 420 ? 2 : gridInnerWidth < 720 ? 3 : 4) : 2;
+  const numColumns = isWeb
+    ? gridInnerWidth < 420
+      ? 2
+      : gridInnerWidth < 720
+        ? 3
+        : gridInnerWidth < 1100
+          ? 4
+          : 5
+    : 2;
   const cardWidth = (gridInnerWidth - GAP * (numColumns - 1)) / numColumns;
 
   const toApiFilters = useCallback((f: ProductFilterState): ProductFilters => {

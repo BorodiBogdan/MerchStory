@@ -1366,7 +1366,7 @@ function makeStyles(
       minWidth: 160,
       flexShrink: 0,
       flexGrow: 0,
-      alignSelf: 'flex-start',
+      alignSelf: 'stretch',
       ...(Platform.OS === 'web' ? ({ whiteSpace: 'nowrap' } as any) : {}),
       ...(Platform.OS === 'web' ? { boxShadow: `0 6px 18px -8px ${colors.accent.primary}80` } : {}),
     } as any,

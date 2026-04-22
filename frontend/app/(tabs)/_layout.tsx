@@ -3,29 +3,25 @@ import { Redirect, Tabs, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
-import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 
 export default function TabLayout() {
   const { token, isLoading, isShopSetupComplete } = useAuth();
   const { colors, colorScheme, toggleTheme } = useTheme();
-  const { profile } = useShop();
   const t = useT();
-  const shopLogoUri = profile?.logoBase64 ?? null;
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
   const insets = useSafeAreaInsets();
@@ -53,13 +49,7 @@ export default function TabLayout() {
       accessibilityRole="button"
       accessibilityLabel={t('tabs.home')}
     >
-      <View style={styles.logoMark}>
-        <Ionicons name="color-wand" size={13} color="#fff" />
-      </View>
-      <Text style={styles.logoWordmark}>
-        <Text style={styles.logoWordmarkBold}>Merch</Text>
-        <Text style={styles.logoWordmarkAccent}>Story</Text>
-      </Text>
+      <BrandLogo size="sm" variant="horizontal" />
     </Pressable>
   );
 
@@ -85,11 +75,7 @@ export default function TabLayout() {
         accessibilityLabel={t('tabs.profile')}
       >
         <View style={styles.avatarChip}>
-          {shopLogoUri ? (
-            <Image source={{ uri: shopLogoUri }} style={styles.avatarLogo} />
-          ) : (
-            <Ionicons name="person-circle-outline" size={22} color={colors.text.secondary} />
-          )}
+          <Ionicons name="person" size={18} color={colors.accent.primary} />
         </View>
       </Pressable>
     </View>
@@ -190,29 +176,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     logoButton: {
       marginLeft: D.spacing.md,
       outlineWidth: 0,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: D.spacing.xs,
-    },
-    logoMark: {
-      width: 26,
-      height: 26,
-      borderRadius: D.radius.sm,
-      backgroundColor: colors.accent.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    logoWordmark: {
-      fontSize: D.fontSize.lg,
-      letterSpacing: -0.5,
-    },
-    logoWordmarkBold: {
-      fontWeight: D.fontWeight.bold,
-      color: colors.text.primary,
-    },
-    logoWordmarkAccent: {
-      fontWeight: D.fontWeight.bold,
-      color: colors.accent.primary,
     },
     headerActions: {
       flexDirection: 'row',
@@ -238,11 +201,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
-    },
-    avatarLogo: {
-      width: '100%',
-      height: '100%',
-      resizeMode: 'contain',
     },
     tabBar: {
       backgroundColor: colors.bg.surface,

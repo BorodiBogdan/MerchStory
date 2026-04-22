@@ -21,12 +21,16 @@ import {
   View,
 } from 'react-native';
 import ReAnimated, {
+  Easing,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { ChipSelector } from '@/components/ui/ChipSelector';
 import { GalleryImage } from '@/components/ui/GalleryImage';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
@@ -464,7 +468,7 @@ function TextStylePresetPicker({
                 width: 130,
                 borderRadius: 12,
                 overflow: 'hidden',
-                borderWidth: selected ? 2.5 : 1.5,
+                borderWidth: 2.5,
                 borderColor: selected ? colors.accent.primary : colors.border.default,
               }}
             >
@@ -560,38 +564,50 @@ function TextStylePresetPicker({
                       Product Name
                     </Text>
                     <View
-                      style={
-                        preset.priceBadge === 'Pill'
-                          ? {
-                              // Backend draws the pill as a filled shape with no stroke;
-                              // tinted priceColor fill keeps it visible on previewBg
-                              // (which sits in the opposite luminance bucket).
-                              backgroundColor: priceColor + '33',
-                              paddingHorizontal: 16,
-                              paddingVertical: 6,
-                              borderRadius: 999,
-                            }
-                          : undefined
-                      }
+                      style={{
+                        height: 40,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
                     >
-                      <Text
-                        style={{
-                          color: priceColor,
-                          fontSize: 24,
-                          fontFamily: preset.priceFont,
-                          letterSpacing: -0.5,
-                          ...(shadowStyle ?? {}),
-                          ...(hasOutline
+                      <View
+                        style={
+                          preset.priceBadge === 'Pill'
                             ? {
-                                textShadowColor: outlineGlow,
-                                textShadowOffset: { width: 0, height: 0 },
-                                textShadowRadius: 3,
+                                // Backend draws the pill as a filled shape with no stroke;
+                                // tinted priceColor fill keeps it visible on previewBg
+                                // (which sits in the opposite luminance bucket).
+                                backgroundColor: priceColor + '33',
+                                paddingHorizontal: 16,
+                                paddingVertical: 6,
+                                borderRadius: 999,
                               }
-                            : {}),
-                        }}
+                            : undefined
+                        }
                       >
-                        $19.99
-                      </Text>
+                        <Text
+                          style={
+                            {
+                              color: priceColor,
+                              fontSize: 24,
+                              lineHeight: 26,
+                              includeFontPadding: false,
+                              fontFamily: preset.priceFont,
+                              letterSpacing: -0.5,
+                              ...(shadowStyle ?? {}),
+                              ...(hasOutline
+                                ? {
+                                    textShadowColor: outlineGlow,
+                                    textShadowOffset: { width: 0, height: 0 },
+                                    textShadowRadius: 3,
+                                  }
+                                : {}),
+                            } as any
+                          }
+                        >
+                          $19.99
+                        </Text>
+                      </View>
                     </View>
                   </>
                 )}
@@ -755,6 +771,8 @@ function BrandContextSection({
 }) {
   const { colors } = useTheme();
   const t = useT();
+  const { width: screenWidth } = useWindowDimensions();
+  const isDesktop = isWeb && screenWidth >= DESKTOP_BREAKPOINT;
   if (items.length === 0) return null;
   return (
     <>
@@ -768,7 +786,13 @@ function BrandContextSection({
       >
         {t('studio.brandContextHint')}
       </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: D.spacing.xs }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          gap: isDesktop ? D.spacing.xs : D.spacing.sm,
+        }}
+      >
         {items.map((item) => {
           const active = selected.includes(item.key);
           return (
@@ -780,9 +804,9 @@ function BrandContextSection({
               style={({ pressed }) => ({
                 flexDirection: 'row' as const,
                 alignItems: 'center' as const,
-                gap: 4,
-                paddingVertical: 5,
-                paddingHorizontal: D.spacing.sm,
+                gap: isDesktop ? 4 : 6,
+                paddingVertical: isDesktop ? 5 : 9,
+                paddingHorizontal: isDesktop ? D.spacing.sm : D.spacing.md,
                 borderRadius: D.radius.pill,
                 borderWidth: 1,
                 borderColor: active ? colors.accent.primary : colors.border.default,
@@ -795,12 +819,12 @@ function BrandContextSection({
             >
               <Ionicons
                 name={active ? 'checkmark-circle' : 'ellipse-outline'}
-                size={13}
+                size={isDesktop ? 13 : 16}
                 color={active ? colors.accent.primary : colors.text.muted}
               />
               <Text
                 style={{
-                  fontSize: D.fontSize.xs,
+                  fontSize: isDesktop ? D.fontSize.xs : D.fontSize.sm,
                   color: active ? colors.accent.primary : colors.text.secondary,
                   fontWeight: active ? D.fontWeight.medium : D.fontWeight.regular,
                 }}
@@ -864,7 +888,7 @@ function SidebarOptionGroup({
 }) {
   const { colors } = useTheme();
   return (
-    <View style={{ gap: 1, marginTop: D.spacing.xs }}>
+    <View style={{ gap: 2, marginTop: D.spacing.xs }}>
       {options.map((opt) => {
         const active = selected === opt.value;
         return (
@@ -873,39 +897,48 @@ function SidebarOptionGroup({
             onPress={() => onSelect(opt.value)}
             accessibilityRole="radio"
             accessibilityState={{ selected: active }}
-            style={({ pressed }) => ({
-              flexDirection: 'row' as const,
-              alignItems: 'center' as const,
-              paddingVertical: 7,
-              paddingHorizontal: D.spacing.sm,
-              borderRadius: D.radius.sm,
-              backgroundColor: active
-                ? colors.accent.dim
-                : pressed
-                  ? colors.bg.elevated
-                  : 'transparent',
-              gap: D.spacing.sm,
-            })}
+            style={({ pressed }) =>
+              ({
+                flexDirection: 'row' as const,
+                alignItems: 'center' as const,
+                paddingVertical: 9,
+                paddingHorizontal: D.spacing.sm + 2,
+                borderRadius: D.radius.md,
+                backgroundColor: active
+                  ? colors.accent.dim
+                  : pressed
+                    ? colors.bg.elevated
+                    : 'transparent',
+                borderWidth: 1,
+                borderColor: active ? colors.accent.primary + '55' : 'transparent',
+                gap: D.spacing.sm + 2,
+                ...(Platform.OS === 'web' ? ({ transitionDuration: '140ms' } as any) : {}),
+              }) as any
+            }
           >
             <View
               style={{
-                width: 16,
-                height: 16,
-                borderRadius: 8,
-                borderWidth: 1.5,
+                width: 18,
+                height: 18,
+                borderRadius: 9,
+                borderWidth: 2,
                 borderColor: active ? colors.accent.primary : colors.border.default,
                 backgroundColor: active ? colors.accent.primary : 'transparent',
                 alignItems: 'center',
                 justifyContent: 'center',
+                ...(Platform.OS === 'web' && active
+                  ? ({ boxShadow: `0 0 0 3px ${colors.accent.primary}22` } as any)
+                  : {}),
               }}
             >
-              {active && <Ionicons name="checkmark" size={10} color="#fff" />}
+              {active && <Ionicons name="checkmark" size={11} color="#fff" />}
             </View>
             <Text
               style={{
                 fontSize: D.fontSize.sm,
-                fontWeight: active ? D.fontWeight.medium : D.fontWeight.regular,
+                fontWeight: active ? D.fontWeight.semibold : D.fontWeight.medium,
                 color: active ? colors.accent.primary : colors.text.secondary,
+                letterSpacing: active ? 0.1 : 0,
               }}
             >
               {opt.label}
@@ -928,39 +961,56 @@ function GenerateButton({
   label: string;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
+  const inactive = disabled || loading;
   return (
     <Pressable
-      style={({ pressed }) => [
-        {
-          backgroundColor: '#6366F1',
-          borderRadius: D.radius.md,
-          paddingVertical: 13,
-          flexDirection: 'row' as const,
-          alignItems: 'center' as const,
-          justifyContent: 'center' as const,
-          gap: D.spacing.sm,
-          opacity: disabled || loading ? 0.45 : pressed ? 0.85 : 1,
-        },
-        !disabled &&
-          !loading && {
-            shadowColor: '#6366F1',
-            shadowOpacity: 0.4,
-            shadowRadius: 12,
-            shadowOffset: { width: 0, height: 4 },
-            elevation: 6,
+      style={({ pressed }) =>
+        [
+          {
+            borderRadius: D.radius.pill,
+            paddingVertical: 14,
+            paddingHorizontal: D.spacing.md,
+            flexDirection: 'row' as const,
+            alignItems: 'center' as const,
+            justifyContent: 'center' as const,
+            gap: 6,
+            backgroundColor: inactive ? colors.bg.elevated : colors.accent.primary,
+            borderWidth: inactive ? 1 : 0,
+            borderColor: colors.border.default,
+            transform: [{ scale: pressed && !inactive ? 0.98 : 1 }],
+            opacity: loading ? 0.85 : pressed && !inactive ? 0.95 : 1,
           },
-      ]}
+          !inactive &&
+            (Platform.OS === 'web'
+              ? ({
+                  boxShadow: `0 10px 28px -10px ${colors.accent.primary}CC, 0 0 0 1px ${colors.accent.primary}33 inset`,
+                  transitionDuration: '160ms',
+                } as any)
+              : D.shadow.glow),
+        ] as any
+      }
       onPress={onPress}
-      disabled={disabled || loading}
+      disabled={inactive}
       accessibilityRole="button"
+      accessibilityState={{ disabled: inactive, busy: loading }}
     >
       {loading ? (
         <ActivityIndicator size="small" color="#fff" />
       ) : (
         <>
-          <Ionicons name="sparkles-outline" size={15} color="#fff" />
+          <Ionicons name="sparkles" size={16} color={inactive ? colors.text.muted : '#fff'} />
           <Text
-            style={{ color: '#fff', fontSize: D.fontSize.base, fontWeight: D.fontWeight.semibold }}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={{
+              color: inactive ? colors.text.muted : '#fff',
+              fontSize: D.fontSize.base,
+              fontWeight: D.fontWeight.bold,
+              letterSpacing: 0.3,
+              flexShrink: 1,
+              minWidth: 0,
+            }}
           >
             {label}
           </Text>
@@ -1006,7 +1056,12 @@ function ResultPreviewPanel({
   if (generating) {
     return (
       <View style={styles.previewPlaceholder}>
-        <ActivityIndicator size="large" color={colors.accent.primary} />
+        <View style={styles.previewHaloTR} pointerEvents="none" />
+        <View style={styles.previewHaloBL} pointerEvents="none" />
+        <View style={styles.previewHaloSpot} pointerEvents="none" />
+        <View style={styles.previewIconCircle}>
+          <ActivityIndicator size="small" color={colors.accent.primary} />
+        </View>
         <Text style={styles.previewEmptyTitle}>{t('studio.generating')}</Text>
         <Text style={styles.previewEmptyHint}>{t('studio.previewEmptyHint')}</Text>
       </View>
@@ -1015,7 +1070,9 @@ function ResultPreviewPanel({
   if (error) {
     return (
       <View style={styles.previewPlaceholder}>
-        <Ionicons name="alert-circle-outline" size={40} color={colors.text.error} />
+        <View style={[styles.previewIconCircle, { backgroundColor: `${colors.destructive}1A` }]}>
+          <Ionicons name="alert-circle-outline" size={30} color={colors.text.error} />
+        </View>
         <Text style={[styles.previewEmptyTitle, { color: colors.text.error }]}>
           {t('studio.errorGeneric')}
         </Text>
@@ -1032,13 +1089,13 @@ function ResultPreviewPanel({
           resizeMode="contain"
           accessibilityLabel={t('studio.a11y.generatedImage')}
         />
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 8, margin: D.spacing.md, marginTop: 0 }}>
           {onKeep && (
             <Pressable
               style={({ pressed }) => [
                 styles.downloadBtn,
-                { backgroundColor: isKept ? colors.accent.dim : colors.accent.primary },
-                pressed && { opacity: 0.75 },
+                { margin: 0, backgroundColor: isKept ? colors.accent.dim : colors.accent.primary },
+                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
               ]}
               onPress={isKept ? undefined : onKeep}
               accessibilityRole="button"
@@ -1056,7 +1113,11 @@ function ResultPreviewPanel({
           )}
           {isWeb && (
             <Pressable
-              style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.75 }]}
+              style={({ pressed }) => [
+                styles.downloadBtn,
+                { margin: 0 },
+                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+              ]}
               onPress={() => downloadImage(result, filename)}
               accessibilityRole="button"
               accessibilityLabel={t('studio.a11y.downloadImage')}
@@ -1071,8 +1132,11 @@ function ResultPreviewPanel({
   }
   return (
     <View style={styles.previewPlaceholder}>
+      <View style={styles.previewHaloTR} pointerEvents="none" />
+      <View style={styles.previewHaloBL} pointerEvents="none" />
+      <View style={styles.previewHaloSpot} pointerEvents="none" />
       <View style={styles.previewIconCircle}>
-        <Ionicons name="sparkles-outline" size={28} color={colors.accent.primary} />
+        <Ionicons name="sparkles" size={30} color={colors.accent.primary} />
       </View>
       <Text style={styles.previewEmptyTitle}>{emptyTitle}</Text>
       <Text style={styles.previewEmptyHint}>{emptyHint}</Text>
@@ -1164,10 +1228,16 @@ function ChooseProductsSection({
     setPickerOpen(false);
   };
 
-  // Desktop inline card width: 4 cards in available panel space
-  const panelInner = screenWidth - SIDEBAR_WIDTH - 1 - 64;
-  const inlineCardWidth = Math.floor(
-    (panelInner - D.spacing.sm * (DESKTOP_INLINE_LIMIT - 1)) / DESKTOP_INLINE_LIMIT
+  // Desktop inline card width: 4 cards fit inside the right panel's section card.
+  // Layout: right panel fills `screenWidth - SIDEBAR_WIDTH` (capped at 1280), minus
+  // rightPanelContent horizontal padding (D.spacing.xl * 2), minus desktopSection
+  // inner padding (D.spacing.lg * 2), minus the section's 1px border on each side.
+  const rightPanelMax = 1280;
+  const rightPanelWidth = Math.min(screenWidth - SIDEBAR_WIDTH, rightPanelMax);
+  const panelInner = rightPanelWidth - D.spacing.xl * 2 - D.spacing.lg * 2 - 2;
+  const inlineCardWidth = Math.max(
+    96,
+    Math.floor((panelInner - D.spacing.sm * (DESKTOP_INLINE_LIMIT - 1)) / DESKTOP_INLINE_LIMIT)
   );
 
   const hasMore = products.length > DESKTOP_INLINE_LIMIT;
@@ -1443,6 +1513,7 @@ export default function StudioScreen() {
   const t = useT();
   const { profile: shopProfile } = useShop();
   const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isDesktop = isWeb && screenWidth >= DESKTOP_BREAKPOINT;
   const styles = useMemo(
     () => makeStyles(colors, isDesktop, screenWidth),
@@ -1915,6 +1986,35 @@ export default function StudioScreen() {
   }, [floatY]);
   const floatStyle = useAnimatedStyle(() => ({ transform: [{ translateY: floatY.value }] }));
 
+  // ── Entrance animation (opacity + translateY) ────────────────────────────────
+  const enterOpacity = useSharedValue(0);
+  const enterTranslate = useSharedValue(14);
+  useEffect(() => {
+    enterOpacity.value = withTiming(1, {
+      duration: D.duration.entrance,
+      easing: Easing.out(Easing.cubic),
+    });
+    enterTranslate.value = withTiming(0, {
+      duration: D.duration.entrance + 50,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [enterOpacity, enterTranslate]);
+  const heroEnterStyle = useAnimatedStyle(() => ({
+    opacity: enterOpacity.value,
+    transform: [{ translateY: enterTranslate.value }],
+  }));
+
+  const panelOpacity = useSharedValue(0);
+  const panelTranslate = useSharedValue(18);
+  useEffect(() => {
+    panelOpacity.value = withDelay(120, withTiming(1, { duration: 500 }));
+    panelTranslate.value = withDelay(120, withTiming(0, { duration: 520 }));
+  }, [panelOpacity, panelTranslate]);
+  const panelEnterStyle = useAnimatedStyle(() => ({
+    opacity: panelOpacity.value,
+    transform: [{ translateY: panelTranslate.value }],
+  }));
+
   const selectedCount = selected.size;
   const currentPostType = POST_TYPES.find((t) => t.type === postType)!;
 
@@ -2047,47 +2147,11 @@ export default function StudioScreen() {
       ) : null;
 
     // ── Right panel content per tab ──────────────────────────────────────────
+    // Note: the Photo/On-Wallpaper segmented control now lives inside the hero's
+    // top-right dock, so the body starts directly with the mode's content.
     const rightContent =
       activeTab === 'catalog' ? (
         <>
-          {/* Catalog mode sub-tab bar */}
-          <View style={styles.desktopSection}>
-            <View style={styles.segmentTrack}>
-              <Animated.View
-                style={[styles.segmentIndicator, { width: '48%', left: catalogModeIndicatorLeft }]}
-              />
-              {(['generate', 'on-wallpaper'] as CatalogMode[]).map((mode) => {
-                const isActive = catalogMode === mode;
-                return (
-                  <Pressable
-                    key={mode}
-                    style={styles.segmentButton}
-                    onPress={() => switchCatalogMode(mode)}
-                    accessibilityRole="button"
-                  >
-                    <Ionicons
-                      name={
-                        mode === 'generate'
-                          ? isActive
-                            ? 'sparkles'
-                            : 'sparkles-outline'
-                          : isActive
-                            ? 'image'
-                            : 'image-outline'
-                      }
-                      size={14}
-                      color={isActive ? '#fff' : colors.text.secondary}
-                      style={{ marginRight: 4 }}
-                    />
-                    <Text style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}>
-                      {mode === 'generate' ? t('studio.generate') : t('studio.onWallpaperTab')}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
           {catalogMode === 'generate' ? (
             <>
               {/* Product picker */}
@@ -2164,7 +2228,9 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="image-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>{t('studio.import')}</Text>
+                    <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                      {t('studio.import')}
+                    </Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [
@@ -2175,7 +2241,9 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="sparkles-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>{t('studio.generate')}</Text>
+                    <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                      {t('studio.generate')}
+                    </Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [
@@ -2186,7 +2254,9 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="albums-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>{t('studio.myWallpapers')}</Text>
+                    <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                      {t('studio.myWallpapers')}
+                    </Text>
                   </Pressable>
                 </View>
 
@@ -2559,14 +2629,17 @@ export default function StudioScreen() {
     return (
       <>
         <View style={styles.desktopRoot}>
+          <View style={styles.ambientGlow} pointerEvents="none" />
+          <View style={styles.ambientGlow2} pointerEvents="none" />
+
           {/* ── LEFT SIDEBAR ── */}
-          <View style={styles.sidebar}>
+          <ReAnimated.View style={[styles.sidebar, heroEnterStyle]}>
             <ScrollView
               style={styles.sidebarScroll}
               contentContainerStyle={styles.sidebarContent}
               showsVerticalScrollIndicator={false}
             >
-              {/* Header */}
+              {/* Header: title (brand logo lives in the top navbar) */}
               <View style={styles.sidebarHeader}>
                 <Text style={styles.sidebarTitle}>{t('studio.title')}</Text>
                 <Text style={styles.sidebarSubtitle}>{t('studio.subtitle')}</Text>
@@ -2616,10 +2689,7 @@ export default function StudioScreen() {
 
             {/* Sticky footer */}
             {sidebarFooter && <View style={styles.sidebarFooter}>{sidebarFooter}</View>}
-          </View>
-
-          {/* ── PANEL DIVIDER ── */}
-          <View style={styles.panelDivider} />
+          </ReAnimated.View>
 
           {/* ── RIGHT PANEL ── */}
           <ScrollView
@@ -2627,7 +2697,104 @@ export default function StudioScreen() {
             contentContainerStyle={styles.rightPanelContent}
             showsVerticalScrollIndicator={false}
           >
-            {rightContent}
+            <ReAnimated.View style={[panelEnterStyle, { gap: D.spacing.lg }]}>
+              {/* Hero header */}
+              <View style={styles.heroWrap}>
+                <View style={styles.heroGlow} pointerEvents="none" />
+                <View style={styles.heroGlow2} pointerEvents="none" />
+                <View style={activeTab === 'catalog' ? styles.heroTextClamp : undefined}>
+                  <View style={styles.heroEyebrow}>
+                    <View style={styles.heroEyebrowDot} />
+                    <Text style={styles.heroEyebrowText}>GENERATION STUDIO</Text>
+                  </View>
+                  <Text style={styles.heroTitle}>
+                    {activeTab === 'catalog'
+                      ? t('studio.navCatalog')
+                      : activeTab === 'announcements'
+                        ? t('studio.navAnnouncements')
+                        : t('studio.navVideo')}
+                  </Text>
+                  <Text style={styles.heroSubtitle}>{TAB_META_I18N[activeTab].desc}</Text>
+                  <View style={styles.heroMetaRow}>
+                    {activeTab === 'catalog' && (
+                      <View style={styles.heroMetaChip}>
+                        <Ionicons name="grid-outline" size={12} color={colors.accent.primary} />
+                        <Text style={styles.heroMetaText}>
+                          {selectedCount > 0
+                            ? `${selectedCount} ${t('productPicker.selected')}`
+                            : t('studio.selectProductsFirst')}
+                        </Text>
+                      </View>
+                    )}
+                    {activeTab === 'announcements' && (
+                      <View style={styles.heroMetaChip}>
+                        <Ionicons
+                          name="megaphone-outline"
+                          size={12}
+                          color={colors.accent.primary}
+                        />
+                        <Text style={styles.heroMetaText}>{postType}</Text>
+                      </View>
+                    )}
+                    {activeTab === 'video' && (
+                      <View style={styles.heroMetaChip}>
+                        <Ionicons name="time-outline" size={12} color={colors.accent.primary} />
+                        <Text style={styles.heroMetaText}>{t('studio.comingSoon')}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* Photo ↔ On Wallpaper segmented control (docked top-right) */}
+                {activeTab === 'catalog' && (
+                  <View style={styles.heroSegmentDock}>
+                    <View style={styles.segmentTrack}>
+                      <Animated.View
+                        style={[
+                          styles.segmentIndicator,
+                          { width: '48%', left: catalogModeIndicatorLeft },
+                        ]}
+                      />
+                      {(['generate', 'on-wallpaper'] as CatalogMode[]).map((mode) => {
+                        const isActive = catalogMode === mode;
+                        return (
+                          <Pressable
+                            key={mode}
+                            style={styles.segmentButton}
+                            onPress={() => switchCatalogMode(mode)}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons
+                              name={
+                                mode === 'generate'
+                                  ? isActive
+                                    ? 'sparkles'
+                                    : 'sparkles-outline'
+                                  : isActive
+                                    ? 'image'
+                                    : 'image-outline'
+                              }
+                              size={14}
+                              color={isActive ? '#fff' : colors.text.secondary}
+                              style={{ marginRight: 4 }}
+                            />
+                            <Text
+                              style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}
+                            >
+                              {mode === 'generate'
+                                ? t('studio.generate')
+                                : t('studio.onWallpaperTab')}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {rightContent}
+            </ReAnimated.View>
           </ScrollView>
         </View>
 
@@ -2772,7 +2939,7 @@ export default function StudioScreen() {
                         >
                           <Ionicons
                             name={checked ? 'checkbox' : 'square-outline'}
-                            size={18}
+                            size={isDesktop ? 18 : 24}
                             color={checked ? colors.accent.primary : colors.text.muted}
                           />
                           <Text style={styles.wallpaperGenCheckLabel}>{opt.label}</Text>
@@ -3024,7 +3191,15 @@ export default function StudioScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.mobileInner}>
+        <ReAnimated.View style={[styles.mobileInner, heroEnterStyle]}>
+          {/* Mobile hero header */}
+          <View style={styles.mobileHero}>
+            <View style={styles.mobileHeroGlow} pointerEvents="none" />
+            <BrandLogo size="sm" variant="horizontal" style={{ marginBottom: D.spacing.sm }} />
+            <Text style={styles.mobileHeroTitle}>{t('studio.title')}</Text>
+            <Text style={styles.mobileHeroSubtitle}>{t('studio.subtitle')}</Text>
+          </View>
+
           {/* Segmented control */}
           <View style={styles.segmentTrack}>
             <Animated.View style={[styles.segmentIndicator, { left: indicatorLeft }]} />
@@ -3265,7 +3440,9 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="image-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>{t('studio.import')}</Text>
+                        <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                          {t('studio.import')}
+                        </Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
@@ -3276,7 +3453,9 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="sparkles-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>{t('studio.generate')}</Text>
+                        <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                          {t('studio.generate')}
+                        </Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
@@ -3287,7 +3466,9 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="albums-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>{t('studio.myWallpapers')}</Text>
+                        <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                          {t('studio.myWallpapers')}
+                        </Text>
                       </Pressable>
                     </View>
 
@@ -3803,7 +3984,7 @@ export default function StudioScreen() {
               </View>
             </View>
           )}
-        </View>
+        </ReAnimated.View>
       </ScrollView>
 
       {/* Wallpaper generate modal */}
@@ -3953,7 +4134,7 @@ export default function StudioScreen() {
                       >
                         <Ionicons
                           name={checked ? 'checkbox' : 'square-outline'}
-                          size={18}
+                          size={isDesktop ? 18 : 24}
                           color={checked ? colors.accent.primary : colors.text.muted}
                         />
                         <Text style={styles.wallpaperGenCheckLabel}>{opt.label}</Text>
@@ -4109,7 +4290,12 @@ export default function StudioScreen() {
         animationType="fade"
         onRequestClose={() => setWallpaperPickerVisible(false)}
       >
-        <View style={styles.pickerFullScreen}>
+        <View
+          style={[
+            styles.pickerFullScreen,
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
+          ]}
+        >
           <View style={styles.pickerHeader}>
             <Text style={styles.pickerTitle}>{t('studio.myWallpapers')}</Text>
             <Pressable
@@ -4143,25 +4329,28 @@ export default function StudioScreen() {
               numColumns={2}
               contentContainerStyle={{ padding: D.spacing.md, gap: D.spacing.sm }}
               columnWrapperStyle={{ gap: D.spacing.sm }}
+              showsVerticalScrollIndicator={false}
               renderItem={({ item }) => {
                 const thumbWidth = (screenWidth - D.spacing.md * 2 - D.spacing.sm) / 2;
+                const thumbHeight = Math.min(thumbWidth * (16 / 9), screenWidth * 0.55);
                 return (
                   <Pressable
                     style={({ pressed }) => ({
                       width: thumbWidth,
-                      aspectRatio: 9 / 16,
+                      height: thumbHeight,
                       borderRadius: D.radius.md,
                       overflow: 'hidden',
                       opacity: pressed ? 0.8 : 1,
                       borderWidth: 1.5,
                       borderColor: colors.border.default,
+                      backgroundColor: colors.bg.elevated,
                     })}
                     onPress={() => pickWallpaperFromLibrary(item)}
                   >
                     <GalleryImage
                       id={item.id}
                       style={{ width: '100%', height: '100%' }}
-                      resizeMode="contain"
+                      resizeMode="cover"
                     />
                   </Pressable>
                 );
@@ -4193,6 +4382,30 @@ function makeStyles(
       flex: 1,
       flexDirection: 'row',
       backgroundColor: colors.bg.base,
+      position: 'relative',
+      overflow: 'hidden',
+    },
+
+    // ── Ambient decorative glows (pointerEvents: 'none') ───────────────────────
+    ambientGlow: {
+      position: 'absolute',
+      top: -160,
+      right: -160,
+      width: 440,
+      height: 440,
+      borderRadius: 220,
+      backgroundColor: colors.accent.primary,
+      opacity: 0.07,
+    },
+    ambientGlow2: {
+      position: 'absolute',
+      bottom: -180,
+      left: SIDEBAR_WIDTH - 80,
+      width: 360,
+      height: 360,
+      borderRadius: 180,
+      backgroundColor: colors.accent.secondary,
+      opacity: 0.05,
     },
 
     // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -4200,25 +4413,33 @@ function makeStyles(
       width: SIDEBAR_WIDTH,
       backgroundColor: colors.bg.surface,
       flexDirection: 'column',
-    },
+      borderRightWidth: 1,
+      borderRightColor: colors.border.subtle,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `2px 0 24px -16px ${colors.accent.primary}33` } as any)
+        : {}),
+    } as any,
     sidebarScroll: { flex: 1 },
     sidebarContent: {
       padding: D.spacing.lg,
       paddingBottom: D.spacing.sm,
     },
     sidebarHeader: {
-      marginBottom: D.spacing.xs,
+      marginBottom: D.spacing.md,
+      position: 'relative',
     },
     sidebarTitle: {
-      fontSize: D.fontSize.xl,
+      fontSize: D.fontSize['2xl'],
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
-      letterSpacing: -0.5,
+      letterSpacing: -0.6,
+      lineHeight: 32,
     },
     sidebarSubtitle: {
       fontSize: D.fontSize.sm,
-      color: colors.text.muted,
-      marginTop: 2,
+      color: colors.text.secondary,
+      marginTop: 4,
+      lineHeight: 20,
     },
     sidebarFooter: {
       padding: D.spacing.lg,
@@ -4226,67 +4447,88 @@ function makeStyles(
       borderTopWidth: 1,
       borderTopColor: colors.border.subtle,
       backgroundColor: colors.bg.surface,
-    },
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 -8px 24px -12px ${colors.accent.primary}1F` } as any)
+        : {}),
+    } as any,
 
     // ── Vertical nav ───────────────────────────────────────────────────────────
     verticalNav: {
-      gap: D.spacing.xs,
+      gap: 6,
     },
     navItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: D.spacing.sm,
-      paddingHorizontal: D.spacing.sm,
-      paddingVertical: D.spacing.sm,
+      gap: D.spacing.sm + 2,
+      paddingHorizontal: D.spacing.sm + 2,
+      paddingVertical: D.spacing.sm + 2,
       borderRadius: D.radius.md,
       borderWidth: 1,
       borderColor: 'transparent',
+      backgroundColor: 'transparent',
+      ...(Platform.OS === 'web' ? ({ transitionDuration: '180ms' } as any) : {}),
+    } as any,
+    navItemHover: {
+      backgroundColor: colors.bg.elevated,
     },
     navItemActive: {
       backgroundColor: colors.accent.dim,
-      borderColor: colors.border.focus,
-    },
+      borderColor: colors.accent.primary + '55',
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 4px 14px -6px ${colors.accent.primary}55` } as any)
+        : D.shadow.sm),
+    } as any,
     navIconBox: {
-      width: 32,
-      height: 32,
-      borderRadius: D.radius.sm,
-      backgroundColor: colors.bg.base,
+      width: 34,
+      height: 34,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
       alignItems: 'center',
       justifyContent: 'center',
     },
     navIconBoxActive: {
       backgroundColor: colors.accent.primary,
-    },
+      borderColor: colors.accent.primary,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 6px 16px -6px ${colors.accent.primary}AA` } as any)
+        : D.shadow.glow),
+    } as any,
     navLabel: {
       fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.medium,
+      fontWeight: D.fontWeight.semibold,
       color: colors.text.secondary,
+      letterSpacing: -0.1,
     },
     navLabelActive: {
       color: colors.accent.primary,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
     },
     navDesc: {
       fontSize: D.fontSize.xs,
       color: colors.text.muted,
-      marginTop: 1,
+      marginTop: 2,
+      lineHeight: 15,
     },
     navBadge: {
       backgroundColor: colors.accent.dim,
       borderRadius: D.radius.pill,
-      paddingHorizontal: D.spacing.xs + 2,
-      paddingVertical: 2,
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: 3,
+      borderWidth: 1,
+      borderColor: colors.accent.primary + '40',
     },
     navBadgeText: {
       fontSize: 10,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
       color: colors.accent.primary,
+      letterSpacing: 0.5,
     },
 
     // ── Panel divider ──────────────────────────────────────────────────────────
     panelDivider: {
-      width: 1,
-      backgroundColor: colors.border.subtle,
+      width: 0,
     },
 
     // ── Right panel ────────────────────────────────────────────────────────────
@@ -4295,24 +4537,160 @@ function makeStyles(
       backgroundColor: colors.bg.base,
     },
     rightPanelContent: {
-      padding: D.spacing.xl,
-      gap: D.spacing.xl,
+      paddingHorizontal: D.spacing.xl,
+      paddingTop: D.spacing.lg,
+      paddingBottom: D.spacing['2xl'],
+      gap: D.spacing.lg,
       flexGrow: 1,
+      maxWidth: 1280,
+      width: '100%',
+      alignSelf: 'center',
+    },
+
+    // ── Desktop hero header (top of right panel) ───────────────────────────────
+    heroWrap: {
+      position: 'relative',
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      padding: D.spacing.lg,
+      overflow: 'hidden',
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 16px 40px -22px ${colors.accent.primary}40` } as any)
+        : D.shadow.sm),
+    } as any,
+    heroGlow: {
+      position: 'absolute',
+      top: -90,
+      right: -90,
+      width: 260,
+      height: 260,
+      borderRadius: 130,
+      backgroundColor: colors.accent.dim,
+      opacity: 0.9,
+    },
+    heroGlow2: {
+      position: 'absolute',
+      bottom: -80,
+      left: -60,
+      width: 200,
+      height: 200,
+      borderRadius: 100,
+      backgroundColor: colors.accent.secondary + '22',
+      opacity: 0.7,
+    },
+    heroEyebrow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: D.spacing.xs,
+    },
+    heroEyebrowDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.accent.primary,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 0 10px 2px ${colors.accent.primary}` } as any)
+        : {}),
+    } as any,
+    heroEyebrowText: {
+      fontSize: 10,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+    },
+    heroTitle: {
+      fontSize: D.fontSize['3xl'],
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.8,
+      lineHeight: 40,
+    },
+    heroSubtitle: {
+      fontSize: D.fontSize.base,
+      color: colors.text.secondary,
+      marginTop: 6,
+      lineHeight: 22,
+      maxWidth: 620,
+    },
+    heroMetaRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: D.spacing.sm,
+      marginTop: D.spacing.md,
+    },
+    heroMetaChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: D.spacing.sm + 2,
+      paddingVertical: 5,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    heroMetaText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.secondary,
+      fontWeight: D.fontWeight.medium,
+    },
+    // Interactive segment control docked in the hero (top-right).
+    heroSegmentDock: {
+      position: 'absolute',
+      top: D.spacing.lg,
+      right: D.spacing.lg,
+      width: 260,
+      zIndex: 3,
+    },
+    // When the hero has a segmented control on the right, keep text from running under it.
+    heroTextClamp: {
+      maxWidth: '100%',
+      paddingRight: 276, // 260 segment + 16 gutter
     },
 
     // ── Desktop sections ───────────────────────────────────────────────────────
     desktopSection: {
-      // no card bg on desktop — sections are separated by whitespace
-    },
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      padding: D.spacing.lg,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 2px 12px -6px ${colors.accent.primary}1F` } as any)
+        : D.shadow.sm),
+    } as any,
     desktopSectionHeader: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       justifyContent: 'space-between',
+      gap: D.spacing.md,
       marginBottom: D.spacing.md,
+    },
+    sectionHeadingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm + 2,
+      flex: 1,
+      minWidth: 0,
+    },
+    sectionIconBadge: {
+      width: 34,
+      height: 34,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.accent.primary + '33',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
     },
     desktopSectionTitle: {
       fontSize: D.fontSize.lg,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
       letterSpacing: -0.3,
     },
@@ -4320,6 +4698,7 @@ function makeStyles(
       fontSize: D.fontSize.sm,
       color: colors.text.muted,
       marginTop: 2,
+      lineHeight: 20,
     },
 
     // ── Preview placeholder ────────────────────────────────────────────────────
@@ -4328,42 +4707,84 @@ function makeStyles(
       borderColor: colors.border.subtle,
       borderStyle: 'dashed' as never,
       borderRadius: D.radius.xl,
-      minHeight: 280,
+      minHeight: isDesktop ? 360 : 280,
       alignItems: 'center',
       justifyContent: 'center',
       gap: D.spacing.sm,
       padding: D.spacing.xl,
-      backgroundColor: colors.bg.surface,
+      backgroundColor: colors.bg.base,
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    // Ambient decorative blobs on preview placeholder — corner-positioned, very
+    // low opacity so the icon+text stay the focal point.
+    previewHaloTR: {
+      position: 'absolute',
+      top: -90,
+      right: -90,
+      width: 240,
+      height: 240,
+      borderRadius: 120,
+      backgroundColor: colors.accent.primary,
+      opacity: 0.09,
+    },
+    previewHaloBL: {
+      position: 'absolute',
+      bottom: -100,
+      left: -100,
+      width: 220,
+      height: 220,
+      borderRadius: 110,
+      backgroundColor: colors.accent.secondary,
+      opacity: 0.07,
+    },
+    previewHaloSpot: {
+      position: 'absolute',
+      top: 30,
+      left: 40,
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: colors.accent.primary,
+      opacity: 0.05,
     },
     previewIconCircle: {
-      width: 56,
-      height: 56,
+      width: 72,
+      height: 72,
       borderRadius: D.radius.pill,
       backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.accent.primary + '44',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: D.spacing.xs,
-    },
+      marginBottom: D.spacing.sm,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 8px 24px -8px ${colors.accent.primary}66` } as any)
+        : D.shadow.glow),
+    } as any,
     previewEmptyTitle: {
-      fontSize: D.fontSize.base,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.text.secondary,
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.3,
     },
     previewEmptyHint: {
       fontSize: D.fontSize.sm,
       color: colors.text.muted,
       textAlign: 'center',
-      maxWidth: 320,
+      maxWidth: 340,
       lineHeight: 20,
     },
     resultImageCard: {
       borderRadius: D.radius.xl,
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: colors.border.subtle,
-      backgroundColor: colors.bg.surface,
-      ...D.shadow.modal,
-    },
+      borderColor: colors.accent.primary + '40',
+      backgroundColor: colors.bg.base,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 20px 60px -20px ${colors.accent.primary}66` } as any)
+        : D.shadow.modal),
+    } as any,
     downloadBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -4371,19 +4792,23 @@ function makeStyles(
       margin: D.spacing.md,
       alignSelf: 'flex-end',
       paddingHorizontal: D.spacing.md,
-      paddingVertical: D.spacing.sm,
-      borderRadius: D.radius.md,
+      paddingVertical: D.spacing.sm + 2,
+      borderRadius: D.radius.pill,
       backgroundColor: colors.accent.primary,
-    },
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 6px 18px -6px ${colors.accent.primary}AA` } as any)
+        : D.shadow.sm),
+    } as any,
     downloadBtnText: {
       color: '#fff',
       fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
+      letterSpacing: 0.3,
     },
     resultImage: {
       width: '100%',
       aspectRatio: 1,
-      maxHeight: 480,
+      maxHeight: 520,
     },
 
     // ── Mobile layout ──────────────────────────────────────────────────────────
@@ -4399,29 +4824,31 @@ function makeStyles(
       gap: D.spacing.md,
     },
 
-    // ── Mobile segmented control ───────────────────────────────────────────────
+    // ── Segmented control ──────────────────────────────────────────────────────
     segmentTrack: {
       flexDirection: 'row',
       backgroundColor: colors.bg.surface,
-      borderRadius: D.radius.md,
+      borderRadius: D.radius.pill,
       borderWidth: 1,
-      borderColor: colors.border.subtle,
+      borderColor: colors.border.default,
       padding: 4,
       position: 'relative',
-      height: 40,
-    },
+      height: 44,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `inset 0 1px 2px ${colors.border.subtle}` } as any)
+        : {}),
+    } as any,
     segmentIndicator: {
       position: 'absolute',
       top: 4,
       width: '31.33%',
-      height: 32,
+      height: 36,
       backgroundColor: colors.accent.primary,
-      borderRadius: D.radius.sm,
-      shadowColor: '#6366F1',
-      shadowOpacity: 0.35,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-    },
+      borderRadius: D.radius.pill,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 6px 18px -6px ${colors.accent.primary}CC` } as any)
+        : D.shadow.glow),
+    } as any,
     segmentButton: {
       flex: 1,
       flexDirection: 'row',
@@ -4431,20 +4858,60 @@ function makeStyles(
     },
     segmentLabel: {
       fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.medium,
+      fontWeight: D.fontWeight.semibold,
       color: colors.text.secondary,
+      letterSpacing: 0.2,
     },
-    segmentLabelActive: { color: '#fff', fontWeight: D.fontWeight.semibold },
+    segmentLabelActive: { color: '#fff', fontWeight: D.fontWeight.bold, letterSpacing: 0.3 },
+
+    // ── Mobile hero ────────────────────────────────────────────────────────────
+    mobileHero: {
+      position: 'relative',
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      padding: D.spacing.md + 2,
+      overflow: 'hidden',
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 12px 32px -18px ${colors.accent.primary}40` } as any)
+        : D.shadow.sm),
+    } as any,
+    mobileHeroGlow: {
+      position: 'absolute',
+      top: -60,
+      right: -60,
+      width: 160,
+      height: 160,
+      borderRadius: 80,
+      backgroundColor: colors.accent.dim,
+      opacity: 0.85,
+    },
+    mobileHeroTitle: {
+      fontSize: D.fontSize['2xl'],
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.6,
+      lineHeight: 32,
+    },
+    mobileHeroSubtitle: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
+      marginTop: 4,
+      lineHeight: 20,
+    },
 
     // ── Mobile section cards ───────────────────────────────────────────────────
     mobileSection: {
       backgroundColor: colors.bg.surface,
       borderRadius: D.radius.lg,
       borderWidth: 1,
-      borderColor: colors.border.subtle,
+      borderColor: colors.border.default,
       padding: D.spacing.md,
-      ...D.shadow.sm,
-    },
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 2px 10px -4px ${colors.border.default}` } as any)
+        : D.shadow.sm),
+    } as any,
     sectionHeader: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -4452,30 +4919,43 @@ function makeStyles(
       marginBottom: D.spacing.md,
     },
     sectionTitle: {
-      fontSize: D.fontSize.base,
-      fontWeight: D.fontWeight.semibold,
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
+      letterSpacing: -0.3,
+    },
+    mobileSectionHeadingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm + 2,
+      marginBottom: D.spacing.sm + 2,
     },
     mobileResultCard: {
-      borderRadius: D.radius.lg,
+      borderRadius: D.radius.xl,
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: colors.border.subtle,
-      backgroundColor: colors.bg.surface,
-    },
-    mobileResultImage: { width: '100%', aspectRatio: 1, maxHeight: 400 },
+      borderColor: colors.accent.primary + '40',
+      backgroundColor: colors.bg.base,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 14px 40px -16px ${colors.accent.primary}66` } as any)
+        : D.shadow.modal),
+    } as any,
+    mobileResultImage: { width: '100%', aspectRatio: 1, maxHeight: 420 },
 
     // ── Shared ─────────────────────────────────────────────────────────────────
     countBadge: {
       backgroundColor: colors.accent.dim,
       borderRadius: D.radius.pill,
-      paddingHorizontal: D.spacing.sm,
-      paddingVertical: 2,
+      paddingHorizontal: D.spacing.sm + 2,
+      paddingVertical: 3,
+      borderWidth: 1,
+      borderColor: colors.accent.primary + '40',
     },
     countBadgeText: {
       fontSize: D.fontSize.xs,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
       color: colors.accent.primary,
+      letterSpacing: 0.3,
     },
     emptyState: {
       alignItems: 'center',
@@ -4552,30 +5032,35 @@ function makeStyles(
     typeChip: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: D.spacing.xs,
+      gap: 6,
       paddingHorizontal: D.spacing.md,
-      paddingVertical: D.spacing.sm,
+      paddingVertical: D.spacing.sm + 2,
       borderRadius: D.radius.pill,
       borderWidth: 1.5,
       borderColor: colors.border.default,
       backgroundColor: colors.bg.elevated,
-    },
+      ...(Platform.OS === 'web' ? ({ transitionDuration: '160ms' } as any) : {}),
+    } as any,
     typeChipActive: {
       borderColor: colors.accent.primary,
       backgroundColor: colors.accent.dim,
-      shadowColor: '#6366F1',
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-    },
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 4px 12px -4px ${colors.accent.primary}55` } as any)
+        : {
+            shadowColor: '#6366F1',
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 2 },
+          }),
+    } as any,
     typeChipText: {
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.medium,
-      color: colors.text.muted,
+      color: colors.text.secondary,
     },
     typeChipTextActive: {
       color: colors.accent.primary,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
     },
     textArea: {
       borderWidth: 1,
@@ -4586,9 +5071,10 @@ function makeStyles(
       minHeight: isDesktop ? 140 : 100,
       textAlignVertical: 'top',
       color: colors.text.primary,
-      backgroundColor: colors.bg.base,
+      backgroundColor: colors.bg.input,
       outlineStyle: 'none' as never,
-    },
+      ...(Platform.OS === 'web' ? ({ transitionDuration: '160ms' } as any) : {}),
+    } as any,
     jobInput: {
       borderWidth: 1,
       borderColor: colors.border.default,
@@ -4596,9 +5082,9 @@ function makeStyles(
       paddingHorizontal: D.spacing.md,
       paddingVertical: 10,
       fontSize: D.fontSize.sm,
-      height: 40,
+      height: 44,
       color: colors.text.primary,
-      backgroundColor: colors.bg.base,
+      backgroundColor: colors.bg.input,
       outlineStyle: 'none' as never,
     },
     jobTextArea: {
@@ -4608,11 +5094,21 @@ function makeStyles(
       paddingHorizontal: D.spacing.md,
       paddingVertical: 10,
       fontSize: D.fontSize.sm,
-      minHeight: 72,
+      minHeight: 80,
       textAlignVertical: 'top',
       color: colors.text.primary,
-      backgroundColor: colors.bg.base,
+      backgroundColor: colors.bg.input,
       outlineStyle: 'none' as never,
+    },
+    errorBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      backgroundColor: `${colors.destructive}18`,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.destructive,
+      borderRadius: D.radius.sm,
+      padding: D.spacing.sm,
     },
     errorText: {
       color: colors.text.error,
@@ -4632,40 +5128,52 @@ function makeStyles(
       backgroundColor: colors.accent.dim,
       borderRadius: D.radius.pill,
       paddingHorizontal: D.spacing.md,
-      paddingVertical: D.spacing.xs,
-      shadowColor: '#6366F1',
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-    },
+      paddingVertical: D.spacing.xs + 1,
+      borderWidth: 1,
+      borderColor: colors.accent.primary + '40',
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 4px 12px -4px ${colors.accent.primary}55` } as any)
+        : {
+            shadowColor: '#6366F1',
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 2 },
+          }),
+    } as any,
     comingSoonText: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.semibold,
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
       color: colors.accent.primary,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
     },
     videoTitle: {
       fontSize: D.fontSize['2xl'],
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
       letterSpacing: -0.5,
+      textAlign: 'center',
     },
     videoDescription: {
       fontSize: D.fontSize.sm,
-      color: colors.text.muted,
+      color: colors.text.secondary,
       textAlign: 'center',
-      maxWidth: 300,
-      lineHeight: 20,
+      maxWidth: 320,
+      lineHeight: 22,
     },
     stepsCard: {
       width: '100%',
-      maxWidth: 340,
+      maxWidth: 360,
       backgroundColor: colors.bg.surface,
       borderRadius: D.radius.lg,
       borderWidth: 1,
-      borderColor: colors.border.subtle,
-      padding: D.spacing.md,
-      opacity: 0.55,
-    },
+      borderColor: colors.border.default,
+      padding: D.spacing.md + 2,
+      opacity: 0.85,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 2px 12px -6px ${colors.border.default}` } as any)
+        : D.shadow.sm),
+    } as any,
     stepsTitle: {
       fontSize: D.fontSize.xs,
       fontWeight: D.fontWeight.semibold,
@@ -4702,20 +5210,25 @@ function makeStyles(
     },
     wallpaperActionBtn: {
       flex: 1,
+      minWidth: 0,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: D.spacing.xs,
-      paddingVertical: D.spacing.sm,
+      gap: 6,
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: D.spacing.sm + 2,
       borderRadius: D.radius.md,
       borderWidth: 1.5,
-      borderColor: colors.accent.primary,
+      borderColor: colors.accent.primary + '55',
       backgroundColor: colors.accent.dim,
-    },
+      ...(Platform.OS === 'web' ? ({ transitionDuration: '150ms' } as any) : {}),
+    } as any,
     wallpaperActionText: {
       fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.medium,
+      fontWeight: D.fontWeight.semibold,
       color: colors.accent.primary,
+      letterSpacing: 0.2,
+      flexShrink: 1,
     },
     wallpaperGenBtn: {
       flexDirection: 'row',
@@ -4842,13 +5355,13 @@ function makeStyles(
     wallpaperGenCheckRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: D.spacing.sm,
-      paddingVertical: 7,
+      gap: isDesktop ? D.spacing.sm : D.spacing.md,
+      paddingVertical: isDesktop ? 7 : 12,
       borderBottomWidth: 1,
       borderBottomColor: colors.border.subtle,
     },
     wallpaperGenCheckLabel: {
-      fontSize: D.fontSize.sm,
+      fontSize: isDesktop ? D.fontSize.sm : D.fontSize.base,
       color: colors.text.primary,
     },
     wallpaperGenError: {

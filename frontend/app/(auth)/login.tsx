@@ -21,6 +21,7 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AuthNavbar } from '@/components/ui/AuthNavbar';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { FloatingInput } from '@/components/ui/FloatingInput';
 import { SocialButton } from '@/components/ui/SocialButton';
 import { D } from '@/constants/design';
@@ -143,12 +144,9 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Animated.View style={[animStyle, styles.card]}>
-            {/* Logo mark */}
+            {/* Logo mark (wordmark lives in the navbar — avoid duplicate titles here) */}
             <View style={styles.logoContainer}>
-              <View style={styles.logoMark}>
-                <Text style={styles.logoGlyph}>M</Text>
-              </View>
-              <Text style={styles.logoText}>MerchStory</Text>
+              <BrandLogo size="lg" variant="mark" />
             </View>
 
             {/* Heading */}
@@ -304,29 +302,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     logoContainer: {
       alignItems: 'center',
       marginBottom: D.spacing.xl,
-      gap: D.spacing.sm,
-    },
-    logoMark: {
-      width: 56,
-      height: 56,
-      borderRadius: D.radius.lg,
-      backgroundColor: colors.accent.dim,
-      borderWidth: 1.5,
-      borderColor: colors.accent.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    logoGlyph: {
-      fontSize: D.fontSize['2xl'],
-      fontWeight: D.fontWeight.bold,
-      color: colors.accent.secondary,
-    },
-    logoText: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.text.muted,
-      letterSpacing: 1.5,
-      textTransform: 'uppercase',
     },
     heading: {
       fontSize: D.fontSize['2xl'],

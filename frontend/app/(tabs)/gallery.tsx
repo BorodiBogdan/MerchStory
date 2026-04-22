@@ -37,8 +37,8 @@ import * as galleryCache from '@/utils/galleryCache';
 import * as galleryImageCache from '@/utils/galleryImageCache';
 
 const isWeb = Platform.OS === 'web';
-const MAX_CONTENT_WIDTH = 1200;
-const WEB_H_PADDING = 32;
+const MAX_CONTENT_WIDTH = 1600;
+const WEB_H_PADDING = 64;
 const MOBILE_H_PADDING = D.spacing.md;
 const GAP = D.spacing.md;
 
@@ -83,7 +83,15 @@ export default function GalleryScreen() {
 
   const listRef = useRef<FlatList<GalleryItem>>(null);
 
-  const numColumns = isWeb ? (screenWidth < 600 ? 2 : screenWidth < 1024 ? 3 : 4) : 2;
+  const numColumns = isWeb
+    ? screenWidth < 600
+      ? 2
+      : screenWidth < 1024
+        ? 3
+        : screenWidth < 1500
+          ? 4
+          : 5
+    : 2;
 
   const useSidebar = isWeb && screenWidth >= 900;
   const hPadding = isWeb ? WEB_H_PADDING : MOBILE_H_PADDING;
