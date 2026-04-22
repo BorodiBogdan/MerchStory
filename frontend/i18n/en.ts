@@ -23,6 +23,9 @@ const en = {
   appLanguage: 'App language',
   generationLanguage: 'Language of generated content',
   defaultCurrency: 'Default currency',
+  appearance: 'Appearance',
+  appearanceLight: 'Light',
+  appearanceDark: 'Dark',
   save: 'Save',
   cancel: 'Cancel',
   english: 'English',
@@ -130,7 +133,7 @@ const en = {
   'tabs.products': 'Products',
   'tabs.analytics': 'Analytics',
   'tabs.home': 'MerchStory home',
-  'tabs.profile': 'Go to profile',
+  'tabs.profile': 'Profile',
 
   // ── Products screen ──────────────────────────────────────────────────────
   'products.pageTitle': 'My Products',

@@ -25,6 +25,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { LogoutModal } from '@/components/ui/LogoutModal';
 import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
@@ -126,8 +127,8 @@ function computeIsDirty(draft: DraftState | null, profile: ShopProfileResponse |
 }
 
 export default function ProfileScreen() {
-  const { colors } = useTheme();
-  const { email: accountEmail } = useAuth();
+  const { colors, colorScheme, toggleTheme } = useTheme();
+  const { email: accountEmail, signOut } = useAuth();
   const { profile, setProfile, isProfileLoading, refreshProfile } = useShop();
   const { language: appLanguage, setLanguage: setAppLanguage, t } = useI18n();
   const { width: screenWidth } = useWindowDimensions();
@@ -186,6 +187,7 @@ export default function ProfileScreen() {
     null
   );
   const [socialStatus, setSocialStatus] = useState<{ facebook?: string }>({});
+  const [isLogoutVisible, setIsLogoutVisible] = useState(false);
 
   // Entrance animation
   const enterOpacity = useSharedValue(0);
@@ -623,7 +625,7 @@ export default function ProfileScreen() {
         />
       </View>
 
-      <View style={[styles.infoRow, styles.infoRowLast]}>
+      <View style={[styles.infoRow]}>
         <Text style={styles.infoLabel}>{t('defaultCurrency')}</Text>
         <Segmented<Currency>
           options={[
@@ -633,6 +635,20 @@ export default function ProfileScreen() {
           ]}
           value={profile.currency}
           onChange={(code) => void handlePreferenceSave({ currency: code })}
+        />
+      </View>
+
+      <View style={[styles.infoRow, styles.infoRowLast]}>
+        <Text style={styles.infoLabel}>{t('appearance')}</Text>
+        <Segmented<'light' | 'dark'>
+          options={[
+            { value: 'light', label: t('appearanceLight') },
+            { value: 'dark', label: t('appearanceDark') },
+          ]}
+          value={colorScheme}
+          onChange={(next) => {
+            if (next !== colorScheme) toggleTheme();
+          }}
         />
       </View>
     </Section>
@@ -1056,6 +1072,22 @@ export default function ProfileScreen() {
                       {isEditing ? t('common.cancel') : t('profile.edit')}
                     </Text>
                   </Pressable>
+
+                  {!isEditing && (
+                    <Pressable
+                      onPress={() => setIsLogoutVisible(true)}
+                      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+                        styles.signOutButton,
+                        hovered && styles.signOutButtonHover,
+                        pressed && styles.signOutButtonPressed,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('common.signOut')}
+                    >
+                      <Ionicons name="log-out-outline" size={14} color={colors.text.error} />
+                      <Text style={styles.signOutButtonText}>{t('common.signOut')}</Text>
+                    </Pressable>
+                  )}
                 </View>
               </View>
             </View>
@@ -1171,6 +1203,15 @@ export default function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <LogoutModal
+        visible={isLogoutVisible}
+        onConfirm={() => {
+          setIsLogoutVisible(false);
+          void signOut();
+        }}
+        onDismiss={() => setIsLogoutVisible(false)}
+      />
     </>
   );
 }
@@ -1311,6 +1352,7 @@ function makeStyles(
       alignSelf: isTablet ? 'center' : 'flex-start',
       marginTop: isTablet ? 0 : D.spacing.xs,
       flexShrink: 0,
+      gap: D.spacing.sm,
     },
     editButton: {
       flexDirection: 'row',
@@ -1875,6 +1917,36 @@ function makeStyles(
       fontSize: D.fontSize.xs,
       color: colors.text.muted,
       fontWeight: D.fontWeight.medium,
+    },
+
+    // ── Sign out ─────────────────────────────────────────────────────────
+    signOutButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingHorizontal: D.spacing.lg,
+      paddingVertical: D.spacing.sm + 2,
+      borderRadius: D.radius.pill,
+      backgroundColor: `${colors.destructive}0F`,
+      borderWidth: 1.5,
+      borderColor: colors.border.error,
+      minWidth: 160,
+      alignSelf: 'stretch',
+      ...(Platform.OS === 'web' ? ({ transitionDuration: '150ms' } as any) : {}),
+    } as any,
+    signOutButtonHover: {
+      backgroundColor: `${colors.destructive}1F`,
+    },
+    signOutButtonPressed: {
+      opacity: 0.88,
+      transform: [{ scale: 0.98 }],
+    },
+    signOutButtonText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.error,
+      letterSpacing: 0.3,
     },
   });
 }

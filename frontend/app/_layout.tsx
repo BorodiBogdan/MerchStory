@@ -8,6 +8,7 @@ import {
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@/context/auth';
 import { ShopProvider } from '@/context/shop';
@@ -50,14 +51,16 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <ThemeProvider>
-      <I18nProvider>
-        <AuthProvider>
-          <ShopProvider>
-            <RootLayoutNav />
-          </ShopProvider>
-        </AuthProvider>
-      </I18nProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <ShopProvider>
+              <RootLayoutNav />
+            </ShopProvider>
+          </AuthProvider>
+        </I18nProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

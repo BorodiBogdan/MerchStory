@@ -560,9 +560,18 @@ export default function ProductsScreen() {
       );
     }
     const scrollListTop = () => {
-      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
       if (isWeb && typeof window !== 'undefined') {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        const doScroll = () => {
+          window.scrollTo(0, 0);
+          document.documentElement?.scrollTo?.(0, 0);
+          document.body?.scrollTo?.(0, 0);
+        };
+        doScroll();
+        requestAnimationFrame(() => {
+          doScroll();
+          requestAnimationFrame(doScroll);
+        });
       }
     };
     const footer = isWeb ? (

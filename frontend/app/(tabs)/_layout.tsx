@@ -8,8 +8,10 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { D } from '@/constants/design';
@@ -19,11 +21,15 @@ import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 
 export default function TabLayout() {
-  const { token, isLoading, isShopSetupComplete, signOut } = useAuth();
+  const { token, isLoading, isShopSetupComplete } = useAuth();
   const { colors, colorScheme, toggleTheme } = useTheme();
   const { profile } = useShop();
   const t = useT();
   const shopLogoUri = profile?.logoBase64 ?? null;
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+  const insets = useSafeAreaInsets();
+  const mobileTopPad = !isDesktop ? insets.top : 0;
 
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
@@ -86,84 +92,92 @@ export default function TabLayout() {
           )}
         </View>
       </Pressable>
-
-      <Pressable
-        onPress={() => void signOut()}
-        style={styles.iconButton}
-        accessibilityRole="button"
-        accessibilityLabel={t('common.signOut')}
-      >
-        <Ionicons name="log-out-outline" size={20} color={colors.destructive} />
-      </Pressable>
     </View>
   );
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: colors.accent.primary,
-        tabBarInactiveTintColor: colors.text.muted,
-        headerShown: true,
-        headerStyle: { backgroundColor: colors.bg.surface },
-        headerTintColor: colors.text.primary,
-        headerShadowVisible: false,
-        tabBarStyle: styles.tabBar,
-        tabBarButton: HapticTab,
-        tabBarLabelStyle: styles.tabBarLabel,
-        headerLeft,
-        headerRight,
-        headerTitle: () => null,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          tabBarLabel: t('tabs.studio'),
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={22} color={color} />
-          ),
+    <View style={{ flex: 1, paddingTop: mobileTopPad, backgroundColor: colors.bg.surface }}>
+      <Tabs
+        screenOptions={{
+          tabBarActiveTintColor: colors.accent.primary,
+          tabBarInactiveTintColor: colors.text.muted,
+          headerShown: isDesktop,
+          headerStyle: { backgroundColor: colors.bg.surface },
+          headerTintColor: colors.text.primary,
+          headerShadowVisible: false,
+          tabBarStyle: styles.tabBar,
+          tabBarButton: HapticTab,
+          tabBarLabelStyle: styles.tabBarLabel,
+          headerLeft,
+          headerRight,
+          headerTitle: () => null,
         }}
-      />
-      <Tabs.Screen
-        name="wallpapers"
-        options={{
-          tabBarItemStyle: { display: 'none' },
-        }}
-      />
-      <Tabs.Screen
-        name="gallery"
-        options={{
-          tabBarLabel: t('tabs.gallery'),
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'images' : 'images-outline'} size={22} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="products"
-        options={{
-          tabBarLabel: t('tabs.products'),
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'pricetag' : 'pricetag-outline'} size={22} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="analytics"
-        options={{
-          tabBarLabel: t('tabs.analytics'),
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'bar-chart' : 'bar-chart-outline'} size={22} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          tabBarItemStyle: { display: 'none' },
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            tabBarLabel: t('tabs.studio'),
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={22} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="wallpapers"
+          options={{
+            tabBarItemStyle: { display: 'none' },
+          }}
+        />
+        <Tabs.Screen
+          name="gallery"
+          options={{
+            tabBarLabel: t('tabs.gallery'),
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'images' : 'images-outline'} size={22} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="products"
+          options={{
+            tabBarLabel: t('tabs.products'),
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'pricetag' : 'pricetag-outline'} size={22} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="analytics"
+          options={{
+            tabBarLabel: t('tabs.analytics'),
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? 'bar-chart' : 'bar-chart-outline'}
+                size={22}
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={
+            isDesktop
+              ? { tabBarItemStyle: { display: 'none' } }
+              : {
+                  tabBarLabel: t('tabs.profile'),
+                  tabBarIcon: ({ color, focused }) => (
+                    <Ionicons
+                      name={focused ? 'person' : 'person-outline'}
+                      size={22}
+                      color={color}
+                    />
+                  ),
+                }
+          }
+        />
+      </Tabs>
+    </View>
   );
 }
 

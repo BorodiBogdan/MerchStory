@@ -25,6 +25,9 @@ const ro: Dictionary = {
   appLanguage: 'Limba aplicației',
   generationLanguage: 'Limba conținutului generat',
   defaultCurrency: 'Monedă implicită',
+  appearance: 'Aspect',
+  appearanceLight: 'Luminos',
+  appearanceDark: 'Întunecat',
   save: 'Salvează',
   cancel: 'Anulează',
   english: 'Engleză',
@@ -134,7 +137,7 @@ const ro: Dictionary = {
   'tabs.products': 'Produse',
   'tabs.analytics': 'Analiză',
   'tabs.home': 'Acasă MerchStory',
-  'tabs.profile': 'Mergi la profil',
+  'tabs.profile': 'Profil',
 
   // ── Products screen ──────────────────────────────────────────────────────
   'products.pageTitle': 'Produsele mele',
