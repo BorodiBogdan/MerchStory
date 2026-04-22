@@ -180,13 +180,17 @@ const PRICE_SWATCHES = [
   '#1e1e1e',
 ];
 
-function isColorLight(hex: string): boolean {
+function colorLuminance(hex: string): number {
   const h = hex.replace('#', '');
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+function isColorLight(hex: string): boolean {
   // Perceived luminance
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.45;
+  return colorLuminance(hex) > 0.45;
 }
 
 const PRESET_SWATCH_SET = new Set(PRICE_SWATCHES.map((c) => c.toLowerCase()));
@@ -207,6 +211,37 @@ function CustomColorSwatch({
   const seed = isCustom && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#808080';
 
   const RAINBOW = ['#EF4444', '#F59E0B', '#EAB308', '#22C55E', '#3B82F6', '#A855F7'];
+
+  // The web <input type="color"> fires onChange continuously while the OS picker
+  // is open and the cursor moves. Each one triggers a re-render of the whole
+  // studio component (several thousand lines), which drops the cursor to a crawl.
+  // Coalesce into one update per animation frame so React only reconciles at 60fps,
+  // keeping the live preview smooth without starving the picker dialog.
+  const rafIdRef = useRef<number | null>(null);
+  const pendingRef = useRef<string | null>(null);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+  useEffect(
+    () => () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    },
+    []
+  );
+  const handleWebColorInput = useCallback((hex: string) => {
+    pendingRef.current = hex;
+    if (rafIdRef.current !== null) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const next = pendingRef.current;
+      pendingRef.current = null;
+      if (next !== null) onChangeRef.current(next);
+    });
+  }, []);
 
   return (
     <>
@@ -252,7 +287,7 @@ function CustomColorSwatch({
               type: 'color',
               value: seed,
               onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-                onChange(e.target.value.toUpperCase()),
+                handleWebColorInput(e.target.value.toUpperCase()),
               'aria-label': 'Pick a custom color',
               style: {
                 position: 'absolute',
@@ -412,10 +447,13 @@ function TextStylePresetPicker({
                 textShadowRadius: 0,
               }
             : undefined;
-          // Sticker-chip colors mirror the backend: fill contrasts the price text,
-          // so dark prices get a white chip and light prices get a dark chip.
-          const stickerFill = isColorLight(priceColor) ? '#1e1e1e' : '#ffffff';
-          const stickerText = isColorLight(priceColor) ? '#ffffff' : '#1e1e1e';
+          // Sticker-chip colors mirror the backend exactly: fill is always white
+          // (retail-flyer aesthetic), and text renders in the user's picked price
+          // color. Only when the picked color is too close to white (luminance > 0.65,
+          // matching EnsureReadableOn with a white fill) do we flip to dark so the
+          // price stays legible against a white chip.
+          const stickerFill = '#ffffff';
+          const stickerText = colorLuminance(priceColor) > 0.65 ? '#1e1e1e' : priceColor;
           return (
             <Pressable
               key={preset.id}
@@ -489,7 +527,7 @@ function TextStylePresetPicker({
                     <Text
                       numberOfLines={1}
                       style={{
-                        color: selectedColor,
+                        color: nameColor,
                         fontSize: 11,
                         fontFamily: preset.nameFont,
                         fontWeight: '700',
@@ -504,7 +542,7 @@ function TextStylePresetPicker({
                     <Text
                       numberOfLines={1}
                       style={{
-                        color: selectedColor,
+                        color: nameColor,
                         fontSize: 10,
                         fontFamily: preset.nameFont,
                         marginBottom: 8,
@@ -526,9 +564,9 @@ function TextStylePresetPicker({
                         preset.priceBadge === 'Pill'
                           ? {
                               // Backend draws the pill as a filled shape with no stroke;
-                              // tinted selectedColor fill keeps it visible on previewBg
+                              // tinted priceColor fill keeps it visible on previewBg
                               // (which sits in the opposite luminance bucket).
-                              backgroundColor: selectedColor + '33',
+                              backgroundColor: priceColor + '33',
                               paddingHorizontal: 16,
                               paddingVertical: 6,
                               borderRadius: 999,
@@ -538,7 +576,7 @@ function TextStylePresetPicker({
                     >
                       <Text
                         style={{
-                          color: selectedColor,
+                          color: priceColor,
                           fontSize: 24,
                           fontFamily: preset.priceFont,
                           letterSpacing: -0.5,
@@ -1518,19 +1556,20 @@ export default function StudioScreen() {
 
   // ── Text style state ─────────────────────────────────────────────────────────
   const [selectedPresetId, setSelectedPresetId] = useState<string>('modern-shadow');
-  const [selectedColor, setSelectedColor] = useState<string>('#F59E0B');
+  const [selectedNameColor, setSelectedNameColor] = useState<string>('#F59E0B');
+  const [selectedPriceColor, setSelectedPriceColor] = useState<string>('#F59E0B');
   const textStyle = useMemo<TextStyleOptions>(() => {
     const preset = TEXT_PRESETS.find((p) => p.id === selectedPresetId) ?? TEXT_PRESETS[0];
     return {
       fontFamily: preset.fontFamily,
       fontSize: 'Large',
-      nameColor: selectedColor,
-      priceColor: selectedColor,
+      nameColor: selectedNameColor,
+      priceColor: selectedPriceColor,
       colorMode: 'Solid',
       textEffect: preset.textEffect,
       priceBadge: preset.priceBadge,
     };
-  }, [selectedPresetId, selectedColor]);
+  }, [selectedPresetId, selectedNameColor, selectedPriceColor]);
 
   // ── Catalog state ────────────────────────────────────────────────────────────
   const productsCacheState = productsCache.useProductsCache();
@@ -1946,8 +1985,10 @@ export default function StudioScreen() {
             <TextStylePresetPicker
               selectedId={selectedPresetId}
               onSelect={setSelectedPresetId}
-              selectedColor={selectedColor}
-              onColorChange={setSelectedColor}
+              nameColor={selectedNameColor}
+              onNameColorChange={setSelectedNameColor}
+              priceColor={selectedPriceColor}
+              onPriceColorChange={setSelectedPriceColor}
               colors={colors}
             />
           </>
@@ -3439,8 +3480,10 @@ export default function StudioScreen() {
                     <TextStylePresetPicker
                       selectedId={selectedPresetId}
                       onSelect={setSelectedPresetId}
-                      selectedColor={selectedColor}
-                      onColorChange={setSelectedColor}
+                      nameColor={selectedNameColor}
+                      onNameColorChange={setSelectedNameColor}
+                      priceColor={selectedPriceColor}
+                      onPriceColorChange={setSelectedPriceColor}
                       colors={colors}
                     />
                   </View>

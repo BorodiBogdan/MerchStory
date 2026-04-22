@@ -430,6 +430,8 @@ const en = {
   'studio.optColorTheme': 'Color Theme',
   'studio.optText': 'Text Style',
   'studio.optColor': 'Color',
+  'studio.optNameColor': 'Name color',
+  'studio.optPriceColor': 'Price color',
   'studio.brandContext': 'Brand Context',
   'studio.brandContextHint': 'Choose which brand info to include in the AI prompt',
   // Option labels used via OptionLabel

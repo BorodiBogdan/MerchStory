@@ -439,6 +439,8 @@ const ro: Dictionary = {
   'studio.optColorTheme': 'Paletă',
   'studio.optText': 'Stil text',
   'studio.optColor': 'Culoare',
+  'studio.optNameColor': 'Culoare nume',
+  'studio.optPriceColor': 'Culoare preț',
   // Option labels
   'studio.opt.layout': 'Aranjament',
   'studio.opt.format': 'Format',

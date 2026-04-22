@@ -587,11 +587,13 @@ internal static class CatalogCompositor
         float badgeW = textW + (PadH * 2);
         float badgeH = lineH + (PadV * 2);
 
-        // Fill is the contrast of the text color — for typical dark prices this is
-        // white, matching the retail-flyer reference. EnsureReadableOn swaps the
-        // text to a safe dark/light if the user picked a color too close to the fill.
+        // Retail-flyer stickers are consistently white — this lets the chip read as
+        // an applied price tag regardless of what color the user picks for the text.
+        // EnsureReadableOn only intervenes when the user's color is too close to white
+        // to stay legible (e.g. they pick white itself), flipping text to dark in that
+        // edge case. Otherwise the text renders in exactly the picked color.
         Color textColor = ParseHexColor(style.PriceColor ?? style.NameColor ?? "#1e1e1e");
-        Color fillColor = ContrastColor(textColor);
+        Color fillColor = Color.FromRgba(255, 255, 255, 255);
         textColor = EnsureReadableOn(fillColor, textColor);
 
         // Position: anchor the sticker's bottom-right to the image's bottom-right with
