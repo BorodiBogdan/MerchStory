@@ -558,6 +558,7 @@ const ro: Dictionary = {
   'studio.formatPortrait': 'Portret 4:5',
   'studio.formatStory': 'Story 9:16',
   'studio.showPrices': 'Afișează prețurile',
+  'studio.showProductNames': 'Afișează numele produselor',
   'studio.brandContext': 'Date de brand de inclus',
   'studio.brandContextHint': 'Alege ce date de brand să includă prompt-ul AI',
   'studio.fieldBrandName': 'Numele brandului',
