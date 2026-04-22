@@ -99,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await storage.setItem(TOKEN_KEY, data.token);
     await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
     await storage.setItem(USER_KEY, JSON.stringify(user));
+    await applyServerLanguage(data.preferredLanguage);
     setState({
       token: data.token,
       email: data.email,
@@ -121,6 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await storage.setItem(TOKEN_KEY, data.token);
     await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
     await storage.setItem(USER_KEY, JSON.stringify(user));
+    await applyServerLanguage(data.preferredLanguage);
     setState({
       token: data.token,
       email: data.email,
@@ -129,6 +131,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAdmin: data.isAdmin,
       isLoading: false,
     });
+  }
+
+  async function applyServerLanguage(lang: string | undefined) {
+    try {
+      const { applyLanguageFromServer } = await import('@/i18n');
+      await applyLanguageFromServer((lang ?? 'EN') as 'EN' | 'RO');
+    } catch {
+      // best-effort
+    }
   }
 
   async function signOut() {

@@ -14,11 +14,12 @@ import {
 import { DateField } from '@/components/ui/DateField';
 import { D } from '@/constants/design';
 import {
-  GENERATION_TYPE_LABELS,
+  GENERATION_TYPE_I18N_KEYS,
   GENERATION_TYPES,
   type GenerationType,
 } from '@/constants/generationTypes';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 
 export interface GalleryFilterState {
   search: string;
@@ -43,6 +44,7 @@ export function GalleryFilterBar({
   resultCount,
 }: GalleryFilterBarProps) {
   const { colors } = useTheme();
+  const t = useT();
   const { width } = useWindowDimensions();
   const isVertical = layout === 'vertical';
   const isDesktop = layout === 'auto' && width >= DESKTOP_BREAKPOINT;
@@ -93,7 +95,7 @@ export function GalleryFilterBar({
       <Ionicons name="search-outline" size={16} color={colors.text.muted} />
       <TextInput
         style={styles.searchInput as any}
-        placeholder="Search by name…"
+        placeholder={t('filters.searchPlaceholder')}
         placeholderTextColor={colors.text.muted}
         value={searchLocal}
         onChangeText={setSearchLocal}
@@ -112,10 +114,10 @@ export function GalleryFilterBar({
   const selectedCount = value.types.length;
   const dropdownLabel =
     selectedCount === 0
-      ? 'All types'
+      ? t('galleryFilters.allTypes')
       : selectedCount === 1
-        ? GENERATION_TYPE_LABELS[value.types[0]]
-        : `${selectedCount} types`;
+        ? t(GENERATION_TYPE_I18N_KEYS[value.types[0]])
+        : `${selectedCount} ${t('galleryFilters.typesCount')}`;
 
   const typeList = (
     <View>
@@ -148,12 +150,12 @@ export function GalleryFilterBar({
             nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
           >
-            {GENERATION_TYPES.map((t) => {
-              const isSel = value.types.includes(t);
+            {GENERATION_TYPES.map((genType) => {
+              const isSel = value.types.includes(genType);
               return (
                 <Pressable
-                  key={t}
-                  onPress={() => toggleType(t)}
+                  key={genType}
+                  onPress={() => toggleType(genType)}
                   style={({ pressed }) => [
                     styles.dropdownItem,
                     pressed && { backgroundColor: colors.bg.elevated },
@@ -182,7 +184,7 @@ export function GalleryFilterBar({
                     ]}
                     numberOfLines={1}
                   >
-                    {GENERATION_TYPE_LABELS[t]}
+                    {t(GENERATION_TYPE_I18N_KEYS[genType])}
                   </Text>
                 </Pressable>
               );
@@ -194,7 +196,7 @@ export function GalleryFilterBar({
               style={({ pressed }) => [styles.dropdownFooter, pressed && { opacity: 0.7 }]}
             >
               <Ionicons name="close-circle-outline" size={14} color={colors.accent.primary} />
-              <Text style={styles.dropdownFooterText}>Clear selection</Text>
+              <Text style={styles.dropdownFooterText}>{t('galleryFilters.clearSelection')}</Text>
             </Pressable>
           )}
         </View>
@@ -205,13 +207,13 @@ export function GalleryFilterBar({
   const dateRange = (
     <View style={styles.dateRow}>
       <DateField
-        label="From"
+        label={t('galleryFilters.from')}
         value={value.from}
         onChange={(next) => onChange({ ...value, from: next })}
         maxDate={value.to || undefined}
       />
       <DateField
-        label="To"
+        label={t('galleryFilters.to')}
         value={value.to}
         onChange={(next) => onChange({ ...value, to: next })}
         minDate={value.from || undefined}
@@ -223,37 +225,38 @@ export function GalleryFilterBar({
     return (
       <View style={styles.verticalContainer}>
         <View style={styles.verticalHeader}>
-          <Text style={styles.verticalTitle}>Filters</Text>
+          <Text style={styles.verticalTitle}>{t('galleryFilters.title')}</Text>
           {hasActiveFilters && (
             <Pressable
               onPress={resetAll}
               style={({ pressed }) => [pressed && styles.pressed]}
-              accessibilityLabel="Clear all filters"
+              accessibilityLabel={t('galleryFilters.clearAllFilters')}
             >
-              <Text style={styles.clearLink}>Clear all</Text>
+              <Text style={styles.clearLink}>{t('galleryFilters.clearAll')}</Text>
             </Pressable>
           )}
         </View>
 
         <View style={styles.verticalSection}>
-          <Text style={styles.verticalLabel}>Search</Text>
+          <Text style={styles.verticalLabel}>{t('galleryFilters.search')}</Text>
           {searchField}
         </View>
 
         <View style={styles.verticalSection}>
-          <Text style={styles.verticalLabel}>Type</Text>
+          <Text style={styles.verticalLabel}>{t('galleryFilters.type')}</Text>
           {typeList}
         </View>
 
         <View style={styles.verticalSection}>
-          <Text style={styles.verticalLabel}>Generated</Text>
+          <Text style={styles.verticalLabel}>{t('galleryFilters.generated')}</Text>
           {dateRange}
         </View>
 
         {typeof resultCount === 'number' && (
           <View style={styles.resultPill}>
             <Text style={styles.resultPillText}>
-              {resultCount} {resultCount === 1 ? 'result' : 'results'}
+              {resultCount}{' '}
+              {resultCount === 1 ? t('galleryFilters.resultOne') : t('galleryFilters.resultOther')}
             </Text>
           </View>
         )}
@@ -273,14 +276,15 @@ export function GalleryFilterBar({
               style={({ pressed }) => [styles.clearBtn, pressed && styles.pressed]}
             >
               <Ionicons name="refresh-outline" size={14} color={colors.accent.primary} />
-              <Text style={styles.clearBtnText}>Clear</Text>
+              <Text style={styles.clearBtnText}>{t('galleryFilters.clear')}</Text>
             </Pressable>
           )}
         </View>
         <View style={styles.desktopChipsRow}>{typeList}</View>
         {typeof resultCount === 'number' && (
           <Text style={styles.resultCount}>
-            {resultCount} {resultCount === 1 ? 'image' : 'images'}
+            {resultCount}{' '}
+            {resultCount === 1 ? t('galleryFilters.imageOne') : t('galleryFilters.imageOther')}
           </Text>
         )}
       </View>
@@ -298,7 +302,7 @@ export function GalleryFilterBar({
             expanded && styles.filterToggleActive,
             pressed && styles.pressed,
           ]}
-          accessibilityLabel="Toggle filters"
+          accessibilityLabel={t('galleryFilters.toggle')}
         >
           <Ionicons
             name="options-outline"
@@ -306,7 +310,7 @@ export function GalleryFilterBar({
             color={expanded ? colors.accent.primary : colors.text.secondary}
           />
           <Text style={[styles.filterToggleText, expanded && styles.filterToggleTextActive]}>
-            Filters
+            {t('galleryFilters.title')}
           </Text>
           {hasActiveFilters && !expanded && <View style={styles.filterDot} />}
         </Pressable>
@@ -321,14 +325,15 @@ export function GalleryFilterBar({
               style={({ pressed }) => [styles.clearBtnMobile, pressed && styles.pressed]}
             >
               <Ionicons name="refresh-outline" size={14} color={colors.accent.primary} />
-              <Text style={styles.clearBtnText}>Clear all filters</Text>
+              <Text style={styles.clearBtnText}>{t('galleryFilters.clearAllFilters')}</Text>
             </Pressable>
           )}
         </View>
       )}
       {typeof resultCount === 'number' && (
         <Text style={styles.resultCount}>
-          {resultCount} {resultCount === 1 ? 'image' : 'images'}
+          {resultCount}{' '}
+          {resultCount === 1 ? t('galleryFilters.imageOne') : t('galleryFilters.imageOther')}
         </Text>
       )}
     </View>

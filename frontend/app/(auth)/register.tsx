@@ -21,16 +21,17 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AuthNavbar } from '@/components/ui/AuthNavbar';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { FloatingInput } from '@/components/ui/FloatingInput';
 import { SocialButton } from '@/components/ui/SocialButton';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 
 const isWeb = Platform.OS === 'web';
 
 const STRENGTH_COLORS = ['#EF4444', '#F97316', '#EAB308', '#22C55E'];
-const STRENGTH_LABELS = ['Weak', 'Fair', 'Good', 'Strong'];
 
 function getPasswordStrength(pw: string): number {
   let score = 0;
@@ -41,22 +42,27 @@ function getPasswordStrength(pw: string): number {
   return score;
 }
 
-function validate(email: string, password: string, confirmPassword: string) {
+function validate(
+  email: string,
+  password: string,
+  confirmPassword: string,
+  t: ReturnType<typeof useT>
+) {
   const errors: { email?: string; password?: string; confirm?: string } = {};
   if (!email.trim()) {
-    errors.email = 'Email is required.';
+    errors.email = t('auth.register.emailRequired');
   } else if (!email.includes('@') || !email.includes('.')) {
-    errors.email = 'Enter a valid email address.';
+    errors.email = t('auth.register.emailInvalid');
   }
   if (!password) {
-    errors.password = 'Password is required.';
+    errors.password = t('auth.register.passwordRequired');
   } else if (password.length < 6) {
-    errors.password = 'Password must be at least 6 characters.';
+    errors.password = t('auth.register.passwordTooShort');
   }
   if (!confirmPassword) {
-    errors.confirm = 'Please confirm your password.';
+    errors.confirm = t('auth.register.confirmRequired');
   } else if (password !== confirmPassword) {
-    errors.confirm = 'Passwords do not match.';
+    errors.confirm = t('auth.register.passwordMismatch');
   }
   return errors;
 }
@@ -64,6 +70,13 @@ function validate(email: string, password: string, confirmPassword: string) {
 export default function RegisterScreen() {
   const { signUp } = useAuth();
   const { colors, colorScheme, toggleTheme } = useTheme();
+  const t = useT();
+  const strengthLabels = [
+    t('auth.register.strengthWeak'),
+    t('auth.register.strengthFair'),
+    t('auth.register.strengthGood'),
+    t('auth.register.strengthStrong'),
+  ];
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -98,7 +111,7 @@ export default function RegisterScreen() {
   }));
 
   async function handleRegister() {
-    const errors = validate(email, password, confirmPassword);
+    const errors = validate(email, password, confirmPassword, t);
     if (Object.keys(errors).length > 0) {
       if (errors.email) emailErrorKey.current += 1;
       if (errors.password) passwordErrorKey.current += 1;
@@ -112,7 +125,7 @@ export default function RegisterScreen() {
     try {
       await signUp(email.trim(), password);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Registration failed. Please try again.';
+      const msg = err instanceof Error ? err.message : t('auth.register.failed');
       setApiError(msg);
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -140,7 +153,7 @@ export default function RegisterScreen() {
   }
 
   function handleSocialPress() {
-    Alert.alert('Coming Soon', 'Social login is not available yet. Stay tuned!');
+    Alert.alert(t('auth.login.socialComingSoonTitle'), t('auth.login.socialComingSoonBody'));
   }
 
   const canSubmit =
@@ -149,14 +162,12 @@ export default function RegisterScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {isWeb ? (
-        <AuthNavbar ctaLabel="Sign in" ctaHref="/(auth)/login" />
+        <AuthNavbar ctaLabel={t('auth.register.signInLink')} ctaHref="/(auth)/login" />
       ) : (
         <Pressable
           onPress={toggleTheme}
           style={styles.themeToggle}
-          accessibilityLabel={
-            colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
-          }
+          accessibilityLabel={colorScheme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
           accessibilityRole="button"
         >
           <Ionicons
@@ -173,17 +184,14 @@ export default function RegisterScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Animated.View style={[animStyle, styles.card]}>
-            {/* Logo mark */}
+            {/* Logo mark (wordmark lives in the navbar — avoid duplicate titles here) */}
             <View style={styles.logoContainer}>
-              <View style={styles.logoMark}>
-                <Text style={styles.logoGlyph}>M</Text>
-              </View>
-              <Text style={styles.logoText}>MerchStory</Text>
+              <BrandLogo size="lg" variant="mark" />
             </View>
 
             {/* Heading */}
-            <Text style={styles.heading}>Create account</Text>
-            <Text style={styles.subheading}>Start turning photos into ads</Text>
+            <Text style={styles.heading}>{t('auth.register.heading')}</Text>
+            <Text style={styles.subheading}>{t('auth.register.subheading')}</Text>
 
             {/* Social row */}
             <View style={styles.socialRow}>
@@ -204,14 +212,14 @@ export default function RegisterScreen() {
             {/* OR divider */}
             <View style={styles.orRow}>
               <View style={styles.orLine} />
-              <Text style={styles.orText}>or</Text>
+              <Text style={styles.orText}>{t('common.or')}</Text>
               <View style={styles.orLine} />
             </View>
 
             {/* Form */}
             <FloatingInput
               key={`email-${emailErrorKey.current}`}
-              label="Email address"
+              label={t('auth.register.emailLabel')}
               value={email}
               onChangeText={handleEmailChange}
               error={fieldErrors.email}
@@ -226,7 +234,7 @@ export default function RegisterScreen() {
 
             <FloatingInput
               key={`password-${passwordErrorKey.current}`}
-              label="Password"
+              label={t('auth.register.passwordLabel')}
               value={password}
               onChangeText={handlePasswordChange}
               error={fieldErrors.password}
@@ -261,14 +269,14 @@ export default function RegisterScreen() {
                     { color: STRENGTH_COLORS[strength - 1] ?? colors.text.muted },
                   ]}
                 >
-                  {strength > 0 ? STRENGTH_LABELS[strength - 1] : ''}
+                  {strength > 0 ? strengthLabels[strength - 1] : ''}
                 </Text>
               </View>
             )}
 
             <FloatingInput
               key={`confirm-${confirmErrorKey.current}`}
-              label="Confirm password"
+              label={t('auth.register.confirmLabel')}
               value={confirmPassword}
               onChangeText={handleConfirmChange}
               error={fieldErrors.confirm}
@@ -298,21 +306,24 @@ export default function RegisterScreen() {
                 !canSubmit && styles.primaryButtonDisabled,
                 pressed && canSubmit && styles.primaryButtonPressed,
               ]}
-              accessibilityLabel="Create account"
+              accessibilityLabel={t('auth.register.submit')}
               accessibilityRole="button"
               accessibilityState={{ disabled: !canSubmit, busy: loading }}
             >
               <Text style={styles.primaryButtonText}>
-                {loading ? 'Creating account…' : 'Create account'}
+                {loading ? t('auth.register.submitting') : t('auth.register.submit')}
               </Text>
             </Pressable>
 
             {/* Footer */}
             <View style={styles.footer}>
-              <Text style={styles.footerText}>Already have an account?&nbsp;</Text>
+              <Text style={styles.footerText}>{t('auth.register.hasAccount')}&nbsp;</Text>
               <Link href="/(auth)/login" asChild>
-                <Pressable accessibilityRole="link" accessibilityLabel="Sign in">
-                  <Text style={styles.footerLink}>Sign in</Text>
+                <Pressable
+                  accessibilityRole="link"
+                  accessibilityLabel={t('auth.register.signInLink')}
+                >
+                  <Text style={styles.footerLink}>{t('auth.register.signInLink')}</Text>
                 </Pressable>
               </Link>
             </View>
@@ -366,29 +377,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     logoContainer: {
       alignItems: 'center',
       marginBottom: D.spacing.xl,
-      gap: D.spacing.sm,
-    },
-    logoMark: {
-      width: 56,
-      height: 56,
-      borderRadius: D.radius.lg,
-      backgroundColor: colors.accent.dim,
-      borderWidth: 1.5,
-      borderColor: colors.accent.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    logoGlyph: {
-      fontSize: D.fontSize['2xl'],
-      fontWeight: D.fontWeight.bold,
-      color: colors.accent.secondary,
-    },
-    logoText: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.text.muted,
-      letterSpacing: 1.5,
-      textTransform: 'uppercase',
     },
     heading: {
       fontSize: D.fontSize['2xl'],

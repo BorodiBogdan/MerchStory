@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -21,31 +21,38 @@ import {
   View,
 } from 'react-native';
 import ReAnimated, {
+  Easing,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { ChipSelector } from '@/components/ui/ChipSelector';
 import { GalleryImage } from '@/components/ui/GalleryImage';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
 import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
+import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { D } from '@/constants/design';
 import type { GenerationType } from '@/constants/generationTypes';
+import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import {
   fetchGallery,
   fetchGalleryImage,
+  formatPrice,
   type GalleryItem,
   generateAnnouncementImage,
   generateCatalogImage,
   generateCatalogOnWallpaper,
   type GenerateImageResponse,
   generateWallpaper,
-  getShopProfile,
   type PlacementZone,
   type ProductItem,
   saveToGallery,
@@ -78,56 +85,89 @@ type PostType = 'Announcement' | 'Job Post' | 'Promotion';
 type ContextItem = { key: string; label: string };
 
 // ─── Text style presets (style only — color is chosen separately) ──────────────
+// Preview font files must match the backend (CatalogCompositor.LoadEmbeddedFamily)
+// so the sidebar preview renders with the same typeface as the generated image.
 type TextPreset = {
   id: string;
   label: string;
+  i18nKey: string;
   fontFamily: string;
   textEffect: string;
   priceBadge: string;
+  nameFont: string;
+  priceFont: string;
 };
 
 const TEXT_PRESETS: TextPreset[] = [
   {
     id: 'modern-shadow',
     label: 'Shadow',
+    i18nKey: 'studio.preset.shadow',
     fontFamily: 'Modern',
     textEffect: 'Shadow',
     priceBadge: 'None',
+    nameFont: 'Inter-Regular',
+    priceFont: 'Inter-Bold',
   },
   {
     id: 'bold-shadow',
     label: 'Bold',
+    i18nKey: 'studio.preset.bold',
     fontFamily: 'Bold',
     textEffect: 'Shadow',
     priceBadge: 'None',
+    nameFont: 'Montserrat-Bold',
+    priceFont: 'Montserrat-Bold',
   },
   {
     id: 'elegant-clean',
     label: 'Elegant',
+    i18nKey: 'studio.preset.elegant',
     fontFamily: 'Elegant',
     textEffect: 'None',
     priceBadge: 'None',
+    nameFont: 'PlayfairDisplay-Regular',
+    priceFont: 'PlayfairDisplay-Regular',
   },
   {
     id: 'bold-badge',
     label: 'Badge',
+    i18nKey: 'studio.preset.badge',
     fontFamily: 'Bold',
     textEffect: 'Shadow',
     priceBadge: 'Pill',
+    nameFont: 'Montserrat-Bold',
+    priceFont: 'Montserrat-Bold',
   },
   {
     id: 'outline',
     label: 'Outline',
+    i18nKey: 'studio.preset.outline',
     fontFamily: 'Modern',
     textEffect: 'Outline',
     priceBadge: 'None',
+    nameFont: 'Inter-Regular',
+    priceFont: 'Inter-Bold',
   },
   {
     id: 'friendly-badge',
     label: 'Friendly',
+    i18nKey: 'studio.preset.friendly',
     fontFamily: 'Friendly',
     textEffect: 'Shadow',
     priceBadge: 'Pill',
+    nameFont: 'Lato-Regular',
+    priceFont: 'Lato-Regular',
+  },
+  {
+    id: 'flyer-sticker',
+    label: 'Flyer',
+    i18nKey: 'studio.preset.flyer',
+    fontFamily: 'Bold',
+    textEffect: 'Shadow',
+    priceBadge: 'Sticker',
+    nameFont: 'Montserrat-Bold',
+    priceFont: 'Montserrat-Bold',
   },
 ];
 
@@ -144,56 +184,280 @@ const PRICE_SWATCHES = [
   '#1e1e1e',
 ];
 
-function isColorLight(hex: string): boolean {
+function colorLuminance(hex: string): number {
   const h = hex.replace('#', '');
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+function isColorLight(hex: string): boolean {
   // Perceived luminance
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.45;
+  return colorLuminance(hex) > 0.45;
+}
+
+const PRESET_SWATCH_SET = new Set(PRICE_SWATCHES.map((c) => c.toLowerCase()));
+
+// Circle swatch that opens a custom color picker. Uses the OS-native color picker
+// on web (zero-friction) and a small modal with the RGB picker on native.
+function CustomColorSwatch({
+  value,
+  onChange,
+  colors,
+}: {
+  value: string;
+  onChange: (c: string) => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const isCustom = !PRESET_SWATCH_SET.has(value.toLowerCase());
+  const seed = isCustom && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#808080';
+
+  const RAINBOW = ['#EF4444', '#F59E0B', '#EAB308', '#22C55E', '#3B82F6', '#A855F7'];
+
+  // The web <input type="color"> fires onChange continuously while the OS picker
+  // is open and the cursor moves. Each one triggers a re-render of the whole
+  // studio component (several thousand lines), which drops the cursor to a crawl.
+  // Coalesce into one update per animation frame so React only reconciles at 60fps,
+  // keeping the live preview smooth without starving the picker dialog.
+  const rafIdRef = useRef<number | null>(null);
+  const pendingRef = useRef<string | null>(null);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+  useEffect(
+    () => () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    },
+    []
+  );
+  const handleWebColorInput = useCallback((hex: string) => {
+    pendingRef.current = hex;
+    if (rafIdRef.current !== null) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const next = pendingRef.current;
+      pendingRef.current = null;
+      if (next !== null) onChangeRef.current(next);
+    });
+  }, []);
+
+  return (
+    <>
+      <View
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          overflow: 'hidden',
+          borderWidth: isCustom ? 2.5 : 1,
+          borderColor: isCustom ? colors.accent.primary : colors.border.default,
+          backgroundColor: isCustom ? value : '#fff',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+        }}
+      >
+        {!isCustom && (
+          <View style={{ flexDirection: 'row', width: '100%', height: '100%' }}>
+            {RAINBOW.map((c) => (
+              <View key={c} style={{ flex: 1, backgroundColor: c }} />
+            ))}
+          </View>
+        )}
+        <View
+          style={{
+            position: 'absolute',
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            backgroundColor: 'rgba(255,255,255,0.92)',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          pointerEvents="none"
+        >
+          <Ionicons name="color-palette" size={10} color="#1e1e1e" />
+        </View>
+        {Platform.OS === 'web'
+          ? // Real native color input stretched over the circle. User's click on
+            // the input itself makes Chrome anchor the OS picker to this element.
+            React.createElement('input', {
+              type: 'color',
+              value: seed,
+              onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+                handleWebColorInput(e.target.value.toUpperCase()),
+              'aria-label': 'Pick a custom color',
+              style: {
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                border: 0,
+                padding: 0,
+                margin: 0,
+                cursor: 'pointer',
+                background: 'transparent',
+              },
+            })
+          : null}
+        {Platform.OS !== 'web' && (
+          <Pressable
+            onPress={() => setModalOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Pick a custom color"
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+          />
+        )}
+      </View>
+
+      <Modal
+        visible={modalOpen && Platform.OS !== 'web'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalOpen(false)}
+      >
+        <Pressable
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: D.spacing.lg,
+          }}
+          onPress={() => setModalOpen(false)}
+        >
+          <Pressable
+            style={{
+              width: '100%',
+              maxWidth: 360,
+              backgroundColor: colors.bg.surface,
+              borderRadius: D.radius.xl,
+              padding: D.spacing.lg,
+            }}
+            onPress={() => {}}
+          >
+            <RgbColorPicker label="Custom color" value={value} onChange={onChange} />
+            <Pressable
+              onPress={() => setModalOpen(false)}
+              style={{
+                marginTop: D.spacing.sm,
+                paddingVertical: 12,
+                borderRadius: D.radius.pill,
+                backgroundColor: colors.accent.primary,
+                alignItems: 'center',
+              }}
+            >
+              <Text
+                style={{
+                  color: '#fff',
+                  fontSize: D.fontSize.base,
+                  fontWeight: D.fontWeight.semibold,
+                }}
+              >
+                Done
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+function ColorSwatchRow({
+  value,
+  onChange,
+  colors,
+}: {
+  value: string;
+  onChange: (c: string) => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: D.spacing.md }}>
+      {PRICE_SWATCHES.map((hex) => (
+        <Pressable
+          key={hex}
+          onPress={() => onChange(hex)}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: value === hex }}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 14,
+            backgroundColor: hex,
+            borderWidth: value === hex ? 2.5 : 1,
+            borderColor: value === hex ? colors.accent.primary : colors.border.default,
+          }}
+        />
+      ))}
+      <CustomColorSwatch value={value} onChange={onChange} colors={colors} />
+    </View>
+  );
 }
 
 function TextStylePresetPicker({
   selectedId,
   onSelect,
-  selectedColor,
-  onColorChange,
+  nameColor,
+  onNameColorChange,
+  priceColor,
+  onPriceColorChange,
   colors,
 }: {
   selectedId: string;
   onSelect: (id: string) => void;
-  selectedColor: string;
-  onColorChange: (c: string) => void;
+  nameColor: string;
+  onNameColorChange: (c: string) => void;
+  priceColor: string;
+  onPriceColorChange: (c: string) => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
-  const previewBg = isColorLight(selectedColor) ? '#1a1a2e' : '#f0f4ff';
+  const t = useT();
+  // Preview background tracks the name color (the dominant text element) so light
+  // names show on dark and vice versa — same rule as before the split.
+  const previewBg = isColorLight(nameColor) ? '#1a1a2e' : '#f0f4ff';
   return (
     <>
-      <SectionLabel label="Color" />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: D.spacing.md }}>
-        {PRICE_SWATCHES.map((hex) => (
-          <Pressable
-            key={hex}
-            onPress={() => onColorChange(hex)}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: selectedColor === hex }}
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 14,
-              backgroundColor: hex,
-              borderWidth: selectedColor === hex ? 2.5 : 1,
-              borderColor: selectedColor === hex ? colors.accent.primary : colors.border.default,
-            }}
-          />
-        ))}
-      </View>
+      <OptionLabel label={t('studio.optNameColor')} />
+      <ColorSwatchRow value={nameColor} onChange={onNameColorChange} colors={colors} />
+      <OptionLabel label={t('studio.optPriceColor')} />
+      <ColorSwatchRow value={priceColor} onChange={onPriceColorChange} colors={colors} />
 
-      <SectionLabel label="Text Style" />
+      <SectionLabel label={t('studio.optText')} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: D.spacing.sm }}>
         {TEXT_PRESETS.map((preset) => {
           const selected = preset.id === selectedId;
           const hasShadow = preset.textEffect === 'Shadow';
+          const hasOutline = preset.textEffect === 'Outline';
+          const isSticker = preset.priceBadge === 'Sticker';
+          // Single-color glow that reads equally well against light and dark previews
+          // and never matches the selectedColor (so it stays visible for every swatch).
+          // Using textShadowRadius instead of a 4-direction stack avoids the jagged
+          // overdraw artifacts that came from stacking five absolute-positioned Texts.
+          const outlineGlow = 'rgba(120, 120, 120, 0.95)';
+          const shadowStyle = hasShadow
+            ? {
+                textShadowColor: 'rgba(0,0,0,0.4)',
+                textShadowOffset: { width: 2, height: 2 },
+                textShadowRadius: 0,
+              }
+            : undefined;
+          // Sticker-chip colors mirror the backend exactly: fill is always white
+          // (retail-flyer aesthetic), and text renders in the user's picked price
+          // color. Only when the picked color is too close to white (luminance > 0.65,
+          // matching EnsureReadableOn with a white fill) do we flip to dark so the
+          // price stays legible against a white chip.
+          const stickerFill = '#ffffff';
+          const stickerText = colorLuminance(priceColor) > 0.65 ? '#1e1e1e' : priceColor;
           return (
             <Pressable
               key={preset.id}
@@ -204,7 +468,7 @@ function TextStylePresetPicker({
                 width: 130,
                 borderRadius: 12,
                 overflow: 'hidden',
-                borderWidth: selected ? 2.5 : 1.5,
+                borderWidth: 2.5,
                 borderColor: selected ? colors.accent.primary : colors.border.default,
               }}
             >
@@ -218,57 +482,135 @@ function TextStylePresetPicker({
                   height: 88,
                 }}
               >
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: selectedColor,
-                    fontSize: 10,
-                    fontWeight: '500',
-                    marginBottom: 8,
-                    opacity: 0.75,
-                    ...(hasShadow
-                      ? {
-                          textShadowColor: 'rgba(0,0,0,0.8)',
-                          textShadowOffset: { width: 1, height: 1 },
-                          textShadowRadius: 2,
-                        }
-                      : {}),
-                  }}
-                >
-                  Product Name
-                </Text>
-                <View
-                  style={
-                    preset.priceBadge === 'Pill'
-                      ? {
-                          backgroundColor: selectedColor + '25',
-                          paddingHorizontal: 10,
+                {isSticker ? (
+                  // Flyer preview mirrors the actual composition: a mock product tile with
+                  // a white sticker chip overhanging the bottom-right and the name below.
+                  <View style={{ alignItems: 'center', width: '100%' }}>
+                    <View
+                      style={{
+                        width: 54,
+                        height: 38,
+                        borderRadius: 6,
+                        backgroundColor: 'rgba(255,255,255,0.12)',
+                        borderWidth: 1,
+                        borderColor: 'rgba(255,255,255,0.18)',
+                        marginBottom: 6,
+                        position: 'relative',
+                        overflow: 'visible',
+                      }}
+                    >
+                      <View
+                        style={{
+                          position: 'absolute',
+                          right: -10,
+                          bottom: -6,
+                          backgroundColor: stickerFill,
+                          paddingHorizontal: 8,
                           paddingVertical: 3,
-                          borderRadius: 20,
-                          borderWidth: 1,
-                          borderColor: selectedColor + '88',
+                          borderRadius: 6,
+                          shadowColor: '#000',
+                          shadowOpacity: 0.25,
+                          shadowOffset: { width: 1, height: 2 },
+                          shadowRadius: 2,
+                          elevation: 3,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: stickerText,
+                            fontSize: 11,
+                            fontFamily: preset.priceFont,
+                            fontWeight: '700',
+                            letterSpacing: -0.3,
+                          }}
+                        >
+                          $19.99
+                        </Text>
+                      </View>
+                    </View>
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: nameColor,
+                        fontSize: 11,
+                        fontFamily: preset.nameFont,
+                        fontWeight: '700',
+                        ...(shadowStyle ?? {}),
+                      }}
+                    >
+                      Product Name
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: nameColor,
+                        fontSize: 10,
+                        fontFamily: preset.nameFont,
+                        marginBottom: 8,
+                        opacity: 0.85,
+                        ...(shadowStyle ?? {}),
+                        ...(hasOutline
+                          ? {
+                              textShadowColor: outlineGlow,
+                              textShadowOffset: { width: 0, height: 0 },
+                              textShadowRadius: 1.5,
+                            }
+                          : {}),
+                      }}
+                    >
+                      Product Name
+                    </Text>
+                    <View
+                      style={{
+                        height: 40,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <View
+                        style={
+                          preset.priceBadge === 'Pill'
+                            ? {
+                                // Backend draws the pill as a filled shape with no stroke;
+                                // tinted priceColor fill keeps it visible on previewBg
+                                // (which sits in the opposite luminance bucket).
+                                backgroundColor: priceColor + '33',
+                                paddingHorizontal: 16,
+                                paddingVertical: 6,
+                                borderRadius: 999,
+                              }
+                            : undefined
                         }
-                      : undefined
-                  }
-                >
-                  <Text
-                    style={{
-                      color: selectedColor,
-                      fontSize: 24,
-                      fontWeight: '900',
-                      letterSpacing: -0.5,
-                      ...(hasShadow
-                        ? {
-                            textShadowColor: 'rgba(0,0,0,0.8)',
-                            textShadowOffset: { width: 1.5, height: 1.5 },
-                            textShadowRadius: 2,
+                      >
+                        <Text
+                          style={
+                            {
+                              color: priceColor,
+                              fontSize: 24,
+                              lineHeight: 26,
+                              includeFontPadding: false,
+                              fontFamily: preset.priceFont,
+                              letterSpacing: -0.5,
+                              ...(shadowStyle ?? {}),
+                              ...(hasOutline
+                                ? {
+                                    textShadowColor: outlineGlow,
+                                    textShadowOffset: { width: 0, height: 0 },
+                                    textShadowRadius: 3,
+                                  }
+                                : {}),
+                            } as any
                           }
-                        : {}),
-                    }}
-                  >
-                    $19.99
-                  </Text>
-                </View>
+                        >
+                          $19.99
+                        </Text>
+                      </View>
+                    </View>
+                  </>
+                )}
               </View>
               <View
                 style={{
@@ -284,7 +626,7 @@ function TextStylePresetPicker({
                     fontWeight: '600',
                   }}
                 >
-                  {preset.label}
+                  {t(preset.i18nKey as never)}
                 </Text>
               </View>
             </Pressable>
@@ -295,54 +637,71 @@ function TextStylePresetPicker({
   );
 }
 
-// ─── Static data ───────────────────────────────────────────────────────────────
-const LAYOUT_OPTIONS = [
-  { value: 'Showcase', label: 'Showcase' },
-  { value: 'Story', label: 'Story' },
-];
-const COLOR_OPTIONS = [
-  { value: 'Brand Colors', label: 'Brand Colors' },
-  { value: 'Vibrant', label: 'Vibrant' },
-  { value: 'Monochrome', label: 'Monochrome' },
-  { value: 'Dark', label: 'Dark' },
-];
-const FORMAT_OPTIONS = [
-  { value: 'Square', label: 'Square (1:1)' },
-  { value: 'Portrait', label: 'Portrait (4:5)' },
-  { value: 'Story', label: 'Story (9:16)' },
-];
-const POST_TYPES: {
+// ─── Static data (labels come from i18n at render time) ───────────────────────
+type TranslateFn = (key: string) => string;
+
+function getLayoutOptions(tr: TranslateFn) {
+  return [
+    { value: 'Showcase', label: tr('studio.layoutShowcaseLabel') },
+    { value: 'Story', label: tr('studio.layoutStoryLabel') },
+  ];
+}
+function getColorOptions(tr: TranslateFn) {
+  return [
+    { value: 'Brand Colors', label: tr('studio.themeBrandLabel') },
+    { value: 'Vibrant', label: tr('studio.themeVibrantLabel') },
+    { value: 'Monochrome', label: tr('studio.themeMonoLabel') },
+    { value: 'Dark', label: tr('studio.themeDarkLabel') },
+  ];
+}
+function getFormatOptions(tr: TranslateFn) {
+  return [
+    { value: 'Square', label: tr('studio.formatSquareLabel') },
+    { value: 'Portrait', label: tr('studio.formatPortraitLabel') },
+    { value: 'Story', label: tr('studio.formatStoryLabel') },
+  ];
+}
+function getPostTypes(tr: TranslateFn): {
   type: PostType;
+  label: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
   placeholder: string;
-}[] = [
-  {
-    type: 'Announcement',
-    icon: 'megaphone-outline',
-    placeholder:
-      "e.g. We're open this Sunday from 9am to 6pm — or — Did you know we offer free gift wrapping?",
-  },
-  {
-    type: 'Job Post',
-    icon: 'briefcase-outline',
-    placeholder: 'e.g. Looking for a part-time cashier, 3 days/week…',
-  },
-  {
-    type: 'Promotion',
-    icon: 'pricetag-outline',
-    placeholder: 'e.g. 20% off all clothing this weekend only!',
-  },
-];
-const JOB_IMAGE_STYLE_OPTIONS = [
-  { value: 'text-only', label: 'Text only' },
-  { value: 'with-person', label: 'With person' },
-];
-const TONE_OPTIONS = [
-  { value: 'Professional', label: 'Professional' },
-  { value: 'Friendly', label: 'Friendly' },
-  { value: 'Bold', label: 'Bold' },
-  { value: 'Playful', label: 'Playful' },
-];
+}[] {
+  return [
+    {
+      type: 'Announcement',
+      label: tr('studio.post.announcement'),
+      icon: 'megaphone-outline',
+      placeholder: tr('studio.post.announcementPlaceholder'),
+    },
+    {
+      type: 'Job Post',
+      label: tr('studio.post.jobPost'),
+      icon: 'briefcase-outline',
+      placeholder: tr('studio.post.jobPostPlaceholder'),
+    },
+    {
+      type: 'Promotion',
+      label: tr('studio.post.promotion'),
+      icon: 'pricetag-outline',
+      placeholder: tr('studio.post.promotionPlaceholder'),
+    },
+  ];
+}
+function getJobImageStyleOptions(tr: TranslateFn) {
+  return [
+    { value: 'text-only', label: tr('studio.jobStyle.textOnly') },
+    { value: 'with-person', label: tr('studio.jobStyle.withPerson') },
+  ];
+}
+function getToneOptions(tr: TranslateFn) {
+  return [
+    { value: 'Professional', label: tr('studio.tone.professional') },
+    { value: 'Friendly', label: tr('studio.tone.friendly') },
+    { value: 'Bold', label: tr('studio.tone.bold') },
+    { value: 'Playful', label: tr('studio.tone.playful') },
+  ];
+}
 const TAB_META: {
   key: StudioTab;
   label: string;
@@ -376,22 +735,28 @@ const TAB_META: {
 ];
 
 // ─── Brand context helpers ──────────────────────────────────────────────────────
-function deriveContextItems(profile: ShopProfileResponse): ContextItem[] {
+function deriveContextItems(profile: ShopProfileResponse, tr: TranslateFn): ContextItem[] {
   const items: ContextItem[] = [];
-  if (profile.logoBase64) items.push({ key: 'logoBase64', label: 'Brand Logo' });
-  if (profile.brandName) items.push({ key: 'brandName', label: 'Brand Name' });
-  if (profile.slogan) items.push({ key: 'slogan', label: 'Slogan' });
-  if (profile.brandColors?.length > 0) items.push({ key: 'brandColors', label: 'Brand Colors' });
-  if (profile.businessDomain) items.push({ key: 'businessDomain', label: 'Business Domain' });
-  if (profile.shopType) items.push({ key: 'shopType', label: 'Shop Type' });
-  if (profile.targetAudience) items.push({ key: 'targetAudience', label: 'Target Audience' });
-  if (profile.competitors) items.push({ key: 'competitors', label: 'Competitors' });
-  if (profile.phoneNumber) items.push({ key: 'phoneNumber', label: 'Phone' });
-  if (profile.email) items.push({ key: 'email', label: 'Email' });
-  if (profile.addresses?.length > 0) items.push({ key: 'addresses', label: 'Address' });
-  if (profile.instagramHandle) items.push({ key: 'instagramHandle', label: 'Instagram' });
-  if (profile.facebookHandle) items.push({ key: 'facebookHandle', label: 'Facebook' });
-  if (profile.tikTokHandle) items.push({ key: 'tikTokHandle', label: 'TikTok' });
+  if (profile.logoBase64) items.push({ key: 'logoBase64', label: tr('studio.ctx.logo') });
+  if (profile.brandName) items.push({ key: 'brandName', label: tr('studio.ctx.brandName') });
+  if (profile.slogan) items.push({ key: 'slogan', label: tr('studio.ctx.slogan') });
+  if (profile.brandColors?.length > 0)
+    items.push({ key: 'brandColors', label: tr('studio.ctx.brandColors') });
+  if (profile.businessDomain)
+    items.push({ key: 'businessDomain', label: tr('studio.ctx.businessDomain') });
+  if (profile.shopType) items.push({ key: 'shopType', label: tr('studio.ctx.shopType') });
+  if (profile.targetAudience)
+    items.push({ key: 'targetAudience', label: tr('studio.ctx.targetAudience') });
+  if (profile.competitors) items.push({ key: 'competitors', label: tr('studio.ctx.competitors') });
+  if (profile.phoneNumber) items.push({ key: 'phoneNumber', label: tr('studio.ctx.phone') });
+  if (profile.email) items.push({ key: 'email', label: tr('studio.ctx.email') });
+  if (profile.addresses?.length > 0)
+    items.push({ key: 'addresses', label: tr('studio.ctx.address') });
+  if (profile.instagramHandle)
+    items.push({ key: 'instagramHandle', label: tr('studio.ctx.instagram') });
+  if (profile.facebookHandle)
+    items.push({ key: 'facebookHandle', label: tr('studio.ctx.facebook') });
+  if (profile.tikTokHandle) items.push({ key: 'tikTokHandle', label: tr('studio.ctx.tiktok') });
   return items;
 }
 
@@ -405,10 +770,13 @@ function BrandContextSection({
   onToggle: (key: string) => void;
 }) {
   const { colors } = useTheme();
+  const t = useT();
+  const { width: screenWidth } = useWindowDimensions();
+  const isDesktop = isWeb && screenWidth >= DESKTOP_BREAKPOINT;
   if (items.length === 0) return null;
   return (
     <>
-      <SectionLabel label="Brand Context" />
+      <SectionLabel label={t('studio.brandContext')} />
       <Text
         style={{
           fontSize: D.fontSize.xs,
@@ -416,9 +784,15 @@ function BrandContextSection({
           marginBottom: D.spacing.sm,
         }}
       >
-        Choose which brand info to include in the AI prompt
+        {t('studio.brandContextHint')}
       </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: D.spacing.xs }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          gap: isDesktop ? D.spacing.xs : D.spacing.sm,
+        }}
+      >
         {items.map((item) => {
           const active = selected.includes(item.key);
           return (
@@ -430,9 +804,9 @@ function BrandContextSection({
               style={({ pressed }) => ({
                 flexDirection: 'row' as const,
                 alignItems: 'center' as const,
-                gap: 4,
-                paddingVertical: 5,
-                paddingHorizontal: D.spacing.sm,
+                gap: isDesktop ? 4 : 6,
+                paddingVertical: isDesktop ? 5 : 9,
+                paddingHorizontal: isDesktop ? D.spacing.sm : D.spacing.md,
                 borderRadius: D.radius.pill,
                 borderWidth: 1,
                 borderColor: active ? colors.accent.primary : colors.border.default,
@@ -445,12 +819,12 @@ function BrandContextSection({
             >
               <Ionicons
                 name={active ? 'checkmark-circle' : 'ellipse-outline'}
-                size={13}
+                size={isDesktop ? 13 : 16}
                 color={active ? colors.accent.primary : colors.text.muted}
               />
               <Text
                 style={{
-                  fontSize: D.fontSize.xs,
+                  fontSize: isDesktop ? D.fontSize.xs : D.fontSize.sm,
                   color: active ? colors.accent.primary : colors.text.secondary,
                   fontWeight: active ? D.fontWeight.medium : D.fontWeight.regular,
                 }}
@@ -514,7 +888,7 @@ function SidebarOptionGroup({
 }) {
   const { colors } = useTheme();
   return (
-    <View style={{ gap: 1, marginTop: D.spacing.xs }}>
+    <View style={{ gap: 2, marginTop: D.spacing.xs }}>
       {options.map((opt) => {
         const active = selected === opt.value;
         return (
@@ -523,39 +897,48 @@ function SidebarOptionGroup({
             onPress={() => onSelect(opt.value)}
             accessibilityRole="radio"
             accessibilityState={{ selected: active }}
-            style={({ pressed }) => ({
-              flexDirection: 'row' as const,
-              alignItems: 'center' as const,
-              paddingVertical: 7,
-              paddingHorizontal: D.spacing.sm,
-              borderRadius: D.radius.sm,
-              backgroundColor: active
-                ? colors.accent.dim
-                : pressed
-                  ? colors.bg.elevated
-                  : 'transparent',
-              gap: D.spacing.sm,
-            })}
+            style={({ pressed }) =>
+              ({
+                flexDirection: 'row' as const,
+                alignItems: 'center' as const,
+                paddingVertical: 9,
+                paddingHorizontal: D.spacing.sm + 2,
+                borderRadius: D.radius.md,
+                backgroundColor: active
+                  ? colors.accent.dim
+                  : pressed
+                    ? colors.bg.elevated
+                    : 'transparent',
+                borderWidth: 1,
+                borderColor: active ? colors.accent.primary + '55' : 'transparent',
+                gap: D.spacing.sm + 2,
+                ...(Platform.OS === 'web' ? ({ transitionDuration: '140ms' } as any) : {}),
+              }) as any
+            }
           >
             <View
               style={{
-                width: 16,
-                height: 16,
-                borderRadius: 8,
-                borderWidth: 1.5,
+                width: 18,
+                height: 18,
+                borderRadius: 9,
+                borderWidth: 2,
                 borderColor: active ? colors.accent.primary : colors.border.default,
                 backgroundColor: active ? colors.accent.primary : 'transparent',
                 alignItems: 'center',
                 justifyContent: 'center',
+                ...(Platform.OS === 'web' && active
+                  ? ({ boxShadow: `0 0 0 3px ${colors.accent.primary}22` } as any)
+                  : {}),
               }}
             >
-              {active && <Ionicons name="checkmark" size={10} color="#fff" />}
+              {active && <Ionicons name="checkmark" size={11} color="#fff" />}
             </View>
             <Text
               style={{
                 fontSize: D.fontSize.sm,
-                fontWeight: active ? D.fontWeight.medium : D.fontWeight.regular,
+                fontWeight: active ? D.fontWeight.semibold : D.fontWeight.medium,
                 color: active ? colors.accent.primary : colors.text.secondary,
+                letterSpacing: active ? 0.1 : 0,
               }}
             >
               {opt.label}
@@ -578,39 +961,56 @@ function GenerateButton({
   label: string;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
+  const inactive = disabled || loading;
   return (
     <Pressable
-      style={({ pressed }) => [
-        {
-          backgroundColor: '#6366F1',
-          borderRadius: D.radius.md,
-          paddingVertical: 13,
-          flexDirection: 'row' as const,
-          alignItems: 'center' as const,
-          justifyContent: 'center' as const,
-          gap: D.spacing.sm,
-          opacity: disabled || loading ? 0.45 : pressed ? 0.85 : 1,
-        },
-        !disabled &&
-          !loading && {
-            shadowColor: '#6366F1',
-            shadowOpacity: 0.4,
-            shadowRadius: 12,
-            shadowOffset: { width: 0, height: 4 },
-            elevation: 6,
+      style={({ pressed }) =>
+        [
+          {
+            borderRadius: D.radius.pill,
+            paddingVertical: 14,
+            paddingHorizontal: D.spacing.md,
+            flexDirection: 'row' as const,
+            alignItems: 'center' as const,
+            justifyContent: 'center' as const,
+            gap: 6,
+            backgroundColor: inactive ? colors.bg.elevated : colors.accent.primary,
+            borderWidth: inactive ? 1 : 0,
+            borderColor: colors.border.default,
+            transform: [{ scale: pressed && !inactive ? 0.98 : 1 }],
+            opacity: loading ? 0.85 : pressed && !inactive ? 0.95 : 1,
           },
-      ]}
+          !inactive &&
+            (Platform.OS === 'web'
+              ? ({
+                  boxShadow: `0 10px 28px -10px ${colors.accent.primary}CC, 0 0 0 1px ${colors.accent.primary}33 inset`,
+                  transitionDuration: '160ms',
+                } as any)
+              : D.shadow.glow),
+        ] as any
+      }
       onPress={onPress}
-      disabled={disabled || loading}
+      disabled={inactive}
       accessibilityRole="button"
+      accessibilityState={{ disabled: inactive, busy: loading }}
     >
       {loading ? (
         <ActivityIndicator size="small" color="#fff" />
       ) : (
         <>
-          <Ionicons name="sparkles-outline" size={15} color="#fff" />
+          <Ionicons name="sparkles" size={16} color={inactive ? colors.text.muted : '#fff'} />
           <Text
-            style={{ color: '#fff', fontSize: D.fontSize.base, fontWeight: D.fontWeight.semibold }}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={{
+              color: inactive ? colors.text.muted : '#fff',
+              fontSize: D.fontSize.base,
+              fontWeight: D.fontWeight.bold,
+              letterSpacing: 0.3,
+              flexShrink: 1,
+              minWidth: 0,
+            }}
           >
             {label}
           </Text>
@@ -652,21 +1052,29 @@ function ResultPreviewPanel({
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
 }) {
+  const t = useT();
   if (generating) {
     return (
       <View style={styles.previewPlaceholder}>
-        <ActivityIndicator size="large" color={colors.accent.primary} />
-        <Text style={styles.previewEmptyTitle}>Generating…</Text>
-        <Text style={styles.previewEmptyHint}>This usually takes a few seconds</Text>
+        <View style={styles.previewHaloTR} pointerEvents="none" />
+        <View style={styles.previewHaloBL} pointerEvents="none" />
+        <View style={styles.previewHaloSpot} pointerEvents="none" />
+        <View style={styles.previewIconCircle}>
+          <ActivityIndicator size="small" color={colors.accent.primary} />
+        </View>
+        <Text style={styles.previewEmptyTitle}>{t('studio.generating')}</Text>
+        <Text style={styles.previewEmptyHint}>{t('studio.previewEmptyHint')}</Text>
       </View>
     );
   }
   if (error) {
     return (
       <View style={styles.previewPlaceholder}>
-        <Ionicons name="alert-circle-outline" size={40} color={colors.text.error} />
+        <View style={[styles.previewIconCircle, { backgroundColor: `${colors.destructive}1A` }]}>
+          <Ionicons name="alert-circle-outline" size={30} color={colors.text.error} />
+        </View>
         <Text style={[styles.previewEmptyTitle, { color: colors.text.error }]}>
-          Generation failed
+          {t('studio.errorGeneric')}
         </Text>
         <Text style={styles.previewEmptyHint}>{error}</Text>
       </View>
@@ -679,37 +1087,43 @@ function ResultPreviewPanel({
           source={{ uri: `data:${result.mimeType};base64,${result.imageBase64}` }}
           style={styles.resultImage}
           resizeMode="contain"
-          accessibilityLabel="Generated image"
+          accessibilityLabel={t('studio.a11y.generatedImage')}
         />
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 8, margin: D.spacing.md, marginTop: 0 }}>
           {onKeep && (
             <Pressable
               style={({ pressed }) => [
                 styles.downloadBtn,
-                { backgroundColor: isKept ? colors.accent.dim : colors.accent.primary },
-                pressed && { opacity: 0.75 },
+                { margin: 0, backgroundColor: isKept ? colors.accent.dim : colors.accent.primary },
+                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
               ]}
               onPress={isKept ? undefined : onKeep}
               accessibilityRole="button"
-              accessibilityLabel={isKept ? 'Image saved' : 'Keep image'}
+              accessibilityLabel={isKept ? t('studio.a11y.imageSaved') : t('studio.a11y.keepImage')}
             >
               <Ionicons
                 name={isKept ? 'checkmark-circle' : 'bookmark-outline'}
                 size={15}
                 color="#fff"
               />
-              <Text style={styles.downloadBtnText}>{isKept ? 'Saved' : 'Keep'}</Text>
+              <Text style={styles.downloadBtnText}>
+                {isKept ? t('studio.saved') : t('studio.keep')}
+              </Text>
             </Pressable>
           )}
           {isWeb && (
             <Pressable
-              style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.75 }]}
+              style={({ pressed }) => [
+                styles.downloadBtn,
+                { margin: 0 },
+                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+              ]}
               onPress={() => downloadImage(result, filename)}
               accessibilityRole="button"
-              accessibilityLabel="Download image"
+              accessibilityLabel={t('studio.a11y.downloadImage')}
             >
               <Ionicons name="download-outline" size={15} color="#fff" />
-              <Text style={styles.downloadBtnText}>Download</Text>
+              <Text style={styles.downloadBtnText}>{t('studio.download')}</Text>
             </Pressable>
           )}
         </View>
@@ -718,8 +1132,11 @@ function ResultPreviewPanel({
   }
   return (
     <View style={styles.previewPlaceholder}>
+      <View style={styles.previewHaloTR} pointerEvents="none" />
+      <View style={styles.previewHaloBL} pointerEvents="none" />
+      <View style={styles.previewHaloSpot} pointerEvents="none" />
       <View style={styles.previewIconCircle}>
-        <Ionicons name="sparkles-outline" size={28} color={colors.accent.primary} />
+        <Ionicons name="sparkles" size={30} color={colors.accent.primary} />
       </View>
       <Text style={styles.previewEmptyTitle}>{emptyTitle}</Text>
       <Text style={styles.previewEmptyHint}>{emptyHint}</Text>
@@ -734,6 +1151,8 @@ function ProductCard({
   cardWidth,
   colors,
   styles,
+  mismatch = false,
+  mismatchHint,
 }: {
   product: ProductItem;
   selected: boolean;
@@ -741,13 +1160,22 @@ function ProductCard({
   cardWidth: DimensionValue;
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
+  mismatch?: boolean;
+  mismatchHint?: string;
 }) {
   return (
     <Pressable
-      style={[styles.productCard, { width: cardWidth }, selected && styles.productCardSelected]}
+      style={[
+        styles.productCard,
+        { width: cardWidth },
+        selected && styles.productCardSelected,
+        mismatch && { opacity: 0.35 },
+      ]}
       onPress={onToggle}
+      disabled={mismatch}
       accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected }}
+      accessibilityState={{ checked: selected, disabled: mismatch }}
+      accessibilityHint={mismatch ? mismatchHint : undefined}
     >
       <View style={styles.productImageBox}>
         <ProductImage id={product.id} style={styles.productImage} resizeMode="cover" />
@@ -761,7 +1189,7 @@ function ProductCard({
         <Text style={styles.productName} numberOfLines={1}>
           {product.name}
         </Text>
-        <Text style={styles.productPrice}>${product.price.toFixed(2)}</Text>
+        <Text style={styles.productPrice}>{formatPrice(product.price, product.currency)}</Text>
       </View>
     </Pressable>
   );
@@ -794,20 +1222,28 @@ function ChooseProductsSection({
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
+  const t = useT();
 
   const closePicker = () => {
     setPickerOpen(false);
   };
 
-  // Desktop inline card width: 4 cards in available panel space
-  const panelInner = screenWidth - SIDEBAR_WIDTH - 1 - 64;
-  const inlineCardWidth = Math.floor(
-    (panelInner - D.spacing.sm * (DESKTOP_INLINE_LIMIT - 1)) / DESKTOP_INLINE_LIMIT
+  // Desktop inline card width: 4 cards fit inside the right panel's section card.
+  // Layout: right panel fills `screenWidth - SIDEBAR_WIDTH` (capped at 1280), minus
+  // rightPanelContent horizontal padding (D.spacing.xl * 2), minus desktopSection
+  // inner padding (D.spacing.lg * 2), minus the section's 1px border on each side.
+  const rightPanelMax = 1280;
+  const rightPanelWidth = Math.min(screenWidth - SIDEBAR_WIDTH, rightPanelMax);
+  const panelInner = rightPanelWidth - D.spacing.xl * 2 - D.spacing.lg * 2 - 2;
+  const inlineCardWidth = Math.max(
+    96,
+    Math.floor((panelInner - D.spacing.sm * (DESKTOP_INLINE_LIMIT - 1)) / DESKTOP_INLINE_LIMIT)
   );
 
   const hasMore = products.length > DESKTOP_INLINE_LIMIT;
   const inlineProducts = products.slice(0, DESKTOP_INLINE_LIMIT);
   const selectedProducts = products.filter((p) => selected.has(p.id));
+  const lockedCurrency = selectedProducts.length > 0 ? selectedProducts[0].currency : null;
 
   const picker = (
     <ProductPickerModal
@@ -825,12 +1261,14 @@ function ChooseProductsSection({
       <View style={styles.desktopSection}>
         <View style={styles.desktopSectionHeader}>
           <View>
-            <Text style={styles.desktopSectionTitle}>Choose Products</Text>
+            <Text style={styles.desktopSectionTitle}>{t('productPicker.defaultTitle')}</Text>
             <Text style={styles.desktopSectionSub}>{subtitle}</Text>
           </View>
           {selectedCount > 0 && (
             <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+              <Text
+                style={styles.countBadgeText}
+              >{`${selectedCount} ${t('productPicker.selected')}`}</Text>
             </View>
           )}
         </View>
@@ -844,7 +1282,7 @@ function ChooseProductsSection({
         ) : products.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-            <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
+            <Text style={styles.emptyText}>{t('studio.noProductsAddFirst')}</Text>
           </View>
         ) : showProducts == false ? (
           <>
@@ -873,25 +1311,39 @@ function ChooseProductsSection({
                   fontWeight: D.fontWeight.medium,
                 }}
               >
-                {'Browse products'}
+                {t('studio.browseProducts')}
               </Text>
               <Ionicons name="chevron-forward" size={13} color={colors.accent.primary} />
             </Pressable>
           </>
         ) : (
           <>
+            {lockedCurrency !== null ? (
+              <View style={styles.currencyNotice}>
+                <Ionicons name="lock-closed-outline" size={14} color={colors.accent.primary} />
+                <Text style={styles.currencyNoticeText}>
+                  {`${t('productPicker.currencyLocked')} ${lockedCurrency}.`}
+                </Text>
+              </View>
+            ) : null}
             <View style={{ flexDirection: 'row', gap: D.spacing.sm }}>
-              {inlineProducts.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  selected={selected.has(p.id)}
-                  onToggle={() => toggleProduct(p.id)}
-                  cardWidth={inlineCardWidth}
-                  colors={colors}
-                  styles={styles}
-                />
-              ))}
+              {inlineProducts.map((p) => {
+                const isSel = selected.has(p.id);
+                const mismatch = lockedCurrency !== null && !isSel && p.currency !== lockedCurrency;
+                return (
+                  <ProductCard
+                    key={p.id}
+                    product={p}
+                    selected={isSel}
+                    onToggle={() => toggleProduct(p.id)}
+                    cardWidth={inlineCardWidth}
+                    colors={colors}
+                    styles={styles}
+                    mismatch={mismatch}
+                    mismatchHint={t('productPicker.currencyMismatch')}
+                  />
+                );
+              })}
             </View>
 
             <Pressable
@@ -919,7 +1371,9 @@ function ChooseProductsSection({
                   fontWeight: D.fontWeight.medium,
                 }}
               >
-                {hasMore ? `Browse all ${products.length} products` : 'Browse products'}
+                {hasMore
+                  ? t('studio.browseAllProducts').replace('{count}', String(products.length))
+                  : t('studio.browseProducts')}
               </Text>
               <Ionicons name="chevron-forward" size={13} color={colors.accent.primary} />
             </Pressable>
@@ -935,10 +1389,12 @@ function ChooseProductsSection({
   return (
     <View style={styles.mobileSection}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Choose Products</Text>
+        <Text style={styles.sectionTitle}>{t('productPicker.defaultTitle')}</Text>
         {selectedCount > 0 && (
           <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+            <Text
+              style={styles.countBadgeText}
+            >{`${selectedCount} ${t('productPicker.selected')}`}</Text>
           </View>
         )}
       </View>
@@ -952,7 +1408,7 @@ function ChooseProductsSection({
       ) : products.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-          <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
+          <Text style={styles.emptyText}>{t('studio.noProductsAddFirst')}</Text>
         </View>
       ) : (
         <Pressable
@@ -1032,8 +1488,14 @@ function ChooseProductsSection({
               }}
             >
               {selectedCount > 0
-                ? `${selectedCount} of ${products.length} product${products.length !== 1 ? 's' : ''} selected`
-                : `Choose from ${products.length} product${products.length !== 1 ? 's' : ''}`}
+                ? products.length === 1
+                  ? t('studio.selectedOfOne').replace('{selected}', String(selectedCount))
+                  : t('studio.selectedOfN')
+                      .replace('{selected}', String(selectedCount))
+                      .replace('{total}', String(products.length))
+                : products.length === 1
+                  ? t('studio.chooseFromOne')
+                  : t('studio.chooseFromN').replace('{count}', String(products.length))}
             </Text>
             <Ionicons name="chevron-forward" size={16} color={colors.text.muted} />
           </View>
@@ -1048,12 +1510,35 @@ function ChooseProductsSection({
 // ─── Main screen ───────────────────────────────────────────────────────────────
 export default function StudioScreen() {
   const { colors } = useTheme();
+  const t = useT();
+  const { profile: shopProfile } = useShop();
   const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isDesktop = isWeb && screenWidth >= DESKTOP_BREAKPOINT;
   const styles = useMemo(
     () => makeStyles(colors, isDesktop, screenWidth),
     [colors, isDesktop, screenWidth]
   );
+
+  // ── Translated labels (rebuilt on language change) ───────────────────────────
+  const TAB_META_I18N = useMemo(
+    () => ({
+      catalog: { label: t('studio.navCatalog'), desc: t('studio.toolsCatalogDesc') },
+      announcements: {
+        label: t('studio.navAnnouncements'),
+        desc: t('studio.toolsAnnouncementsDesc'),
+      },
+      video: { label: t('studio.navVideo'), desc: t('studio.toolsVideoDesc') },
+    }),
+    [t]
+  );
+  const tr: TranslateFn = t as unknown as TranslateFn;
+  const LAYOUT_OPTIONS = useMemo(() => getLayoutOptions(tr), [tr]);
+  const COLOR_OPTIONS = useMemo(() => getColorOptions(tr), [tr]);
+  const FORMAT_OPTIONS = useMemo(() => getFormatOptions(tr), [tr]);
+  const POST_TYPES = useMemo(() => getPostTypes(tr), [tr]);
+  const JOB_IMAGE_STYLE_OPTIONS = useMemo(() => getJobImageStyleOptions(tr), [tr]);
+  const TONE_OPTIONS = useMemo(() => getToneOptions(tr), [tr]);
 
   // ── Tab state ────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<StudioTab>('catalog');
@@ -1142,19 +1627,20 @@ export default function StudioScreen() {
 
   // ── Text style state ─────────────────────────────────────────────────────────
   const [selectedPresetId, setSelectedPresetId] = useState<string>('modern-shadow');
-  const [selectedColor, setSelectedColor] = useState<string>('#F59E0B');
+  const [selectedNameColor, setSelectedNameColor] = useState<string>('#F59E0B');
+  const [selectedPriceColor, setSelectedPriceColor] = useState<string>('#F59E0B');
   const textStyle = useMemo<TextStyleOptions>(() => {
     const preset = TEXT_PRESETS.find((p) => p.id === selectedPresetId) ?? TEXT_PRESETS[0];
     return {
       fontFamily: preset.fontFamily,
       fontSize: 'Large',
-      nameColor: selectedColor,
-      priceColor: selectedColor,
+      nameColor: selectedNameColor,
+      priceColor: selectedPriceColor,
       colorMode: 'Solid',
       textEffect: preset.textEffect,
       priceBadge: preset.priceBadge,
     };
-  }, [selectedPresetId, selectedColor]);
+  }, [selectedPresetId, selectedNameColor, selectedPriceColor]);
 
   // ── Catalog state ────────────────────────────────────────────────────────────
   const productsCacheState = productsCache.useProductsCache();
@@ -1165,6 +1651,7 @@ export default function StudioScreen() {
   const [colorTheme, setColorTheme] = useState('Brand Colors');
   const [catalogFormat, setCatalogFormat] = useState('Square');
   const [showPrices, setShowPrices] = useState(true);
+  const [showProductNames, setShowProductNames] = useState(true);
   const [catalogGenerating, setCatalogGenerating] = useState(false);
   const [catalogResult, setCatalogResult] = useState<GenerateImageResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -1173,19 +1660,15 @@ export default function StudioScreen() {
   useFocusEffect(
     useCallback(() => {
       void productsCache.ensureLoaded({});
-
-      getShopProfile()
-        .then((profile) => {
-          setShopProfile(profile);
-          if (profile) {
-            const allKeys = deriveContextItems(profile).map((i) => i.key);
-            setCatalogContextFields(allKeys);
-            setAnnoContextFields(allKeys);
-          }
-        })
-        .catch(() => {});
     }, [])
   );
+
+  useEffect(() => {
+    if (!shopProfile) return;
+    const allKeys = deriveContextItems(shopProfile, tr).map((i) => i.key);
+    setCatalogContextFields(allKeys);
+    setAnnoContextFields(allKeys);
+  }, [shopProfile]);
 
   function toggleProduct(id: string) {
     setSelected((prev) => {
@@ -1211,9 +1694,11 @@ export default function StudioScreen() {
         chosen.map(async (p) => ({
           name: p.name,
           price: p.price,
+          currency: p.currency,
           imageBase64: await loadProductImageBase64(p.id),
         }))
       );
+      const catalogCurrency = chosen[0].currency;
       setCatalogResult(
         await generateCatalogImage({
           products: productsWithImages,
@@ -1222,6 +1707,7 @@ export default function StudioScreen() {
           format: catalogFormat,
           showPrices,
           brandContextFields: catalogContextFields.length > 0 ? catalogContextFields : undefined,
+          currency: catalogCurrency,
         })
       );
     } catch (err) {
@@ -1294,6 +1780,7 @@ export default function StudioScreen() {
         chosen.map(async (p) => ({
           name: p.name,
           price: p.price,
+          currency: p.currency,
           imageBase64: await loadProductImageBase64(p.id),
         }))
       );
@@ -1303,6 +1790,7 @@ export default function StudioScreen() {
           wallpaperBase64,
           layout,
           showPrices,
+          showProductNames,
           textStyle,
           placementZone,
         })
@@ -1361,7 +1849,6 @@ export default function StudioScreen() {
   const annoReady = isJobPost ? jobPostReady : content.trim().length > 0;
 
   // ── Brand context state ──────────────────────────────────────────────────────
-  const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
   const [catalogContextFields, setCatalogContextFields] = useState<string[]>([]);
   const [annoContextFields, setAnnoContextFields] = useState<string[]>([]);
 
@@ -1416,8 +1903,8 @@ export default function StudioScreen() {
   }, []);
 
   const contextItems = useMemo(
-    () => (shopProfile ? deriveContextItems(shopProfile) : []),
-    [shopProfile]
+    () => (shopProfile ? deriveContextItems(shopProfile, tr) : []),
+    [shopProfile, tr]
   );
 
   const toggleCatalogField = useCallback((key: string) => {
@@ -1499,6 +1986,35 @@ export default function StudioScreen() {
   }, [floatY]);
   const floatStyle = useAnimatedStyle(() => ({ transform: [{ translateY: floatY.value }] }));
 
+  // ── Entrance animation (opacity + translateY) ────────────────────────────────
+  const enterOpacity = useSharedValue(0);
+  const enterTranslate = useSharedValue(14);
+  useEffect(() => {
+    enterOpacity.value = withTiming(1, {
+      duration: D.duration.entrance,
+      easing: Easing.out(Easing.cubic),
+    });
+    enterTranslate.value = withTiming(0, {
+      duration: D.duration.entrance + 50,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [enterOpacity, enterTranslate]);
+  const heroEnterStyle = useAnimatedStyle(() => ({
+    opacity: enterOpacity.value,
+    transform: [{ translateY: enterTranslate.value }],
+  }));
+
+  const panelOpacity = useSharedValue(0);
+  const panelTranslate = useSharedValue(18);
+  useEffect(() => {
+    panelOpacity.value = withDelay(120, withTiming(1, { duration: 500 }));
+    panelTranslate.value = withDelay(120, withTiming(0, { duration: 520 }));
+  }, [panelOpacity, panelTranslate]);
+  const panelEnterStyle = useAnimatedStyle(() => ({
+    opacity: panelOpacity.value,
+    transform: [{ translateY: panelTranslate.value }],
+  }));
+
   const selectedCount = selected.size;
   const currentPostType = POST_TYPES.find((t) => t.type === postType)!;
 
@@ -1513,23 +2029,23 @@ export default function StudioScreen() {
       activeTab === 'catalog' ? (
         catalogMode === 'generate' ? (
           <>
-            <SectionLabel label="Generation Options" />
-            <OptionLabel label="Layout" />
+            <SectionLabel label={t('studio.generationOptions')} />
+            <OptionLabel label={t('studio.opt.layout')} />
             <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
-            <OptionLabel label="Color Theme" />
+            <OptionLabel label={t('studio.opt.colorTheme')} />
             <SidebarOptionGroup
               options={COLOR_OPTIONS}
               selected={colorTheme}
               onSelect={setColorTheme}
             />
-            <OptionLabel label="Format" />
+            <OptionLabel label={t('studio.opt.format')} />
             <SidebarOptionGroup
               options={FORMAT_OPTIONS}
               selected={catalogFormat}
               onSelect={setCatalogFormat}
             />
             <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Show Prices</Text>
+              <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
               <Switch
                 value={showPrices}
                 onValueChange={setShowPrices}
@@ -1545,11 +2061,20 @@ export default function StudioScreen() {
           </>
         ) : (
           <>
-            <SectionLabel label="Placement Options" />
-            <OptionLabel label="Layout" />
+            <SectionLabel label={t('studio.placementOptions')} />
+            <OptionLabel label={t('studio.opt.layout')} />
             <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
             <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Show Prices</Text>
+              <Text style={styles.toggleLabel}>{t('studio.showProductNames')}</Text>
+              <Switch
+                value={showProductNames}
+                onValueChange={setShowProductNames}
+                thumbColor={showProductNames ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
               <Switch
                 value={showPrices}
                 onValueChange={setShowPrices}
@@ -1560,18 +2085,20 @@ export default function StudioScreen() {
             <TextStylePresetPicker
               selectedId={selectedPresetId}
               onSelect={setSelectedPresetId}
-              selectedColor={selectedColor}
-              onColorChange={setSelectedColor}
+              nameColor={selectedNameColor}
+              onNameColorChange={setSelectedNameColor}
+              priceColor={selectedPriceColor}
+              onPriceColorChange={setSelectedPriceColor}
               colors={colors}
             />
           </>
         )
       ) : activeTab === 'announcements' ? (
         <>
-          <SectionLabel label="Style Options" />
-          <OptionLabel label="Tone" />
+          <SectionLabel label={t('studio.styleOptions')} />
+          <OptionLabel label={t('studio.opt.tone')} />
           <SidebarOptionGroup options={TONE_OPTIONS} selected={tone} onSelect={setTone} />
-          <OptionLabel label="Format" />
+          <OptionLabel label={t('studio.opt.format')} />
           <SidebarOptionGroup
             options={FORMAT_OPTIONS}
             selected={annoFormat}
@@ -1591,7 +2118,9 @@ export default function StudioScreen() {
           <GenerateButton
             loading={catalogGenerating}
             disabled={selectedCount === 0}
-            label={selectedCount === 0 ? 'Select products first' : 'Generate Catalog'}
+            label={
+              selectedCount === 0 ? t('studio.selectProductsFirst') : t('studio.generateCatalog')
+            }
             onPress={handleCatalogGenerate}
           />
         ) : (
@@ -1600,10 +2129,10 @@ export default function StudioScreen() {
             disabled={selectedCount === 0 || wallpaperBase64 === null}
             label={
               wallpaperBase64 === null
-                ? 'Pick a wallpaper first'
+                ? t('studio.pickWallpaperFirst')
                 : selectedCount === 0
-                  ? 'Select products first'
-                  : 'Place on Wallpaper'
+                  ? t('studio.selectProductsFirst')
+                  : t('studio.placeOnWallpaper')
             }
             onPress={handleWallpaperOnGenerate}
           />
@@ -1612,58 +2141,22 @@ export default function StudioScreen() {
         <GenerateButton
           loading={annoGenerating}
           disabled={!annoReady}
-          label="Generate Graphic"
+          label={t('studio.generateGraphic')}
           onPress={handleAnnoGenerate}
         />
       ) : null;
 
     // ── Right panel content per tab ──────────────────────────────────────────
+    // Note: the Photo/On-Wallpaper segmented control now lives inside the hero's
+    // top-right dock, so the body starts directly with the mode's content.
     const rightContent =
       activeTab === 'catalog' ? (
         <>
-          {/* Catalog mode sub-tab bar */}
-          <View style={styles.desktopSection}>
-            <View style={styles.segmentTrack}>
-              <Animated.View
-                style={[styles.segmentIndicator, { width: '48%', left: catalogModeIndicatorLeft }]}
-              />
-              {(['generate', 'on-wallpaper'] as CatalogMode[]).map((mode) => {
-                const isActive = catalogMode === mode;
-                return (
-                  <Pressable
-                    key={mode}
-                    style={styles.segmentButton}
-                    onPress={() => switchCatalogMode(mode)}
-                    accessibilityRole="button"
-                  >
-                    <Ionicons
-                      name={
-                        mode === 'generate'
-                          ? isActive
-                            ? 'sparkles'
-                            : 'sparkles-outline'
-                          : isActive
-                            ? 'image'
-                            : 'image-outline'
-                      }
-                      size={14}
-                      color={isActive ? '#fff' : colors.text.secondary}
-                      style={{ marginRight: 4 }}
-                    />
-                    <Text style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}>
-                      {mode === 'generate' ? 'Generate' : 'On Wallpaper'}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
           {catalogMode === 'generate' ? (
             <>
               {/* Product picker */}
               <ChooseProductsSection
-                subtitle="Select products to include in your catalog"
+                subtitle={t('studio.subtitleCatalog')}
                 isDesktop
                 products={products}
                 loadingProducts={loadingProducts}
@@ -1677,17 +2170,15 @@ export default function StudioScreen() {
 
               {/* Preview */}
               <View style={styles.desktopSection}>
-                <Text style={styles.desktopSectionTitle}>Preview</Text>
-                <Text style={styles.desktopSectionSub}>
-                  Your generated catalog will appear here
-                </Text>
+                <Text style={styles.desktopSectionTitle}>{t('studio.preview')}</Text>
+                <Text style={styles.desktopSectionSub}>{t('studio.catalogPreviewSub')}</Text>
                 <View style={{ marginTop: D.spacing.md }}>
                   <ResultPreviewPanel
                     result={catalogResult}
                     generating={catalogGenerating}
                     error={catalogError}
-                    emptyTitle="Your catalog will appear here"
-                    emptyHint="Select products on the left, configure options, then hit Generate."
+                    emptyTitle={t('studio.previewEmptyCatalog')}
+                    emptyHint={t('studio.hintCatalog')}
                     filename="catalog"
                     onKeep={() => {
                       if (!catalogResult) return;
@@ -1710,7 +2201,7 @@ export default function StudioScreen() {
             <>
               {/* Product picker */}
               <ChooseProductsSection
-                subtitle="Select products to place on your wallpaper"
+                subtitle={t('studio.subtitleWallpaper')}
                 isDesktop
                 products={products}
                 loadingProducts={loadingProducts}
@@ -1724,10 +2215,8 @@ export default function StudioScreen() {
 
               {/* Wallpaper picker */}
               <View style={styles.desktopSection}>
-                <Text style={styles.desktopSectionTitle}>Background Wallpaper</Text>
-                <Text style={styles.desktopSectionSub}>
-                  Import from device or generate with AI — your wallpaper stays unchanged
-                </Text>
+                <Text style={styles.desktopSectionTitle}>{t('studio.backgroundWallpaper')}</Text>
+                <Text style={styles.desktopSectionSub}>{t('studio.wallpaperImportSub')}</Text>
 
                 <View style={[styles.wallpaperActionRow, { marginTop: D.spacing.md }]}>
                   <Pressable
@@ -1739,7 +2228,9 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="image-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>Import</Text>
+                    <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                      {t('studio.import')}
+                    </Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [
@@ -1750,7 +2241,9 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="sparkles-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>Generate</Text>
+                    <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                      {t('studio.generate')}
+                    </Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [
@@ -1761,7 +2254,9 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="albums-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>My Wallpapers</Text>
+                    <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                      {t('studio.myWallpapers')}
+                    </Text>
                   </Pressable>
                 </View>
 
@@ -1782,7 +2277,7 @@ export default function StudioScreen() {
                       }}
                       style={styles.wallpaperPreviewImage}
                       resizeMode="cover"
-                      accessibilityLabel="Generated wallpaper preview"
+                      accessibilityLabel={t('studio.a11y.generatedWallpaperPreview')}
                     />
                     <View style={styles.wallpaperPreviewActions}>
                       <Pressable
@@ -1809,7 +2304,7 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="checkmark" size={15} color="#fff" />
-                        <Text style={styles.wallpaperConfirmBtnText}>Keep</Text>
+                        <Text style={styles.wallpaperConfirmBtnText}>{t('studio.keep')}</Text>
                       </Pressable>
                       <Pressable
                         style={[
@@ -1867,7 +2362,7 @@ export default function StudioScreen() {
                       }}
                       style={styles.wallpaperThumb}
                       resizeMode="cover"
-                      accessibilityLabel="Selected wallpaper"
+                      accessibilityLabel={t('studio.a11y.selectedWallpaper')}
                     />
                     <View style={{ flex: 1 }}>
                       <Text
@@ -1917,17 +2412,15 @@ export default function StudioScreen() {
 
               {/* Result */}
               <View style={styles.desktopSection}>
-                <Text style={styles.desktopSectionTitle}>Result</Text>
-                <Text style={styles.desktopSectionSub}>
-                  Your products composited onto the wallpaper
-                </Text>
+                <Text style={styles.desktopSectionTitle}>{t('studio.result')}</Text>
+                <Text style={styles.desktopSectionSub}>{t('studio.wallpaperResultSub')}</Text>
                 <View style={{ marginTop: D.spacing.md }}>
                   <ResultPreviewPanel
                     result={wallpaperOnResult}
                     generating={wallpaperOnGenerating}
                     error={wallpaperOnError}
-                    emptyTitle="Result will appear here"
-                    emptyHint="Pick a wallpaper, select products, configure options, then hit Place on Wallpaper."
+                    emptyTitle={t('studio.previewResult')}
+                    emptyHint={t('studio.hintWallpaper')}
                     filename="wallpaper-composite"
                     onKeep={() => {
                       if (!wallpaperOnResult) return;
@@ -1952,10 +2445,10 @@ export default function StudioScreen() {
         <>
           {/* Post type + content */}
           <View style={styles.desktopSection}>
-            <Text style={styles.desktopSectionTitle}>Post Type</Text>
-            <Text style={styles.desktopSectionSub}>What kind of graphic do you need?</Text>
+            <Text style={styles.desktopSectionTitle}>{t('studio.announcement.postType')}</Text>
+            <Text style={styles.desktopSectionSub}>{t('studio.postTypeHint')}</Text>
             <View style={[styles.typeRow, { marginTop: D.spacing.md }]}>
-              {POST_TYPES.map(({ type, icon }) => {
+              {POST_TYPES.map(({ type, label, icon }) => {
                 const active = postType === type;
                 return (
                   <Pressable
@@ -1971,7 +2464,7 @@ export default function StudioScreen() {
                       color={active ? colors.accent.primary : colors.text.muted}
                     />
                     <Text style={[styles.typeChipText, active && styles.typeChipTextActive]}>
-                      {type}
+                      {label}
                     </Text>
                   </Pressable>
                 );
@@ -1980,7 +2473,7 @@ export default function StudioScreen() {
           </View>
           {postType === 'Promotion' && (
             <ChooseProductsSection
-              subtitle="Select products to use as visual reference (optional)"
+              subtitle={t('studio.subtitleAnnouncement')}
               isDesktop
               products={products}
               loadingProducts={loadingProducts}
@@ -1994,38 +2487,36 @@ export default function StudioScreen() {
           )}
           {isJobPost ? (
             <View style={styles.desktopSection}>
-              <Text style={styles.desktopSectionTitle}>Job details</Text>
-              <Text style={styles.desktopSectionSub}>
-                The role, schedule, and requirements shown on the graphic
-              </Text>
-              <OptionLabel label="Job title" />
+              <Text style={styles.desktopSectionTitle}>{t('studio.jobDetails')}</Text>
+              <Text style={styles.desktopSectionSub}>{t('studio.jobDetailsSub')}</Text>
+              <OptionLabel label={t('studio.opt.jobTitle')} />
               <TextInput
                 style={styles.jobInput}
-                placeholder="e.g. Cashier"
+                placeholder={t('studio.announcement.jobTitlePlaceholderCashier')}
                 placeholderTextColor={colors.text.muted}
                 value={jobTitle}
                 onChangeText={setJobTitle}
                 editable={!annoGenerating}
               />
-              <OptionLabel label="Work schedule" />
+              <OptionLabel label={t('studio.opt.jobSchedule')} />
               <TextInput
                 style={styles.jobInput}
-                placeholder="e.g. Part-time, weekends, 3 days/week"
+                placeholder={t('studio.announcement.jobSchedulePlaceholder')}
                 placeholderTextColor={colors.text.muted}
                 value={jobSchedule}
                 onChangeText={setJobSchedule}
                 editable={!annoGenerating}
               />
-              <OptionLabel label="Salary (optional)" />
+              <OptionLabel label={t('studio.opt.jobSalary')} />
               <TextInput
                 style={styles.jobInput}
-                placeholder="e.g. $15/hr or €1,800/month"
+                placeholder={t('studio.announcement.jobSalaryPlaceholder')}
                 placeholderTextColor={colors.text.muted}
                 value={jobSalary}
                 onChangeText={setJobSalary}
                 editable={!annoGenerating}
               />
-              <OptionLabel label="Requirements (optional, one per line)" />
+              <OptionLabel label={t('studio.opt.jobRequirements')} />
               <TextInput
                 style={styles.jobTextArea}
                 placeholder={"Driver's license\nCommunication skills\nResponsibility"}
@@ -2035,14 +2526,14 @@ export default function StudioScreen() {
                 multiline
                 editable={!annoGenerating}
               />
-              <OptionLabel label="Image style" />
+              <OptionLabel label={t('studio.opt.jobImageStyle')} />
               <ChipSelector
                 options={JOB_IMAGE_STYLE_OPTIONS}
                 selected={jobImageStyle}
                 onSelect={(v) => setJobImageStyle(v as 'with-person' | 'text-only')}
-                accessibilityLabel="Job image style"
+                accessibilityLabel={t('studio.a11y.jobImageStyle')}
               />
-              <OptionLabel label="Additional direction (optional)" />
+              <OptionLabel label={t('studio.opt.additionalDirection')} />
               <TextInput
                 style={styles.jobTextArea}
                 placeholder={'e.g. "Apply by email at jobs@example.com" or "Call 555-1234"'}
@@ -2055,8 +2546,8 @@ export default function StudioScreen() {
             </View>
           ) : (
             <View style={styles.desktopSection}>
-              <Text style={styles.desktopSectionTitle}>Content</Text>
-              <Text style={styles.desktopSectionSub}>Describe what you want to communicate</Text>
+              <Text style={styles.desktopSectionTitle}>{t('studio.contentSection')}</Text>
+              <Text style={styles.desktopSectionSub}>{t('studio.announcement.describe')}</Text>
               <TextInput
                 style={[styles.textArea, { marginTop: D.spacing.md }]}
                 placeholder={currentPostType.placeholder}
@@ -2071,15 +2562,15 @@ export default function StudioScreen() {
 
           {/* Preview */}
           <View style={styles.desktopSection}>
-            <Text style={styles.desktopSectionTitle}>Preview</Text>
-            <Text style={styles.desktopSectionSub}>Your generated graphic will appear here</Text>
+            <Text style={styles.desktopSectionTitle}>{t('studio.preview')}</Text>
+            <Text style={styles.desktopSectionSub}>{t('studio.previewEmptyAnnouncement')}</Text>
             <View style={{ marginTop: D.spacing.md }}>
               <ResultPreviewPanel
                 result={annoResult}
                 generating={annoGenerating}
                 error={annoError}
-                emptyTitle="Your graphic will appear here"
-                emptyHint="Fill in the content and style options, then hit Generate."
+                emptyTitle={t('studio.previewGraphic')}
+                emptyHint={t('studio.hintAnnouncement')}
                 filename="announcement"
                 onKeep={() => {
                   if (!annoResult) return;
@@ -2110,19 +2601,17 @@ export default function StudioScreen() {
             />
           </ReAnimated.View>
           <View style={styles.comingSoonBadge}>
-            <Text style={styles.comingSoonText}>Coming Soon</Text>
+            <Text style={styles.comingSoonText}>{t('studio.comingSoon')}</Text>
           </View>
-          <Text style={styles.videoTitle}>Video Ads</Text>
-          <Text style={styles.videoDescription}>
-            Generate professional short-form video ads powered by AI. Currently in development.
-          </Text>
+          <Text style={styles.videoTitle}>{t('studio.videoAdsTitle')}</Text>
+          <Text style={styles.videoDescription}>{t('studio.videoBody')}</Text>
           <View style={styles.stepsCard}>
-            <Text style={styles.stepsTitle}>{"What's coming"}</Text>
+            <Text style={styles.stepsTitle}>{t('studio.videoWhatsComing')}</Text>
             {(
               [
-                { icon: 'film-outline', label: 'Storyboard your concept' },
-                { icon: 'sparkles-outline', label: 'AI generates visuals' },
-                { icon: 'cloud-upload-outline', label: 'Export & share' },
+                { icon: 'film-outline', label: t('studio.videoStep1') },
+                { icon: 'sparkles-outline', label: t('studio.videoStep2') },
+                { icon: 'cloud-upload-outline', label: t('studio.videoStep3') },
               ] as { icon: React.ComponentProps<typeof Ionicons>['name']; label: string }[]
             ).map(({ icon, label }, i) => (
               <View key={label} style={styles.stepRow}>
@@ -2140,21 +2629,24 @@ export default function StudioScreen() {
     return (
       <>
         <View style={styles.desktopRoot}>
+          <View style={styles.ambientGlow} pointerEvents="none" />
+          <View style={styles.ambientGlow2} pointerEvents="none" />
+
           {/* ── LEFT SIDEBAR ── */}
-          <View style={styles.sidebar}>
+          <ReAnimated.View style={[styles.sidebar, heroEnterStyle]}>
             <ScrollView
               style={styles.sidebarScroll}
               contentContainerStyle={styles.sidebarContent}
               showsVerticalScrollIndicator={false}
             >
-              {/* Header */}
+              {/* Header: title (brand logo lives in the top navbar) */}
               <View style={styles.sidebarHeader}>
-                <Text style={styles.sidebarTitle}>Studio</Text>
-                <Text style={styles.sidebarSubtitle}>AI-powered ad creation</Text>
+                <Text style={styles.sidebarTitle}>{t('studio.title')}</Text>
+                <Text style={styles.sidebarSubtitle}>{t('studio.subtitle')}</Text>
               </View>
 
               {/* Vertical tab nav */}
-              <SectionLabel label="Tools" />
+              <SectionLabel label={t('studio.title')} />
               <View style={styles.verticalNav}>
                 {TAB_META.map((tab) => {
                   const active = activeTab === tab.key;
@@ -2174,13 +2666,13 @@ export default function StudioScreen() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.navLabel, active && styles.navLabelActive]}>
-                          {tab.label}
+                          {TAB_META_I18N[tab.key].label}
                         </Text>
-                        <Text style={styles.navDesc}>{tab.desc}</Text>
+                        <Text style={styles.navDesc}>{TAB_META_I18N[tab.key].desc}</Text>
                       </View>
                       {tab.comingSoon && (
                         <View style={styles.navBadge}>
-                          <Text style={styles.navBadgeText}>Soon</Text>
+                          <Text style={styles.navBadgeText}>{t('gallery.videoBadge')}</Text>
                         </View>
                       )}
                       {active && !tab.comingSoon && (
@@ -2197,10 +2689,7 @@ export default function StudioScreen() {
 
             {/* Sticky footer */}
             {sidebarFooter && <View style={styles.sidebarFooter}>{sidebarFooter}</View>}
-          </View>
-
-          {/* ── PANEL DIVIDER ── */}
-          <View style={styles.panelDivider} />
+          </ReAnimated.View>
 
           {/* ── RIGHT PANEL ── */}
           <ScrollView
@@ -2208,7 +2697,104 @@ export default function StudioScreen() {
             contentContainerStyle={styles.rightPanelContent}
             showsVerticalScrollIndicator={false}
           >
-            {rightContent}
+            <ReAnimated.View style={[panelEnterStyle, { gap: D.spacing.lg }]}>
+              {/* Hero header */}
+              <View style={styles.heroWrap}>
+                <View style={styles.heroGlow} pointerEvents="none" />
+                <View style={styles.heroGlow2} pointerEvents="none" />
+                <View style={activeTab === 'catalog' ? styles.heroTextClamp : undefined}>
+                  <View style={styles.heroEyebrow}>
+                    <View style={styles.heroEyebrowDot} />
+                    <Text style={styles.heroEyebrowText}>GENERATION STUDIO</Text>
+                  </View>
+                  <Text style={styles.heroTitle}>
+                    {activeTab === 'catalog'
+                      ? t('studio.navCatalog')
+                      : activeTab === 'announcements'
+                        ? t('studio.navAnnouncements')
+                        : t('studio.navVideo')}
+                  </Text>
+                  <Text style={styles.heroSubtitle}>{TAB_META_I18N[activeTab].desc}</Text>
+                  <View style={styles.heroMetaRow}>
+                    {activeTab === 'catalog' && (
+                      <View style={styles.heroMetaChip}>
+                        <Ionicons name="grid-outline" size={12} color={colors.accent.primary} />
+                        <Text style={styles.heroMetaText}>
+                          {selectedCount > 0
+                            ? `${selectedCount} ${t('productPicker.selected')}`
+                            : t('studio.selectProductsFirst')}
+                        </Text>
+                      </View>
+                    )}
+                    {activeTab === 'announcements' && (
+                      <View style={styles.heroMetaChip}>
+                        <Ionicons
+                          name="megaphone-outline"
+                          size={12}
+                          color={colors.accent.primary}
+                        />
+                        <Text style={styles.heroMetaText}>{postType}</Text>
+                      </View>
+                    )}
+                    {activeTab === 'video' && (
+                      <View style={styles.heroMetaChip}>
+                        <Ionicons name="time-outline" size={12} color={colors.accent.primary} />
+                        <Text style={styles.heroMetaText}>{t('studio.comingSoon')}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* Photo ↔ On Wallpaper segmented control (docked top-right) */}
+                {activeTab === 'catalog' && (
+                  <View style={styles.heroSegmentDock}>
+                    <View style={styles.segmentTrack}>
+                      <Animated.View
+                        style={[
+                          styles.segmentIndicator,
+                          { width: '48%', left: catalogModeIndicatorLeft },
+                        ]}
+                      />
+                      {(['generate', 'on-wallpaper'] as CatalogMode[]).map((mode) => {
+                        const isActive = catalogMode === mode;
+                        return (
+                          <Pressable
+                            key={mode}
+                            style={styles.segmentButton}
+                            onPress={() => switchCatalogMode(mode)}
+                            accessibilityRole="button"
+                          >
+                            <Ionicons
+                              name={
+                                mode === 'generate'
+                                  ? isActive
+                                    ? 'sparkles'
+                                    : 'sparkles-outline'
+                                  : isActive
+                                    ? 'image'
+                                    : 'image-outline'
+                              }
+                              size={14}
+                              color={isActive ? '#fff' : colors.text.secondary}
+                              style={{ marginRight: 4 }}
+                            />
+                            <Text
+                              style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}
+                            >
+                              {mode === 'generate'
+                                ? t('studio.generate')
+                                : t('studio.onWallpaperTab')}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {rightContent}
+            </ReAnimated.View>
           </ScrollView>
         </View>
 
@@ -2232,7 +2818,7 @@ export default function StudioScreen() {
                 style={styles.wallpaperGenCloseBtn}
                 onPress={handleCloseWallpaperGenModal}
                 accessibilityRole="button"
-                accessibilityLabel="Close"
+                accessibilityLabel={t('common.close')}
               >
                 <Ionicons name="close" size={20} color={colors.text.secondary} />
               </Pressable>
@@ -2243,18 +2829,20 @@ export default function StudioScreen() {
                   contentContainerStyle={styles.wallpaperGenScrollContent}
                   keyboardShouldPersistTaps="handled"
                 >
-                  <Text style={styles.wallpaperGenTitle}>Generate Wallpaper</Text>
+                  <Text style={styles.wallpaperGenTitle}>{t('wallpapers.modal.title')}</Text>
                   <Text style={styles.wallpaperGenSubtitle}>
-                    Configure and generate an AI background
+                    {t('studio.wallpaperModal.subtitle')}
                   </Text>
 
-                  <Text style={styles.wallpaperGenSectionLabel}>Format</Text>
+                  <Text style={styles.wallpaperGenSectionLabel}>
+                    {t('wallpapers.modal.format')}
+                  </Text>
                   <View style={styles.wallpaperGenFormatRow}>
                     {(
                       [
-                        { value: '9:16', label: 'Vertical' },
-                        { value: '1:1', label: 'Square' },
-                        { value: '4:5', label: 'Portrait' },
+                        { value: '9:16', label: t('studio.wallpaperModal.verticalAspect') },
+                        { value: '1:1', label: t('studio.wallpaperModal.squareAspect') },
+                        { value: '4:5', label: t('studio.wallpaperModal.portraitAspect') },
                       ] as const
                     ).map((opt) => (
                       <Pressable
@@ -2291,7 +2879,7 @@ export default function StudioScreen() {
                   <Text style={styles.wallpaperGenSectionLabel}>Style prompt (optional)</Text>
                   <TextInput
                     style={styles.wallpaperGenInput}
-                    placeholder="e.g. warm sunset bokeh, soft pastel bakery, dark wood texture…"
+                    placeholder={t('studio.wallpaper.promptPlaceholder')}
                     placeholderTextColor={colors.text.muted}
                     value={wallpaperPrompt}
                     onChangeText={setWallpaperPrompt}
@@ -2301,7 +2889,9 @@ export default function StudioScreen() {
 
                   <View style={styles.wallpaperGenToggleRow}>
                     <View>
-                      <Text style={styles.wallpaperGenToggleLabel}>Include Logo</Text>
+                      <Text style={styles.wallpaperGenToggleLabel}>
+                        {t('wallpapers.modal.includeLogo')}
+                      </Text>
                       <Text style={styles.wallpaperGenToggleHint}>
                         Place your brand logo in the header
                       </Text>
@@ -2314,7 +2904,9 @@ export default function StudioScreen() {
                     />
                   </View>
 
-                  <Text style={styles.wallpaperGenSectionLabel}>Include brand info</Text>
+                  <Text style={styles.wallpaperGenSectionLabel}>
+                    {t('wallpapers.modal.includeBrand')}
+                  </Text>
                   <View>
                     {(
                       [
@@ -2347,7 +2939,7 @@ export default function StudioScreen() {
                         >
                           <Ionicons
                             name={checked ? 'checkbox' : 'square-outline'}
-                            size={18}
+                            size={isDesktop ? 18 : 24}
                             color={checked ? colors.accent.primary : colors.text.muted}
                           />
                           <Text style={styles.wallpaperGenCheckLabel}>{opt.label}</Text>
@@ -2374,7 +2966,7 @@ export default function StudioScreen() {
                       <Ionicons name="sparkles-outline" size={16} color="#fff" />
                     )}
                     <Text style={styles.wallpaperGenBtnText2}>
-                      {wallpaperGenGenerating ? 'Generating…' : 'Generate'}
+                      {wallpaperGenGenerating ? t('studio.generating') : t('studio.generate')}
                     </Text>
                   </Pressable>
                 </ScrollView>
@@ -2384,7 +2976,7 @@ export default function StudioScreen() {
                   contentContainerStyle={styles.wallpaperGenResultContainer}
                   keyboardShouldPersistTaps="handled"
                 >
-                  <Text style={styles.wallpaperGenTitle}>Wallpaper Generated</Text>
+                  <Text style={styles.wallpaperGenTitle}>{t('wallpapers.result.title')}</Text>
                   <Text style={styles.wallpaperGenSubtitle}>
                     Keep it as your background or generate a new one
                   </Text>
@@ -2406,7 +2998,7 @@ export default function StudioScreen() {
                         },
                       ]}
                       resizeMode="contain"
-                      accessibilityLabel="Generated wallpaper"
+                      accessibilityLabel={t('studio.a11y.generatedWallpaper')}
                     />
                   )}
 
@@ -2468,7 +3060,7 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="download-outline" size={16} color="#fff" />
-                        <Text style={styles.wallpaperGenResultBtnText}>Download</Text>
+                        <Text style={styles.wallpaperGenResultBtnText}>{t('studio.download')}</Text>
                       </Pressable>
                     )}
                   </View>
@@ -2486,7 +3078,9 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="refresh-outline" size={15} color={colors.text.secondary} />
-                    <Text style={styles.wallpaperGenSecondaryBtnText}>Generate Again</Text>
+                    <Text style={styles.wallpaperGenSecondaryBtnText}>
+                      {t('studio.generateAgain')}
+                    </Text>
                   </Pressable>
                 </ScrollView>
               )}
@@ -2506,8 +3100,8 @@ export default function StudioScreen() {
               {/* Dialog header */}
               <View style={styles.pickerHeader}>
                 <View>
-                  <Text style={styles.pickerTitle}>My Wallpapers</Text>
-                  <Text style={styles.pickerSubtitle}>Select a wallpaper to use as background</Text>
+                  <Text style={styles.pickerTitle}>{t('studio.myWallpapers')}</Text>
+                  <Text style={styles.pickerSubtitle}>{t('studio.wallpaper.pickFromGallery')}</Text>
                 </View>
                 <Pressable
                   style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
@@ -2597,7 +3191,15 @@ export default function StudioScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.mobileInner}>
+        <ReAnimated.View style={[styles.mobileInner, heroEnterStyle]}>
+          {/* Mobile hero header */}
+          <View style={styles.mobileHero}>
+            <View style={styles.mobileHeroGlow} pointerEvents="none" />
+            <BrandLogo size="sm" variant="horizontal" style={{ marginBottom: D.spacing.sm }} />
+            <Text style={styles.mobileHeroTitle}>{t('studio.title')}</Text>
+            <Text style={styles.mobileHeroSubtitle}>{t('studio.subtitle')}</Text>
+          </View>
+
           {/* Segmented control */}
           <View style={styles.segmentTrack}>
             <Animated.View style={[styles.segmentIndicator, { left: indicatorLeft }]} />
@@ -2618,7 +3220,11 @@ export default function StudioScreen() {
                     style={{ marginRight: 4 }}
                   />
                   <Text style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}>
-                    {tab === 'catalog' ? 'Catalog' : tab === 'announcements' ? 'Posts' : 'Video'}
+                    {tab === 'catalog'
+                      ? t('studio.tabCatalog')
+                      : tab === 'announcements'
+                        ? t('studio.tabAnnouncement')
+                        : 'Video'}
                   </Text>
                 </Pressable>
               );
@@ -2660,7 +3266,7 @@ export default function StudioScreen() {
                         style={{ marginRight: 4 }}
                       />
                       <Text style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}>
-                        {mode === 'generate' ? 'Generate' : 'On Wallpaper'}
+                        {mode === 'generate' ? t('studio.generate') : t('studio.onWallpaperTab')}
                       </Text>
                     </Pressable>
                   );
@@ -2670,7 +3276,7 @@ export default function StudioScreen() {
               {catalogMode === 'generate' ? (
                 <>
                   <ChooseProductsSection
-                    subtitle="Select products to include in your catalog"
+                    subtitle={t('studio.subtitleCatalog')}
                     isDesktop={false}
                     products={products}
                     loadingProducts={loadingProducts}
@@ -2683,30 +3289,30 @@ export default function StudioScreen() {
                   />
 
                   <View style={styles.mobileSection}>
-                    <Text style={styles.sectionTitle}>Generation Options</Text>
-                    <OptionLabel label="Layout" />
+                    <Text style={styles.sectionTitle}>{t('studio.generationOptions')}</Text>
+                    <OptionLabel label={t('studio.opt.layout')} />
                     <ChipSelector
                       options={LAYOUT_OPTIONS}
                       selected={layout}
                       onSelect={setLayout}
-                      accessibilityLabel="Layout"
+                      accessibilityLabel={t('studio.opt.layout')}
                     />
-                    <OptionLabel label="Color Theme" />
+                    <OptionLabel label={t('studio.opt.colorTheme')} />
                     <ChipSelector
                       options={COLOR_OPTIONS}
                       selected={colorTheme}
                       onSelect={setColorTheme}
-                      accessibilityLabel="Color theme"
+                      accessibilityLabel={t('studio.opt.colorTheme')}
                     />
-                    <OptionLabel label="Format" />
+                    <OptionLabel label={t('studio.opt.format')} />
                     <ChipSelector
                       options={FORMAT_OPTIONS}
                       selected={catalogFormat}
                       onSelect={setCatalogFormat}
-                      accessibilityLabel="Format"
+                      accessibilityLabel={t('studio.opt.format')}
                     />
                     <View style={styles.toggleRow}>
-                      <Text style={styles.toggleLabel}>Show Prices</Text>
+                      <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
                       <Switch
                         value={showPrices}
                         onValueChange={setShowPrices}
@@ -2729,7 +3335,11 @@ export default function StudioScreen() {
                   <GenerateButton
                     loading={catalogGenerating}
                     disabled={selectedCount === 0}
-                    label={selectedCount === 0 ? 'Select products to generate' : 'Generate Catalog'}
+                    label={
+                      selectedCount === 0
+                        ? t('studio.selectProductsToGenerate')
+                        : t('studio.generateCatalog')
+                    }
                     onPress={handleCatalogGenerate}
                   />
 
@@ -2785,7 +3395,7 @@ export default function StudioScreen() {
                             accessibilityRole="button"
                           >
                             <Ionicons name="download-outline" size={15} color="#fff" />
-                            <Text style={styles.downloadBtnText}>Download</Text>
+                            <Text style={styles.downloadBtnText}>{t('studio.download')}</Text>
                           </Pressable>
                         )}
                       </View>
@@ -2796,7 +3406,7 @@ export default function StudioScreen() {
                 <>
                   {/* Products */}
                   <ChooseProductsSection
-                    subtitle="Select products to place on your wallpaper"
+                    subtitle={t('studio.subtitleWallpaper')}
                     isDesktop={false}
                     products={products}
                     loadingProducts={loadingProducts}
@@ -2810,7 +3420,7 @@ export default function StudioScreen() {
 
                   {/* Wallpaper picker */}
                   <View style={styles.mobileSection}>
-                    <Text style={styles.sectionTitle}>Background Wallpaper</Text>
+                    <Text style={styles.sectionTitle}>{t('studio.backgroundWallpaper')}</Text>
                     <Text
                       style={[
                         styles.emptyText,
@@ -2830,7 +3440,9 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="image-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>Import</Text>
+                        <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                          {t('studio.import')}
+                        </Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
@@ -2841,7 +3453,9 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="sparkles-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>Generate</Text>
+                        <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                          {t('studio.generate')}
+                        </Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
@@ -2852,7 +3466,9 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="albums-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>My Wallpapers</Text>
+                        <Text numberOfLines={1} style={styles.wallpaperActionText}>
+                          {t('studio.myWallpapers')}
+                        </Text>
                       </Pressable>
                     </View>
 
@@ -2872,7 +3488,7 @@ export default function StudioScreen() {
                           }}
                           style={styles.wallpaperPreviewImage}
                           resizeMode="cover"
-                          accessibilityLabel="Generated wallpaper preview"
+                          accessibilityLabel={t('studio.a11y.generatedWallpaperPreview')}
                         />
                         <View style={styles.wallpaperPreviewActions}>
                           <Pressable
@@ -2899,7 +3515,7 @@ export default function StudioScreen() {
                             accessibilityRole="button"
                           >
                             <Ionicons name="checkmark" size={14} color="#fff" />
-                            <Text style={styles.wallpaperConfirmBtnText}>Keep</Text>
+                            <Text style={styles.wallpaperConfirmBtnText}>{t('studio.keep')}</Text>
                           </Pressable>
                           <Pressable
                             style={[
@@ -2966,7 +3582,7 @@ export default function StudioScreen() {
                           }}
                           style={styles.wallpaperThumb}
                           resizeMode="cover"
-                          accessibilityLabel="Selected wallpaper"
+                          accessibilityLabel={t('studio.a11y.selectedWallpaper')}
                         />
                         <View style={{ flex: 1 }}>
                           <Text
@@ -3016,16 +3632,25 @@ export default function StudioScreen() {
 
                   {/* Placement options */}
                   <View style={styles.mobileSection}>
-                    <Text style={styles.sectionTitle}>Placement Options</Text>
-                    <OptionLabel label="Layout" />
+                    <Text style={styles.sectionTitle}>{t('studio.placementOptions')}</Text>
+                    <OptionLabel label={t('studio.opt.layout')} />
                     <ChipSelector
                       options={LAYOUT_OPTIONS}
                       selected={layout}
                       onSelect={setLayout}
-                      accessibilityLabel="Layout"
+                      accessibilityLabel={t('studio.opt.layout')}
                     />
                     <View style={styles.toggleRow}>
-                      <Text style={styles.toggleLabel}>Show Prices</Text>
+                      <Text style={styles.toggleLabel}>{t('studio.showProductNames')}</Text>
+                      <Switch
+                        value={showProductNames}
+                        onValueChange={setShowProductNames}
+                        thumbColor={showProductNames ? colors.accent.primary : colors.text.muted}
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                    <View style={styles.toggleRow}>
+                      <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
                       <Switch
                         value={showPrices}
                         onValueChange={setShowPrices}
@@ -3036,8 +3661,10 @@ export default function StudioScreen() {
                     <TextStylePresetPicker
                       selectedId={selectedPresetId}
                       onSelect={setSelectedPresetId}
-                      selectedColor={selectedColor}
-                      onColorChange={setSelectedColor}
+                      nameColor={selectedNameColor}
+                      onNameColorChange={setSelectedNameColor}
+                      priceColor={selectedPriceColor}
+                      onPriceColorChange={setSelectedPriceColor}
                       colors={colors}
                     />
                   </View>
@@ -3047,10 +3674,10 @@ export default function StudioScreen() {
                     disabled={selectedCount === 0 || wallpaperBase64 === null}
                     label={
                       wallpaperBase64 === null
-                        ? 'Pick a wallpaper first'
+                        ? t('studio.pickWallpaperFirst')
                         : selectedCount === 0
-                          ? 'Select products first'
-                          : 'Place on Wallpaper'
+                          ? t('studio.selectProductsFirst')
+                          : t('studio.placeOnWallpaper')
                     }
                     onPress={handleWallpaperOnGenerate}
                   />
@@ -3107,7 +3734,7 @@ export default function StudioScreen() {
                             accessibilityRole="button"
                           >
                             <Ionicons name="download-outline" size={15} color="#fff" />
-                            <Text style={styles.downloadBtnText}>Download</Text>
+                            <Text style={styles.downloadBtnText}>{t('studio.download')}</Text>
                           </Pressable>
                         )}
                       </View>
@@ -3122,7 +3749,7 @@ export default function StudioScreen() {
           {activeTab === 'announcements' && (
             <>
               <View style={styles.mobileSection}>
-                <Text style={styles.sectionTitle}>Post Type</Text>
+                <Text style={styles.sectionTitle}>{t('studio.announcement.postType')}</Text>
                 <View style={[styles.typeRow, { marginTop: D.spacing.sm }]}>
                   {POST_TYPES.map(({ type, icon }) => {
                     const active = postType === type;
@@ -3150,35 +3777,35 @@ export default function StudioScreen() {
 
               {isJobPost ? (
                 <View style={styles.mobileSection}>
-                  <Text style={styles.sectionTitle}>Job details</Text>
-                  <OptionLabel label="Job title" />
+                  <Text style={styles.sectionTitle}>{t('studio.jobDetails')}</Text>
+                  <OptionLabel label={t('studio.opt.jobTitle')} />
                   <TextInput
                     style={styles.jobInput}
-                    placeholder="e.g. Cashier"
+                    placeholder={t('studio.announcement.jobTitlePlaceholderCashier')}
                     placeholderTextColor={colors.text.muted}
                     value={jobTitle}
                     onChangeText={setJobTitle}
                     editable={!annoGenerating}
                   />
-                  <OptionLabel label="Work schedule" />
+                  <OptionLabel label={t('studio.opt.jobSchedule')} />
                   <TextInput
                     style={styles.jobInput}
-                    placeholder="e.g. Part-time, weekends"
+                    placeholder={t('studio.announcement.jobSchedulePlaceholderShort')}
                     placeholderTextColor={colors.text.muted}
                     value={jobSchedule}
                     onChangeText={setJobSchedule}
                     editable={!annoGenerating}
                   />
-                  <OptionLabel label="Salary (optional)" />
+                  <OptionLabel label={t('studio.opt.jobSalary')} />
                   <TextInput
                     style={styles.jobInput}
-                    placeholder="e.g. $15/hr"
+                    placeholder={t('studio.announcement.jobSalaryPlaceholderShort')}
                     placeholderTextColor={colors.text.muted}
                     value={jobSalary}
                     onChangeText={setJobSalary}
                     editable={!annoGenerating}
                   />
-                  <OptionLabel label="Requirements (one per line)" />
+                  <OptionLabel label={t('studio.opt.jobRequirementsShort')} />
                   <TextInput
                     style={styles.jobTextArea}
                     placeholder={"Driver's license\nCommunication skills"}
@@ -3188,14 +3815,14 @@ export default function StudioScreen() {
                     multiline
                     editable={!annoGenerating}
                   />
-                  <OptionLabel label="Image style" />
+                  <OptionLabel label={t('studio.opt.jobImageStyle')} />
                   <ChipSelector
                     options={JOB_IMAGE_STYLE_OPTIONS}
                     selected={jobImageStyle}
                     onSelect={(v) => setJobImageStyle(v as 'with-person' | 'text-only')}
-                    accessibilityLabel="Job image style"
+                    accessibilityLabel={t('studio.a11y.jobImageStyle')}
                   />
-                  <OptionLabel label="Additional direction (optional)" />
+                  <OptionLabel label={t('studio.opt.additionalDirection')} />
                   <TextInput
                     style={styles.jobTextArea}
                     placeholder={'e.g. "Apply by email at jobs@example.com"'}
@@ -3208,7 +3835,7 @@ export default function StudioScreen() {
                 </View>
               ) : (
                 <View style={styles.mobileSection}>
-                  <Text style={styles.sectionTitle}>Content</Text>
+                  <Text style={styles.sectionTitle}>{t('studio.contentSection')}</Text>
                   <TextInput
                     style={[styles.textArea, { marginTop: D.spacing.sm }]}
                     placeholder={currentPostType.placeholder}
@@ -3222,20 +3849,20 @@ export default function StudioScreen() {
               )}
 
               <View style={styles.mobileSection}>
-                <Text style={styles.sectionTitle}>Style</Text>
-                <OptionLabel label="Tone" />
+                <Text style={styles.sectionTitle}>{t('studio.styleSection')}</Text>
+                <OptionLabel label={t('studio.opt.tone')} />
                 <ChipSelector
                   options={TONE_OPTIONS}
                   selected={tone}
                   onSelect={setTone}
-                  accessibilityLabel="Tone"
+                  accessibilityLabel={t('studio.opt.tone')}
                 />
-                <OptionLabel label="Format" />
+                <OptionLabel label={t('studio.opt.format')} />
                 <ChipSelector
                   options={FORMAT_OPTIONS}
                   selected={annoFormat}
                   onSelect={setAnnoFormat}
-                  accessibilityLabel="Format"
+                  accessibilityLabel={t('studio.opt.format')}
                 />
               </View>
 
@@ -3251,7 +3878,7 @@ export default function StudioScreen() {
 
               {postType === 'Promotion' && (
                 <ChooseProductsSection
-                  subtitle="Select products to use as visual reference (optional)"
+                  subtitle={t('studio.subtitleAnnouncement')}
                   isDesktop={false}
                   products={products}
                   loadingProducts={loadingProducts}
@@ -3267,7 +3894,7 @@ export default function StudioScreen() {
               <GenerateButton
                 loading={annoGenerating}
                 disabled={!annoReady}
-                label="Generate Graphic"
+                label={t('studio.generateGraphic')}
                 onPress={handleAnnoGenerate}
               />
 
@@ -3312,7 +3939,7 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="download-outline" size={15} color="#fff" />
-                        <Text style={styles.downloadBtnText}>Download</Text>
+                        <Text style={styles.downloadBtnText}>{t('studio.download')}</Text>
                       </Pressable>
                     )}
                   </View>
@@ -3333,19 +3960,17 @@ export default function StudioScreen() {
                 />
               </ReAnimated.View>
               <View style={styles.comingSoonBadge}>
-                <Text style={styles.comingSoonText}>Coming Soon</Text>
+                <Text style={styles.comingSoonText}>{t('studio.comingSoon')}</Text>
               </View>
-              <Text style={styles.videoTitle}>Video Ads</Text>
-              <Text style={styles.videoDescription}>
-                Generate professional short-form video ads powered by AI. Currently in development.
-              </Text>
+              <Text style={styles.videoTitle}>{t('studio.videoAdsTitle')}</Text>
+              <Text style={styles.videoDescription}>{t('studio.videoBody')}</Text>
               <View style={styles.stepsCard}>
-                <Text style={styles.stepsTitle}>{"What's coming"}</Text>
+                <Text style={styles.stepsTitle}>{t('studio.videoWhatsComing')}</Text>
                 {(
                   [
-                    { icon: 'film-outline', label: 'Storyboard your concept' },
-                    { icon: 'sparkles-outline', label: 'AI generates visuals' },
-                    { icon: 'cloud-upload-outline', label: 'Export & share' },
+                    { icon: 'film-outline', label: t('studio.videoStep1') },
+                    { icon: 'sparkles-outline', label: t('studio.videoStep2') },
+                    { icon: 'cloud-upload-outline', label: t('studio.videoStep3') },
                   ] as { icon: React.ComponentProps<typeof Ionicons>['name']; label: string }[]
                 ).map(({ icon, label }, i) => (
                   <View key={label} style={styles.stepRow}>
@@ -3359,7 +3984,7 @@ export default function StudioScreen() {
               </View>
             </View>
           )}
-        </View>
+        </ReAnimated.View>
       </ScrollView>
 
       {/* Wallpaper generate modal */}
@@ -3385,7 +4010,7 @@ export default function StudioScreen() {
                 style={styles.wallpaperGenCloseBtn}
                 onPress={handleCloseWallpaperGenModal}
                 accessibilityRole="button"
-                accessibilityLabel="Close"
+                accessibilityLabel={t('common.close')}
               >
                 <Ionicons name="close" size={20} color={colors.text.secondary} />
               </Pressable>
@@ -3397,19 +4022,19 @@ export default function StudioScreen() {
                 contentContainerStyle={styles.wallpaperGenScrollContent}
                 keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.wallpaperGenTitle}>Generate Wallpaper</Text>
+                <Text style={styles.wallpaperGenTitle}>{t('wallpapers.modal.title')}</Text>
                 <Text style={styles.wallpaperGenSubtitle}>
-                  Configure and generate an AI background
+                  {t('studio.wallpaperModal.subtitle')}
                 </Text>
 
                 {/* Format */}
-                <Text style={styles.wallpaperGenSectionLabel}>Format</Text>
+                <Text style={styles.wallpaperGenSectionLabel}>{t('wallpapers.modal.format')}</Text>
                 <View style={styles.wallpaperGenFormatRow}>
                   {(
                     [
-                      { value: '9:16', label: 'Vertical' },
-                      { value: '1:1', label: 'Square' },
-                      { value: '16:9', label: 'Landscape' },
+                      { value: '9:16', label: t('studio.wallpaperModal.verticalAspect') },
+                      { value: '1:1', label: t('studio.wallpaperModal.squareAspect') },
+                      { value: '16:9', label: t('wallpapers.modal.formatLandscape') },
                     ] as const
                   ).map((opt) => (
                     <Pressable
@@ -3447,7 +4072,7 @@ export default function StudioScreen() {
                 <Text style={styles.wallpaperGenSectionLabel}>Style prompt (optional)</Text>
                 <TextInput
                   style={styles.wallpaperGenInput}
-                  placeholder="e.g. warm sunset bokeh, soft pastel bakery, dark wood texture…"
+                  placeholder={t('studio.wallpaper.promptPlaceholder')}
                   placeholderTextColor={colors.text.muted}
                   value={wallpaperPrompt}
                   onChangeText={setWallpaperPrompt}
@@ -3458,7 +4083,9 @@ export default function StudioScreen() {
                 {/* Include logo */}
                 <View style={styles.wallpaperGenToggleRow}>
                   <View>
-                    <Text style={styles.wallpaperGenToggleLabel}>Include Logo</Text>
+                    <Text style={styles.wallpaperGenToggleLabel}>
+                      {t('wallpapers.modal.includeLogo')}
+                    </Text>
                     <Text style={styles.wallpaperGenToggleHint}>
                       Place your brand logo in the header
                     </Text>
@@ -3472,7 +4099,9 @@ export default function StudioScreen() {
                 </View>
 
                 {/* Brand context */}
-                <Text style={styles.wallpaperGenSectionLabel}>Include brand info</Text>
+                <Text style={styles.wallpaperGenSectionLabel}>
+                  {t('wallpapers.modal.includeBrand')}
+                </Text>
                 <View>
                   {(
                     [
@@ -3505,7 +4134,7 @@ export default function StudioScreen() {
                       >
                         <Ionicons
                           name={checked ? 'checkbox' : 'square-outline'}
-                          size={18}
+                          size={isDesktop ? 18 : 24}
                           color={checked ? colors.accent.primary : colors.text.muted}
                         />
                         <Text style={styles.wallpaperGenCheckLabel}>{opt.label}</Text>
@@ -3532,7 +4161,7 @@ export default function StudioScreen() {
                     <Ionicons name="sparkles-outline" size={16} color="#fff" />
                   )}
                   <Text style={styles.wallpaperGenBtnText2}>
-                    {wallpaperGenGenerating ? 'Generating…' : 'Generate'}
+                    {wallpaperGenGenerating ? t('studio.generating') : t('studio.generate')}
                   </Text>
                 </Pressable>
               </ScrollView>
@@ -3542,7 +4171,7 @@ export default function StudioScreen() {
                 contentContainerStyle={styles.wallpaperGenResultContainer}
                 keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.wallpaperGenTitle}>Wallpaper Generated</Text>
+                <Text style={styles.wallpaperGenTitle}>{t('wallpapers.result.title')}</Text>
                 <Text style={styles.wallpaperGenSubtitle}>
                   Keep it as your background or generate a new one
                 </Text>
@@ -3564,7 +4193,7 @@ export default function StudioScreen() {
                       },
                     ]}
                     resizeMode="contain"
-                    accessibilityLabel="Generated wallpaper"
+                    accessibilityLabel={t('studio.a11y.generatedWallpaper')}
                   />
                 )}
 
@@ -3626,7 +4255,7 @@ export default function StudioScreen() {
                       accessibilityRole="button"
                     >
                       <Ionicons name="download-outline" size={16} color="#fff" />
-                      <Text style={styles.wallpaperGenResultBtnText}>Download</Text>
+                      <Text style={styles.wallpaperGenResultBtnText}>{t('studio.download')}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -3644,7 +4273,9 @@ export default function StudioScreen() {
                   accessibilityRole="button"
                 >
                   <Ionicons name="refresh-outline" size={15} color={colors.text.secondary} />
-                  <Text style={styles.wallpaperGenSecondaryBtnText}>Generate Again</Text>
+                  <Text style={styles.wallpaperGenSecondaryBtnText}>
+                    {t('studio.generateAgain')}
+                  </Text>
                 </Pressable>
               </ScrollView>
             )}
@@ -3659,9 +4290,14 @@ export default function StudioScreen() {
         animationType="fade"
         onRequestClose={() => setWallpaperPickerVisible(false)}
       >
-        <View style={styles.pickerFullScreen}>
+        <View
+          style={[
+            styles.pickerFullScreen,
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
+          ]}
+        >
           <View style={styles.pickerHeader}>
-            <Text style={styles.pickerTitle}>My Wallpapers</Text>
+            <Text style={styles.pickerTitle}>{t('studio.myWallpapers')}</Text>
             <Pressable
               style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
               onPress={() => setWallpaperPickerVisible(false)}
@@ -3693,25 +4329,28 @@ export default function StudioScreen() {
               numColumns={2}
               contentContainerStyle={{ padding: D.spacing.md, gap: D.spacing.sm }}
               columnWrapperStyle={{ gap: D.spacing.sm }}
+              showsVerticalScrollIndicator={false}
               renderItem={({ item }) => {
                 const thumbWidth = (screenWidth - D.spacing.md * 2 - D.spacing.sm) / 2;
+                const thumbHeight = Math.min(thumbWidth * (16 / 9), screenWidth * 0.55);
                 return (
                   <Pressable
                     style={({ pressed }) => ({
                       width: thumbWidth,
-                      aspectRatio: 9 / 16,
+                      height: thumbHeight,
                       borderRadius: D.radius.md,
                       overflow: 'hidden',
                       opacity: pressed ? 0.8 : 1,
                       borderWidth: 1.5,
                       borderColor: colors.border.default,
+                      backgroundColor: colors.bg.elevated,
                     })}
                     onPress={() => pickWallpaperFromLibrary(item)}
                   >
                     <GalleryImage
                       id={item.id}
                       style={{ width: '100%', height: '100%' }}
-                      resizeMode="contain"
+                      resizeMode="cover"
                     />
                   </Pressable>
                 );
@@ -3743,6 +4382,30 @@ function makeStyles(
       flex: 1,
       flexDirection: 'row',
       backgroundColor: colors.bg.base,
+      position: 'relative',
+      overflow: 'hidden',
+    },
+
+    // ── Ambient decorative glows (pointerEvents: 'none') ───────────────────────
+    ambientGlow: {
+      position: 'absolute',
+      top: -160,
+      right: -160,
+      width: 440,
+      height: 440,
+      borderRadius: 220,
+      backgroundColor: colors.accent.primary,
+      opacity: 0.07,
+    },
+    ambientGlow2: {
+      position: 'absolute',
+      bottom: -180,
+      left: SIDEBAR_WIDTH - 80,
+      width: 360,
+      height: 360,
+      borderRadius: 180,
+      backgroundColor: colors.accent.secondary,
+      opacity: 0.05,
     },
 
     // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -3750,25 +4413,33 @@ function makeStyles(
       width: SIDEBAR_WIDTH,
       backgroundColor: colors.bg.surface,
       flexDirection: 'column',
-    },
+      borderRightWidth: 1,
+      borderRightColor: colors.border.subtle,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `2px 0 24px -16px ${colors.accent.primary}33` } as any)
+        : {}),
+    } as any,
     sidebarScroll: { flex: 1 },
     sidebarContent: {
       padding: D.spacing.lg,
       paddingBottom: D.spacing.sm,
     },
     sidebarHeader: {
-      marginBottom: D.spacing.xs,
+      marginBottom: D.spacing.md,
+      position: 'relative',
     },
     sidebarTitle: {
-      fontSize: D.fontSize.xl,
+      fontSize: D.fontSize['2xl'],
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
-      letterSpacing: -0.5,
+      letterSpacing: -0.6,
+      lineHeight: 32,
     },
     sidebarSubtitle: {
       fontSize: D.fontSize.sm,
-      color: colors.text.muted,
-      marginTop: 2,
+      color: colors.text.secondary,
+      marginTop: 4,
+      lineHeight: 20,
     },
     sidebarFooter: {
       padding: D.spacing.lg,
@@ -3776,67 +4447,88 @@ function makeStyles(
       borderTopWidth: 1,
       borderTopColor: colors.border.subtle,
       backgroundColor: colors.bg.surface,
-    },
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 -8px 24px -12px ${colors.accent.primary}1F` } as any)
+        : {}),
+    } as any,
 
     // ── Vertical nav ───────────────────────────────────────────────────────────
     verticalNav: {
-      gap: D.spacing.xs,
+      gap: 6,
     },
     navItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: D.spacing.sm,
-      paddingHorizontal: D.spacing.sm,
-      paddingVertical: D.spacing.sm,
+      gap: D.spacing.sm + 2,
+      paddingHorizontal: D.spacing.sm + 2,
+      paddingVertical: D.spacing.sm + 2,
       borderRadius: D.radius.md,
       borderWidth: 1,
       borderColor: 'transparent',
+      backgroundColor: 'transparent',
+      ...(Platform.OS === 'web' ? ({ transitionDuration: '180ms' } as any) : {}),
+    } as any,
+    navItemHover: {
+      backgroundColor: colors.bg.elevated,
     },
     navItemActive: {
       backgroundColor: colors.accent.dim,
-      borderColor: colors.border.focus,
-    },
+      borderColor: colors.accent.primary + '55',
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 4px 14px -6px ${colors.accent.primary}55` } as any)
+        : D.shadow.sm),
+    } as any,
     navIconBox: {
-      width: 32,
-      height: 32,
-      borderRadius: D.radius.sm,
-      backgroundColor: colors.bg.base,
+      width: 34,
+      height: 34,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
       alignItems: 'center',
       justifyContent: 'center',
     },
     navIconBoxActive: {
       backgroundColor: colors.accent.primary,
-    },
+      borderColor: colors.accent.primary,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 6px 16px -6px ${colors.accent.primary}AA` } as any)
+        : D.shadow.glow),
+    } as any,
     navLabel: {
       fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.medium,
+      fontWeight: D.fontWeight.semibold,
       color: colors.text.secondary,
+      letterSpacing: -0.1,
     },
     navLabelActive: {
       color: colors.accent.primary,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
     },
     navDesc: {
       fontSize: D.fontSize.xs,
       color: colors.text.muted,
-      marginTop: 1,
+      marginTop: 2,
+      lineHeight: 15,
     },
     navBadge: {
       backgroundColor: colors.accent.dim,
       borderRadius: D.radius.pill,
-      paddingHorizontal: D.spacing.xs + 2,
-      paddingVertical: 2,
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: 3,
+      borderWidth: 1,
+      borderColor: colors.accent.primary + '40',
     },
     navBadgeText: {
       fontSize: 10,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
       color: colors.accent.primary,
+      letterSpacing: 0.5,
     },
 
     // ── Panel divider ──────────────────────────────────────────────────────────
     panelDivider: {
-      width: 1,
-      backgroundColor: colors.border.subtle,
+      width: 0,
     },
 
     // ── Right panel ────────────────────────────────────────────────────────────
@@ -3845,24 +4537,160 @@ function makeStyles(
       backgroundColor: colors.bg.base,
     },
     rightPanelContent: {
-      padding: D.spacing.xl,
-      gap: D.spacing.xl,
+      paddingHorizontal: D.spacing.xl,
+      paddingTop: D.spacing.lg,
+      paddingBottom: D.spacing['2xl'],
+      gap: D.spacing.lg,
       flexGrow: 1,
+      maxWidth: 1280,
+      width: '100%',
+      alignSelf: 'center',
+    },
+
+    // ── Desktop hero header (top of right panel) ───────────────────────────────
+    heroWrap: {
+      position: 'relative',
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      padding: D.spacing.lg,
+      overflow: 'hidden',
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 16px 40px -22px ${colors.accent.primary}40` } as any)
+        : D.shadow.sm),
+    } as any,
+    heroGlow: {
+      position: 'absolute',
+      top: -90,
+      right: -90,
+      width: 260,
+      height: 260,
+      borderRadius: 130,
+      backgroundColor: colors.accent.dim,
+      opacity: 0.9,
+    },
+    heroGlow2: {
+      position: 'absolute',
+      bottom: -80,
+      left: -60,
+      width: 200,
+      height: 200,
+      borderRadius: 100,
+      backgroundColor: colors.accent.secondary + '22',
+      opacity: 0.7,
+    },
+    heroEyebrow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: D.spacing.xs,
+    },
+    heroEyebrowDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.accent.primary,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 0 10px 2px ${colors.accent.primary}` } as any)
+        : {}),
+    } as any,
+    heroEyebrowText: {
+      fontSize: 10,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+    },
+    heroTitle: {
+      fontSize: D.fontSize['3xl'],
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.8,
+      lineHeight: 40,
+    },
+    heroSubtitle: {
+      fontSize: D.fontSize.base,
+      color: colors.text.secondary,
+      marginTop: 6,
+      lineHeight: 22,
+      maxWidth: 620,
+    },
+    heroMetaRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: D.spacing.sm,
+      marginTop: D.spacing.md,
+    },
+    heroMetaChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: D.spacing.sm + 2,
+      paddingVertical: 5,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    heroMetaText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.secondary,
+      fontWeight: D.fontWeight.medium,
+    },
+    // Interactive segment control docked in the hero (top-right).
+    heroSegmentDock: {
+      position: 'absolute',
+      top: D.spacing.lg,
+      right: D.spacing.lg,
+      width: 260,
+      zIndex: 3,
+    },
+    // When the hero has a segmented control on the right, keep text from running under it.
+    heroTextClamp: {
+      maxWidth: '100%',
+      paddingRight: 276, // 260 segment + 16 gutter
     },
 
     // ── Desktop sections ───────────────────────────────────────────────────────
     desktopSection: {
-      // no card bg on desktop — sections are separated by whitespace
-    },
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      padding: D.spacing.lg,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 2px 12px -6px ${colors.accent.primary}1F` } as any)
+        : D.shadow.sm),
+    } as any,
     desktopSectionHeader: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       justifyContent: 'space-between',
+      gap: D.spacing.md,
       marginBottom: D.spacing.md,
+    },
+    sectionHeadingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm + 2,
+      flex: 1,
+      minWidth: 0,
+    },
+    sectionIconBadge: {
+      width: 34,
+      height: 34,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.accent.primary + '33',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
     },
     desktopSectionTitle: {
       fontSize: D.fontSize.lg,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
       letterSpacing: -0.3,
     },
@@ -3870,6 +4698,7 @@ function makeStyles(
       fontSize: D.fontSize.sm,
       color: colors.text.muted,
       marginTop: 2,
+      lineHeight: 20,
     },
 
     // ── Preview placeholder ────────────────────────────────────────────────────
@@ -3878,42 +4707,84 @@ function makeStyles(
       borderColor: colors.border.subtle,
       borderStyle: 'dashed' as never,
       borderRadius: D.radius.xl,
-      minHeight: 280,
+      minHeight: isDesktop ? 360 : 280,
       alignItems: 'center',
       justifyContent: 'center',
       gap: D.spacing.sm,
       padding: D.spacing.xl,
-      backgroundColor: colors.bg.surface,
+      backgroundColor: colors.bg.base,
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    // Ambient decorative blobs on preview placeholder — corner-positioned, very
+    // low opacity so the icon+text stay the focal point.
+    previewHaloTR: {
+      position: 'absolute',
+      top: -90,
+      right: -90,
+      width: 240,
+      height: 240,
+      borderRadius: 120,
+      backgroundColor: colors.accent.primary,
+      opacity: 0.09,
+    },
+    previewHaloBL: {
+      position: 'absolute',
+      bottom: -100,
+      left: -100,
+      width: 220,
+      height: 220,
+      borderRadius: 110,
+      backgroundColor: colors.accent.secondary,
+      opacity: 0.07,
+    },
+    previewHaloSpot: {
+      position: 'absolute',
+      top: 30,
+      left: 40,
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: colors.accent.primary,
+      opacity: 0.05,
     },
     previewIconCircle: {
-      width: 56,
-      height: 56,
+      width: 72,
+      height: 72,
       borderRadius: D.radius.pill,
       backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.accent.primary + '44',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: D.spacing.xs,
-    },
+      marginBottom: D.spacing.sm,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 8px 24px -8px ${colors.accent.primary}66` } as any)
+        : D.shadow.glow),
+    } as any,
     previewEmptyTitle: {
-      fontSize: D.fontSize.base,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.text.secondary,
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.3,
     },
     previewEmptyHint: {
       fontSize: D.fontSize.sm,
       color: colors.text.muted,
       textAlign: 'center',
-      maxWidth: 320,
+      maxWidth: 340,
       lineHeight: 20,
     },
     resultImageCard: {
       borderRadius: D.radius.xl,
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: colors.border.subtle,
-      backgroundColor: colors.bg.surface,
-      ...D.shadow.modal,
-    },
+      borderColor: colors.accent.primary + '40',
+      backgroundColor: colors.bg.base,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 20px 60px -20px ${colors.accent.primary}66` } as any)
+        : D.shadow.modal),
+    } as any,
     downloadBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -3921,19 +4792,23 @@ function makeStyles(
       margin: D.spacing.md,
       alignSelf: 'flex-end',
       paddingHorizontal: D.spacing.md,
-      paddingVertical: D.spacing.sm,
-      borderRadius: D.radius.md,
+      paddingVertical: D.spacing.sm + 2,
+      borderRadius: D.radius.pill,
       backgroundColor: colors.accent.primary,
-    },
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 6px 18px -6px ${colors.accent.primary}AA` } as any)
+        : D.shadow.sm),
+    } as any,
     downloadBtnText: {
       color: '#fff',
       fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
+      letterSpacing: 0.3,
     },
     resultImage: {
       width: '100%',
       aspectRatio: 1,
-      maxHeight: 480,
+      maxHeight: 520,
     },
 
     // ── Mobile layout ──────────────────────────────────────────────────────────
@@ -3949,29 +4824,31 @@ function makeStyles(
       gap: D.spacing.md,
     },
 
-    // ── Mobile segmented control ───────────────────────────────────────────────
+    // ── Segmented control ──────────────────────────────────────────────────────
     segmentTrack: {
       flexDirection: 'row',
       backgroundColor: colors.bg.surface,
-      borderRadius: D.radius.md,
+      borderRadius: D.radius.pill,
       borderWidth: 1,
-      borderColor: colors.border.subtle,
+      borderColor: colors.border.default,
       padding: 4,
       position: 'relative',
-      height: 40,
-    },
+      height: 44,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `inset 0 1px 2px ${colors.border.subtle}` } as any)
+        : {}),
+    } as any,
     segmentIndicator: {
       position: 'absolute',
       top: 4,
       width: '31.33%',
-      height: 32,
+      height: 36,
       backgroundColor: colors.accent.primary,
-      borderRadius: D.radius.sm,
-      shadowColor: '#6366F1',
-      shadowOpacity: 0.35,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-    },
+      borderRadius: D.radius.pill,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 6px 18px -6px ${colors.accent.primary}CC` } as any)
+        : D.shadow.glow),
+    } as any,
     segmentButton: {
       flex: 1,
       flexDirection: 'row',
@@ -3981,20 +4858,60 @@ function makeStyles(
     },
     segmentLabel: {
       fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.medium,
+      fontWeight: D.fontWeight.semibold,
       color: colors.text.secondary,
+      letterSpacing: 0.2,
     },
-    segmentLabelActive: { color: '#fff', fontWeight: D.fontWeight.semibold },
+    segmentLabelActive: { color: '#fff', fontWeight: D.fontWeight.bold, letterSpacing: 0.3 },
+
+    // ── Mobile hero ────────────────────────────────────────────────────────────
+    mobileHero: {
+      position: 'relative',
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      padding: D.spacing.md + 2,
+      overflow: 'hidden',
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 12px 32px -18px ${colors.accent.primary}40` } as any)
+        : D.shadow.sm),
+    } as any,
+    mobileHeroGlow: {
+      position: 'absolute',
+      top: -60,
+      right: -60,
+      width: 160,
+      height: 160,
+      borderRadius: 80,
+      backgroundColor: colors.accent.dim,
+      opacity: 0.85,
+    },
+    mobileHeroTitle: {
+      fontSize: D.fontSize['2xl'],
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.6,
+      lineHeight: 32,
+    },
+    mobileHeroSubtitle: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
+      marginTop: 4,
+      lineHeight: 20,
+    },
 
     // ── Mobile section cards ───────────────────────────────────────────────────
     mobileSection: {
       backgroundColor: colors.bg.surface,
       borderRadius: D.radius.lg,
       borderWidth: 1,
-      borderColor: colors.border.subtle,
+      borderColor: colors.border.default,
       padding: D.spacing.md,
-      ...D.shadow.sm,
-    },
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 2px 10px -4px ${colors.border.default}` } as any)
+        : D.shadow.sm),
+    } as any,
     sectionHeader: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -4002,30 +4919,43 @@ function makeStyles(
       marginBottom: D.spacing.md,
     },
     sectionTitle: {
-      fontSize: D.fontSize.base,
-      fontWeight: D.fontWeight.semibold,
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
+      letterSpacing: -0.3,
+    },
+    mobileSectionHeadingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm + 2,
+      marginBottom: D.spacing.sm + 2,
     },
     mobileResultCard: {
-      borderRadius: D.radius.lg,
+      borderRadius: D.radius.xl,
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: colors.border.subtle,
-      backgroundColor: colors.bg.surface,
-    },
-    mobileResultImage: { width: '100%', aspectRatio: 1, maxHeight: 400 },
+      borderColor: colors.accent.primary + '40',
+      backgroundColor: colors.bg.base,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 14px 40px -16px ${colors.accent.primary}66` } as any)
+        : D.shadow.modal),
+    } as any,
+    mobileResultImage: { width: '100%', aspectRatio: 1, maxHeight: 420 },
 
     // ── Shared ─────────────────────────────────────────────────────────────────
     countBadge: {
       backgroundColor: colors.accent.dim,
       borderRadius: D.radius.pill,
-      paddingHorizontal: D.spacing.sm,
-      paddingVertical: 2,
+      paddingHorizontal: D.spacing.sm + 2,
+      paddingVertical: 3,
+      borderWidth: 1,
+      borderColor: colors.accent.primary + '40',
     },
     countBadgeText: {
       fontSize: D.fontSize.xs,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
       color: colors.accent.primary,
+      letterSpacing: 0.3,
     },
     emptyState: {
       alignItems: 'center',
@@ -4102,30 +5032,35 @@ function makeStyles(
     typeChip: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: D.spacing.xs,
+      gap: 6,
       paddingHorizontal: D.spacing.md,
-      paddingVertical: D.spacing.sm,
+      paddingVertical: D.spacing.sm + 2,
       borderRadius: D.radius.pill,
       borderWidth: 1.5,
       borderColor: colors.border.default,
       backgroundColor: colors.bg.elevated,
-    },
+      ...(Platform.OS === 'web' ? ({ transitionDuration: '160ms' } as any) : {}),
+    } as any,
     typeChipActive: {
       borderColor: colors.accent.primary,
       backgroundColor: colors.accent.dim,
-      shadowColor: '#6366F1',
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-    },
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 4px 12px -4px ${colors.accent.primary}55` } as any)
+        : {
+            shadowColor: '#6366F1',
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 2 },
+          }),
+    } as any,
     typeChipText: {
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.medium,
-      color: colors.text.muted,
+      color: colors.text.secondary,
     },
     typeChipTextActive: {
       color: colors.accent.primary,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
     },
     textArea: {
       borderWidth: 1,
@@ -4136,9 +5071,10 @@ function makeStyles(
       minHeight: isDesktop ? 140 : 100,
       textAlignVertical: 'top',
       color: colors.text.primary,
-      backgroundColor: colors.bg.base,
+      backgroundColor: colors.bg.input,
       outlineStyle: 'none' as never,
-    },
+      ...(Platform.OS === 'web' ? ({ transitionDuration: '160ms' } as any) : {}),
+    } as any,
     jobInput: {
       borderWidth: 1,
       borderColor: colors.border.default,
@@ -4146,9 +5082,9 @@ function makeStyles(
       paddingHorizontal: D.spacing.md,
       paddingVertical: 10,
       fontSize: D.fontSize.sm,
-      height: 40,
+      height: 44,
       color: colors.text.primary,
-      backgroundColor: colors.bg.base,
+      backgroundColor: colors.bg.input,
       outlineStyle: 'none' as never,
     },
     jobTextArea: {
@@ -4158,11 +5094,21 @@ function makeStyles(
       paddingHorizontal: D.spacing.md,
       paddingVertical: 10,
       fontSize: D.fontSize.sm,
-      minHeight: 72,
+      minHeight: 80,
       textAlignVertical: 'top',
       color: colors.text.primary,
-      backgroundColor: colors.bg.base,
+      backgroundColor: colors.bg.input,
       outlineStyle: 'none' as never,
+    },
+    errorBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      backgroundColor: `${colors.destructive}18`,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.destructive,
+      borderRadius: D.radius.sm,
+      padding: D.spacing.sm,
     },
     errorText: {
       color: colors.text.error,
@@ -4182,40 +5128,52 @@ function makeStyles(
       backgroundColor: colors.accent.dim,
       borderRadius: D.radius.pill,
       paddingHorizontal: D.spacing.md,
-      paddingVertical: D.spacing.xs,
-      shadowColor: '#6366F1',
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-    },
+      paddingVertical: D.spacing.xs + 1,
+      borderWidth: 1,
+      borderColor: colors.accent.primary + '40',
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 4px 12px -4px ${colors.accent.primary}55` } as any)
+        : {
+            shadowColor: '#6366F1',
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 2 },
+          }),
+    } as any,
     comingSoonText: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.semibold,
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
       color: colors.accent.primary,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
     },
     videoTitle: {
       fontSize: D.fontSize['2xl'],
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
       letterSpacing: -0.5,
+      textAlign: 'center',
     },
     videoDescription: {
       fontSize: D.fontSize.sm,
-      color: colors.text.muted,
+      color: colors.text.secondary,
       textAlign: 'center',
-      maxWidth: 300,
-      lineHeight: 20,
+      maxWidth: 320,
+      lineHeight: 22,
     },
     stepsCard: {
       width: '100%',
-      maxWidth: 340,
+      maxWidth: 360,
       backgroundColor: colors.bg.surface,
       borderRadius: D.radius.lg,
       borderWidth: 1,
-      borderColor: colors.border.subtle,
-      padding: D.spacing.md,
-      opacity: 0.55,
-    },
+      borderColor: colors.border.default,
+      padding: D.spacing.md + 2,
+      opacity: 0.85,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: `0 2px 12px -6px ${colors.border.default}` } as any)
+        : D.shadow.sm),
+    } as any,
     stepsTitle: {
       fontSize: D.fontSize.xs,
       fontWeight: D.fontWeight.semibold,
@@ -4252,20 +5210,25 @@ function makeStyles(
     },
     wallpaperActionBtn: {
       flex: 1,
+      minWidth: 0,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: D.spacing.xs,
-      paddingVertical: D.spacing.sm,
+      gap: 6,
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: D.spacing.sm + 2,
       borderRadius: D.radius.md,
       borderWidth: 1.5,
-      borderColor: colors.accent.primary,
+      borderColor: colors.accent.primary + '55',
       backgroundColor: colors.accent.dim,
-    },
+      ...(Platform.OS === 'web' ? ({ transitionDuration: '150ms' } as any) : {}),
+    } as any,
     wallpaperActionText: {
       fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.medium,
+      fontWeight: D.fontWeight.semibold,
       color: colors.accent.primary,
+      letterSpacing: 0.2,
+      flexShrink: 1,
     },
     wallpaperGenBtn: {
       flexDirection: 'row',
@@ -4392,13 +5355,13 @@ function makeStyles(
     wallpaperGenCheckRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: D.spacing.sm,
-      paddingVertical: 7,
+      gap: isDesktop ? D.spacing.sm : D.spacing.md,
+      paddingVertical: isDesktop ? 7 : 12,
       borderBottomWidth: 1,
       borderBottomColor: colors.border.subtle,
     },
     wallpaperGenCheckLabel: {
-      fontSize: D.fontSize.sm,
+      fontSize: isDesktop ? D.fontSize.sm : D.fontSize.base,
       color: colors.text.primary,
     },
     wallpaperGenError: {
@@ -4604,6 +5567,23 @@ function makeStyles(
       fontSize: D.fontSize.xs,
       color: colors.text.secondary,
       lineHeight: 16,
+    },
+    currencyNotice: {
+      marginTop: D.spacing.sm,
+      marginBottom: D.spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: D.spacing.xs,
+      paddingHorizontal: D.spacing.sm,
+      borderRadius: D.radius.sm,
+      backgroundColor: colors.accent.dim,
+      alignSelf: 'flex-start',
+    },
+    currencyNoticeText: {
+      fontSize: D.fontSize.xs,
+      color: colors.accent.primary,
+      fontWeight: D.fontWeight.medium,
     },
   });
 }

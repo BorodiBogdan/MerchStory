@@ -5,24 +5,46 @@ import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ChipSelector } from '@/components/ui/ChipSelector';
 import { FloatingInput } from '@/components/ui/FloatingInput';
 import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { SetupShell } from '@/components/ui/SetupShell';
 import { StepProgress } from '@/components/ui/StepProgress';
 import { D } from '@/constants/design';
-import { useSetup } from '@/context/setup';
+import { type Currency, type GenerationLanguage, useSetup } from '@/context/setup';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import { type BrandColor } from '@/utils/api';
+
+const CURRENCY_OPTIONS = [
+  { value: 'USD', label: 'USD ($)' },
+  { value: 'EUR', label: 'EUR (€)' },
+  { value: 'RON', label: 'RON (lei)' },
+];
 
 export default function Step1Screen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data, updateStep1 } = useSetup();
+  const t = useT();
+  const GENERATION_LANGUAGE_OPTIONS = [
+    { value: 'EN', label: t('common.english') },
+    { value: 'RO', label: t('common.romanian') },
+  ];
+  const stepLabels = [
+    t('setup.stepLabel.visual'),
+    t('setup.stepLabel.business'),
+    t('setup.stepLabel.contact'),
+  ];
 
   const [brandName, setBrandName] = useState(data.brandName);
   const [slogan, setSlogan] = useState(data.slogan);
   const [brandColors, setBrandColors] = useState<BrandColor[]>(data.brandColors);
   const [logoUri, setLogoUri] = useState<string | null>(data.logoUri);
+  const [currency, setCurrency] = useState<Currency>(data.currency);
+  const [generationLanguage, setGenerationLanguage] = useState<GenerationLanguage>(
+    data.generationLanguage
+  );
   const [brandNameError, setBrandNameError] = useState<string | null>(null);
 
   const totalPct = brandColors.reduce((sum, c) => sum + c.percentage, 0);
@@ -59,7 +81,7 @@ export default function Step1Screen() {
 
   function handleNext() {
     if (!brandName.trim()) {
-      setBrandNameError('Brand name is required');
+      setBrandNameError(t('setup.step1.brandNameRequired'));
       return;
     }
     updateStep1({
@@ -67,6 +89,8 @@ export default function Step1Screen() {
       slogan,
       brandColors,
       logoUri,
+      currency,
+      generationLanguage,
     });
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -76,18 +100,15 @@ export default function Step1Screen() {
 
   return (
     <SetupShell>
-      <StepProgress
-        currentStep={1}
-        stepLabels={['Visual Identity', 'Business DNA', 'Contact & Social']}
-      />
+      <StepProgress currentStep={1} stepLabels={stepLabels} />
 
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>{"Your Brand's Look"}</Text>
-        <Text style={styles.subtitle}>These details shape every ad we generate for you.</Text>
+        <Text style={styles.title}>{t('setup.step1.title')}</Text>
+        <Text style={styles.subtitle}>{t('setup.step1.subtitle')}</Text>
       </View>
 
       <FloatingInput
-        label="Brand Name"
+        label={t('setup.step1.brandName')}
         value={brandName}
         onChangeText={(v) => {
           setBrandName(v);
@@ -99,7 +120,7 @@ export default function Step1Screen() {
       />
 
       <FloatingInput
-        label="Slogan / Motto (optional)"
+        label={t('setup.step1.slogan')}
         value={slogan}
         onChangeText={setSlogan}
         accessibilityLabel="Brand slogan"
@@ -108,7 +129,7 @@ export default function Step1Screen() {
 
       {/* Logo upload */}
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Logo</Text>
+        <Text style={styles.sectionLabel}>{t('setup.step1.logo')}</Text>
         <Pressable
           onPress={pickLogo}
           style={[styles.logoButton, logoUri ? styles.logoButtonFilled : null]}
@@ -120,8 +141,8 @@ export default function Step1Screen() {
           ) : (
             <View style={styles.logoPlaceholder}>
               <Text style={styles.logoIcon}>↑</Text>
-              <Text style={styles.logoLabel}>Upload Logo</Text>
-              <Text style={styles.logoHint}>PNG, JPG · recommended 512×512</Text>
+              <Text style={styles.logoLabel}>{t('setup.step1.uploadLogo')}</Text>
+              <Text style={styles.logoHint}>{t('setup.step1.logoHint')}</Text>
             </View>
           )}
         </Pressable>
@@ -129,13 +150,13 @@ export default function Step1Screen() {
 
       {/* Brand Colors */}
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Brand Colors</Text>
+        <Text style={styles.sectionLabel}>{t('setup.step1.brandColors')}</Text>
 
         {brandColors.map((color, index) => (
           <View key={index} style={styles.colorRow}>
             <View style={styles.colorPickerWrapper}>
               <RgbColorPicker
-                label={`Color ${index + 1}`}
+                label={`${t('setup.step1.colorNumber')} ${index + 1}`}
                 value={color.hex}
                 onChange={(hex) => updateColor(index, { hex })}
               />
@@ -166,7 +187,7 @@ export default function Step1Screen() {
         ))}
 
         <Text style={[styles.totalIndicator, totalPct !== 100 && styles.totalIndicatorError]}>
-          Total: {totalPct}% / 100%
+          {`${totalPct}% / 100%`}
         </Text>
 
         {brandColors.length < 5 && (
@@ -177,9 +198,31 @@ export default function Step1Screen() {
             accessibilityLabel="Add a brand color"
           >
             <Ionicons name="add-circle-outline" size={16} color={colors.accent.primary} />
-            <Text style={styles.addColorText}>Add color</Text>
+            <Text style={styles.addColorText}>{t('setup.step1.addColor')}</Text>
           </Pressable>
         )}
+      </View>
+
+      {/* Default currency */}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>{t('setup.step1.currency')}</Text>
+        <ChipSelector
+          options={CURRENCY_OPTIONS}
+          selected={currency}
+          onSelect={(v) => setCurrency((v || 'USD') as Currency)}
+          accessibilityLabel="Default currency"
+        />
+      </View>
+
+      {/* Generation language */}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>{t('setup.step1.generationLanguage')}</Text>
+        <ChipSelector
+          options={GENERATION_LANGUAGE_OPTIONS}
+          selected={generationLanguage}
+          onSelect={(v) => setGenerationLanguage((v || 'EN') as GenerationLanguage)}
+          accessibilityLabel="Language of generated content"
+        />
       </View>
 
       <Pressable
@@ -191,7 +234,7 @@ export default function Step1Screen() {
         accessibilityState={{ disabled: !canProceed }}
       >
         <Text style={[styles.nextButtonText, !canProceed && styles.nextButtonTextDisabled]}>
-          Next step →
+          {t('common.nextStep')}
         </Text>
       </Pressable>
     </SetupShell>

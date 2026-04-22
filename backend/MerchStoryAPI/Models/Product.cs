@@ -12,6 +12,8 @@ public class Product
 
     public decimal Price { get; set; }
 
+    public Currency Currency { get; set; } = Currency.USD;
+
     public string? ImageBase64 { get; set; }
 
     public string? Category { get; set; }

@@ -2,10 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
-
-const ACCENT = '#6366F1';
+import { useT } from '@/i18n';
 
 interface AuthNavbarProps {
   /** Label for the right-side CTA button */
@@ -17,6 +17,7 @@ interface AuthNavbarProps {
 export function AuthNavbar({ ctaLabel, ctaHref }: AuthNavbarProps) {
   const { colors, colorScheme, toggleTheme } = useTheme();
   const router = useRouter();
+  const t = useT();
   const isDark = colorScheme === 'dark';
   const s = makeStyles(colors, isDark);
 
@@ -28,15 +29,9 @@ export function AuthNavbar({ ctaLabel, ctaHref }: AuthNavbarProps) {
           style={({ pressed }) => [s.logoBtn, pressed && { opacity: 0.75 }]}
           onPress={() => router.push('/')}
           accessibilityRole="button"
-          accessibilityLabel="MerchStory home"
+          accessibilityLabel={t('tabs.home')}
         >
-          <View style={s.logoMark}>
-            <Ionicons name="color-wand" size={13} color="#fff" />
-          </View>
-          <Text style={s.logoWordmark}>
-            <Text style={s.logoWordmarkBold}>Merch</Text>
-            <Text style={s.logoWordmarkAccent}>Story</Text>
-          </Text>
+          <BrandLogo size="sm" variant="horizontal" />
         </Pressable>
 
         <View style={s.right}>
@@ -44,7 +39,7 @@ export function AuthNavbar({ ctaLabel, ctaHref }: AuthNavbarProps) {
           <Pressable
             onPress={toggleTheme}
             style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.6 }]}
-            accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            accessibilityLabel={isDark ? t('common.lightMode') : t('common.darkMode')}
             accessibilityRole="button"
           >
             <Ionicons
@@ -97,26 +92,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
       gap: D.spacing.xs,
       // @ts-ignore
       outlineWidth: 0,
-    },
-    logoMark: {
-      width: 26,
-      height: 26,
-      borderRadius: D.radius.sm,
-      backgroundColor: ACCENT,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    logoWordmark: {
-      fontSize: D.fontSize.lg,
-      letterSpacing: -0.5,
-    },
-    logoWordmarkBold: {
-      fontWeight: D.fontWeight.bold,
-      color: colors.text.primary,
-    },
-    logoWordmarkAccent: {
-      fontWeight: D.fontWeight.bold,
-      color: ACCENT,
     },
     right: {
       flexDirection: 'row',

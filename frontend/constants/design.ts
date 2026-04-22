@@ -32,34 +32,34 @@ export type DesignColors = {
 
 export const darkColors: DesignColors = {
   bg: {
-    base: '#0F1117',
-    surface: '#161B27',
-    elevated: '#1E2535',
-    input: 'rgba(255,255,255,0.05)',
-    inputFocus: 'rgba(99,102,241,0.08)',
+    base: '#0B0E14',
+    surface: '#1A2030',
+    elevated: '#242C42',
+    input: 'rgba(255,255,255,0.08)',
+    inputFocus: 'rgba(129,140,248,0.14)',
   },
   border: {
-    default: 'rgba(255,255,255,0.08)',
-    focus: '#6366F1',
-    error: '#EF4444',
-    subtle: 'rgba(255,255,255,0.04)',
+    default: 'rgba(255,255,255,0.16)',
+    focus: '#818CF8',
+    error: '#F87171',
+    subtle: 'rgba(255,255,255,0.08)',
   },
   accent: {
-    primary: '#6366F1',
-    secondary: '#818CF8',
-    dim: 'rgba(99,102,241,0.15)',
+    primary: '#818CF8',
+    secondary: '#A5B4FC',
+    dim: 'rgba(129,140,248,0.22)',
   },
   text: {
     primary: '#F8FAFC',
-    secondary: '#94A3B8',
-    muted: '#475569',
-    error: '#EF4444',
-    labelActive: '#818CF8',
+    secondary: '#CBD5E1',
+    muted: '#94A3B8',
+    error: '#F87171',
+    labelActive: '#A5B4FC',
   },
   social: {
-    border: 'rgba(255,255,255,0.12)',
+    border: 'rgba(255,255,255,0.20)',
   },
-  destructive: '#EF4444',
+  destructive: '#F87171',
 };
 
 export const lightColors: DesignColors = {
@@ -152,5 +152,7 @@ export const D = {
     fast: 150,
     normal: 250,
     slow: 400,
+    entrance: 450,
+    shimmer: 1200,
   },
 } as const;

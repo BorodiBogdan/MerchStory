@@ -26,13 +26,31 @@ public static class ImageGenerationRoutes
                 return Results.BadRequest(new { error = "At least one product is required." });
             }
 
+            string[] distinctCurrencies = request.Products
+                .Select(p => (p.Currency ?? "USD").Trim().ToUpperInvariant())
+                .Distinct()
+                .ToArray();
+
+            if (distinctCurrencies.Length > 1)
+            {
+                return Results.BadRequest(new
+                {
+                    error = "All products in a catalog must use the same currency.",
+                    currencies = distinctCurrencies,
+                });
+            }
+
+            string resolvedCurrency = distinctCurrencies.Length == 1 ? distinctCurrencies[0] : "USD";
+
             string? userId = GetUserId(principal);
             string? logoBase64 = await FetchLogoIfRequestedAsync(db, userId, request.BrandContextFields);
             List<string>? textFields = StripLogoField(request.BrandContextFields);
             BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
 
+            string resolvedLanguage = await ResolveLanguageAsync(db, userId, request.Language);
+
             return await HandleGeneration(
-                () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext, logoBase64)),
+                () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext, logoBase64, resolvedCurrency, resolvedLanguage)),
                 logger);
         })
         .WithName("GenerateCatalogImage")
@@ -57,8 +75,10 @@ public static class ImageGenerationRoutes
                 .FirstOrDefaultAsync();
             }
 
+            string wallpaperLanguage = await ResolveLanguageAsync(db, userId, request.Language);
+
             return await HandleGeneration(
-                () => wallpaperService.GenerateWallpaperAsync(request.ToServiceRequest(brandContext, brandLogo)),
+                () => wallpaperService.GenerateWallpaperAsync(request.ToServiceRequest(brandContext, brandLogo, wallpaperLanguage)),
                 logger);
         })
         .WithName("GenerateWallpaper")
@@ -76,6 +96,20 @@ public static class ImageGenerationRoutes
             if (string.IsNullOrWhiteSpace(request.WallpaperBase64))
             {
                 return Results.BadRequest(new { error = "Wallpaper image is required." });
+            }
+
+            string[] currencies = request.Products
+                .Select(p => (p.Currency ?? "USD").Trim().ToUpperInvariant())
+                .Distinct()
+                .ToArray();
+
+            if (currencies.Length > 1)
+            {
+                return Results.BadRequest(new
+                {
+                    error = "All products in a catalog must use the same currency.",
+                    currencies,
+                });
             }
 
             return await HandleGeneration(
@@ -122,13 +156,34 @@ public static class ImageGenerationRoutes
             string? logoBase64 = await FetchLogoIfRequestedAsync(db, userId, request.BrandContextFields);
             List<string>? textFields = StripLogoField(request.BrandContextFields);
             BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
+            string announcementLanguage = await ResolveLanguageAsync(db, userId, request.Language);
 
             return await HandleGeneration(
-                () => announcementService.GenerateAnnouncementImageAsync(request.ToServiceRequest(brandContext, logoBase64)),
+                () => announcementService.GenerateAnnouncementImageAsync(request.ToServiceRequest(brandContext, logoBase64, announcementLanguage)),
                 logger);
         })
         .WithName("GenerateAnnouncementImage")
         .RequireAuthorization();
+    }
+
+    private static async Task<string> ResolveLanguageAsync(AppDbContext db, string? userId, string? requestedLanguage)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedLanguage))
+        {
+            return requestedLanguage!.Trim().ToUpperInvariant();
+        }
+
+        if (userId is null)
+        {
+            return "EN";
+        }
+
+        AppLanguage lang = await db.ShopProfiles
+            .Where(s => s.UserId == userId)
+            .Select(s => s.GenerationLanguage)
+            .FirstOrDefaultAsync();
+
+        return lang.ToString();
     }
 
     private static string? GetUserId(ClaimsPrincipal principal) =>
@@ -247,7 +302,7 @@ public static class ImageGenerationRoutes
 }
 
 // ── API-layer DTOs ────────────────────────────────────────────────────────────
-internal sealed record CatalogProductApiItem(string Name, decimal Price, string? ImageBase64);
+internal sealed record CatalogProductApiItem(string Name, decimal Price, string? ImageBase64, string Currency = "USD");
 
 internal sealed record CatalogImageApiRequest(
     List<CatalogProductApiItem>? Products,
@@ -255,9 +310,11 @@ internal sealed record CatalogImageApiRequest(
     string ColorTheme,
     string Format,
     bool ShowPrices,
-    List<string>? BrandContextFields)
+    List<string>? BrandContextFields,
+    string? Currency = null,
+    string? Language = null)
 {
-    public CatalogImageRequest ToServiceRequest(BrandContext? brandContext, string? logoBase64 = null) =>
+    public CatalogImageRequest ToServiceRequest(BrandContext? brandContext, string? logoBase64, string currency, string language) =>
         new(
             this.Products!.Select(p => new CatalogProductItem(p.Name, p.Price, p.ImageBase64)).ToList(),
             this.Layout,
@@ -265,17 +322,20 @@ internal sealed record CatalogImageApiRequest(
             this.Format,
             this.ShowPrices,
             brandContext,
-            logoBase64);
+            logoBase64,
+            currency,
+            language);
 }
 
-internal sealed record WallpaperApiRequest(string Prompt, string Format, bool IncludeLogo, List<string>? BrandContextFields)
+internal sealed record WallpaperApiRequest(string Prompt, string Format, bool IncludeLogo, List<string>? BrandContextFields, string? Language = null)
 {
-    public WallpaperImageRequest ToServiceRequest(BrandContext? brandContext, string? brandLogo) =>
+    public WallpaperImageRequest ToServiceRequest(BrandContext? brandContext, string? brandLogo, string language) =>
         new(
             Format: this.Format,
             UserPrompt: this.Prompt,
             InlineImages: string.IsNullOrWhiteSpace(brandLogo) ? null : [brandLogo],
-            BrandContext: brandContext);
+            BrandContext: brandContext,
+            Language: language);
 }
 
 internal sealed record PlacementZone(
@@ -289,6 +349,7 @@ internal sealed record CatalogOnWallpaperApiRequest(
     string WallpaperBase64,
     string Layout,
     bool ShowPrices,
+    bool ShowProductNames = true,
     TextStyleOptions? TextStyle = null,
     PlacementZone? PlacementZone = null);
 
@@ -303,9 +364,10 @@ internal sealed record AnnouncementImageApiRequest(
     string? JobSchedule = null,
     string? JobSalary = null,
     string? JobImageStyle = null,
-    List<string>? JobRequirements = null)
+    List<string>? JobRequirements = null,
+    string? Language = null)
 {
-    public AnnouncementImageRequest ToServiceRequest(BrandContext? brandContext, string? logoBase64 = null) =>
+    public AnnouncementImageRequest ToServiceRequest(BrandContext? brandContext, string? logoBase64, string language) =>
         new(
             this.PostType,
             this.Content ?? string.Empty,
@@ -318,5 +380,6 @@ internal sealed record AnnouncementImageApiRequest(
             this.JobSchedule,
             this.JobSalary,
             this.JobImageStyle,
-            this.JobRequirements);
+            this.JobRequirements,
+            language);
 }

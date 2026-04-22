@@ -13,6 +13,7 @@ import {
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 
 const NAME_MAX = 80;
 
@@ -32,13 +33,17 @@ export function KeepImageModal({
   defaultName,
   onCancel,
   onConfirm,
-  title = 'Name this image',
-  body = 'Give it a descriptive name so you can find it later.',
+  title,
+  body,
   icon = 'bookmark-outline',
-  submitLabel = 'Save',
+  submitLabel,
 }: KeepImageModalProps) {
   const { colors } = useTheme();
+  const t = useT();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const resolvedTitle = title ?? t('keepModal.title');
+  const resolvedBody = body ?? t('keepModal.body');
+  const resolvedSubmit = submitLabel ?? t('keepModal.submitDefault');
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -54,11 +59,11 @@ export function KeepImageModal({
   async function handleSave() {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('Please enter a name.');
+      setError(t('keepModal.nameRequired'));
       return;
     }
     if (trimmed.length > NAME_MAX) {
-      setError(`Name must be ${NAME_MAX} characters or fewer.`);
+      setError(t('keepModal.nameTooLong').replace('{max}', String(NAME_MAX)));
       return;
     }
     setSaving(true);
@@ -66,7 +71,7 @@ export function KeepImageModal({
     try {
       await onConfirm(trimmed);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save. Try again.');
+      setError(e instanceof Error ? e.message : t('keepModal.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -79,12 +84,12 @@ export function KeepImageModal({
           <View style={styles.iconWrap}>
             <Ionicons name={icon} size={26} color={colors.accent.primary} />
           </View>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.body}>{body}</Text>
+          <Text style={styles.title}>{resolvedTitle}</Text>
+          <Text style={styles.body}>{resolvedBody}</Text>
 
           <TextInput
             style={styles.input as any}
-            placeholder="e.g. Spring sale wallpaper"
+            placeholder={t('keepModal.placeholder')}
             placeholderTextColor={colors.text.muted}
             value={name}
             onChangeText={(t) => {
@@ -109,7 +114,7 @@ export function KeepImageModal({
               onPress={onCancel}
               disabled={saving}
             >
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{t('common.cancel')}</Text>
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.saveBtn, (pressed || saving) && { opacity: 0.8 }]}
@@ -119,7 +124,7 @@ export function KeepImageModal({
               {saving ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.saveText}>{submitLabel}</Text>
+                <Text style={styles.saveText}>{resolvedSubmit}</Text>
               )}
             </Pressable>
           </View>

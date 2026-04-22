@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,13 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Pagination } from '@/components/ui/Pagination';
@@ -26,11 +33,15 @@ import { ProductFilterBar, ProductFilterState } from '@/components/ui/ProductFil
 import { ProductImage } from '@/components/ui/ProductImage';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
+import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import {
   createProduct,
+  type Currency,
+  currencySymbol,
   deleteProduct,
-  fetchProductCategories,
+  formatPrice,
   type ProductDetail,
   type ProductFilters,
   type ProductItem,
@@ -47,6 +58,7 @@ function toMetadata(detail: ProductDetail): ProductItem {
     id: detail.id,
     name: detail.name,
     price: detail.price,
+    currency: detail.currency,
     category: detail.category,
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt,
@@ -54,16 +66,46 @@ function toMetadata(detail: ProductDetail): ProductItem {
   };
 }
 
+const CURRENCY_CHOICES: Currency[] = ['USD', 'EUR', 'RON'];
+
 const isWeb = Platform.OS === 'web';
-const MAX_CONTENT_WIDTH = 1200;
-const WEB_H_PADDING = 32;
+const MAX_CONTENT_WIDTH = 1600;
+const WEB_H_PADDING = 64;
 const MOBILE_H_PADDING = D.spacing.md;
-const GAP = D.spacing.sm;
+const GAP = D.spacing.md;
+
+type SectionLabelProps = {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  text: string;
+  color: string;
+  mutedColor: string;
+};
+
+function SectionLabel({ icon, text, color, mutedColor }: SectionLabelProps) {
+  return (
+    <View
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: D.spacing.xs }}
+    >
+      <Ionicons name={icon} size={13} color={color} />
+      <Text
+        style={{
+          fontSize: 11,
+          fontWeight: D.fontWeight.semibold,
+          color: mutedColor,
+          textTransform: 'uppercase',
+          letterSpacing: 0.8,
+        }}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
 
 export default function ProductsScreen() {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const styles = useMemo(() => makeStyles(colors, screenHeight), [colors, screenHeight]);
   const router = useRouter();
   const { isAdmin } = useAuth();
 
@@ -86,13 +128,15 @@ export default function ProductsScreen() {
     minPrice: '',
     maxPrice: '',
   });
-  const [categories, setCategories] = useState<string[]>([]);
+  const { profile: shopProfile, categories, refreshCategories } = useShop();
+  const t = useT();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draftPrice, setDraftPrice] = useState('');
+  const [draftCurrency, setDraftCurrency] = useState<Currency>('USD');
   const [draftCategory, setDraftCategory] = useState('');
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [addingNewCategory, setAddingNewCategory] = useState(false);
@@ -110,6 +154,8 @@ export default function ProductsScreen() {
   const [priceError, setPriceError] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  const listRef = useRef<FlatList<ProductItem>>(null);
+
   // Reference image similarity search
   const [isFindingSimilar, setIsFindingSimilar] = useState(false);
   const [similarResults, setSimilarResults] = useState<ReferenceImage[] | null>(null);
@@ -119,7 +165,7 @@ export default function ProductsScreen() {
   const SIMILAR_PAGE_SIZE = 4;
 
   const useSidebar = isWeb && screenWidth >= 900;
-  const SIDEBAR_WIDTH = 260;
+  const SIDEBAR_WIDTH = 272;
   const SIDEBAR_GAP = D.spacing.lg;
 
   // Responsive column count
@@ -128,7 +174,15 @@ export default function ProductsScreen() {
   const gridInnerWidth = useSidebar
     ? baseWidth - hPadding * 2 - SIDEBAR_WIDTH - SIDEBAR_GAP
     : baseWidth - hPadding * 2;
-  const numColumns = isWeb ? (gridInnerWidth < 420 ? 2 : gridInnerWidth < 720 ? 3 : 4) : 2;
+  const numColumns = isWeb
+    ? gridInnerWidth < 420
+      ? 2
+      : gridInnerWidth < 720
+        ? 3
+        : gridInnerWidth < 1100
+          ? 4
+          : 5
+    : 2;
   const cardWidth = (gridInnerWidth - GAP * (numColumns - 1)) / numColumns;
 
   const toApiFilters = useCallback((f: ProductFilterState): ProductFilters => {
@@ -146,17 +200,10 @@ export default function ProductsScreen() {
     return apiFilters;
   }, []);
 
-  const loadCategories = useCallback(() => {
-    fetchProductCategories()
-      .then(setCategories)
-      .catch(() => {});
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
       void productsCache.ensureLoaded(toApiFilters(filters));
-      loadCategories();
-    }, [filters, loadCategories, toApiFilters])
+    }, [filters, toApiFilters])
   );
 
   function handleFiltersChange(next: ProductFilterState) {
@@ -164,10 +211,13 @@ export default function ProductsScreen() {
     void productsCache.setFiltersAndReload(toApiFilters(next));
   }
 
+  const shopCurrency = (shopProfile?.currency ?? 'USD') as Currency;
+
   function openAddModal() {
     setEditingProduct(null);
     setDraftName('');
     setDraftPrice('');
+    setDraftCurrency(shopCurrency);
     setDraftCategory('');
     setCategoryDropdownOpen(false);
     setAddingNewCategory(false);
@@ -182,6 +232,7 @@ export default function ProductsScreen() {
     setEditingProduct(product);
     setDraftName(product.name);
     setDraftPrice(String(product.price));
+    setDraftCurrency((product.currency ?? shopCurrency) as Currency);
     setDraftCategory(product.category ?? '');
     setCategoryDropdownOpen(false);
     setAddingNewCategory(false);
@@ -342,6 +393,7 @@ export default function ProductsScreen() {
       const payload = {
         name: draftName.trim(),
         price: parseFloat(draftPrice),
+        currency: draftCurrency,
         imageBase64,
         category: trimmedCategory.length > 0 ? trimmedCategory : null,
       };
@@ -360,7 +412,7 @@ export default function ProductsScreen() {
         }
         productsCache.addItem(toMetadata(created));
       }
-      loadCategories();
+      void refreshCategories();
       closeModal();
     } catch (err: unknown) {
       setNameError(err instanceof Error ? err.message : 'Save failed. Please try again.');
@@ -374,6 +426,7 @@ export default function ProductsScreen() {
     productImageCache.evict(id);
     try {
       await deleteProduct(id);
+      void refreshCategories();
     } catch {
       void productsCache.refresh();
     }
@@ -381,9 +434,10 @@ export default function ProductsScreen() {
 
   const renderProduct = ({ item }: { item: ProductItem }) => (
     <Pressable
-      style={({ pressed }) => [
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
         styles.productCard,
         { width: cardWidth },
+        hovered && styles.cardHovered,
         pressed && styles.cardPressed,
       ]}
       onPress={() => openEditModal(item)}
@@ -391,9 +445,12 @@ export default function ProductsScreen() {
       accessibilityLabel={`Edit ${item.name}`}
     >
       <View style={[styles.productImageArea, { height: cardWidth }]}>
-        <ProductImage id={item.id} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <View style={styles.productImageInset} pointerEvents="none">
+          <ProductImage id={item.id} style={styles.productImageFit} resizeMode="contain" />
+        </View>
+
         <Pressable
-          style={({ pressed }) => [styles.deleteButton, pressed && { opacity: 0.7 }]}
+          style={({ pressed }) => [styles.deleteButton, pressed && styles.deleteButtonPressed]}
           onPress={(e) => {
             e.stopPropagation?.();
             setConfirmDeleteId(item.id);
@@ -404,18 +461,26 @@ export default function ProductsScreen() {
         >
           <Ionicons name="trash-outline" size={13} color="#fff" />
         </Pressable>
+
+        <View style={styles.editHint}>
+          <Ionicons name="create-outline" size={12} color="#fff" />
+        </View>
       </View>
       <View style={styles.productInfo}>
         {item.category ? (
-          <Text style={styles.categoryPill} numberOfLines={1}>
-            {item.category}
-          </Text>
-        ) : null}
+          <View style={styles.categoryPillWrap}>
+            <Text style={styles.categoryPill} numberOfLines={1}>
+              {item.category}
+            </Text>
+          </View>
+        ) : (
+          <View style={{ height: 14 }} />
+        )}
         <Text style={styles.productName} numberOfLines={2}>
           {item.name}
         </Text>
         <View style={styles.priceBadge}>
-          <Text style={styles.priceText}>${item.price.toFixed(2)}</Text>
+          <Text style={styles.priceText}>{formatPrice(item.price, item.currency)}</Text>
         </View>
       </View>
     </Pressable>
@@ -425,24 +490,31 @@ export default function ProductsScreen() {
     if (isLoading) {
       return (
         <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={colors.accent.primary} />
+          <View style={styles.loaderHalo}>
+            <ActivityIndicator size="large" color={colors.accent.primary} />
+          </View>
+          <Text style={[styles.emptySubtitle, { marginTop: D.spacing.md }]}>Loading catalog…</Text>
         </View>
       );
     }
     if (error) {
       return (
         <View style={styles.centerFill}>
-          <Ionicons
-            name="cloud-offline-outline"
-            size={40}
-            color={colors.text.muted}
-            style={{ marginBottom: D.spacing.sm }}
-          />
-          <Text style={styles.errorText}>{error}</Text>
+          <View style={styles.emptyIconCircle}>
+            <Ionicons name="cloud-offline-outline" size={40} color={colors.accent.primary} />
+          </View>
+          <Text style={styles.emptyTitle}>Couldn&apos;t load catalog</Text>
+          <Text style={styles.emptySubtitle}>{error}</Text>
           <Pressable
             style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
             onPress={() => void productsCache.refresh()}
           >
+            <Ionicons
+              name="refresh"
+              size={15}
+              color={colors.text.secondary}
+              style={{ marginRight: 6 }}
+            />
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
         </View>
@@ -459,18 +531,24 @@ export default function ProductsScreen() {
         return (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconCircle}>
-              <Ionicons name="search-outline" size={48} color={colors.accent.primary} />
+              <View style={styles.emptyIconInner}>
+                <Ionicons name="search-outline" size={40} color={colors.accent.primary} />
+              </View>
             </View>
-            <Text style={styles.emptyTitle}>No products match</Text>
-            <Text style={styles.emptySubtitle}>
-              Try adjusting your search, category, or price range.
-            </Text>
+            <Text style={styles.emptyTitle}>{t('products.filteredEmptyTitle')}</Text>
+            <Text style={styles.emptySubtitle}>{t('products.filteredEmptySubtitle')}</Text>
             <Pressable
               style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
               onPress={() =>
                 handleFiltersChange({ search: '', categories: [], minPrice: '', maxPrice: '' })
               }
             >
+              <Ionicons
+                name="close-circle-outline"
+                size={15}
+                color={colors.text.secondary}
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.retryText}>Clear filters</Text>
             </Pressable>
           </View>
@@ -479,29 +557,47 @@ export default function ProductsScreen() {
       return (
         <View style={styles.emptyState}>
           <View style={styles.emptyIconCircle}>
-            <Ionicons name="pricetag-outline" size={48} color={colors.accent.primary} />
+            <View style={styles.emptyIconInner}>
+              <Ionicons name="pricetag-outline" size={40} color={colors.accent.primary} />
+            </View>
           </View>
-          <Text style={styles.emptyTitle}>No products yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Add your first product to start building your catalog
-          </Text>
+          <Text style={styles.emptyTitle}>{t('products.emptyTitle')}</Text>
+          <Text style={styles.emptySubtitle}>{t('products.emptySubtitle')}</Text>
           <Pressable
             style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
             onPress={openAddModal}
             accessibilityRole="button"
           >
-            <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 4 }} />
-            <Text style={styles.addButtonText}>Add Product</Text>
+            <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 6 }} />
+            <Text style={styles.addButtonText}>{t('products.addButton')}</Text>
           </Pressable>
         </View>
       );
     }
+    const scrollListTop = () => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      if (isWeb && typeof window !== 'undefined') {
+        const doScroll = () => {
+          window.scrollTo(0, 0);
+          document.documentElement?.scrollTo?.(0, 0);
+          document.body?.scrollTo?.(0, 0);
+        };
+        doScroll();
+        requestAnimationFrame(() => {
+          doScroll();
+          requestAnimationFrame(doScroll);
+        });
+      }
+    };
     const footer = isWeb ? (
       <Pagination
         page={currentPage}
         pageSize={currentPageSize}
         total={totalProducts}
-        onPageChange={(p) => void productsCache.goToPage(p)}
+        onPageChange={(p) => {
+          void productsCache.goToPage(p);
+          scrollListTop();
+        }}
         disabled={isLoading}
       />
     ) : loadingMore ? (
@@ -512,6 +608,7 @@ export default function ProductsScreen() {
 
     return (
       <FlatList
+        ref={listRef}
         data={products}
         keyExtractor={(item) => item.id}
         numColumns={numColumns}
@@ -527,20 +624,56 @@ export default function ProductsScreen() {
     );
   };
 
+  // Page entrance: hero fades/slides in, content follows with a small delay
+  const heroOpacity = useSharedValue(0);
+  const heroTranslate = useSharedValue(12);
+  const gridOpacity = useSharedValue(0);
+  const gridTranslate = useSharedValue(16);
+  useEffect(() => {
+    heroOpacity.value = withTiming(1, { duration: 450, easing: Easing.out(Easing.cubic) });
+    heroTranslate.value = withTiming(0, { duration: 500, easing: Easing.out(Easing.cubic) });
+    gridOpacity.value = withDelay(120, withTiming(1, { duration: 450 }));
+    gridTranslate.value = withDelay(120, withTiming(0, { duration: 500 }));
+  }, [heroOpacity, heroTranslate, gridOpacity, gridTranslate]);
+  const heroAnimStyle = useAnimatedStyle(() => ({
+    opacity: heroOpacity.value,
+    transform: [{ translateY: heroTranslate.value }],
+  }));
+  const gridAnimStyle = useAnimatedStyle(() => ({
+    flex: 1,
+    opacity: gridOpacity.value,
+    transform: [{ translateY: gridTranslate.value }],
+  }));
+
   return (
     <View style={styles.root}>
+      {/* Ambient accent glow (behind content, desaturated) */}
+      <View pointerEvents="none" style={styles.ambientGlow} />
+      <View pointerEvents="none" style={styles.ambientGlow2} />
+
       <View style={styles.pageContainer}>
-        <View style={styles.pageHeader}>
-          <View>
-            <Text style={styles.pageTitle}>My Products</Text>
-            <Text style={styles.pageSubtitle}>
-              {totalProducts} {totalProducts === 1 ? 'item' : 'items'} in catalog
-            </Text>
+        <Animated.View style={[styles.pageHeader, heroAnimStyle]}>
+          <View style={styles.headerTextBlock}>
+            <View style={styles.eyebrowRow}>
+              <View style={styles.eyebrowDot} />
+              <Text style={styles.eyebrow}>Catalog</Text>
+            </View>
+            <Text style={styles.pageTitle}>{t('products.pageTitle')}</Text>
+            <View style={styles.subtitleRow}>
+              <View style={styles.countChip}>
+                <Ionicons name="cube-outline" size={12} color={colors.accent.primary} />
+                <Text style={styles.countChipText}>
+                  {totalProducts} {totalProducts === 1 ? 'item' : 'items'}
+                </Text>
+              </View>
+              <Text style={styles.pageSubtitle}>in your catalog</Text>
+            </View>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: D.spacing.xs }}>
+
+          <View style={styles.headerActions}>
             {isAdmin && (
               <Pressable
-                style={({ pressed }) => [styles.adminButton, pressed && { opacity: 0.7 }]}
+                style={({ pressed }) => [styles.adminButton, pressed && { opacity: 0.75 }]}
                 onPress={() => router.push('/add-products-professional')}
                 accessibilityRole="button"
                 accessibilityLabel="Admin: add professional reference photo"
@@ -554,51 +687,53 @@ export default function ProductsScreen() {
               accessibilityRole="button"
               accessibilityLabel="Add product"
             >
-              <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 4 }} />
-              <Text style={styles.addButtonText}>Add Product</Text>
+              <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.addButtonText}>{t('products.addButton')}</Text>
             </Pressable>
           </View>
-        </View>
+        </Animated.View>
 
-        {(() => {
-          const showFilter =
-            totalProducts > 0 ||
-            filters.search ||
-            filters.categories.length > 0 ||
-            filters.minPrice ||
-            filters.maxPrice;
-          const useSidebar = isWeb && screenWidth >= 900;
-          if (!showFilter) return listContent();
-          if (useSidebar) {
+        <Animated.View style={gridAnimStyle}>
+          {(() => {
+            const showFilter =
+              totalProducts > 0 ||
+              filters.search ||
+              filters.categories.length > 0 ||
+              filters.minPrice ||
+              filters.maxPrice;
+            const useSidebarLayout = isWeb && screenWidth >= 900;
+            if (!showFilter) return listContent();
+            if (useSidebarLayout) {
+              return (
+                <View style={styles.sidebarLayout}>
+                  <View style={styles.sidebar}>
+                    <ProductFilterBar
+                      value={filters}
+                      onChange={handleFiltersChange}
+                      categories={categories}
+                      layout="vertical"
+                      resultCount={isLoading ? undefined : totalProducts}
+                    />
+                  </View>
+                  <View style={styles.sidebarContent}>{listContent()}</View>
+                </View>
+              );
+            }
             return (
-              <View style={styles.sidebarLayout}>
-                <View style={styles.sidebar}>
+              <>
+                <View style={styles.filterBarWrap}>
                   <ProductFilterBar
                     value={filters}
                     onChange={handleFiltersChange}
                     categories={categories}
-                    layout="vertical"
                     resultCount={isLoading ? undefined : totalProducts}
                   />
                 </View>
-                <View style={styles.sidebarContent}>{listContent()}</View>
-              </View>
+                {listContent()}
+              </>
             );
-          }
-          return (
-            <>
-              <View style={styles.filterBarWrap}>
-                <ProductFilterBar
-                  value={filters}
-                  onChange={handleFiltersChange}
-                  categories={categories}
-                  resultCount={isLoading ? undefined : totalProducts}
-                />
-              </View>
-              {listContent()}
-            </>
-          );
-        })()}
+          })()}
+        </Animated.View>
       </View>
 
       {/* Delete confirmation */}
@@ -611,28 +746,29 @@ export default function ProductsScreen() {
         <Pressable style={styles.confirmOverlay} onPress={() => setConfirmDeleteId(null)}>
           <Pressable style={styles.confirmDialog} onPress={() => {}}>
             <View style={styles.confirmIconWrap}>
-              <Ionicons name="trash-outline" size={28} color="#EF4444" />
+              <View style={styles.confirmIconInner}>
+                <Ionicons name="trash-outline" size={26} color={colors.destructive} />
+              </View>
             </View>
-            <Text style={styles.confirmTitle}>Delete product?</Text>
-            <Text style={styles.confirmBody}>
-              This product will be permanently removed from your catalog.
-            </Text>
+            <Text style={styles.confirmTitle}>{t('products.deleteConfirm.title')}</Text>
+            <Text style={styles.confirmBody}>{t('products.deleteConfirm.body')}</Text>
             <View style={styles.confirmActions}>
               <Pressable
                 style={({ pressed }) => [styles.confirmCancel, pressed && { opacity: 0.7 }]}
                 onPress={() => setConfirmDeleteId(null)}
               >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
+                <Text style={styles.confirmCancelText}>{t('common.cancel')}</Text>
               </Pressable>
               <Pressable
-                style={({ pressed }) => [styles.confirmDelete, pressed && { opacity: 0.8 }]}
+                style={({ pressed }) => [styles.confirmDelete, pressed && { opacity: 0.85 }]}
                 onPress={() => {
                   const id = confirmDeleteId;
                   setConfirmDeleteId(null);
                   if (id) void handleDelete(id);
                 }}
               >
-                <Text style={styles.confirmDeleteText}>Delete</Text>
+                <Ionicons name="trash" size={14} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.confirmDeleteText}>{t('common.delete')}</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -641,7 +777,6 @@ export default function ProductsScreen() {
 
       {/* Add / Edit Modal */}
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={closeModal}>
-        {/* Overlay — always centered on web, bottom sheet on native */}
         <Pressable style={styles.modalOverlay} onPress={closeModal}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -652,37 +787,47 @@ export default function ProductsScreen() {
               onPress={() => {}}
             >
               {!isWeb && <View style={styles.modalHandle} />}
+
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={!isWeb && styles.modalScrollContent}
               >
                 {showSimilarModal ? (
                   <>
-                    <View style={styles.similarHeader}>
+                    <View style={styles.modalHeaderRow}>
+                      <View style={styles.modalHeaderIcon}>
+                        <Ionicons name="sparkles-outline" size={18} color={colors.accent.primary} />
+                      </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.similarTitle}>Professional References</Text>
-                        <Text style={styles.similarSubtitle}>
+                        <Text style={styles.modalTitle}>Professional References</Text>
+                        <Text style={styles.modalSubtitle}>
                           Tap a photo to use it as your product reference image.
                         </Text>
                       </View>
                       <Pressable
-                        style={({ pressed }) => [
-                          styles.similarCloseBtn,
-                          pressed && { opacity: 0.6 },
-                        ]}
+                        style={({ pressed }) => [styles.modalCloseBtn, pressed && { opacity: 0.6 }]}
                         onPress={() => setShowSimilarModal(false)}
                         accessibilityRole="button"
                         accessibilityLabel="Close"
                         hitSlop={8}
                       >
-                        <Ionicons name="close" size={20} color={colors.text.secondary} />
+                        <Ionicons name="close" size={18} color={colors.text.secondary} />
                       </Pressable>
                     </View>
 
                     {similarResults?.length === 0 ? (
                       <View style={styles.similarEmpty}>
-                        <Ionicons name="search-outline" size={36} color={colors.text.muted} />
-                        <Text style={styles.errorText}>
+                        <View style={styles.emptyIconCircle}>
+                          <View style={styles.emptyIconInner}>
+                            <Ionicons
+                              name="search-outline"
+                              size={34}
+                              color={colors.accent.primary}
+                            />
+                          </View>
+                        </View>
+                        <Text style={styles.emptyTitle}>No matches</Text>
+                        <Text style={styles.emptySubtitle}>
                           No similar products found in the reference library.
                         </Text>
                       </View>
@@ -708,7 +853,7 @@ export default function ProductsScreen() {
                                       flexBasis: `${100 / numCols}%`,
                                       maxWidth: `${100 / numCols}%`,
                                     },
-                                    pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+                                    pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
                                   ]}
                                   onPress={() => selectReferenceImage(item)}
                                   accessibilityRole="button"
@@ -724,6 +869,12 @@ export default function ProductsScreen() {
                                         resizeMode="contain"
                                       />
                                       <View style={styles.similarMatchBadge}>
+                                        <Ionicons
+                                          name="flash"
+                                          size={10}
+                                          color="#fff"
+                                          style={{ marginRight: 3 }}
+                                        />
                                         <Text style={styles.similarMatchText}>
                                           {Math.round(item.similarity * 100)}%
                                         </Text>
@@ -809,7 +960,47 @@ export default function ProductsScreen() {
                   </>
                 ) : showPreview ? (
                   <>
-                    <Text style={styles.modalTitle}>Preview Photo</Text>
+                    <View style={styles.modalHeaderRow}>
+                      <View style={styles.modalHeaderIcon}>
+                        <Ionicons name="image-outline" size={18} color={colors.accent.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.modalTitle}>Preview Photo</Text>
+                        <Text style={styles.modalSubtitle}>
+                          Enhance your photo before using it.
+                        </Text>
+                      </View>
+                      <Pressable
+                        style={({ pressed }) => [styles.modalCloseBtn, pressed && { opacity: 0.6 }]}
+                        onPress={() => setShowPreview(false)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Back"
+                        hitSlop={8}
+                      >
+                        <Ionicons name="arrow-back" size={18} color={colors.text.secondary} />
+                      </Pressable>
+                    </View>
+
+                    {/* Step indicator */}
+                    <View style={styles.stepIndicator}>
+                      <View style={[styles.stepPill, styles.stepPillActive]}>
+                        <Text style={styles.stepPillTextActive}>1 · Preview</Text>
+                      </View>
+                      <View style={styles.stepConnector} />
+                      <View style={[styles.stepPill, previewProcessedB64 && styles.stepPillActive]}>
+                        <Text
+                          style={
+                            previewProcessedB64 ? styles.stepPillTextActive : styles.stepPillText
+                          }
+                        >
+                          2 · Enhance
+                        </Text>
+                      </View>
+                      <View style={styles.stepConnector} />
+                      <View style={styles.stepPill}>
+                        <Text style={styles.stepPillText}>3 · Confirm</Text>
+                      </View>
+                    </View>
 
                     <View style={styles.previewImageWrap}>
                       <Image
@@ -821,28 +1012,26 @@ export default function ProductsScreen() {
                         style={styles.previewImage}
                         resizeMode="contain"
                       />
+                      {previewProcessedB64 && (
+                        <View style={styles.previewBadge}>
+                          <Ionicons name="checkmark-circle" size={12} color="#fff" />
+                          <Text style={styles.previewBadgeText}>Background removed</Text>
+                        </View>
+                      )}
                     </View>
 
-                    {previewProcessedB64 && (
-                      <Text style={styles.previewToggleLabel}>Showing: background removed</Text>
-                    )}
-
                     {removeBgError && (
-                      <Text
-                        style={[
-                          styles.fieldError,
-                          { textAlign: 'center', marginBottom: D.spacing.sm },
-                        ]}
-                      >
-                        {removeBgError}
-                      </Text>
+                      <View style={styles.inlineErrorBanner}>
+                        <Ionicons name="alert-circle-outline" size={14} color={colors.text.error} />
+                        <Text style={styles.inlineErrorText}>{removeBgError}</Text>
+                      </View>
                     )}
 
                     <Pressable
                       style={({ pressed }) => [
-                        styles.removeBgButton,
+                        styles.enhanceButton,
                         isRemovingBg && { opacity: 0.7 },
-                        pressed && !isRemovingBg && { opacity: 0.85 },
+                        pressed && !isRemovingBg && { opacity: 0.88 },
                       ]}
                       onPress={() => void handleRemoveBackground()}
                       disabled={isRemovingBg}
@@ -851,24 +1040,30 @@ export default function ProductsScreen() {
                         <ActivityIndicator size="small" color={colors.accent.primary} />
                       ) : (
                         <>
-                          <Ionicons
-                            name="cut-outline"
-                            size={16}
-                            color={colors.accent.primary}
-                            style={{ marginRight: D.spacing.xs }}
-                          />
-                          <Text style={styles.removeBgButtonText}>
-                            {previewProcessedB64 ? 'Remove Background Again' : 'Remove Background'}
-                          </Text>
+                          <View style={styles.enhanceIconWrap}>
+                            <Ionicons name="cut-outline" size={14} color={colors.accent.primary} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.enhanceButtonTitle}>
+                              {previewProcessedB64
+                                ? 'Remove Background Again'
+                                : 'Remove Background'}
+                            </Text>
+                            <Text style={styles.enhanceButtonSubtitle}>
+                              AI-powered, one-tap cleanup
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={14} color={colors.text.muted} />
                         </>
                       )}
                     </Pressable>
 
                     <Pressable
                       style={({ pressed }) => [
-                        styles.findSimilarButton,
+                        styles.enhanceButton,
+                        styles.enhanceButtonAlt,
                         isFindingSimilar && { opacity: 0.7 },
-                        pressed && !isFindingSimilar && { opacity: 0.85 },
+                        pressed && !isFindingSimilar && { opacity: 0.88 },
                       ]}
                       onPress={() => void handleFindSimilar()}
                       disabled={isFindingSimilar}
@@ -877,33 +1072,36 @@ export default function ProductsScreen() {
                         <ActivityIndicator size="small" color={colors.accent.secondary} />
                       ) : (
                         <>
-                          <Ionicons
-                            name="search-outline"
-                            size={16}
-                            color={colors.accent.secondary}
-                            style={{ marginRight: D.spacing.xs }}
-                          />
-                          <Text style={styles.findSimilarButtonText}>
-                            Find Professional Reference
-                          </Text>
+                          <View style={[styles.enhanceIconWrap, styles.enhanceIconWrapAlt]}>
+                            <Ionicons
+                              name="sparkles-outline"
+                              size={14}
+                              color={colors.accent.secondary}
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.enhanceButtonTitle}>
+                              Find Professional Reference
+                            </Text>
+                            <Text style={styles.enhanceButtonSubtitle}>
+                              Swap in a studio-quality match
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={14} color={colors.text.muted} />
                         </>
                       )}
                     </Pressable>
 
                     {similarError && (
-                      <Text
-                        style={[
-                          styles.fieldError,
-                          { textAlign: 'center', marginBottom: D.spacing.sm },
-                        ]}
-                      >
-                        {similarError}
-                      </Text>
+                      <View style={styles.inlineErrorBanner}>
+                        <Ionicons name="alert-circle-outline" size={14} color={colors.text.error} />
+                        <Text style={styles.inlineErrorText}>{similarError}</Text>
+                      </View>
                     )}
 
                     <View style={styles.modalActions}>
                       <Pressable
-                        style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.7 }]}
+                        style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.75 }]}
                         onPress={() => confirmImageChoice(false)}
                       >
                         <Text style={styles.cancelButtonText}>Use Original</Text>
@@ -912,24 +1110,67 @@ export default function ProductsScreen() {
                         style={({ pressed }) => [
                           styles.saveButton,
                           !previewProcessedB64 && styles.saveButtonDisabled,
-                          pressed && !!previewProcessedB64 && { opacity: 0.85 },
+                          pressed && !!previewProcessedB64 && { opacity: 0.88 },
                         ]}
                         onPress={() => confirmImageChoice(true)}
                         disabled={!previewProcessedB64}
                       >
+                        <Ionicons
+                          name="checkmark"
+                          size={16}
+                          color="#fff"
+                          style={{ marginRight: 6 }}
+                        />
                         <Text style={styles.saveButtonText}>Use Processed</Text>
                       </Pressable>
                     </View>
                   </>
                 ) : (
                   <>
-                    <Text style={styles.modalTitle}>
-                      {editingProduct ? 'Edit Product' : 'New Product'}
-                    </Text>
+                    <View style={styles.modalHeaderRow}>
+                      <View style={styles.modalHeaderIcon}>
+                        <Ionicons
+                          name={editingProduct ? 'pencil-outline' : 'add-circle-outline'}
+                          size={18}
+                          color={colors.accent.primary}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.modalTitle}>
+                          {editingProduct
+                            ? t('products.modal.editTitle')
+                            : t('products.modal.newTitle')}
+                        </Text>
+                        <Text style={styles.modalSubtitle}>
+                          {editingProduct
+                            ? 'Update the details of this product.'
+                            : 'Add a new item to your catalog.'}
+                        </Text>
+                      </View>
+                      <Pressable
+                        style={({ pressed }) => [styles.modalCloseBtn, pressed && { opacity: 0.6 }]}
+                        onPress={closeModal}
+                        accessibilityRole="button"
+                        accessibilityLabel="Close"
+                        hitSlop={8}
+                      >
+                        <Ionicons name="close" size={18} color={colors.text.secondary} />
+                      </Pressable>
+                    </View>
 
                     {/* Photo picker */}
+                    <SectionLabel
+                      icon="camera-outline"
+                      text="Photo"
+                      color={colors.accent.primary}
+                      mutedColor={colors.text.muted}
+                    />
                     <Pressable
-                      style={({ pressed }) => [styles.imagePicker, pressed && { opacity: 0.8 }]}
+                      style={({ pressed }) => [
+                        styles.imagePicker,
+                        draftImageUri && styles.imagePickerFilled,
+                        pressed && { opacity: 0.85 },
+                      ]}
                       onPress={() => (isWeb ? void pickImage() : showPhotoSourcePicker())}
                       accessibilityRole="button"
                       accessibilityLabel="Pick product photo"
@@ -938,41 +1179,70 @@ export default function ProductsScreen() {
                         <Image
                           source={{ uri: draftImageUri }}
                           style={styles.imagePickerPreview}
-                          resizeMode="cover"
+                          resizeMode="contain"
                         />
                       ) : (
                         <View style={styles.imagePickerPlaceholder}>
-                          <Ionicons name="camera-outline" size={28} color={colors.text.muted} />
-                          <Text style={styles.imagePickerLabel}>Tap to add photo</Text>
+                          <View style={styles.imagePickerIconBadge}>
+                            <Ionicons
+                              name="camera-outline"
+                              size={22}
+                              color={colors.accent.primary}
+                            />
+                          </View>
+                          <Text style={styles.imagePickerLabel}>
+                            {t('products.modal.photoPlaceholder')}
+                          </Text>
+                          <Text style={styles.imagePickerHint}>PNG or JPG, up to 10 MB</Text>
                         </View>
                       )}
                       {draftImageUri && (
                         <View style={styles.imagePickerOverlay}>
-                          <Ionicons name="camera-outline" size={20} color="#fff" />
+                          <Ionicons name="camera-reverse-outline" size={16} color="#fff" />
+                          <Text style={styles.imagePickerOverlayText}>Change</Text>
                         </View>
                       )}
                     </Pressable>
 
                     {/* Name */}
                     <View style={styles.fieldGroup}>
-                      <Text style={styles.fieldLabel}>Product Name</Text>
+                      <SectionLabel
+                        icon="text-outline"
+                        text={t('products.modal.nameLabel')}
+                        color={colors.accent.primary}
+                        mutedColor={colors.text.muted}
+                      />
                       <TextInput
                         style={[styles.textInput, nameError ? styles.textInputError : null]}
                         placeholder="e.g. Artisan Coffee Blend"
                         placeholderTextColor={colors.text.muted}
                         value={draftName}
-                        onChangeText={(t) => {
-                          setDraftName(t);
+                        onChangeText={(txt) => {
+                          setDraftName(txt);
                           if (nameError) setNameError('');
                         }}
                         autoCorrect={false}
                       />
-                      {nameError ? <Text style={styles.fieldError}>{nameError}</Text> : null}
+                      {nameError ? (
+                        <View style={styles.inlineErrorBanner}>
+                          <Ionicons
+                            name="alert-circle-outline"
+                            size={13}
+                            color={colors.text.error}
+                          />
+                          <Text style={styles.inlineErrorText}>{nameError}</Text>
+                        </View>
+                      ) : null}
                     </View>
 
                     {/* Category */}
                     <View style={styles.fieldGroup}>
-                      <Text style={styles.fieldLabel}>Category</Text>
+                      <SectionLabel
+                        icon="pricetags-outline"
+                        text={t('products.modal.categoryLabel')}
+                        color={colors.accent.primary}
+                        mutedColor={colors.text.muted}
+                      />
                       {addingNewCategory ? (
                         <View style={styles.categoryInputRow}>
                           <TextInput
@@ -1018,7 +1288,7 @@ export default function ProductsScreen() {
                             ]}
                             numberOfLines={1}
                           >
-                            {draftCategory || 'Select a category'}
+                            {draftCategory || t('products.modal.categoryPlaceholder')}
                           </Text>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                             {draftCategory ? (
@@ -1104,18 +1374,66 @@ export default function ProductsScreen() {
                               size={16}
                               color={colors.accent.primary}
                             />
-                            <Text style={styles.categoryAddNewText}>New category</Text>
+                            <Text style={styles.categoryAddNewText}>
+                              {t('products.modal.newCategory')}
+                            </Text>
                           </Pressable>
                         </View>
                       )}
                     </View>
 
+                    {/* Currency */}
+                    <View style={styles.fieldGroup}>
+                      <SectionLabel
+                        icon="swap-horizontal-outline"
+                        text={t('products.modal.currencyLabel')}
+                        color={colors.accent.primary}
+                        mutedColor={colors.text.muted}
+                      />
+                      <View style={styles.currencyRow}>
+                        {CURRENCY_CHOICES.map((c) => {
+                          const selected = draftCurrency === c;
+                          return (
+                            <Pressable
+                              key={c}
+                              onPress={() => setDraftCurrency(c)}
+                              style={({ pressed }) => [
+                                styles.currencyChip,
+                                selected && styles.currencyChipSelected,
+                                pressed && { opacity: 0.85 },
+                              ]}
+                              accessibilityRole="radio"
+                              accessibilityState={{ selected }}
+                              accessibilityLabel={`Currency ${c}`}
+                            >
+                              <Text style={styles.currencySymbol}>{currencySymbol(c)}</Text>
+                              <Text
+                                style={[
+                                  styles.currencyChipText,
+                                  selected && { color: colors.accent.primary },
+                                ]}
+                              >
+                                {c}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+
                     {/* Price */}
                     <View style={styles.fieldGroup}>
-                      <Text style={styles.fieldLabel}>Price (USD)</Text>
+                      <SectionLabel
+                        icon="cash-outline"
+                        text={`${t('products.modal.priceLabel')} (${draftCurrency})`}
+                        color={colors.accent.primary}
+                        mutedColor={colors.text.muted}
+                      />
                       <View style={styles.priceInputRow}>
                         <View style={styles.priceCurrencyBadge}>
-                          <Text style={styles.priceCurrencyText}>$</Text>
+                          <Text style={styles.priceCurrencyText}>
+                            {currencySymbol(draftCurrency)}
+                          </Text>
                         </View>
                         <TextInput
                           style={[
@@ -1126,31 +1444,40 @@ export default function ProductsScreen() {
                           placeholder="0.00"
                           placeholderTextColor={colors.text.muted}
                           value={draftPrice}
-                          onChangeText={(t) => {
-                            setDraftPrice(t);
+                          onChangeText={(txt) => {
+                            setDraftPrice(txt);
                             if (priceError) setPriceError('');
                           }}
                           keyboardType="decimal-pad"
                         />
                       </View>
-                      {priceError ? <Text style={styles.fieldError}>{priceError}</Text> : null}
+                      {priceError ? (
+                        <View style={styles.inlineErrorBanner}>
+                          <Ionicons
+                            name="alert-circle-outline"
+                            size={13}
+                            color={colors.text.error}
+                          />
+                          <Text style={styles.inlineErrorText}>{priceError}</Text>
+                        </View>
+                      ) : null}
                     </View>
 
                     {/* Actions */}
                     <View style={styles.modalActions}>
                       <Pressable
-                        style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.7 }]}
+                        style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.75 }]}
                         onPress={closeModal}
                         accessibilityRole="button"
                         disabled={isSaving}
                       >
-                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                        <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
                           styles.saveButton,
                           isSaving && { opacity: 0.7 },
-                          pressed && !isSaving && { opacity: 0.85 },
+                          pressed && !isSaving && { opacity: 0.88 },
                         ]}
                         onPress={() => void saveProduct()}
                         accessibilityRole="button"
@@ -1160,7 +1487,15 @@ export default function ProductsScreen() {
                         {isSaving ? (
                           <ActivityIndicator size="small" color="#fff" />
                         ) : (
-                          <Text style={styles.saveButtonText}>Save Product</Text>
+                          <>
+                            <Ionicons
+                              name={editingProduct ? 'checkmark' : 'arrow-forward'}
+                              size={16}
+                              color="#fff"
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text style={styles.saveButtonText}>{t('products.modal.save')}</Text>
+                          </>
                         )}
                       </Pressable>
                     </View>
@@ -1175,52 +1510,132 @@ export default function ProductsScreen() {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+function makeStyles(colors: ReturnType<typeof useTheme>['colors'], windowHeight: number) {
+  const modalMaxHeight = Math.round(windowHeight * (isWeb ? 0.9 : 0.92));
   return StyleSheet.create({
     root: {
       flex: 1,
       backgroundColor: colors.bg.base,
       alignItems: isWeb ? 'center' : 'stretch',
     },
+    ambientGlow: {
+      position: 'absolute',
+      top: -140,
+      right: -80,
+      width: 360,
+      height: 360,
+      borderRadius: 360,
+      backgroundColor: colors.accent.primary,
+      opacity: 0.08,
+    },
+    ambientGlow2: {
+      position: 'absolute',
+      top: 120,
+      left: -120,
+      width: 280,
+      height: 280,
+      borderRadius: 280,
+      backgroundColor: colors.accent.secondary,
+      opacity: 0.05,
+    },
     pageContainer: {
       flex: 1,
       width: '100%',
       maxWidth: isWeb ? MAX_CONTENT_WIDTH : undefined,
     },
+
+    // ── Header ───────────────────────────────────────────────────────────
     pageHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      flexWrap: 'wrap',
       paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
-      paddingTop: D.spacing.lg,
-      paddingBottom: D.spacing.md,
+      paddingTop: D.spacing.xl,
+      paddingBottom: D.spacing.lg,
+      gap: D.spacing.md,
+    },
+    headerTextBlock: {
+      flex: 1,
+      flexGrow: 1,
+      flexShrink: 1,
+      minWidth: 220,
+    },
+    eyebrowRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 6,
+    },
+    eyebrowDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 6,
+      backgroundColor: colors.accent.primary,
+    },
+    eyebrow: {
+      fontSize: 11,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      textTransform: 'uppercase',
+      letterSpacing: 1.4,
     },
     pageTitle: {
-      fontSize: D.fontSize['2xl'],
+      fontSize: isWeb ? D.fontSize['3xl'] : D.fontSize['2xl'],
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
-      letterSpacing: -0.5,
+      letterSpacing: -0.8,
+      marginBottom: 6,
+    },
+    subtitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+    },
+    countChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingVertical: 3,
+      paddingHorizontal: 10,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    countChipText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.accent.primary,
     },
     pageSubtitle: {
       fontSize: D.fontSize.sm,
       color: colors.text.muted,
-      marginTop: 2,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
     },
     addButton: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.accent.primary,
-      paddingVertical: 9,
+      paddingVertical: 11,
       paddingHorizontal: D.spacing.md,
       borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.accent.secondary,
       ...D.shadow.glow,
     },
     addButtonPressed: {
-      opacity: 0.85,
+      opacity: 0.88,
+      transform: [{ scale: 0.98 }],
     },
     adminButton: {
-      width: 38,
-      height: 38,
+      width: 42,
+      height: 42,
       borderRadius: D.radius.pill,
       borderWidth: 1,
       borderColor: colors.accent.primary,
@@ -1232,61 +1647,126 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: '#fff',
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.semibold,
+      letterSpacing: 0.2,
     },
+
+    // ── Grid ─────────────────────────────────────────────────────────────
     grid: {
       paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
+      paddingTop: D.spacing.sm,
       paddingBottom: D.spacing.xl,
     },
     gridRow: {
       gap: GAP,
       marginBottom: GAP,
     },
+
+    // ── Product card ─────────────────────────────────────────────────────
     productCard: {
       backgroundColor: colors.bg.surface,
       borderRadius: D.radius.lg,
       borderWidth: 1,
-      borderColor: colors.border.default,
+      borderColor: colors.border.subtle,
       overflow: 'hidden',
       ...D.shadow.sm,
     },
+    cardHovered: {
+      borderColor: colors.accent.primary,
+      transform: [{ translateY: -2 }],
+      ...D.shadow.glow,
+    },
     cardPressed: {
-      opacity: 0.8,
+      opacity: 0.9,
+      transform: [{ scale: 0.985 }],
     },
     productImageArea: {
       backgroundColor: colors.bg.elevated,
       overflow: 'hidden',
       position: 'relative',
     },
-    productImagePlaceholder: {
-      flex: 1,
+    productImageInset: {
+      ...StyleSheet.absoluteFillObject,
+      padding: D.spacing.sm,
       alignItems: 'center',
       justifyContent: 'center',
     },
+    productImageFit: {
+      width: '100%',
+      height: '100%',
+    },
     deleteButton: {
       position: 'absolute',
-      top: D.spacing.xs,
-      right: D.spacing.xs,
+      top: D.spacing.sm,
+      right: D.spacing.sm,
+      width: 28,
+      height: 28,
+      borderRadius: D.radius.pill,
+      backgroundColor: 'rgba(239,68,68,0.9)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.25)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...D.shadow.sm,
+    },
+    deleteButtonPressed: {
+      opacity: 0.8,
+      transform: [{ scale: 0.94 }],
+    },
+    editHint: {
+      position: 'absolute',
+      top: D.spacing.sm,
+      left: D.spacing.sm,
       width: 26,
       height: 26,
       borderRadius: D.radius.pill,
-      backgroundColor: 'rgba(239,68,68,0.85)',
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.18)',
       alignItems: 'center',
       justifyContent: 'center',
     },
     productInfo: {
-      padding: D.spacing.sm,
+      padding: D.spacing.md,
       gap: D.spacing.xs,
+    },
+    categoryPillWrap: {
+      alignSelf: 'flex-start',
     },
     categoryPill: {
       fontSize: 10,
       color: colors.accent.primary,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
       textTransform: 'uppercase',
-      letterSpacing: 0.4,
+      letterSpacing: 0.8,
     },
+    productName: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+      lineHeight: 20,
+      letterSpacing: -0.2,
+    },
+    priceBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: colors.accent.dim,
+      borderRadius: D.radius.pill,
+      paddingVertical: 4,
+      paddingHorizontal: D.spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      marginTop: 2,
+    },
+    priceText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 0.1,
+    },
+
+    // ── Filter bar / sidebar ─────────────────────────────────────────────
     filterBarWrap: {
       paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
-      paddingBottom: D.spacing.xs,
+      paddingBottom: D.spacing.sm,
     },
     sidebarLayout: {
       flex: 1,
@@ -1296,13 +1776,15 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingBottom: D.spacing.lg,
     },
     sidebar: {
-      width: 260,
+      width: 272,
       flexShrink: 0,
     },
     sidebarContent: {
       flex: 1,
       minWidth: 0,
     },
+
+    // ── Category dropdown (used in modal) ────────────────────────────────
     categorySelectBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1312,7 +1794,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderColor: colors.border.default,
       borderRadius: D.radius.md,
       paddingHorizontal: D.spacing.md,
-      paddingVertical: 12,
+      paddingVertical: 10,
       gap: D.spacing.sm,
     },
     categorySelectBtnOpen: {
@@ -1346,7 +1828,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: 10,
+      paddingVertical: 11,
       paddingHorizontal: D.spacing.md,
       borderBottomWidth: 1,
       borderBottomColor: colors.border.subtle,
@@ -1363,7 +1845,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: D.spacing.sm,
-      paddingVertical: 10,
+      paddingVertical: 11,
       paddingHorizontal: D.spacing.md,
       backgroundColor: colors.bg.elevated,
       borderTopWidth: 1,
@@ -1380,8 +1862,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       gap: D.spacing.xs,
     },
     categoryCancelBtn: {
-      width: 40,
-      height: 44,
+      width: 44,
+      height: 48,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: D.radius.md,
@@ -1389,29 +1871,23 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderColor: colors.border.default,
       backgroundColor: colors.bg.surface,
     },
-    productName: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.text.primary,
-      lineHeight: 18,
-    },
-    priceBadge: {
-      alignSelf: 'flex-start',
-      backgroundColor: colors.accent.dim,
-      borderRadius: D.radius.pill,
-      paddingVertical: 3,
-      paddingHorizontal: D.spacing.sm,
-    },
-    priceText: {
-      fontSize: D.fontSize.xs,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.accent.primary,
-    },
+
+    // ── Loading / empty / error ─────────────────────────────────────────
     centerFill: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
       paddingBottom: D.spacing['2xl'],
+    },
+    loaderHalo: {
+      width: 84,
+      height: 84,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
     },
     errorText: {
       fontSize: D.fontSize.sm,
@@ -1420,11 +1896,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginBottom: D.spacing.md,
     },
     retryButton: {
-      paddingVertical: 9,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
       paddingHorizontal: D.spacing.lg,
       borderRadius: D.radius.pill,
       borderWidth: 1,
       borderColor: colors.border.default,
+      backgroundColor: colors.bg.surface,
     },
     retryText: {
       fontSize: D.fontSize.sm,
@@ -1439,20 +1918,33 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingBottom: D.spacing['2xl'],
     },
     emptyIconCircle: {
-      width: 88,
-      height: 88,
+      width: 104,
+      height: 104,
       borderRadius: D.radius.pill,
       backgroundColor: colors.accent.dim,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: D.spacing.md,
+      marginBottom: D.spacing.lg,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    emptyIconInner: {
+      width: 76,
+      height: 76,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.surface,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     emptyTitle: {
       fontSize: D.fontSize.lg,
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
       textAlign: 'center',
-      marginBottom: D.spacing.sm,
+      marginBottom: D.spacing.xs,
+      letterSpacing: -0.3,
     },
     emptySubtitle: {
       fontSize: D.fontSize.sm,
@@ -1460,22 +1952,26 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       textAlign: 'center',
       lineHeight: 20,
       marginBottom: D.spacing.lg,
+      maxWidth: 360,
     },
+
+    // ── Modal shell ──────────────────────────────────────────────────────
     modalScrollContent: {
       flexGrow: 1,
-      paddingVertical: D.spacing.lg,
+      paddingVertical: D.spacing.md,
     },
-    // ── Modal ────────────────────────────────────────────────────────────────
     modalOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.55)',
+      backgroundColor: 'rgba(0,0,0,0.66)',
       justifyContent: isWeb ? 'center' : 'flex-end',
       alignItems: 'center',
-      padding: isWeb ? D.spacing.md : 0,
+      paddingHorizontal: isWeb ? D.spacing.md : 0,
+      paddingVertical: isWeb ? D.spacing.md : 0,
     },
     modalKAV: {
       width: '100%',
-      maxWidth: isWeb ? 520 : undefined,
+      maxWidth: isWeb ? 560 : undefined,
+      alignSelf: 'center',
     },
     modalSheet: {
       backgroundColor: colors.bg.surface,
@@ -1483,34 +1979,79 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderTopLeftRadius: isWeb ? undefined : D.radius.xl,
       borderTopRightRadius: isWeb ? undefined : D.radius.xl,
       paddingHorizontal: D.spacing.md,
-      paddingTop: D.spacing.sm,
-      maxHeight: isWeb ? '90%' : '92%',
+      paddingTop: D.spacing.md,
+      maxHeight: modalMaxHeight,
       width: '100%',
+      alignSelf: 'stretch',
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      overflow: 'hidden',
       ...D.shadow.modal,
     },
     modalHandle: {
-      width: 36,
+      width: 40,
       height: 4,
       borderRadius: D.radius.pill,
       backgroundColor: colors.border.default,
       alignSelf: 'center',
       marginBottom: D.spacing.md,
     },
+    modalHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: D.spacing.sm,
+      marginBottom: D.spacing.md,
+    },
+    modalHeaderIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.dim,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      marginTop: 2,
+    },
     modalTitle: {
       fontSize: D.fontSize.xl,
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
-      marginBottom: D.spacing.md,
+      letterSpacing: -0.4,
     },
+    modalSubtitle: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      lineHeight: 19,
+      marginTop: 2,
+    },
+    modalCloseBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    // ── Modal content ────────────────────────────────────────────────────
     imagePicker: {
       width: '100%',
-      aspectRatio: 1.6,
+      aspectRatio: 2.2,
+      maxHeight: 220,
       borderRadius: D.radius.lg,
       backgroundColor: colors.bg.elevated,
       borderWidth: 1,
       borderColor: colors.border.default,
+      borderStyle: 'dashed',
       overflow: 'hidden',
       marginBottom: D.spacing.md,
+    },
+    imagePickerFilled: {
+      borderStyle: 'solid',
+      borderColor: colors.border.subtle,
     },
     imagePickerPreview: {
       width: '100%',
@@ -1520,31 +2061,50 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      gap: D.spacing.sm,
+      gap: 6,
+      paddingHorizontal: D.spacing.md,
+    },
+    imagePickerIconBadge: {
+      width: 48,
+      height: 48,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 4,
     },
     imagePickerLabel: {
       fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.secondary,
+    },
+    imagePickerHint: {
+      fontSize: D.fontSize.xs,
       color: colors.text.muted,
     },
     imagePickerOverlay: {
       position: 'absolute',
       bottom: D.spacing.sm,
       right: D.spacing.sm,
-      width: 32,
-      height: 32,
-      borderRadius: D.radius.pill,
-      backgroundColor: 'rgba(0,0,0,0.5)',
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: D.radius.pill,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.18)',
+    },
+    imagePickerOverlayText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.semibold,
+      color: '#fff',
     },
     fieldGroup: {
-      marginBottom: D.spacing.md,
-    },
-    fieldLabel: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.medium,
-      color: colors.text.secondary,
-      marginBottom: D.spacing.xs,
+      marginBottom: D.spacing.sm,
     },
     textInput: {
       backgroundColor: colors.bg.input,
@@ -1552,78 +2112,145 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderColor: colors.border.default,
       borderRadius: D.radius.md,
       paddingHorizontal: D.spacing.md,
-      paddingVertical: 12,
-      fontSize: D.fontSize.base,
+      paddingVertical: 10,
+      fontSize: D.fontSize.sm,
       color: colors.text.primary,
       flex: 1,
     },
     textInputError: {
       borderColor: colors.border.error,
     },
+    inlineErrorBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 6,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: D.radius.sm,
+      backgroundColor: 'rgba(248,113,113,0.08)',
+      borderWidth: 1,
+      borderColor: 'rgba(248,113,113,0.28)',
+    },
+    inlineErrorText: {
+      flex: 1,
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.error,
+    },
     fieldError: {
       fontSize: D.fontSize.xs,
       color: colors.text.error,
       marginTop: 4,
     },
+
+    // Currency chips
+    currencyRow: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+      flexWrap: 'wrap',
+    },
+    currencyChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.input,
+    },
+    currencyChipSelected: {
+      borderColor: colors.accent.primary,
+      backgroundColor: colors.accent.dim,
+    },
+    currencySymbol: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.secondary,
+    },
+    currencyChipText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.secondary,
+      letterSpacing: 0.3,
+    },
+
+    // Price input
     priceInputRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: D.spacing.sm,
     },
     priceCurrencyBadge: {
-      width: 40,
-      height: 48,
+      width: 46,
+      height: 42,
       borderRadius: D.radius.md,
-      backgroundColor: colors.bg.elevated,
+      backgroundColor: colors.accent.dim,
       borderWidth: 1,
-      borderColor: colors.border.default,
+      borderColor: colors.border.subtle,
       alignItems: 'center',
       justifyContent: 'center',
     },
     priceCurrencyText: {
       fontSize: D.fontSize.lg,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.text.secondary,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
     },
     priceInput: {
       flex: 1,
     },
+
     modalActions: {
       flexDirection: 'row',
       gap: D.spacing.sm,
-      marginTop: D.spacing.sm,
-      marginBottom: D.spacing.md,
+      marginTop: D.spacing.md,
+      marginBottom: D.spacing.sm,
     },
     cancelButton: {
       flex: 1,
-      paddingVertical: 13,
+      paddingVertical: 11,
       borderRadius: D.radius.pill,
       borderWidth: 1,
       borderColor: colors.border.default,
       alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.bg.elevated,
     },
     cancelButtonText: {
       fontSize: D.fontSize.base,
-      fontWeight: D.fontWeight.medium,
+      fontWeight: D.fontWeight.semibold,
       color: colors.text.secondary,
     },
     saveButton: {
       flex: 2,
-      paddingVertical: 13,
+      flexDirection: 'row',
+      paddingVertical: 11,
       borderRadius: D.radius.pill,
       backgroundColor: colors.accent.primary,
       alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.accent.secondary,
       ...D.shadow.glow,
     },
     saveButtonText: {
       fontSize: D.fontSize.base,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
       color: '#fff',
+      letterSpacing: 0.2,
     },
-    // ── Confirm delete dialog ─────────────────────────────────────────────
+    saveButtonDisabled: {
+      opacity: 0.4,
+      shadowOpacity: 0,
+      elevation: 0,
+    },
+
+    // ── Confirm delete dialog ────────────────────────────────────────────
     confirmOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.6)',
+      backgroundColor: 'rgba(0,0,0,0.7)',
       justifyContent: 'center',
       alignItems: 'center',
       padding: D.spacing.lg,
@@ -1631,26 +2258,42 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     confirmDialog: {
       backgroundColor: colors.bg.surface,
       borderRadius: D.radius.xl,
-      padding: D.spacing.lg,
+      padding: D.spacing.xl,
       width: '100%',
-      maxWidth: 360,
+      maxWidth: 380,
       alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
       ...D.shadow.modal,
     },
     confirmIconWrap: {
-      width: 56,
-      height: 56,
+      width: 72,
+      height: 72,
       borderRadius: D.radius.pill,
-      backgroundColor: 'rgba(239,68,68,0.12)',
+      backgroundColor: 'rgba(239,68,68,0.14)',
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: D.spacing.md,
+      borderWidth: 1,
+      borderColor: 'rgba(239,68,68,0.22)',
+    },
+    confirmIconInner: {
+      width: 52,
+      height: 52,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.surface,
+      borderWidth: 1,
+      borderColor: 'rgba(239,68,68,0.32)',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     confirmTitle: {
       fontSize: D.fontSize.lg,
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
-      marginBottom: D.spacing.sm,
+      marginBottom: D.spacing.xs,
+      textAlign: 'center',
+      letterSpacing: -0.3,
     },
     confirmBody: {
       fontSize: D.fontSize.sm,
@@ -1671,28 +2314,66 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderWidth: 1,
       borderColor: colors.border.default,
       alignItems: 'center',
+      backgroundColor: colors.bg.elevated,
     },
     confirmCancelText: {
       fontSize: D.fontSize.base,
-      fontWeight: D.fontWeight.medium,
+      fontWeight: D.fontWeight.semibold,
       color: colors.text.secondary,
     },
     confirmDelete: {
       flex: 1,
+      flexDirection: 'row',
       paddingVertical: 12,
       borderRadius: D.radius.pill,
-      backgroundColor: '#EF4444',
+      backgroundColor: colors.destructive,
       alignItems: 'center',
+      justifyContent: 'center',
     },
     confirmDeleteText: {
       fontSize: D.fontSize.base,
-      fontWeight: D.fontWeight.semibold,
+      fontWeight: D.fontWeight.bold,
       color: '#fff',
+      letterSpacing: 0.2,
     },
-    // ── Image preview / background removal ───────────────────────────────
-    previewSheet: {
-      paddingVertical: D.spacing.lg,
-      maxWidth: isWeb ? 480 : undefined,
+
+    // ── Preview / enhance ────────────────────────────────────────────────
+    stepIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      marginBottom: D.spacing.md,
+      flexWrap: 'wrap',
+    },
+    stepPill: {
+      paddingVertical: 4,
+      paddingHorizontal: 9,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    stepPillActive: {
+      backgroundColor: colors.accent.dim,
+      borderColor: colors.accent.primary,
+    },
+    stepPillText: {
+      fontSize: 10,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.muted,
+      letterSpacing: 0.4,
+    },
+    stepPillTextActive: {
+      fontSize: 10,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 0.4,
+    },
+    stepConnector: {
+      width: 12,
+      height: 1,
+      backgroundColor: colors.border.default,
     },
     previewImageWrap: {
       width: '100%',
@@ -1700,96 +2381,75 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderRadius: D.radius.lg,
       backgroundColor: colors.bg.elevated,
       borderWidth: 1,
-      borderColor: colors.border.default,
+      borderColor: colors.border.subtle,
       overflow: 'hidden',
       marginBottom: D.spacing.md,
+      position: 'relative',
     },
     previewImage: {
       width: '100%',
       height: '100%',
     },
-    previewToggleLabel: {
-      fontSize: D.fontSize.xs,
-      color: colors.text.muted,
-      textAlign: 'center',
-      marginBottom: D.spacing.sm,
-    },
-    removeBgButton: {
+    previewBadge: {
+      position: 'absolute',
+      top: D.spacing.sm,
+      left: D.spacing.sm,
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 11,
-      paddingHorizontal: D.spacing.md,
+      gap: 4,
+      paddingVertical: 5,
+      paddingHorizontal: 10,
       borderRadius: D.radius.pill,
+      backgroundColor: 'rgba(16,185,129,0.92)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.2)',
+    },
+    previewBadgeText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: '#fff',
+    },
+    enhanceButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      paddingVertical: 14,
+      paddingHorizontal: D.spacing.md,
+      borderRadius: D.radius.md,
       borderWidth: 1,
       borderColor: colors.accent.primary,
-      marginBottom: D.spacing.md,
-    },
-    removeBgButtonText: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.medium,
-      color: colors.accent.primary,
-    },
-    saveButtonDisabled: {
-      opacity: 0.4,
-    },
-    findSimilarButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 11,
-      paddingHorizontal: D.spacing.md,
-      borderRadius: D.radius.pill,
-      borderWidth: 1,
-      borderColor: colors.accent.secondary,
+      backgroundColor: colors.bg.inputFocus,
       marginBottom: D.spacing.sm,
     },
-    findSimilarButtonText: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.medium,
-      color: colors.accent.secondary,
+    enhanceButtonAlt: {
+      borderColor: colors.accent.secondary,
     },
-    // ── Professional References modal ────────────────────────────────────
-    similarSheet: {
-      backgroundColor: colors.bg.surface,
-      borderRadius: isWeb ? D.radius.xl : undefined,
-      borderTopLeftRadius: isWeb ? undefined : D.radius.xl,
-      borderTopRightRadius: isWeb ? undefined : D.radius.xl,
-      paddingHorizontal: D.spacing.lg,
-      paddingTop: isWeb ? D.spacing.lg : D.spacing.sm,
-      paddingBottom: D.spacing.lg,
-      width: '100%',
-      maxWidth: isWeb ? 880 : undefined,
-      maxHeight: isWeb ? '90%' : '92%',
-      ...D.shadow.modal,
-    },
-    similarHeader: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      justifyContent: 'space-between',
-      marginBottom: D.spacing.lg,
-      gap: D.spacing.md,
-    },
-    similarTitle: {
-      fontSize: D.fontSize.xl,
-      fontWeight: D.fontWeight.bold,
-      color: colors.text.primary,
-      letterSpacing: -0.3,
-      marginBottom: 4,
-    },
-    similarSubtitle: {
-      fontSize: D.fontSize.sm,
-      color: colors.text.muted,
-      lineHeight: 20,
-    },
-    similarCloseBtn: {
+    enhanceIconWrap: {
       width: 34,
       height: 34,
       borderRadius: D.radius.pill,
-      backgroundColor: colors.bg.elevated,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
       alignItems: 'center',
       justifyContent: 'center',
     },
+    enhanceIconWrapAlt: {
+      backgroundColor: colors.accent.dim,
+    },
+    enhanceButtonTitle: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.1,
+    },
+    enhanceButtonSubtitle: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginTop: 1,
+    },
+
+    // ── Similar references grid ─────────────────────────────────────────
     similarEmpty: {
       alignItems: 'center',
       justifyContent: 'center',
@@ -1809,7 +2469,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.bg.elevated,
       borderRadius: D.radius.lg,
       borderWidth: 1,
-      borderColor: colors.border.default,
+      borderColor: colors.border.subtle,
       overflow: 'hidden',
       ...D.shadow.sm,
     },
@@ -1827,12 +2487,16 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     similarMatchBadge: {
       position: 'absolute',
-      top: D.spacing.xs,
-      right: D.spacing.xs,
+      top: D.spacing.sm,
+      right: D.spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.accent.primary,
-      paddingHorizontal: D.spacing.sm,
-      paddingVertical: 3,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
       borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.2)',
       ...D.shadow.sm,
     },
     similarMatchText: {
@@ -1864,11 +2528,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       gap: D.spacing.sm,
       paddingTop: D.spacing.md,
       borderTopWidth: 1,
-      borderTopColor: colors.border.default,
+      borderTopColor: colors.border.subtle,
     },
     pageButton: {
-      width: 36,
-      height: 36,
+      width: 38,
+      height: 38,
       borderRadius: D.radius.pill,
       borderWidth: 1,
       borderColor: colors.border.default,
@@ -1893,7 +2557,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     pageDotActive: {
       backgroundColor: colors.accent.primary,
-      width: 20,
+      width: 22,
     },
     pageIndicator: {
       fontSize: D.fontSize.xs,

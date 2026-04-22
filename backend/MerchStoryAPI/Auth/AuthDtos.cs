@@ -4,7 +4,9 @@ public record RegisterRequest(string Email, string Password, string? ClientType 
 
 public record LoginRequest(string Email, string Password, string? ClientType = null);
 
-public record AuthResponse(string Token, string RefreshToken, string Email, string UserName, bool IsShopSetupComplete, bool IsAdmin);
+public record AuthResponse(string Token, string RefreshToken, string Email, string UserName, bool IsShopSetupComplete, bool IsAdmin, string PreferredLanguage);
+
+public record UpdateLanguageRequest(string Language);
 
 public record RefreshRequest(string RefreshToken);
 
@@ -25,7 +27,9 @@ public record ShopProfileRequest(
     string[] Addresses,
     string? InstagramHandle,
     string? FacebookHandle,
-    string? TikTokHandle);
+    string? TikTokHandle,
+    string Currency,
+    string GenerationLanguage);
 
 public record ShopProfileResponse(
     Guid Id,
@@ -44,5 +48,7 @@ public record ShopProfileResponse(
     string? InstagramHandle,
     string? FacebookHandle,
     string? TikTokHandle,
+    string Currency,
+    string GenerationLanguage,
     DateTime CreatedAt,
     DateTime UpdatedAt);

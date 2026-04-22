@@ -26,6 +26,7 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
 
         var sb = new StringBuilder();
         sb.AppendLine(systemContext);
+        sb.Append(LanguageInstruction.For(r.Language));
 
         // --- STRUCTURAL FORMAT ---
         sb.AppendLine($"\n### CANVAS FORMAT:");
