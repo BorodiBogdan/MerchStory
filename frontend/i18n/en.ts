@@ -433,6 +433,8 @@ const en = {
   'studio.optColorTheme': 'Color Theme',
   'studio.optText': 'Text Style',
   'studio.optColor': 'Color',
+  'studio.optNameColor': 'Name color',
+  'studio.optPriceColor': 'Price color',
   'studio.brandContext': 'Brand Context',
   'studio.brandContextHint': 'Choose which brand info to include in the AI prompt',
   // Option labels used via OptionLabel
@@ -512,6 +514,7 @@ const en = {
   'studio.preset.badge': 'Badge',
   'studio.preset.outline': 'Outline',
   'studio.preset.friendly': 'Friendly',
+  'studio.preset.flyer': 'Flyer',
   // Browse products modal (title passed from parent)
   'studio.browseCatalog': 'Browse all products',
   'studio.browseSelected': 'Selected products',

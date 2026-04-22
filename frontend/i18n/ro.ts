@@ -442,6 +442,8 @@ const ro: Dictionary = {
   'studio.optColorTheme': 'Paletă',
   'studio.optText': 'Stil text',
   'studio.optColor': 'Culoare',
+  'studio.optNameColor': 'Culoare nume',
+  'studio.optPriceColor': 'Culoare preț',
   // Option labels
   'studio.opt.layout': 'Aranjament',
   'studio.opt.format': 'Format',
@@ -519,6 +521,7 @@ const ro: Dictionary = {
   'studio.preset.badge': 'Insignă',
   'studio.preset.outline': 'Contur',
   'studio.preset.friendly': 'Prietenos',
+  'studio.preset.flyer': 'Reclamă',
   // Browse products modal
   'studio.browseCatalog': 'Răsfoiește toate produsele',
   'studio.browseSelected': 'Produse selectate',

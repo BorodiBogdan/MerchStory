@@ -243,6 +243,7 @@ internal static class CatalogCompositor
     {
         const int PanelPadV = 8;
         bool hasPill = (style.PriceBadge ?? "None") == "Pill";
+        bool hasSticker = (style.PriceBadge ?? "None") == "Sticker";
 
         // Larger name→price gap when a pill is drawn so the pill's PadV (10) doesn't
         // push the pill against the name baseline.
@@ -251,10 +252,16 @@ internal static class CatalogCompositor
         bool hasName = showProductNames && nameFont != null && !string.IsNullOrWhiteSpace(product.Name);
         bool hasPrice = showPrices && priceFont != null;
 
-        // Name-only: scale the name font up toward the price-font size but clamp so the
-        // rendered string fits the cell width (the "allocated space for the image").
+        // Sticker badge overlays the image (bottom-right), so the price doesn't
+        // take any vertical space in the below-image text panel. The panel only
+        // contains the name in that mode.
+        bool priceInPanel = hasPrice && !hasSticker;
+
+        // Name-only (in the panel): scale the name font up toward the price-font size but
+        // clamp so the rendered string fits the cell width (the "allocated space for the
+        // image"). Sticker mode also uses the panel for the name alone, so it benefits too.
         Font? effectiveNameFont = nameFont;
-        if (hasName && !hasPrice)
+        if (hasName && !priceInPanel)
         {
             effectiveNameFont = UpsizeNameFont(nameFont!, priceFont, product.Name, inner.Width);
         }
@@ -266,7 +273,7 @@ internal static class CatalogCompositor
         // When a pill is drawn, reserve the full line-advance + 2*PadV vertical
         // space (pill extends beyond the tight glyph box) so the cell layout
         // allocates room for the pill's bottom edge rather than clipping it.
-        float priceH = hasPrice
+        float priceH = priceInPanel
             ? (hasPill
                 ? TextMeasurer.MeasureAdvance("$0.00", new TextOptions(priceFont!)).Height + 20f
                 : MeasureTextHeight(priceFont!, "$0.00"))
@@ -276,7 +283,7 @@ internal static class CatalogCompositor
 
         // Panel height is deterministic (depends only on fonts, not on product data)
         int panelH = 0;
-        if (hasName || hasPrice)
+        if (hasName || priceInPanel)
         {
             panelH = PanelPadV * 2;
             if (hasName)
@@ -284,7 +291,7 @@ internal static class CatalogCompositor
                 panelH += (int)nameH + textGap;
             }
 
-            if (hasPrice)
+            if (priceInPanel)
             {
                 panelH += (int)priceH + textGap;
             }
@@ -316,6 +323,13 @@ internal static class CatalogCompositor
         using Image<Rgba32> resized = productImg.Clone(ctx => ctx.Resize(imgW, imgH));
         canvas.Mutate(ctx => ctx.DrawImage(resized, new Point(imgX, imgY), 1f));
 
+        // Sticker price-badge is pinned to the bottom-right of the product image so
+        // the price reads as a retail-flyer chip rather than a caption below the card.
+        if (hasSticker && hasPrice)
+        {
+            DrawStickerBadge(canvas, FormatPrice(product), priceFont!, imgX, imgY, imgW, imgH, inner, style);
+        }
+
         if (panelH == 0)
         {
             return;
@@ -330,9 +344,9 @@ internal static class CatalogCompositor
             currentY += (int)nameH + textGap;
         }
 
-        if (hasPrice)
+        if (priceInPanel)
         {
-            if ((style.PriceBadge ?? "None") == "Pill")
+            if (hasPill)
             {
                 DrawPriceBadge(canvas, FormatPrice(product), priceFont!, inner.X, currentY, inner.Width, style);
             }
@@ -351,6 +365,13 @@ internal static class CatalogCompositor
         Font? priceFont,
         TextStyleOptions style)
     {
+        // Sticker badge anchors to a product image; with no image, fall back to Pill
+        // so the price still reads as a badge rather than disappearing.
+        if ((style.PriceBadge ?? "None") == "Sticker")
+        {
+            style = style with { PriceBadge = "Pill" };
+        }
+
         string? line1 = showProductNames && nameFont != null ? product.Name : null;
         string? line2 = showPrices && priceFont != null ? FormatPrice(product) : null;
 
@@ -538,6 +559,126 @@ internal static class CatalogCompositor
         // Softer composite (110/255 ≈ 43%) so the pill reads as a translucent plate
         // rather than an opaque stamp — this was the "ugly chunky badge" look.
         canvas.Mutate(ctx => ctx.DrawImage(layer, new Point((int)badgeX, (int)badgeY), 110f / 255f));
+    }
+
+    // ── Sticker badge drawing ─────────────────────────────────────────────────
+    // Retail-flyer style chip: opaque rounded rectangle pinned to the bottom-right
+    // corner of the product image with a subtle drop shadow. Unlike the Pill badge
+    // (translucent, below the image), the Sticker is fully opaque and overlays the
+    // image edge so it reads as a price tag applied to the product itself.
+    private static void DrawStickerBadge(
+        Image<Rgba32> canvas,
+        string text,
+        Font font,
+        int imgX,
+        int imgY,
+        int imgW,
+        int imgH,
+        Rectangle inner,
+        TextStyleOptions style)
+    {
+        var opts = new TextOptions(font);
+        float textW = TextMeasurer.MeasureSize(text, opts).Width;
+        float lineH = TextMeasurer.MeasureAdvance(text, opts).Height;
+
+        // Tighter padding than the Pill so the chip reads as a sticker, not a plate.
+        const int PadH = 22;
+        const int PadV = 8;
+        float badgeW = textW + (PadH * 2);
+        float badgeH = lineH + (PadV * 2);
+
+        // Retail-flyer stickers are consistently white — this lets the chip read as
+        // an applied price tag regardless of what color the user picks for the text.
+        // EnsureReadableOn only intervenes when the user's color is too close to white
+        // to stay legible (e.g. they pick white itself), flipping text to dark in that
+        // edge case. Otherwise the text renders in exactly the picked color.
+        Color textColor = ParseHexColor(style.PriceColor ?? style.NameColor ?? "#1e1e1e");
+        Color fillColor = Color.FromRgba(255, 255, 255, 255);
+        textColor = EnsureReadableOn(fillColor, textColor);
+
+        // Position: anchor the sticker's bottom-right to the image's bottom-right with
+        // a small outward overhang so the chip "sits on" the image edge rather than
+        // entirely inside it. Then clamp to the cell's inner rectangle so it never
+        // escapes its cell (important for small Showcase side-column cells).
+        const int OverhangX = 8;
+        const int OverhangY = 6;
+        int badgeX = imgX + imgW - (int)badgeW + OverhangX;
+        int badgeY = imgY + imgH - (int)badgeH + OverhangY;
+        badgeX = Math.Min(badgeX, (inner.X + inner.Width) - (int)badgeW);
+        badgeY = Math.Min(badgeY, (inner.Y + inner.Height) - (int)badgeH);
+        badgeX = Math.Max(badgeX, inner.X);
+        badgeY = Math.Max(badgeY, inner.Y);
+
+        // Soft-rounded corners (radius = h/4) — not a full capsule like the Pill.
+        float radius = Math.Max(4f, badgeH / 4f);
+
+        // Render on a separate layer so the rounded shape is built from overlapping
+        // primitives once, then composited cleanly (avoids seams between the rects
+        // and corner ellipses at high DPI).
+        const int LayerMargin = 8;
+        int layerW = (int)Math.Ceiling(badgeW) + (LayerMargin * 2);
+        int layerH = (int)Math.Ceiling(badgeH) + (LayerMargin * 2);
+        using var layer = new Image<Rgba32>(layerW, layerH, Color.Transparent);
+
+        // Drop shadow first (offset copy of the same shape), then the fill on top.
+        var shadowColor = Color.FromRgba(0, 0, 0, 64);
+        FillRoundedRect(layer, LayerMargin + 3, LayerMargin + 4, badgeW, badgeH, radius, shadowColor);
+        FillRoundedRect(layer, LayerMargin, LayerMargin, badgeW, badgeH, radius, fillColor);
+
+        // Price text centered inside the chip. Using VerticalAlignment=Center with
+        // Origin at the chip's center accounts for font ascender/descender metrics.
+        var textOpts = new RichTextOptions(font)
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Origin = new System.Numerics.Vector2(LayerMargin + (badgeW / 2f), LayerMargin + (badgeH / 2f)),
+        };
+        layer.Mutate(ctx => ctx.DrawText(textOpts, text, new SolidBrush(textColor)));
+
+        canvas.Mutate(ctx => ctx.DrawImage(layer, new Point(badgeX - LayerMargin, badgeY - LayerMargin), 1f));
+    }
+
+    private static void FillRoundedRect(
+        Image<Rgba32> target,
+        float x,
+        float y,
+        float w,
+        float h,
+        float r,
+        Color color)
+    {
+        // Rounded rect = horizontal bar + vertical bar + 4 corner circles.
+        // The two bars overlap in the middle; the circles fill the corners.
+        var horizontal = new RectangularPolygon(x, y + r, w, h - (2 * r));
+        var vertical = new RectangularPolygon(x + r, y, w - (2 * r), h);
+        var tl = new EllipsePolygon(x + r, y + r, r);
+        var tr = new EllipsePolygon((x + w) - r, y + r, r);
+        var bl = new EllipsePolygon(x + r, (y + h) - r, r);
+        var br = new EllipsePolygon((x + w) - r, (y + h) - r, r);
+
+        target.Mutate(ctx => ctx
+            .Fill(color, horizontal)
+            .Fill(color, vertical)
+            .Fill(color, tl)
+            .Fill(color, tr)
+            .Fill(color, bl)
+            .Fill(color, br));
+    }
+
+    // If the user's price/name color is too close to the sticker fill (e.g. white
+    // on white), swap to black/white so the price stays legible.
+    private static Color EnsureReadableOn(Color bg, Color fg)
+    {
+        var bgPx = bg.ToPixel<Rgba32>();
+        var fgPx = fg.ToPixel<Rgba32>();
+        float bgL = ((0.299f * bgPx.R) + (0.587f * bgPx.G) + (0.114f * bgPx.B)) / 255f;
+        float fgL = ((0.299f * fgPx.R) + (0.587f * fgPx.G) + (0.114f * fgPx.B)) / 255f;
+        if (Math.Abs(bgL - fgL) < 0.35f)
+        {
+            return bgL > 0.5f ? Color.FromRgba(30, 30, 30, 255) : Color.FromRgba(255, 255, 255, 255);
+        }
+
+        return fg;
     }
 
     // ── Styled text drawing ───────────────────────────────────────────────────
