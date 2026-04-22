@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,13 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Pagination } from '@/components/ui/Pagination';
@@ -609,6 +616,27 @@ export default function ProductsScreen() {
     );
   };
 
+  // Page entrance: hero fades/slides in, content follows with a small delay
+  const heroOpacity = useSharedValue(0);
+  const heroTranslate = useSharedValue(12);
+  const gridOpacity = useSharedValue(0);
+  const gridTranslate = useSharedValue(16);
+  useEffect(() => {
+    heroOpacity.value = withTiming(1, { duration: 450, easing: Easing.out(Easing.cubic) });
+    heroTranslate.value = withTiming(0, { duration: 500, easing: Easing.out(Easing.cubic) });
+    gridOpacity.value = withDelay(120, withTiming(1, { duration: 450 }));
+    gridTranslate.value = withDelay(120, withTiming(0, { duration: 500 }));
+  }, [heroOpacity, heroTranslate, gridOpacity, gridTranslate]);
+  const heroAnimStyle = useAnimatedStyle(() => ({
+    opacity: heroOpacity.value,
+    transform: [{ translateY: heroTranslate.value }],
+  }));
+  const gridAnimStyle = useAnimatedStyle(() => ({
+    flex: 1,
+    opacity: gridOpacity.value,
+    transform: [{ translateY: gridTranslate.value }],
+  }));
+
   return (
     <View style={styles.root}>
       {/* Ambient accent glow (behind content, desaturated) */}
@@ -616,7 +644,7 @@ export default function ProductsScreen() {
       <View pointerEvents="none" style={styles.ambientGlow2} />
 
       <View style={styles.pageContainer}>
-        <View style={styles.pageHeader}>
+        <Animated.View style={[styles.pageHeader, heroAnimStyle]}>
           <View style={styles.headerTextBlock}>
             <View style={styles.eyebrowRow}>
               <View style={styles.eyebrowDot} />
@@ -655,47 +683,49 @@ export default function ProductsScreen() {
               <Text style={styles.addButtonText}>{t('products.addButton')}</Text>
             </Pressable>
           </View>
-        </View>
+        </Animated.View>
 
-        {(() => {
-          const showFilter =
-            totalProducts > 0 ||
-            filters.search ||
-            filters.categories.length > 0 ||
-            filters.minPrice ||
-            filters.maxPrice;
-          const useSidebarLayout = isWeb && screenWidth >= 900;
-          if (!showFilter) return listContent();
-          if (useSidebarLayout) {
+        <Animated.View style={gridAnimStyle}>
+          {(() => {
+            const showFilter =
+              totalProducts > 0 ||
+              filters.search ||
+              filters.categories.length > 0 ||
+              filters.minPrice ||
+              filters.maxPrice;
+            const useSidebarLayout = isWeb && screenWidth >= 900;
+            if (!showFilter) return listContent();
+            if (useSidebarLayout) {
+              return (
+                <View style={styles.sidebarLayout}>
+                  <View style={styles.sidebar}>
+                    <ProductFilterBar
+                      value={filters}
+                      onChange={handleFiltersChange}
+                      categories={categories}
+                      layout="vertical"
+                      resultCount={isLoading ? undefined : totalProducts}
+                    />
+                  </View>
+                  <View style={styles.sidebarContent}>{listContent()}</View>
+                </View>
+              );
+            }
             return (
-              <View style={styles.sidebarLayout}>
-                <View style={styles.sidebar}>
+              <>
+                <View style={styles.filterBarWrap}>
                   <ProductFilterBar
                     value={filters}
                     onChange={handleFiltersChange}
                     categories={categories}
-                    layout="vertical"
                     resultCount={isLoading ? undefined : totalProducts}
                   />
                 </View>
-                <View style={styles.sidebarContent}>{listContent()}</View>
-              </View>
+                {listContent()}
+              </>
             );
-          }
-          return (
-            <>
-              <View style={styles.filterBarWrap}>
-                <ProductFilterBar
-                  value={filters}
-                  onChange={handleFiltersChange}
-                  categories={categories}
-                  resultCount={isLoading ? undefined : totalProducts}
-                />
-              </View>
-              {listContent()}
-            </>
-          );
-        })()}
+          })()}
+        </Animated.View>
       </View>
 
       {/* Delete confirmation */}

@@ -2,10 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
+  Animated as RNAnimated,
   FlatList,
   Modal,
   Platform,
@@ -15,6 +15,13 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GalleryFilterBar, type GalleryFilterState } from '@/components/ui/GalleryFilterBar';
@@ -68,7 +75,7 @@ export default function GalleryScreen() {
   const { items, total, page, pageSize, loading, loadingMore, error } = cache;
 
   const [activeTab, setActiveTab] = useState<GalleryTab>('photos');
-  const slideAnim = useMemo(() => new Animated.Value(0), []);
+  const slideAnim = useMemo(() => new RNAnimated.Value(0), []);
   const [lightboxItem, setLightboxItem] = useState<GalleryItem | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<GalleryItem | null>(null);
@@ -101,7 +108,7 @@ export default function GalleryScreen() {
 
   function switchTab(tab: GalleryTab) {
     setActiveTab(tab);
-    Animated.timing(slideAnim, {
+    RNAnimated.timing(slideAnim, {
       toValue: tab === 'photos' ? 0 : 1,
       duration: D.duration.normal,
       useNativeDriver: false,
@@ -393,6 +400,27 @@ export default function GalleryScreen() {
     outputRange: ['1%', '51%'],
   });
 
+  // Page entrance: hero fades/slides in, grid follows with a small delay
+  const heroOpacity = useSharedValue(0);
+  const heroTranslate = useSharedValue(12);
+  const gridOpacity = useSharedValue(0);
+  const gridTranslate = useSharedValue(16);
+  useEffect(() => {
+    heroOpacity.value = withTiming(1, { duration: 450, easing: Easing.out(Easing.cubic) });
+    heroTranslate.value = withTiming(0, { duration: 500, easing: Easing.out(Easing.cubic) });
+    gridOpacity.value = withDelay(120, withTiming(1, { duration: 450 }));
+    gridTranslate.value = withDelay(120, withTiming(0, { duration: 500 }));
+  }, [heroOpacity, heroTranslate, gridOpacity, gridTranslate]);
+  const heroAnimStyle = useAnimatedStyle(() => ({
+    opacity: heroOpacity.value,
+    transform: [{ translateY: heroTranslate.value }],
+  }));
+  const gridAnimStyle = useAnimatedStyle(() => ({
+    flex: 1,
+    opacity: gridOpacity.value,
+    transform: [{ translateY: gridTranslate.value }],
+  }));
+
   const photosCount = activeTab === 'photos' ? total : 0;
 
   return (
@@ -402,7 +430,7 @@ export default function GalleryScreen() {
       <View pointerEvents="none" style={styles.ambientGlow2} />
 
       <View style={styles.pageContainer}>
-        <View style={styles.pageHeader}>
+        <Animated.View style={[styles.pageHeader, heroAnimStyle]}>
           <View style={styles.headerTextBlock}>
             <View style={styles.eyebrowRow}>
               <View style={styles.eyebrowDot} />
@@ -431,7 +459,7 @@ export default function GalleryScreen() {
 
           {/* Photos / Videos segmented switcher — lives in the header */}
           <View style={styles.segmentTrack}>
-            <Animated.View style={[styles.segmentIndicator, { left: segmentIndicatorLeft }]} />
+            <RNAnimated.View style={[styles.segmentIndicator, { left: segmentIndicatorLeft }]} />
             <Pressable
               style={styles.segmentButton}
               onPress={() => switchTab('photos')}
@@ -470,34 +498,36 @@ export default function GalleryScreen() {
               {activeTab !== 'videos' && <View style={styles.segmentSoonDot} />}
             </Pressable>
           </View>
-        </View>
+        </Animated.View>
 
-        {activeTab === 'videos' ? (
-          videosContent
-        ) : useSidebar ? (
-          <View style={styles.sidebarLayout}>
-            <View style={styles.sidebar}>
-              <GalleryFilterBar
-                value={filters}
-                onChange={handleFiltersChange}
-                layout="vertical"
-                resultCount={loading ? undefined : total}
-              />
+        <Animated.View style={gridAnimStyle}>
+          {activeTab === 'videos' ? (
+            videosContent
+          ) : useSidebar ? (
+            <View style={styles.sidebarLayout}>
+              <View style={styles.sidebar}>
+                <GalleryFilterBar
+                  value={filters}
+                  onChange={handleFiltersChange}
+                  layout="vertical"
+                  resultCount={loading ? undefined : total}
+                />
+              </View>
+              <View style={styles.sidebarContent}>{photosContent()}</View>
             </View>
-            <View style={styles.sidebarContent}>{photosContent()}</View>
-          </View>
-        ) : (
-          <>
-            <View style={styles.filterBarWrap}>
-              <GalleryFilterBar
-                value={filters}
-                onChange={handleFiltersChange}
-                resultCount={loading ? undefined : total}
-              />
-            </View>
-            {photosContent()}
-          </>
-        )}
+          ) : (
+            <>
+              <View style={styles.filterBarWrap}>
+                <GalleryFilterBar
+                  value={filters}
+                  onChange={handleFiltersChange}
+                  resultCount={loading ? undefined : total}
+                />
+              </View>
+              {photosContent()}
+            </>
+          )}
+        </Animated.View>
       </View>
 
       <KeepImageModal
