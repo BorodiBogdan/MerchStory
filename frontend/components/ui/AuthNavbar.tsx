@@ -2,11 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
-
-const ACCENT = '#6366F1';
 
 interface AuthNavbarProps {
   /** Label for the right-side CTA button */
@@ -32,13 +31,7 @@ export function AuthNavbar({ ctaLabel, ctaHref }: AuthNavbarProps) {
           accessibilityRole="button"
           accessibilityLabel={t('tabs.home')}
         >
-          <View style={s.logoMark}>
-            <Ionicons name="color-wand" size={13} color="#fff" />
-          </View>
-          <Text style={s.logoWordmark}>
-            <Text style={s.logoWordmarkBold}>Merch</Text>
-            <Text style={s.logoWordmarkAccent}>Story</Text>
-          </Text>
+          <BrandLogo size="sm" variant="horizontal" />
         </Pressable>
 
         <View style={s.right}>
@@ -99,26 +92,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boole
       gap: D.spacing.xs,
       // @ts-ignore
       outlineWidth: 0,
-    },
-    logoMark: {
-      width: 26,
-      height: 26,
-      borderRadius: D.radius.sm,
-      backgroundColor: ACCENT,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    logoWordmark: {
-      fontSize: D.fontSize.lg,
-      letterSpacing: -0.5,
-    },
-    logoWordmarkBold: {
-      fontWeight: D.fontWeight.bold,
-      color: colors.text.primary,
-    },
-    logoWordmarkAccent: {
-      fontWeight: D.fontWeight.bold,
-      color: ACCENT,
     },
     right: {
       flexDirection: 'row',

@@ -7,13 +7,13 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useShop } from '@/context/shop';
@@ -53,13 +53,7 @@ export default function TabLayout() {
       accessibilityRole="button"
       accessibilityLabel={t('tabs.home')}
     >
-      <View style={styles.logoMark}>
-        <Ionicons name="color-wand" size={13} color="#fff" />
-      </View>
-      <Text style={styles.logoWordmark}>
-        <Text style={styles.logoWordmarkBold}>Merch</Text>
-        <Text style={styles.logoWordmarkAccent}>Story</Text>
-      </Text>
+      <BrandLogo size="sm" variant="horizontal" />
     </Pressable>
   );
 
@@ -190,29 +184,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     logoButton: {
       marginLeft: D.spacing.md,
       outlineWidth: 0,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: D.spacing.xs,
-    },
-    logoMark: {
-      width: 26,
-      height: 26,
-      borderRadius: D.radius.sm,
-      backgroundColor: colors.accent.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    logoWordmark: {
-      fontSize: D.fontSize.lg,
-      letterSpacing: -0.5,
-    },
-    logoWordmarkBold: {
-      fontWeight: D.fontWeight.bold,
-      color: colors.text.primary,
-    },
-    logoWordmarkAccent: {
-      fontWeight: D.fontWeight.bold,
-      color: colors.accent.primary,
     },
     headerActions: {
       flexDirection: 'row',
