@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -23,27 +24,38 @@ export function LogoutModal({ visible, onConfirm, onDismiss }: LogoutModalProps)
   const { colors } = useTheme();
   const t = useT();
   const [internalVisible, setInternalVisible] = useState(false);
-  const translateY = useSharedValue(500);
+  const opacity = useSharedValue(0);
+  const scale = useSharedValue(0.92);
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useEffect(() => {
     if (visible) {
       setInternalVisible(true);
-      translateY.value = withTiming(0, {
-        duration: D.duration.slow,
+      opacity.value = withTiming(1, {
+        duration: D.duration.normal,
+        easing: Easing.out(Easing.quad),
+      });
+      scale.value = withTiming(1, {
+        duration: D.duration.normal,
         easing: Easing.out(Easing.cubic),
       });
     } else {
-      translateY.value = withTiming(500, { duration: D.duration.normal }, (finished) => {
+      opacity.value = withTiming(0, { duration: D.duration.fast });
+      scale.value = withTiming(0.92, { duration: D.duration.fast }, (finished) => {
         if (finished) {
           runOnJS(setInternalVisible)(false);
         }
       });
     }
-  }, [visible, translateY]);
+  }, [visible, opacity, scale]);
+
+  const overlayAnimStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+  }));
 
   const cardAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
   }));
 
   function handleConfirm() {
@@ -68,33 +80,37 @@ export function LogoutModal({ visible, onConfirm, onDismiss }: LogoutModalProps)
       onRequestClose={handleDismiss}
       statusBarTranslucent
     >
-      <Pressable style={styles.overlay} onPress={handleDismiss}>
-        <View style={styles.overlayFill} />
-      </Pressable>
-      <View style={styles.sheetAnchor} pointerEvents="box-none">
+      <Animated.View style={[styles.overlay, overlayAnimStyle]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleDismiss} />
+      </Animated.View>
+      <View style={styles.centerAnchor} pointerEvents="box-none">
         <Animated.View style={[styles.card, cardAnimStyle]}>
-          <View style={styles.handle} />
+          <View style={styles.iconCircle}>
+            <Ionicons name="log-out-outline" size={26} color={colors.destructive} />
+          </View>
 
           <Text style={styles.title}>{t('logout.title')}</Text>
           <Text style={styles.subtitle}>{t('logout.body')}</Text>
 
-          <Pressable
-            onPress={handleConfirm}
-            style={({ pressed }) => [styles.confirmButton, pressed && styles.confirmPressed]}
-            accessibilityLabel={t('logout.confirm')}
-            accessibilityRole="button"
-          >
-            <Text style={styles.confirmText}>{t('logout.confirm')}</Text>
-          </Pressable>
+          <View style={styles.actions}>
+            <Pressable
+              onPress={handleDismiss}
+              style={({ pressed }) => [styles.cancelButton, pressed && styles.cancelPressed]}
+              accessibilityLabel={t('common.cancel')}
+              accessibilityRole="button"
+            >
+              <Text style={styles.cancelText}>{t('common.cancel')}</Text>
+            </Pressable>
 
-          <Pressable
-            onPress={handleDismiss}
-            style={({ pressed }) => [styles.cancelButton, pressed && styles.cancelPressed]}
-            accessibilityLabel={t('common.cancel')}
-            accessibilityRole="button"
-          >
-            <Text style={styles.cancelText}>{t('common.cancel')}</Text>
-          </Pressable>
+            <Pressable
+              onPress={handleConfirm}
+              style={({ pressed }) => [styles.confirmButton, pressed && styles.confirmPressed]}
+              accessibilityLabel={t('logout.confirm')}
+              accessibilityRole="button"
+            >
+              <Text style={styles.confirmText}>{t('logout.confirm')}</Text>
+            </Pressable>
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -105,53 +121,58 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     overlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.55)',
+      backgroundColor: 'rgba(0,0,0,0.6)',
     },
-    overlayFill: {
-      flex: 1,
-    },
-    sheetAnchor: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: 0,
+    centerAnchor: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: D.spacing.lg,
     },
     card: {
+      width: '100%',
+      maxWidth: 400,
       backgroundColor: colors.bg.elevated,
-      borderTopLeftRadius: D.radius.xl,
-      borderTopRightRadius: D.radius.xl,
-      borderTopWidth: 1,
-      borderLeftWidth: 1,
-      borderRightWidth: 1,
+      borderRadius: D.radius.xl,
+      borderWidth: 1,
       borderColor: colors.border.subtle,
       paddingHorizontal: D.spacing.lg,
-      paddingTop: D.spacing.md,
-      paddingBottom: 40,
-      overflow: 'visible',
+      paddingTop: D.spacing.lg,
+      paddingBottom: D.spacing.lg,
+      alignItems: 'center',
       ...D.shadow.modal,
     },
-    handle: {
-      width: 36,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: colors.text.muted,
-      alignSelf: 'center',
-      marginBottom: D.spacing.lg,
+    iconCircle: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: 'rgba(239, 68, 68, 0.12)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: D.spacing.md,
     },
     title: {
-      fontSize: D.fontSize.xl,
+      fontSize: D.fontSize.lg,
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
+      textAlign: 'center',
       marginBottom: D.spacing.xs,
     },
     subtitle: {
       fontSize: D.fontSize.sm,
       color: colors.text.secondary,
+      textAlign: 'center',
       marginBottom: D.spacing.lg,
       lineHeight: 20,
     },
+    actions: {
+      flexDirection: 'row',
+      gap: D.spacing.sm,
+      width: '100%',
+    },
     confirmButton: {
-      height: 52,
+      flex: 1,
+      height: 48,
       borderRadius: D.radius.md,
       backgroundColor: colors.destructive,
       alignItems: 'center',
@@ -169,14 +190,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       letterSpacing: 0.2,
     },
     cancelButton: {
-      height: 52,
+      flex: 1,
+      height: 48,
       borderRadius: D.radius.md,
       backgroundColor: colors.bg.input,
       borderWidth: 1,
       borderColor: colors.border.default,
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: D.spacing.sm,
       outlineWidth: 0,
     },
     cancelPressed: {
