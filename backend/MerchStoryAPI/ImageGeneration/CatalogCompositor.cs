@@ -312,10 +312,10 @@ internal static class CatalogCompositor
         {
             if ((style.PriceBadge ?? "None") == "Pill")
             {
-                DrawPriceBadge(canvas, FormatPrice(product.Price), priceFont!, inner.X, currentY, inner.Width, style);
+                DrawPriceBadge(canvas, FormatPrice(product), priceFont!, inner.X, currentY, inner.Width, style);
             }
 
-            DrawStyledText(canvas, FormatPrice(product.Price), priceFont!, inner.X, currentY, inner.Width, style, isPrice: true);
+            DrawStyledText(canvas, FormatPrice(product), priceFont!, inner.X, currentY, inner.Width, style, isPrice: true);
         }
     }
 
@@ -334,7 +334,7 @@ internal static class CatalogCompositor
         }
 
         string line1 = product.Name;
-        string? line2 = showPrices ? FormatPrice(product.Price) : null;
+        string? line2 = showPrices ? FormatPrice(product) : null;
 
         float h1 = MeasureTextHeight(nameFont, line1);
         float h2 = line2 != null && priceFont != null
@@ -688,7 +688,8 @@ internal static class CatalogCompositor
     }
 
     // ── Misc ──────────────────────────────────────────────────────────────────
-    private static string FormatPrice(decimal price) => $"${price:F2}";
+    private static string FormatPrice(CatalogProductApiItem product) =>
+        MerchStoryImageGeneration.Services.CurrencyFormatter.Format(product.Price, product.Currency);
 
     private static byte[] DecodeBase64Image(string raw)
     {

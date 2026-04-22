@@ -13,61 +13,75 @@ import {
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 
 const ACCENT = '#6366F1';
 const MAX_WIDTH = 1100;
 
-const FEATURES: {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  body: string;
-  image: ImageSourcePropType;
-}[] = [
-  {
-    icon: 'color-wand-outline',
-    title: 'AI Scene Generation',
-    body: 'Upload a raw photo. AI removes the background and places your product in a professional studio scene automatically.',
-    image: require('@/assets/images/background-removal.png'),
-  },
-  {
-    icon: 'partly-sunny-outline',
-    title: 'Context Engine',
-    body: 'Posts when it matters — recommendations tuned to local weather, holidays, events, and trending occasions.',
-    image: require('@/assets/images/recommandations.png'),
-  },
-  {
-    icon: 'share-social-outline',
-    title: 'One-Touch Distribution',
-    body: 'Publish directly to Facebook and Instagram from the same screen you created the ad. No copy-pasting.',
-    image: require('@/assets/images/publish-to.png'),
-  },
+const FEATURE_ICONS: (keyof typeof Ionicons.glyphMap)[] = [
+  'color-wand-outline',
+  'partly-sunny-outline',
+  'share-social-outline',
+];
+const FEATURE_IMAGES: ImageSourcePropType[] = [
+  require('@/assets/images/background-removal.png'),
+  require('@/assets/images/recommandations.png'),
+  require('@/assets/images/publish-to.png'),
 ];
 
-const STEPS = [
-  {
-    num: '01',
-    icon: 'camera-outline' as keyof typeof Ionicons.glyphMap,
-    title: 'Upload a Photo',
-    body: 'Take any product photo with your phone. No studio, no lighting setup needed.',
-  },
-  {
-    num: '02',
-    icon: 'sparkles-outline' as keyof typeof Ionicons.glyphMap,
-    title: 'AI Generates the Ad',
-    body: 'Background removed, scene generated, layout composed — in seconds.',
-  },
-  {
-    num: '03',
-    icon: 'rocket-outline' as keyof typeof Ionicons.glyphMap,
-    title: 'Post & Sell',
-    body: 'Publish to your social channels or download the asset — done.',
-  },
+const STEP_ICONS: (keyof typeof Ionicons.glyphMap)[] = [
+  'camera-outline',
+  'sparkles-outline',
+  'rocket-outline',
 ];
 
 export default function LandingPage() {
   const { colors, colorScheme, toggleTheme } = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const t = useT();
+
+  const FEATURES = [
+    {
+      icon: FEATURE_ICONS[0],
+      title: t('landing.features.feat1Title'),
+      body: t('landing.features.feat1Body'),
+      image: FEATURE_IMAGES[0],
+    },
+    {
+      icon: FEATURE_ICONS[1],
+      title: t('landing.features.feat2Title'),
+      body: t('landing.features.feat2Body'),
+      image: FEATURE_IMAGES[1],
+    },
+    {
+      icon: FEATURE_ICONS[2],
+      title: t('landing.features.feat3Title'),
+      body: t('landing.features.feat3Body'),
+      image: FEATURE_IMAGES[2],
+    },
+  ];
+
+  const STEPS = [
+    {
+      num: '01',
+      icon: STEP_ICONS[0],
+      title: t('landing.how.step1Title'),
+      body: t('landing.how.step1Body'),
+    },
+    {
+      num: '02',
+      icon: STEP_ICONS[1],
+      title: t('landing.how.step2Title'),
+      body: t('landing.how.step2Body'),
+    },
+    {
+      num: '03',
+      icon: STEP_ICONS[2],
+      title: t('landing.how.step3Title'),
+      body: t('landing.how.step3Body'),
+    },
+  ];
 
   const isNarrow = width < 768;
   const hPad = isNarrow ? D.spacing.md : D.spacing.xl;
@@ -104,7 +118,7 @@ export default function LandingPage() {
             <Pressable
               onPress={toggleTheme}
               style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.6 }]}
-              accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              accessibilityLabel={isDark ? t('common.lightMode') : t('common.darkMode')}
               accessibilityRole="button"
             >
               <Ionicons
@@ -118,7 +132,7 @@ export default function LandingPage() {
               style={({ pressed }) => [s.navSignIn, pressed && { opacity: 0.7 }]}
               onPress={() => router.push('/(auth)/login')}
             >
-              <Text style={s.navSignInText}>Sign In</Text>
+              <Text style={s.navSignInText}>{t('landing.signIn')}</Text>
             </Pressable>
           </View>
         </View>
@@ -134,38 +148,32 @@ export default function LandingPage() {
           <View style={[s.heroLeft, !isNarrow && s.heroLeftWide]}>
             <View style={s.eyebrowPill}>
               <Ionicons name="sparkles" size={11} color={ACCENT} style={{ marginRight: 5 }} />
-              <Text style={s.eyebrowText}>AI-POWERED · BUILT FOR LOCAL RETAIL</Text>
+              <Text style={s.eyebrowText}>{t('landing.hero.eyebrow')}</Text>
             </View>
 
-            <Text style={s.heroHeadline}>
-              {'Turn product photos\ninto professional\nads '}
-              <Text style={s.heroAccent}>instantly.</Text>
-            </Text>
+            <Text style={s.heroHeadline}>{t('landing.hero.heading')}</Text>
 
-            <Text style={s.heroSub}>
-              MerchStory automates the full creative pipeline — background removal, scene
-              generation, and one-touch social posting — so you can focus on running your store.
-            </Text>
+            <Text style={s.heroSub}>{t('landing.hero.subheading')}</Text>
 
             <View style={s.heroCtas}>
               <Pressable
                 style={({ pressed }) => [s.ctaPrimary, pressed && s.ctaPrimaryPressed]}
                 onPress={() => router.push('/(auth)/register')}
               >
-                <Text style={s.ctaPrimaryText}>Get Started Free</Text>
+                <Text style={s.ctaPrimaryText}>{t('landing.hero.ctaPrimary')}</Text>
                 <Ionicons name="arrow-forward" size={15} color="#fff" style={{ marginLeft: 6 }} />
               </Pressable>
               <Pressable
                 style={({ pressed }) => [s.ctaSecondary, pressed && s.ctaSecondaryPressed]}
                 onPress={() => router.push('/(auth)/login')}
               >
-                <Text style={s.ctaSecondaryText}>Sign In</Text>
+                <Text style={s.ctaSecondaryText}>{t('landing.hero.ctaSecondary')}</Text>
               </Pressable>
             </View>
 
             <View style={s.trustRow}>
               <Ionicons name="shield-checkmark-outline" size={14} color={colors.text.muted} />
-              <Text style={s.trustText}>Free to start · No credit card required</Text>
+              <Text style={s.trustText}>{t('landing.hero.trust')}</Text>
             </View>
           </View>
 
@@ -199,7 +207,7 @@ export default function LandingPage() {
                       color={ACCENT}
                       style={{ opacity: 0.5 }}
                     />
-                    <Text style={s.mockImageLabel}>Your ad here</Text>
+                    <Text style={s.mockImageLabel}>{t('landing.mockup.placeholder')}</Text>
                   </View>
                 </View>
 
@@ -238,7 +246,7 @@ export default function LandingPage() {
           <View style={s.mockupNarrow}>
             <View style={s.mockImageAreaNarrow}>
               <Ionicons name="image-outline" size={36} color={ACCENT} style={{ opacity: 0.45 }} />
-              <Text style={s.mockImageLabel}>App screenshot coming soon</Text>
+              <Text style={s.mockImageLabel}>{t('landing.mockup.comingSoon')}</Text>
             </View>
           </View>
         )}
@@ -247,8 +255,8 @@ export default function LandingPage() {
       {/* ── Features ───────────────────────────────────────────── */}
       <View style={s.section}>
         <View style={s.container}>
-          <Text style={s.sectionLabel}>WHAT IT DOES</Text>
-          <Text style={s.sectionHeading}>Everything a local retailer needs to run great ads.</Text>
+          <Text style={s.sectionLabel}>{t('landing.features.label')}</Text>
+          <Text style={s.sectionHeading}>{t('landing.features.heading')}</Text>
 
           <View style={[s.featureRow, isNarrow && s.featureRowNarrow]}>
             {FEATURES.map((f) => (
@@ -272,8 +280,8 @@ export default function LandingPage() {
       {/* ── How It Works ───────────────────────────────────────── */}
       <View style={s.stepsOuter}>
         <View style={s.container}>
-          <Text style={s.sectionLabel}>HOW IT WORKS</Text>
-          <Text style={s.sectionHeading}>From photo to published ad in under a minute.</Text>
+          <Text style={s.sectionLabel}>{t('landing.how.label')}</Text>
+          <Text style={s.sectionHeading}>{t('landing.how.heading')}</Text>
 
           <View style={[s.stepsRow, isNarrow && s.stepsRowNarrow]}>
             {STEPS.map((step, i) => (
@@ -302,21 +310,15 @@ export default function LandingPage() {
           {/* CTA row */}
           <View style={[s.footerTop, isNarrow && s.footerTopNarrow]}>
             <View style={s.footerTopLeft}>
-              <Text style={s.footerHeading}>
-                Ready to level up{'\n'}
-                <Text style={s.footerHeadingAccent}>your store?</Text>
-              </Text>
-              <Text style={s.footerSub}>
-                Join local retailers using MerchStory to create and post professional ads without a
-                marketing team.
-              </Text>
+              <Text style={s.footerHeading}>{t('landing.footer.heading')}</Text>
+              <Text style={s.footerSub}>{t('landing.footer.subheading')}</Text>
             </View>
             <View style={[s.footerTopRight, isNarrow && s.footerTopRightNarrow]}>
               <Pressable
                 style={({ pressed }) => [s.ctaPrimary, pressed && s.ctaPrimaryPressed]}
                 onPress={() => router.push('/(auth)/register')}
               >
-                <Text style={s.ctaPrimaryText}>Start for Free</Text>
+                <Text style={s.ctaPrimaryText}>{t('landing.footer.ctaPrimary')}</Text>
                 <Ionicons name="arrow-forward" size={15} color="#fff" style={{ marginLeft: 6 }} />
               </Pressable>
               <Pressable
@@ -327,7 +329,7 @@ export default function LandingPage() {
                 ]}
                 onPress={() => router.push('/(auth)/login')}
               >
-                <Text style={s.ctaSecondaryText}>Already have an account? Sign in</Text>
+                <Text style={s.ctaSecondaryText}>{t('landing.footer.ctaSecondary')}</Text>
               </Pressable>
             </View>
           </View>
@@ -349,14 +351,14 @@ export default function LandingPage() {
             </View>
 
             <Text style={s.copyright}>
-              © {new Date().getFullYear()} MerchStory · Built for local retailers
+              © {new Date().getFullYear()} {t('landing.footer.copyright')}
             </Text>
 
             {/* Theme toggle */}
             <Pressable
               onPress={toggleTheme}
               style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.6 }]}
-              accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              accessibilityLabel={isDark ? t('common.lightMode') : t('common.darkMode')}
               accessibilityRole="button"
             >
               <Ionicons

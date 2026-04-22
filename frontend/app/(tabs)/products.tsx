@@ -26,11 +26,15 @@ import { ProductFilterBar, ProductFilterState } from '@/components/ui/ProductFil
 import { ProductImage } from '@/components/ui/ProductImage';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
+import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import {
   createProduct,
+  type Currency,
+  currencySymbol,
   deleteProduct,
-  fetchProductCategories,
+  formatPrice,
   type ProductDetail,
   type ProductFilters,
   type ProductItem,
@@ -47,12 +51,15 @@ function toMetadata(detail: ProductDetail): ProductItem {
     id: detail.id,
     name: detail.name,
     price: detail.price,
+    currency: detail.currency,
     category: detail.category,
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt,
     mimeType: 'image/png',
   };
 }
+
+const CURRENCY_CHOICES: Currency[] = ['USD', 'EUR', 'RON'];
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1200;
@@ -86,13 +93,15 @@ export default function ProductsScreen() {
     minPrice: '',
     maxPrice: '',
   });
-  const [categories, setCategories] = useState<string[]>([]);
+  const { profile: shopProfile, categories, refreshCategories } = useShop();
+  const t = useT();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draftPrice, setDraftPrice] = useState('');
+  const [draftCurrency, setDraftCurrency] = useState<Currency>('USD');
   const [draftCategory, setDraftCategory] = useState('');
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [addingNewCategory, setAddingNewCategory] = useState(false);
@@ -146,17 +155,10 @@ export default function ProductsScreen() {
     return apiFilters;
   }, []);
 
-  const loadCategories = useCallback(() => {
-    fetchProductCategories()
-      .then(setCategories)
-      .catch(() => {});
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
       void productsCache.ensureLoaded(toApiFilters(filters));
-      loadCategories();
-    }, [filters, loadCategories, toApiFilters])
+    }, [filters, toApiFilters])
   );
 
   function handleFiltersChange(next: ProductFilterState) {
@@ -164,10 +166,13 @@ export default function ProductsScreen() {
     void productsCache.setFiltersAndReload(toApiFilters(next));
   }
 
+  const shopCurrency = (shopProfile?.currency ?? 'USD') as Currency;
+
   function openAddModal() {
     setEditingProduct(null);
     setDraftName('');
     setDraftPrice('');
+    setDraftCurrency(shopCurrency);
     setDraftCategory('');
     setCategoryDropdownOpen(false);
     setAddingNewCategory(false);
@@ -182,6 +187,7 @@ export default function ProductsScreen() {
     setEditingProduct(product);
     setDraftName(product.name);
     setDraftPrice(String(product.price));
+    setDraftCurrency((product.currency ?? shopCurrency) as Currency);
     setDraftCategory(product.category ?? '');
     setCategoryDropdownOpen(false);
     setAddingNewCategory(false);
@@ -342,6 +348,7 @@ export default function ProductsScreen() {
       const payload = {
         name: draftName.trim(),
         price: parseFloat(draftPrice),
+        currency: draftCurrency,
         imageBase64,
         category: trimmedCategory.length > 0 ? trimmedCategory : null,
       };
@@ -360,7 +367,7 @@ export default function ProductsScreen() {
         }
         productsCache.addItem(toMetadata(created));
       }
-      loadCategories();
+      void refreshCategories();
       closeModal();
     } catch (err: unknown) {
       setNameError(err instanceof Error ? err.message : 'Save failed. Please try again.');
@@ -374,6 +381,7 @@ export default function ProductsScreen() {
     productImageCache.evict(id);
     try {
       await deleteProduct(id);
+      void refreshCategories();
     } catch {
       void productsCache.refresh();
     }
@@ -415,7 +423,7 @@ export default function ProductsScreen() {
           {item.name}
         </Text>
         <View style={styles.priceBadge}>
-          <Text style={styles.priceText}>${item.price.toFixed(2)}</Text>
+          <Text style={styles.priceText}>{formatPrice(item.price, item.currency)}</Text>
         </View>
       </View>
     </Pressable>
@@ -461,10 +469,8 @@ export default function ProductsScreen() {
             <View style={styles.emptyIconCircle}>
               <Ionicons name="search-outline" size={48} color={colors.accent.primary} />
             </View>
-            <Text style={styles.emptyTitle}>No products match</Text>
-            <Text style={styles.emptySubtitle}>
-              Try adjusting your search, category, or price range.
-            </Text>
+            <Text style={styles.emptyTitle}>{t('products.filteredEmptyTitle')}</Text>
+            <Text style={styles.emptySubtitle}>{t('products.filteredEmptySubtitle')}</Text>
             <Pressable
               style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
               onPress={() =>
@@ -481,17 +487,15 @@ export default function ProductsScreen() {
           <View style={styles.emptyIconCircle}>
             <Ionicons name="pricetag-outline" size={48} color={colors.accent.primary} />
           </View>
-          <Text style={styles.emptyTitle}>No products yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Add your first product to start building your catalog
-          </Text>
+          <Text style={styles.emptyTitle}>{t('products.emptyTitle')}</Text>
+          <Text style={styles.emptySubtitle}>{t('products.emptySubtitle')}</Text>
           <Pressable
             style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
             onPress={openAddModal}
             accessibilityRole="button"
           >
             <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 4 }} />
-            <Text style={styles.addButtonText}>Add Product</Text>
+            <Text style={styles.addButtonText}>{t('products.addButton')}</Text>
           </Pressable>
         </View>
       );
@@ -532,7 +536,7 @@ export default function ProductsScreen() {
       <View style={styles.pageContainer}>
         <View style={styles.pageHeader}>
           <View>
-            <Text style={styles.pageTitle}>My Products</Text>
+            <Text style={styles.pageTitle}>{t('products.pageTitle')}</Text>
             <Text style={styles.pageSubtitle}>
               {totalProducts} {totalProducts === 1 ? 'item' : 'items'} in catalog
             </Text>
@@ -555,7 +559,7 @@ export default function ProductsScreen() {
               accessibilityLabel="Add product"
             >
               <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 4 }} />
-              <Text style={styles.addButtonText}>Add Product</Text>
+              <Text style={styles.addButtonText}>{t('products.addButton')}</Text>
             </Pressable>
           </View>
         </View>
@@ -613,16 +617,14 @@ export default function ProductsScreen() {
             <View style={styles.confirmIconWrap}>
               <Ionicons name="trash-outline" size={28} color="#EF4444" />
             </View>
-            <Text style={styles.confirmTitle}>Delete product?</Text>
-            <Text style={styles.confirmBody}>
-              This product will be permanently removed from your catalog.
-            </Text>
+            <Text style={styles.confirmTitle}>{t('products.deleteConfirm.title')}</Text>
+            <Text style={styles.confirmBody}>{t('products.deleteConfirm.body')}</Text>
             <View style={styles.confirmActions}>
               <Pressable
                 style={({ pressed }) => [styles.confirmCancel, pressed && { opacity: 0.7 }]}
                 onPress={() => setConfirmDeleteId(null)}
               >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
+                <Text style={styles.confirmCancelText}>{t('common.cancel')}</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [styles.confirmDelete, pressed && { opacity: 0.8 }]}
@@ -632,7 +634,7 @@ export default function ProductsScreen() {
                   if (id) void handleDelete(id);
                 }}
               >
-                <Text style={styles.confirmDeleteText}>Delete</Text>
+                <Text style={styles.confirmDeleteText}>{t('common.delete')}</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -924,7 +926,9 @@ export default function ProductsScreen() {
                 ) : (
                   <>
                     <Text style={styles.modalTitle}>
-                      {editingProduct ? 'Edit Product' : 'New Product'}
+                      {editingProduct
+                        ? t('products.modal.editTitle')
+                        : t('products.modal.newTitle')}
                     </Text>
 
                     {/* Photo picker */}
@@ -943,7 +947,9 @@ export default function ProductsScreen() {
                       ) : (
                         <View style={styles.imagePickerPlaceholder}>
                           <Ionicons name="camera-outline" size={28} color={colors.text.muted} />
-                          <Text style={styles.imagePickerLabel}>Tap to add photo</Text>
+                          <Text style={styles.imagePickerLabel}>
+                            {t('products.modal.photoPlaceholder')}
+                          </Text>
                         </View>
                       )}
                       {draftImageUri && (
@@ -955,7 +961,7 @@ export default function ProductsScreen() {
 
                     {/* Name */}
                     <View style={styles.fieldGroup}>
-                      <Text style={styles.fieldLabel}>Product Name</Text>
+                      <Text style={styles.fieldLabel}>{t('products.modal.nameLabel')}</Text>
                       <TextInput
                         style={[styles.textInput, nameError ? styles.textInputError : null]}
                         placeholder="e.g. Artisan Coffee Blend"
@@ -972,7 +978,7 @@ export default function ProductsScreen() {
 
                     {/* Category */}
                     <View style={styles.fieldGroup}>
-                      <Text style={styles.fieldLabel}>Category</Text>
+                      <Text style={styles.fieldLabel}>{t('products.modal.categoryLabel')}</Text>
                       {addingNewCategory ? (
                         <View style={styles.categoryInputRow}>
                           <TextInput
@@ -1018,7 +1024,7 @@ export default function ProductsScreen() {
                             ]}
                             numberOfLines={1}
                           >
-                            {draftCategory || 'Select a category'}
+                            {draftCategory || t('products.modal.categoryPlaceholder')}
                           </Text>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                             {draftCategory ? (
@@ -1104,18 +1110,60 @@ export default function ProductsScreen() {
                               size={16}
                               color={colors.accent.primary}
                             />
-                            <Text style={styles.categoryAddNewText}>New category</Text>
+                            <Text style={styles.categoryAddNewText}>
+                              {t('products.modal.newCategory')}
+                            </Text>
                           </Pressable>
                         </View>
                       )}
                     </View>
 
+                    {/* Currency */}
+                    <View style={styles.fieldGroup}>
+                      <Text style={styles.fieldLabel}>{t('products.modal.currencyLabel')}</Text>
+                      <View style={styles.priceInputRow}>
+                        {CURRENCY_CHOICES.map((c) => {
+                          const selected = draftCurrency === c;
+                          return (
+                            <Pressable
+                              key={c}
+                              onPress={() => setDraftCurrency(c)}
+                              style={[
+                                styles.priceCurrencyBadge,
+                                { marginRight: 8 },
+                                selected && {
+                                  borderColor: colors.accent.primary,
+                                  backgroundColor: colors.accent.dim,
+                                },
+                              ]}
+                              accessibilityRole="radio"
+                              accessibilityState={{ selected }}
+                              accessibilityLabel={`Currency ${c}`}
+                            >
+                              <Text
+                                style={[
+                                  styles.priceCurrencyText,
+                                  selected && { color: colors.accent.primary },
+                                ]}
+                              >
+                                {c}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+
                     {/* Price */}
                     <View style={styles.fieldGroup}>
-                      <Text style={styles.fieldLabel}>Price (USD)</Text>
+                      <Text
+                        style={styles.fieldLabel}
+                      >{`${t('products.modal.priceLabel')} (${draftCurrency})`}</Text>
                       <View style={styles.priceInputRow}>
                         <View style={styles.priceCurrencyBadge}>
-                          <Text style={styles.priceCurrencyText}>$</Text>
+                          <Text style={styles.priceCurrencyText}>
+                            {currencySymbol(draftCurrency)}
+                          </Text>
                         </View>
                         <TextInput
                           style={[
@@ -1144,7 +1192,7 @@ export default function ProductsScreen() {
                         accessibilityRole="button"
                         disabled={isSaving}
                       >
-                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                        <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
@@ -1160,7 +1208,7 @@ export default function ProductsScreen() {
                         {isSaving ? (
                           <ActivityIndicator size="small" color="#fff" />
                         ) : (
-                          <Text style={styles.saveButtonText}>Save Product</Text>
+                          <Text style={styles.saveButtonText}>{t('products.modal.save')}</Text>
                         )}
                       </Pressable>
                     </View>

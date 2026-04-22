@@ -10,27 +10,30 @@ import { StepProgress } from '@/components/ui/StepProgress';
 import { D } from '@/constants/design';
 import { useSetup } from '@/context/setup';
 import { useTheme } from '@/context/theme';
-
-const STEP_LABELS = ['Visual Identity', 'Business DNA', 'Contact & Social'];
-
-const DOMAIN_OPTIONS = [
-  { value: 'Market', label: 'Market' },
-  { value: 'Food', label: 'Food' },
-  { value: 'Retail', label: 'Retail' },
-  { value: 'Fashion', label: 'Fashion' },
-  { value: 'Other', label: 'Other' },
-];
-
-const SHOP_TYPE_OPTIONS = [
-  { value: 'Luxury', label: 'Luxury' },
-  { value: 'MidRange', label: 'Mid-range' },
-  { value: 'Budget', label: 'Budget' },
-];
+import { useT } from '@/i18n';
 
 export default function Step2Screen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data, updateStep2 } = useSetup();
+  const t = useT();
+  const STEP_LABELS = [
+    t('setup.stepLabel.visual'),
+    t('setup.stepLabel.business'),
+    t('setup.stepLabel.contact'),
+  ];
+  const DOMAIN_OPTIONS = [
+    { value: 'Market', label: t('setup.step2.domainMarket') },
+    { value: 'Food', label: t('setup.step2.domainFood') },
+    { value: 'Retail', label: t('setup.step2.domainRetail') },
+    { value: 'Fashion', label: t('setup.step2.domainFashion') },
+    { value: 'Other', label: t('setup.step2.domainOther') },
+  ];
+  const SHOP_TYPE_OPTIONS = [
+    { value: 'Luxury', label: t('setup.step2.shopTypeLuxury') },
+    { value: 'MidRange', label: t('setup.step2.shopTypeMidRange') },
+    { value: 'Budget', label: t('setup.step2.shopTypeBudget') },
+  ];
 
   const [domain, setDomain] = useState(data.businessDomain);
   const [otherDomain, setOtherDomain] = useState(data.otherDomain);
@@ -59,24 +62,22 @@ export default function Step2Screen() {
       <StepProgress currentStep={2} stepLabels={STEP_LABELS} />
 
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>Your Business DNA</Text>
-        <Text style={styles.subtitle}>
-          Helps our AI choose the right scenes and mood for your ads.
-        </Text>
+        <Text style={styles.title}>{t('setup.step2.title')}</Text>
+        <Text style={styles.subtitle}>{t('setup.step2.subtitle')}</Text>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Business Domain</Text>
+        <Text style={styles.sectionLabel}>{t('setup.step2.domain')}</Text>
         <ChipSelector
           options={DOMAIN_OPTIONS}
           selected={domain}
           onSelect={setDomain}
-          accessibilityLabel="Select your business domain"
+          accessibilityLabel={t('setup.step2.domain')}
         />
         {domain === 'Other' && (
           <View style={styles.otherInput}>
             <FloatingInput
-              label="Please specify"
+              label={t('setup.step2.otherDomain')}
               value={otherDomain}
               onChangeText={setOtherDomain}
               accessibilityLabel="Specify your business domain"
@@ -87,31 +88,31 @@ export default function Step2Screen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Shop Type (optional)</Text>
+        <Text style={styles.sectionLabel}>{t('setup.step2.shopType')}</Text>
         <ChipSelector
           options={SHOP_TYPE_OPTIONS}
           selected={shopType}
           onSelect={setShopType}
-          accessibilityLabel="Select shop type"
+          accessibilityLabel={t('setup.step2.shopType')}
           deselectable
         />
       </View>
 
       <FloatingInput
-        label="Target Audience (optional)"
+        label={t('setup.step2.audience')}
         value={audience}
         onChangeText={setAudience}
-        accessibilityLabel="Target audience"
-        accessibilityHint="e.g. Women 25-40 interested in wellness"
+        accessibilityLabel={t('setup.step2.audience')}
+        accessibilityHint={t('setup.step2.audienceHint')}
         autoCapitalize="sentences"
       />
 
       <FloatingInput
-        label="Competitors (optional)"
+        label={t('setup.step2.competitors')}
         value={competitors}
         onChangeText={setCompetitors}
-        accessibilityLabel="Competitors"
-        accessibilityHint="Brand names similar to yours"
+        accessibilityLabel={t('setup.step2.competitors')}
+        accessibilityHint={t('setup.step2.competitorsHint')}
         autoCapitalize="words"
       />
 
@@ -120,20 +121,20 @@ export default function Step2Screen() {
           onPress={() => router.back()}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('common.back')}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>{t('common.backButton')}</Text>
         </Pressable>
         <Pressable
           onPress={handleNext}
           disabled={!canProceed}
           style={[styles.nextButton, !canProceed && styles.nextButtonDisabled]}
           accessibilityRole="button"
-          accessibilityLabel="Next step"
+          accessibilityLabel={t('common.nextStep')}
           accessibilityState={{ disabled: !canProceed }}
         >
           <Text style={[styles.nextButtonText, !canProceed && styles.nextButtonTextDisabled]}>
-            Next step →
+            {t('common.nextStep')}
           </Text>
         </Pressable>
       </View>

@@ -9,4 +9,6 @@ public sealed record CatalogImageRequest(
     string Format,      // "Square 1:1" | "Portrait 4:5" | "Story 9:16"
     bool ShowPrices,
     BrandContext? BrandContext = null,
-    string? LogoBase64 = null);  // brand logo inline image
+    string? LogoBase64 = null,  // brand logo inline image
+    string Currency = "USD",    // "USD" | "EUR" | "RON"
+    string Language = "EN");    // "EN" | "RO"

@@ -35,17 +35,19 @@ import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
 import { D } from '@/constants/design';
 import type { GenerationType } from '@/constants/generationTypes';
+import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import {
   fetchGallery,
   fetchGalleryImage,
+  formatPrice,
   type GalleryItem,
   generateAnnouncementImage,
   generateCatalogImage,
   generateCatalogOnWallpaper,
   type GenerateImageResponse,
   generateWallpaper,
-  getShopProfile,
   type PlacementZone,
   type ProductItem,
   saveToGallery,
@@ -81,6 +83,7 @@ type ContextItem = { key: string; label: string };
 type TextPreset = {
   id: string;
   label: string;
+  i18nKey: string;
   fontFamily: string;
   textEffect: string;
   priceBadge: string;
@@ -90,6 +93,7 @@ const TEXT_PRESETS: TextPreset[] = [
   {
     id: 'modern-shadow',
     label: 'Shadow',
+    i18nKey: 'studio.preset.shadow',
     fontFamily: 'Modern',
     textEffect: 'Shadow',
     priceBadge: 'None',
@@ -97,6 +101,7 @@ const TEXT_PRESETS: TextPreset[] = [
   {
     id: 'bold-shadow',
     label: 'Bold',
+    i18nKey: 'studio.preset.bold',
     fontFamily: 'Bold',
     textEffect: 'Shadow',
     priceBadge: 'None',
@@ -104,6 +109,7 @@ const TEXT_PRESETS: TextPreset[] = [
   {
     id: 'elegant-clean',
     label: 'Elegant',
+    i18nKey: 'studio.preset.elegant',
     fontFamily: 'Elegant',
     textEffect: 'None',
     priceBadge: 'None',
@@ -111,6 +117,7 @@ const TEXT_PRESETS: TextPreset[] = [
   {
     id: 'bold-badge',
     label: 'Badge',
+    i18nKey: 'studio.preset.badge',
     fontFamily: 'Bold',
     textEffect: 'Shadow',
     priceBadge: 'Pill',
@@ -118,6 +125,7 @@ const TEXT_PRESETS: TextPreset[] = [
   {
     id: 'outline',
     label: 'Outline',
+    i18nKey: 'studio.preset.outline',
     fontFamily: 'Modern',
     textEffect: 'Outline',
     priceBadge: 'None',
@@ -125,6 +133,7 @@ const TEXT_PRESETS: TextPreset[] = [
   {
     id: 'friendly-badge',
     label: 'Friendly',
+    i18nKey: 'studio.preset.friendly',
     fontFamily: 'Friendly',
     textEffect: 'Shadow',
     priceBadge: 'Pill',
@@ -166,10 +175,11 @@ function TextStylePresetPicker({
   onColorChange: (c: string) => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
+  const t = useT();
   const previewBg = isColorLight(selectedColor) ? '#1a1a2e' : '#f0f4ff';
   return (
     <>
-      <SectionLabel label="Color" />
+      <SectionLabel label={t('studio.optColor')} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: D.spacing.md }}>
         {PRICE_SWATCHES.map((hex) => (
           <Pressable
@@ -189,7 +199,7 @@ function TextStylePresetPicker({
         ))}
       </View>
 
-      <SectionLabel label="Text Style" />
+      <SectionLabel label={t('studio.optText')} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: D.spacing.sm }}>
         {TEXT_PRESETS.map((preset) => {
           const selected = preset.id === selectedId;
@@ -284,7 +294,7 @@ function TextStylePresetPicker({
                     fontWeight: '600',
                   }}
                 >
-                  {preset.label}
+                  {t(preset.i18nKey as never)}
                 </Text>
               </View>
             </Pressable>
@@ -295,54 +305,71 @@ function TextStylePresetPicker({
   );
 }
 
-// ─── Static data ───────────────────────────────────────────────────────────────
-const LAYOUT_OPTIONS = [
-  { value: 'Showcase', label: 'Showcase' },
-  { value: 'Story', label: 'Story' },
-];
-const COLOR_OPTIONS = [
-  { value: 'Brand Colors', label: 'Brand Colors' },
-  { value: 'Vibrant', label: 'Vibrant' },
-  { value: 'Monochrome', label: 'Monochrome' },
-  { value: 'Dark', label: 'Dark' },
-];
-const FORMAT_OPTIONS = [
-  { value: 'Square', label: 'Square (1:1)' },
-  { value: 'Portrait', label: 'Portrait (4:5)' },
-  { value: 'Story', label: 'Story (9:16)' },
-];
-const POST_TYPES: {
+// ─── Static data (labels come from i18n at render time) ───────────────────────
+type TranslateFn = (key: string) => string;
+
+function getLayoutOptions(tr: TranslateFn) {
+  return [
+    { value: 'Showcase', label: tr('studio.layoutShowcaseLabel') },
+    { value: 'Story', label: tr('studio.layoutStoryLabel') },
+  ];
+}
+function getColorOptions(tr: TranslateFn) {
+  return [
+    { value: 'Brand Colors', label: tr('studio.themeBrandLabel') },
+    { value: 'Vibrant', label: tr('studio.themeVibrantLabel') },
+    { value: 'Monochrome', label: tr('studio.themeMonoLabel') },
+    { value: 'Dark', label: tr('studio.themeDarkLabel') },
+  ];
+}
+function getFormatOptions(tr: TranslateFn) {
+  return [
+    { value: 'Square', label: tr('studio.formatSquareLabel') },
+    { value: 'Portrait', label: tr('studio.formatPortraitLabel') },
+    { value: 'Story', label: tr('studio.formatStoryLabel') },
+  ];
+}
+function getPostTypes(tr: TranslateFn): {
   type: PostType;
+  label: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
   placeholder: string;
-}[] = [
-  {
-    type: 'Announcement',
-    icon: 'megaphone-outline',
-    placeholder:
-      "e.g. We're open this Sunday from 9am to 6pm — or — Did you know we offer free gift wrapping?",
-  },
-  {
-    type: 'Job Post',
-    icon: 'briefcase-outline',
-    placeholder: 'e.g. Looking for a part-time cashier, 3 days/week…',
-  },
-  {
-    type: 'Promotion',
-    icon: 'pricetag-outline',
-    placeholder: 'e.g. 20% off all clothing this weekend only!',
-  },
-];
-const JOB_IMAGE_STYLE_OPTIONS = [
-  { value: 'text-only', label: 'Text only' },
-  { value: 'with-person', label: 'With person' },
-];
-const TONE_OPTIONS = [
-  { value: 'Professional', label: 'Professional' },
-  { value: 'Friendly', label: 'Friendly' },
-  { value: 'Bold', label: 'Bold' },
-  { value: 'Playful', label: 'Playful' },
-];
+}[] {
+  return [
+    {
+      type: 'Announcement',
+      label: tr('studio.post.announcement'),
+      icon: 'megaphone-outline',
+      placeholder: tr('studio.post.announcementPlaceholder'),
+    },
+    {
+      type: 'Job Post',
+      label: tr('studio.post.jobPost'),
+      icon: 'briefcase-outline',
+      placeholder: tr('studio.post.jobPostPlaceholder'),
+    },
+    {
+      type: 'Promotion',
+      label: tr('studio.post.promotion'),
+      icon: 'pricetag-outline',
+      placeholder: tr('studio.post.promotionPlaceholder'),
+    },
+  ];
+}
+function getJobImageStyleOptions(tr: TranslateFn) {
+  return [
+    { value: 'text-only', label: tr('studio.jobStyle.textOnly') },
+    { value: 'with-person', label: tr('studio.jobStyle.withPerson') },
+  ];
+}
+function getToneOptions(tr: TranslateFn) {
+  return [
+    { value: 'Professional', label: tr('studio.tone.professional') },
+    { value: 'Friendly', label: tr('studio.tone.friendly') },
+    { value: 'Bold', label: tr('studio.tone.bold') },
+    { value: 'Playful', label: tr('studio.tone.playful') },
+  ];
+}
 const TAB_META: {
   key: StudioTab;
   label: string;
@@ -376,22 +403,28 @@ const TAB_META: {
 ];
 
 // ─── Brand context helpers ──────────────────────────────────────────────────────
-function deriveContextItems(profile: ShopProfileResponse): ContextItem[] {
+function deriveContextItems(profile: ShopProfileResponse, tr: TranslateFn): ContextItem[] {
   const items: ContextItem[] = [];
-  if (profile.logoBase64) items.push({ key: 'logoBase64', label: 'Brand Logo' });
-  if (profile.brandName) items.push({ key: 'brandName', label: 'Brand Name' });
-  if (profile.slogan) items.push({ key: 'slogan', label: 'Slogan' });
-  if (profile.brandColors?.length > 0) items.push({ key: 'brandColors', label: 'Brand Colors' });
-  if (profile.businessDomain) items.push({ key: 'businessDomain', label: 'Business Domain' });
-  if (profile.shopType) items.push({ key: 'shopType', label: 'Shop Type' });
-  if (profile.targetAudience) items.push({ key: 'targetAudience', label: 'Target Audience' });
-  if (profile.competitors) items.push({ key: 'competitors', label: 'Competitors' });
-  if (profile.phoneNumber) items.push({ key: 'phoneNumber', label: 'Phone' });
-  if (profile.email) items.push({ key: 'email', label: 'Email' });
-  if (profile.addresses?.length > 0) items.push({ key: 'addresses', label: 'Address' });
-  if (profile.instagramHandle) items.push({ key: 'instagramHandle', label: 'Instagram' });
-  if (profile.facebookHandle) items.push({ key: 'facebookHandle', label: 'Facebook' });
-  if (profile.tikTokHandle) items.push({ key: 'tikTokHandle', label: 'TikTok' });
+  if (profile.logoBase64) items.push({ key: 'logoBase64', label: tr('studio.ctx.logo') });
+  if (profile.brandName) items.push({ key: 'brandName', label: tr('studio.ctx.brandName') });
+  if (profile.slogan) items.push({ key: 'slogan', label: tr('studio.ctx.slogan') });
+  if (profile.brandColors?.length > 0)
+    items.push({ key: 'brandColors', label: tr('studio.ctx.brandColors') });
+  if (profile.businessDomain)
+    items.push({ key: 'businessDomain', label: tr('studio.ctx.businessDomain') });
+  if (profile.shopType) items.push({ key: 'shopType', label: tr('studio.ctx.shopType') });
+  if (profile.targetAudience)
+    items.push({ key: 'targetAudience', label: tr('studio.ctx.targetAudience') });
+  if (profile.competitors) items.push({ key: 'competitors', label: tr('studio.ctx.competitors') });
+  if (profile.phoneNumber) items.push({ key: 'phoneNumber', label: tr('studio.ctx.phone') });
+  if (profile.email) items.push({ key: 'email', label: tr('studio.ctx.email') });
+  if (profile.addresses?.length > 0)
+    items.push({ key: 'addresses', label: tr('studio.ctx.address') });
+  if (profile.instagramHandle)
+    items.push({ key: 'instagramHandle', label: tr('studio.ctx.instagram') });
+  if (profile.facebookHandle)
+    items.push({ key: 'facebookHandle', label: tr('studio.ctx.facebook') });
+  if (profile.tikTokHandle) items.push({ key: 'tikTokHandle', label: tr('studio.ctx.tiktok') });
   return items;
 }
 
@@ -405,10 +438,11 @@ function BrandContextSection({
   onToggle: (key: string) => void;
 }) {
   const { colors } = useTheme();
+  const t = useT();
   if (items.length === 0) return null;
   return (
     <>
-      <SectionLabel label="Brand Context" />
+      <SectionLabel label={t('studio.brandContext')} />
       <Text
         style={{
           fontSize: D.fontSize.xs,
@@ -416,7 +450,7 @@ function BrandContextSection({
           marginBottom: D.spacing.sm,
         }}
       >
-        Choose which brand info to include in the AI prompt
+        {t('studio.brandContextHint')}
       </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: D.spacing.xs }}>
         {items.map((item) => {
@@ -652,12 +686,13 @@ function ResultPreviewPanel({
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
 }) {
+  const t = useT();
   if (generating) {
     return (
       <View style={styles.previewPlaceholder}>
         <ActivityIndicator size="large" color={colors.accent.primary} />
-        <Text style={styles.previewEmptyTitle}>Generating…</Text>
-        <Text style={styles.previewEmptyHint}>This usually takes a few seconds</Text>
+        <Text style={styles.previewEmptyTitle}>{t('studio.generating')}</Text>
+        <Text style={styles.previewEmptyHint}>{t('studio.previewEmptyHint')}</Text>
       </View>
     );
   }
@@ -666,7 +701,7 @@ function ResultPreviewPanel({
       <View style={styles.previewPlaceholder}>
         <Ionicons name="alert-circle-outline" size={40} color={colors.text.error} />
         <Text style={[styles.previewEmptyTitle, { color: colors.text.error }]}>
-          Generation failed
+          {t('studio.errorGeneric')}
         </Text>
         <Text style={styles.previewEmptyHint}>{error}</Text>
       </View>
@@ -679,7 +714,7 @@ function ResultPreviewPanel({
           source={{ uri: `data:${result.mimeType};base64,${result.imageBase64}` }}
           style={styles.resultImage}
           resizeMode="contain"
-          accessibilityLabel="Generated image"
+          accessibilityLabel={t('studio.a11y.generatedImage')}
         />
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           {onKeep && (
@@ -691,14 +726,16 @@ function ResultPreviewPanel({
               ]}
               onPress={isKept ? undefined : onKeep}
               accessibilityRole="button"
-              accessibilityLabel={isKept ? 'Image saved' : 'Keep image'}
+              accessibilityLabel={isKept ? t('studio.a11y.imageSaved') : t('studio.a11y.keepImage')}
             >
               <Ionicons
                 name={isKept ? 'checkmark-circle' : 'bookmark-outline'}
                 size={15}
                 color="#fff"
               />
-              <Text style={styles.downloadBtnText}>{isKept ? 'Saved' : 'Keep'}</Text>
+              <Text style={styles.downloadBtnText}>
+                {isKept ? t('studio.saved') : t('studio.keep')}
+              </Text>
             </Pressable>
           )}
           {isWeb && (
@@ -706,10 +743,10 @@ function ResultPreviewPanel({
               style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.75 }]}
               onPress={() => downloadImage(result, filename)}
               accessibilityRole="button"
-              accessibilityLabel="Download image"
+              accessibilityLabel={t('studio.a11y.downloadImage')}
             >
               <Ionicons name="download-outline" size={15} color="#fff" />
-              <Text style={styles.downloadBtnText}>Download</Text>
+              <Text style={styles.downloadBtnText}>{t('studio.download')}</Text>
             </Pressable>
           )}
         </View>
@@ -734,6 +771,8 @@ function ProductCard({
   cardWidth,
   colors,
   styles,
+  mismatch = false,
+  mismatchHint,
 }: {
   product: ProductItem;
   selected: boolean;
@@ -741,13 +780,22 @@ function ProductCard({
   cardWidth: DimensionValue;
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
+  mismatch?: boolean;
+  mismatchHint?: string;
 }) {
   return (
     <Pressable
-      style={[styles.productCard, { width: cardWidth }, selected && styles.productCardSelected]}
+      style={[
+        styles.productCard,
+        { width: cardWidth },
+        selected && styles.productCardSelected,
+        mismatch && { opacity: 0.35 },
+      ]}
       onPress={onToggle}
+      disabled={mismatch}
       accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected }}
+      accessibilityState={{ checked: selected, disabled: mismatch }}
+      accessibilityHint={mismatch ? mismatchHint : undefined}
     >
       <View style={styles.productImageBox}>
         <ProductImage id={product.id} style={styles.productImage} resizeMode="cover" />
@@ -761,7 +809,7 @@ function ProductCard({
         <Text style={styles.productName} numberOfLines={1}>
           {product.name}
         </Text>
-        <Text style={styles.productPrice}>${product.price.toFixed(2)}</Text>
+        <Text style={styles.productPrice}>{formatPrice(product.price, product.currency)}</Text>
       </View>
     </Pressable>
   );
@@ -794,6 +842,7 @@ function ChooseProductsSection({
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
+  const t = useT();
 
   const closePicker = () => {
     setPickerOpen(false);
@@ -808,6 +857,7 @@ function ChooseProductsSection({
   const hasMore = products.length > DESKTOP_INLINE_LIMIT;
   const inlineProducts = products.slice(0, DESKTOP_INLINE_LIMIT);
   const selectedProducts = products.filter((p) => selected.has(p.id));
+  const lockedCurrency = selectedProducts.length > 0 ? selectedProducts[0].currency : null;
 
   const picker = (
     <ProductPickerModal
@@ -825,12 +875,14 @@ function ChooseProductsSection({
       <View style={styles.desktopSection}>
         <View style={styles.desktopSectionHeader}>
           <View>
-            <Text style={styles.desktopSectionTitle}>Choose Products</Text>
+            <Text style={styles.desktopSectionTitle}>{t('productPicker.defaultTitle')}</Text>
             <Text style={styles.desktopSectionSub}>{subtitle}</Text>
           </View>
           {selectedCount > 0 && (
             <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+              <Text
+                style={styles.countBadgeText}
+              >{`${selectedCount} ${t('productPicker.selected')}`}</Text>
             </View>
           )}
         </View>
@@ -844,7 +896,7 @@ function ChooseProductsSection({
         ) : products.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-            <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
+            <Text style={styles.emptyText}>{t('studio.noProductsAddFirst')}</Text>
           </View>
         ) : showProducts == false ? (
           <>
@@ -873,25 +925,39 @@ function ChooseProductsSection({
                   fontWeight: D.fontWeight.medium,
                 }}
               >
-                {'Browse products'}
+                {t('studio.browseProducts')}
               </Text>
               <Ionicons name="chevron-forward" size={13} color={colors.accent.primary} />
             </Pressable>
           </>
         ) : (
           <>
+            {lockedCurrency !== null ? (
+              <View style={styles.currencyNotice}>
+                <Ionicons name="lock-closed-outline" size={14} color={colors.accent.primary} />
+                <Text style={styles.currencyNoticeText}>
+                  {`${t('productPicker.currencyLocked')} ${lockedCurrency}.`}
+                </Text>
+              </View>
+            ) : null}
             <View style={{ flexDirection: 'row', gap: D.spacing.sm }}>
-              {inlineProducts.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  selected={selected.has(p.id)}
-                  onToggle={() => toggleProduct(p.id)}
-                  cardWidth={inlineCardWidth}
-                  colors={colors}
-                  styles={styles}
-                />
-              ))}
+              {inlineProducts.map((p) => {
+                const isSel = selected.has(p.id);
+                const mismatch = lockedCurrency !== null && !isSel && p.currency !== lockedCurrency;
+                return (
+                  <ProductCard
+                    key={p.id}
+                    product={p}
+                    selected={isSel}
+                    onToggle={() => toggleProduct(p.id)}
+                    cardWidth={inlineCardWidth}
+                    colors={colors}
+                    styles={styles}
+                    mismatch={mismatch}
+                    mismatchHint={t('productPicker.currencyMismatch')}
+                  />
+                );
+              })}
             </View>
 
             <Pressable
@@ -919,7 +985,9 @@ function ChooseProductsSection({
                   fontWeight: D.fontWeight.medium,
                 }}
               >
-                {hasMore ? `Browse all ${products.length} products` : 'Browse products'}
+                {hasMore
+                  ? t('studio.browseAllProducts').replace('{count}', String(products.length))
+                  : t('studio.browseProducts')}
               </Text>
               <Ionicons name="chevron-forward" size={13} color={colors.accent.primary} />
             </Pressable>
@@ -935,10 +1003,12 @@ function ChooseProductsSection({
   return (
     <View style={styles.mobileSection}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Choose Products</Text>
+        <Text style={styles.sectionTitle}>{t('productPicker.defaultTitle')}</Text>
         {selectedCount > 0 && (
           <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{selectedCount} selected</Text>
+            <Text
+              style={styles.countBadgeText}
+            >{`${selectedCount} ${t('productPicker.selected')}`}</Text>
           </View>
         )}
       </View>
@@ -952,7 +1022,7 @@ function ChooseProductsSection({
       ) : products.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="pricetag-outline" size={32} color={colors.text.muted} />
-          <Text style={styles.emptyText}>No products yet. Add some in the Products tab.</Text>
+          <Text style={styles.emptyText}>{t('studio.noProductsAddFirst')}</Text>
         </View>
       ) : (
         <Pressable
@@ -1032,8 +1102,14 @@ function ChooseProductsSection({
               }}
             >
               {selectedCount > 0
-                ? `${selectedCount} of ${products.length} product${products.length !== 1 ? 's' : ''} selected`
-                : `Choose from ${products.length} product${products.length !== 1 ? 's' : ''}`}
+                ? products.length === 1
+                  ? t('studio.selectedOfOne').replace('{selected}', String(selectedCount))
+                  : t('studio.selectedOfN')
+                      .replace('{selected}', String(selectedCount))
+                      .replace('{total}', String(products.length))
+                : products.length === 1
+                  ? t('studio.chooseFromOne')
+                  : t('studio.chooseFromN').replace('{count}', String(products.length))}
             </Text>
             <Ionicons name="chevron-forward" size={16} color={colors.text.muted} />
           </View>
@@ -1048,12 +1124,34 @@ function ChooseProductsSection({
 // ─── Main screen ───────────────────────────────────────────────────────────────
 export default function StudioScreen() {
   const { colors } = useTheme();
+  const t = useT();
+  const { profile: shopProfile } = useShop();
   const { width: screenWidth } = useWindowDimensions();
   const isDesktop = isWeb && screenWidth >= DESKTOP_BREAKPOINT;
   const styles = useMemo(
     () => makeStyles(colors, isDesktop, screenWidth),
     [colors, isDesktop, screenWidth]
   );
+
+  // ── Translated labels (rebuilt on language change) ───────────────────────────
+  const TAB_META_I18N = useMemo(
+    () => ({
+      catalog: { label: t('studio.navCatalog'), desc: t('studio.toolsCatalogDesc') },
+      announcements: {
+        label: t('studio.navAnnouncements'),
+        desc: t('studio.toolsAnnouncementsDesc'),
+      },
+      video: { label: t('studio.navVideo'), desc: t('studio.toolsVideoDesc') },
+    }),
+    [t]
+  );
+  const tr: TranslateFn = t as unknown as TranslateFn;
+  const LAYOUT_OPTIONS = useMemo(() => getLayoutOptions(tr), [tr]);
+  const COLOR_OPTIONS = useMemo(() => getColorOptions(tr), [tr]);
+  const FORMAT_OPTIONS = useMemo(() => getFormatOptions(tr), [tr]);
+  const POST_TYPES = useMemo(() => getPostTypes(tr), [tr]);
+  const JOB_IMAGE_STYLE_OPTIONS = useMemo(() => getJobImageStyleOptions(tr), [tr]);
+  const TONE_OPTIONS = useMemo(() => getToneOptions(tr), [tr]);
 
   // ── Tab state ────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<StudioTab>('catalog');
@@ -1173,19 +1271,15 @@ export default function StudioScreen() {
   useFocusEffect(
     useCallback(() => {
       void productsCache.ensureLoaded({});
-
-      getShopProfile()
-        .then((profile) => {
-          setShopProfile(profile);
-          if (profile) {
-            const allKeys = deriveContextItems(profile).map((i) => i.key);
-            setCatalogContextFields(allKeys);
-            setAnnoContextFields(allKeys);
-          }
-        })
-        .catch(() => {});
     }, [])
   );
+
+  useEffect(() => {
+    if (!shopProfile) return;
+    const allKeys = deriveContextItems(shopProfile, tr).map((i) => i.key);
+    setCatalogContextFields(allKeys);
+    setAnnoContextFields(allKeys);
+  }, [shopProfile]);
 
   function toggleProduct(id: string) {
     setSelected((prev) => {
@@ -1211,9 +1305,11 @@ export default function StudioScreen() {
         chosen.map(async (p) => ({
           name: p.name,
           price: p.price,
+          currency: p.currency,
           imageBase64: await loadProductImageBase64(p.id),
         }))
       );
+      const catalogCurrency = chosen[0].currency;
       setCatalogResult(
         await generateCatalogImage({
           products: productsWithImages,
@@ -1222,6 +1318,7 @@ export default function StudioScreen() {
           format: catalogFormat,
           showPrices,
           brandContextFields: catalogContextFields.length > 0 ? catalogContextFields : undefined,
+          currency: catalogCurrency,
         })
       );
     } catch (err) {
@@ -1294,6 +1391,7 @@ export default function StudioScreen() {
         chosen.map(async (p) => ({
           name: p.name,
           price: p.price,
+          currency: p.currency,
           imageBase64: await loadProductImageBase64(p.id),
         }))
       );
@@ -1361,7 +1459,6 @@ export default function StudioScreen() {
   const annoReady = isJobPost ? jobPostReady : content.trim().length > 0;
 
   // ── Brand context state ──────────────────────────────────────────────────────
-  const [shopProfile, setShopProfile] = useState<ShopProfileResponse | null>(null);
   const [catalogContextFields, setCatalogContextFields] = useState<string[]>([]);
   const [annoContextFields, setAnnoContextFields] = useState<string[]>([]);
 
@@ -1416,8 +1513,8 @@ export default function StudioScreen() {
   }, []);
 
   const contextItems = useMemo(
-    () => (shopProfile ? deriveContextItems(shopProfile) : []),
-    [shopProfile]
+    () => (shopProfile ? deriveContextItems(shopProfile, tr) : []),
+    [shopProfile, tr]
   );
 
   const toggleCatalogField = useCallback((key: string) => {
@@ -1513,23 +1610,23 @@ export default function StudioScreen() {
       activeTab === 'catalog' ? (
         catalogMode === 'generate' ? (
           <>
-            <SectionLabel label="Generation Options" />
-            <OptionLabel label="Layout" />
+            <SectionLabel label={t('studio.generationOptions')} />
+            <OptionLabel label={t('studio.opt.layout')} />
             <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
-            <OptionLabel label="Color Theme" />
+            <OptionLabel label={t('studio.opt.colorTheme')} />
             <SidebarOptionGroup
               options={COLOR_OPTIONS}
               selected={colorTheme}
               onSelect={setColorTheme}
             />
-            <OptionLabel label="Format" />
+            <OptionLabel label={t('studio.opt.format')} />
             <SidebarOptionGroup
               options={FORMAT_OPTIONS}
               selected={catalogFormat}
               onSelect={setCatalogFormat}
             />
             <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Show Prices</Text>
+              <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
               <Switch
                 value={showPrices}
                 onValueChange={setShowPrices}
@@ -1545,11 +1642,11 @@ export default function StudioScreen() {
           </>
         ) : (
           <>
-            <SectionLabel label="Placement Options" />
-            <OptionLabel label="Layout" />
+            <SectionLabel label={t('studio.placementOptions')} />
+            <OptionLabel label={t('studio.opt.layout')} />
             <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
             <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Show Prices</Text>
+              <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
               <Switch
                 value={showPrices}
                 onValueChange={setShowPrices}
@@ -1568,10 +1665,10 @@ export default function StudioScreen() {
         )
       ) : activeTab === 'announcements' ? (
         <>
-          <SectionLabel label="Style Options" />
-          <OptionLabel label="Tone" />
+          <SectionLabel label={t('studio.styleOptions')} />
+          <OptionLabel label={t('studio.opt.tone')} />
           <SidebarOptionGroup options={TONE_OPTIONS} selected={tone} onSelect={setTone} />
-          <OptionLabel label="Format" />
+          <OptionLabel label={t('studio.opt.format')} />
           <SidebarOptionGroup
             options={FORMAT_OPTIONS}
             selected={annoFormat}
@@ -1591,7 +1688,9 @@ export default function StudioScreen() {
           <GenerateButton
             loading={catalogGenerating}
             disabled={selectedCount === 0}
-            label={selectedCount === 0 ? 'Select products first' : 'Generate Catalog'}
+            label={
+              selectedCount === 0 ? t('studio.selectProductsFirst') : t('studio.generateCatalog')
+            }
             onPress={handleCatalogGenerate}
           />
         ) : (
@@ -1600,10 +1699,10 @@ export default function StudioScreen() {
             disabled={selectedCount === 0 || wallpaperBase64 === null}
             label={
               wallpaperBase64 === null
-                ? 'Pick a wallpaper first'
+                ? t('studio.pickWallpaperFirst')
                 : selectedCount === 0
-                  ? 'Select products first'
-                  : 'Place on Wallpaper'
+                  ? t('studio.selectProductsFirst')
+                  : t('studio.placeOnWallpaper')
             }
             onPress={handleWallpaperOnGenerate}
           />
@@ -1612,7 +1711,7 @@ export default function StudioScreen() {
         <GenerateButton
           loading={annoGenerating}
           disabled={!annoReady}
-          label="Generate Graphic"
+          label={t('studio.generateGraphic')}
           onPress={handleAnnoGenerate}
         />
       ) : null;
@@ -1651,7 +1750,7 @@ export default function StudioScreen() {
                       style={{ marginRight: 4 }}
                     />
                     <Text style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}>
-                      {mode === 'generate' ? 'Generate' : 'On Wallpaper'}
+                      {mode === 'generate' ? t('studio.generate') : t('studio.onWallpaperTab')}
                     </Text>
                   </Pressable>
                 );
@@ -1663,7 +1762,7 @@ export default function StudioScreen() {
             <>
               {/* Product picker */}
               <ChooseProductsSection
-                subtitle="Select products to include in your catalog"
+                subtitle={t('studio.subtitleCatalog')}
                 isDesktop
                 products={products}
                 loadingProducts={loadingProducts}
@@ -1677,17 +1776,15 @@ export default function StudioScreen() {
 
               {/* Preview */}
               <View style={styles.desktopSection}>
-                <Text style={styles.desktopSectionTitle}>Preview</Text>
-                <Text style={styles.desktopSectionSub}>
-                  Your generated catalog will appear here
-                </Text>
+                <Text style={styles.desktopSectionTitle}>{t('studio.preview')}</Text>
+                <Text style={styles.desktopSectionSub}>{t('studio.catalogPreviewSub')}</Text>
                 <View style={{ marginTop: D.spacing.md }}>
                   <ResultPreviewPanel
                     result={catalogResult}
                     generating={catalogGenerating}
                     error={catalogError}
-                    emptyTitle="Your catalog will appear here"
-                    emptyHint="Select products on the left, configure options, then hit Generate."
+                    emptyTitle={t('studio.previewEmptyCatalog')}
+                    emptyHint={t('studio.hintCatalog')}
                     filename="catalog"
                     onKeep={() => {
                       if (!catalogResult) return;
@@ -1710,7 +1807,7 @@ export default function StudioScreen() {
             <>
               {/* Product picker */}
               <ChooseProductsSection
-                subtitle="Select products to place on your wallpaper"
+                subtitle={t('studio.subtitleWallpaper')}
                 isDesktop
                 products={products}
                 loadingProducts={loadingProducts}
@@ -1724,10 +1821,8 @@ export default function StudioScreen() {
 
               {/* Wallpaper picker */}
               <View style={styles.desktopSection}>
-                <Text style={styles.desktopSectionTitle}>Background Wallpaper</Text>
-                <Text style={styles.desktopSectionSub}>
-                  Import from device or generate with AI — your wallpaper stays unchanged
-                </Text>
+                <Text style={styles.desktopSectionTitle}>{t('studio.backgroundWallpaper')}</Text>
+                <Text style={styles.desktopSectionSub}>{t('studio.wallpaperImportSub')}</Text>
 
                 <View style={[styles.wallpaperActionRow, { marginTop: D.spacing.md }]}>
                   <Pressable
@@ -1739,7 +1834,7 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="image-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>Import</Text>
+                    <Text style={styles.wallpaperActionText}>{t('studio.import')}</Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [
@@ -1750,7 +1845,7 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="sparkles-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>Generate</Text>
+                    <Text style={styles.wallpaperActionText}>{t('studio.generate')}</Text>
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [
@@ -1761,7 +1856,7 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="albums-outline" size={16} color={colors.accent.primary} />
-                    <Text style={styles.wallpaperActionText}>My Wallpapers</Text>
+                    <Text style={styles.wallpaperActionText}>{t('studio.myWallpapers')}</Text>
                   </Pressable>
                 </View>
 
@@ -1782,7 +1877,7 @@ export default function StudioScreen() {
                       }}
                       style={styles.wallpaperPreviewImage}
                       resizeMode="cover"
-                      accessibilityLabel="Generated wallpaper preview"
+                      accessibilityLabel={t('studio.a11y.generatedWallpaperPreview')}
                     />
                     <View style={styles.wallpaperPreviewActions}>
                       <Pressable
@@ -1809,7 +1904,7 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="checkmark" size={15} color="#fff" />
-                        <Text style={styles.wallpaperConfirmBtnText}>Keep</Text>
+                        <Text style={styles.wallpaperConfirmBtnText}>{t('studio.keep')}</Text>
                       </Pressable>
                       <Pressable
                         style={[
@@ -1867,7 +1962,7 @@ export default function StudioScreen() {
                       }}
                       style={styles.wallpaperThumb}
                       resizeMode="cover"
-                      accessibilityLabel="Selected wallpaper"
+                      accessibilityLabel={t('studio.a11y.selectedWallpaper')}
                     />
                     <View style={{ flex: 1 }}>
                       <Text
@@ -1917,17 +2012,15 @@ export default function StudioScreen() {
 
               {/* Result */}
               <View style={styles.desktopSection}>
-                <Text style={styles.desktopSectionTitle}>Result</Text>
-                <Text style={styles.desktopSectionSub}>
-                  Your products composited onto the wallpaper
-                </Text>
+                <Text style={styles.desktopSectionTitle}>{t('studio.result')}</Text>
+                <Text style={styles.desktopSectionSub}>{t('studio.wallpaperResultSub')}</Text>
                 <View style={{ marginTop: D.spacing.md }}>
                   <ResultPreviewPanel
                     result={wallpaperOnResult}
                     generating={wallpaperOnGenerating}
                     error={wallpaperOnError}
-                    emptyTitle="Result will appear here"
-                    emptyHint="Pick a wallpaper, select products, configure options, then hit Place on Wallpaper."
+                    emptyTitle={t('studio.previewResult')}
+                    emptyHint={t('studio.hintWallpaper')}
                     filename="wallpaper-composite"
                     onKeep={() => {
                       if (!wallpaperOnResult) return;
@@ -1952,10 +2045,10 @@ export default function StudioScreen() {
         <>
           {/* Post type + content */}
           <View style={styles.desktopSection}>
-            <Text style={styles.desktopSectionTitle}>Post Type</Text>
-            <Text style={styles.desktopSectionSub}>What kind of graphic do you need?</Text>
+            <Text style={styles.desktopSectionTitle}>{t('studio.announcement.postType')}</Text>
+            <Text style={styles.desktopSectionSub}>{t('studio.postTypeHint')}</Text>
             <View style={[styles.typeRow, { marginTop: D.spacing.md }]}>
-              {POST_TYPES.map(({ type, icon }) => {
+              {POST_TYPES.map(({ type, label, icon }) => {
                 const active = postType === type;
                 return (
                   <Pressable
@@ -1971,7 +2064,7 @@ export default function StudioScreen() {
                       color={active ? colors.accent.primary : colors.text.muted}
                     />
                     <Text style={[styles.typeChipText, active && styles.typeChipTextActive]}>
-                      {type}
+                      {label}
                     </Text>
                   </Pressable>
                 );
@@ -1980,7 +2073,7 @@ export default function StudioScreen() {
           </View>
           {postType === 'Promotion' && (
             <ChooseProductsSection
-              subtitle="Select products to use as visual reference (optional)"
+              subtitle={t('studio.subtitleAnnouncement')}
               isDesktop
               products={products}
               loadingProducts={loadingProducts}
@@ -1994,38 +2087,36 @@ export default function StudioScreen() {
           )}
           {isJobPost ? (
             <View style={styles.desktopSection}>
-              <Text style={styles.desktopSectionTitle}>Job details</Text>
-              <Text style={styles.desktopSectionSub}>
-                The role, schedule, and requirements shown on the graphic
-              </Text>
-              <OptionLabel label="Job title" />
+              <Text style={styles.desktopSectionTitle}>{t('studio.jobDetails')}</Text>
+              <Text style={styles.desktopSectionSub}>{t('studio.jobDetailsSub')}</Text>
+              <OptionLabel label={t('studio.opt.jobTitle')} />
               <TextInput
                 style={styles.jobInput}
-                placeholder="e.g. Cashier"
+                placeholder={t('studio.announcement.jobTitlePlaceholderCashier')}
                 placeholderTextColor={colors.text.muted}
                 value={jobTitle}
                 onChangeText={setJobTitle}
                 editable={!annoGenerating}
               />
-              <OptionLabel label="Work schedule" />
+              <OptionLabel label={t('studio.opt.jobSchedule')} />
               <TextInput
                 style={styles.jobInput}
-                placeholder="e.g. Part-time, weekends, 3 days/week"
+                placeholder={t('studio.announcement.jobSchedulePlaceholder')}
                 placeholderTextColor={colors.text.muted}
                 value={jobSchedule}
                 onChangeText={setJobSchedule}
                 editable={!annoGenerating}
               />
-              <OptionLabel label="Salary (optional)" />
+              <OptionLabel label={t('studio.opt.jobSalary')} />
               <TextInput
                 style={styles.jobInput}
-                placeholder="e.g. $15/hr or €1,800/month"
+                placeholder={t('studio.announcement.jobSalaryPlaceholder')}
                 placeholderTextColor={colors.text.muted}
                 value={jobSalary}
                 onChangeText={setJobSalary}
                 editable={!annoGenerating}
               />
-              <OptionLabel label="Requirements (optional, one per line)" />
+              <OptionLabel label={t('studio.opt.jobRequirements')} />
               <TextInput
                 style={styles.jobTextArea}
                 placeholder={"Driver's license\nCommunication skills\nResponsibility"}
@@ -2035,14 +2126,14 @@ export default function StudioScreen() {
                 multiline
                 editable={!annoGenerating}
               />
-              <OptionLabel label="Image style" />
+              <OptionLabel label={t('studio.opt.jobImageStyle')} />
               <ChipSelector
                 options={JOB_IMAGE_STYLE_OPTIONS}
                 selected={jobImageStyle}
                 onSelect={(v) => setJobImageStyle(v as 'with-person' | 'text-only')}
-                accessibilityLabel="Job image style"
+                accessibilityLabel={t('studio.a11y.jobImageStyle')}
               />
-              <OptionLabel label="Additional direction (optional)" />
+              <OptionLabel label={t('studio.opt.additionalDirection')} />
               <TextInput
                 style={styles.jobTextArea}
                 placeholder={'e.g. "Apply by email at jobs@example.com" or "Call 555-1234"'}
@@ -2055,8 +2146,8 @@ export default function StudioScreen() {
             </View>
           ) : (
             <View style={styles.desktopSection}>
-              <Text style={styles.desktopSectionTitle}>Content</Text>
-              <Text style={styles.desktopSectionSub}>Describe what you want to communicate</Text>
+              <Text style={styles.desktopSectionTitle}>{t('studio.contentSection')}</Text>
+              <Text style={styles.desktopSectionSub}>{t('studio.announcement.describe')}</Text>
               <TextInput
                 style={[styles.textArea, { marginTop: D.spacing.md }]}
                 placeholder={currentPostType.placeholder}
@@ -2071,15 +2162,15 @@ export default function StudioScreen() {
 
           {/* Preview */}
           <View style={styles.desktopSection}>
-            <Text style={styles.desktopSectionTitle}>Preview</Text>
-            <Text style={styles.desktopSectionSub}>Your generated graphic will appear here</Text>
+            <Text style={styles.desktopSectionTitle}>{t('studio.preview')}</Text>
+            <Text style={styles.desktopSectionSub}>{t('studio.previewEmptyAnnouncement')}</Text>
             <View style={{ marginTop: D.spacing.md }}>
               <ResultPreviewPanel
                 result={annoResult}
                 generating={annoGenerating}
                 error={annoError}
-                emptyTitle="Your graphic will appear here"
-                emptyHint="Fill in the content and style options, then hit Generate."
+                emptyTitle={t('studio.previewGraphic')}
+                emptyHint={t('studio.hintAnnouncement')}
                 filename="announcement"
                 onKeep={() => {
                   if (!annoResult) return;
@@ -2110,19 +2201,17 @@ export default function StudioScreen() {
             />
           </ReAnimated.View>
           <View style={styles.comingSoonBadge}>
-            <Text style={styles.comingSoonText}>Coming Soon</Text>
+            <Text style={styles.comingSoonText}>{t('studio.comingSoon')}</Text>
           </View>
-          <Text style={styles.videoTitle}>Video Ads</Text>
-          <Text style={styles.videoDescription}>
-            Generate professional short-form video ads powered by AI. Currently in development.
-          </Text>
+          <Text style={styles.videoTitle}>{t('studio.videoAdsTitle')}</Text>
+          <Text style={styles.videoDescription}>{t('studio.videoBody')}</Text>
           <View style={styles.stepsCard}>
-            <Text style={styles.stepsTitle}>{"What's coming"}</Text>
+            <Text style={styles.stepsTitle}>{t('studio.videoWhatsComing')}</Text>
             {(
               [
-                { icon: 'film-outline', label: 'Storyboard your concept' },
-                { icon: 'sparkles-outline', label: 'AI generates visuals' },
-                { icon: 'cloud-upload-outline', label: 'Export & share' },
+                { icon: 'film-outline', label: t('studio.videoStep1') },
+                { icon: 'sparkles-outline', label: t('studio.videoStep2') },
+                { icon: 'cloud-upload-outline', label: t('studio.videoStep3') },
               ] as { icon: React.ComponentProps<typeof Ionicons>['name']; label: string }[]
             ).map(({ icon, label }, i) => (
               <View key={label} style={styles.stepRow}>
@@ -2149,12 +2238,12 @@ export default function StudioScreen() {
             >
               {/* Header */}
               <View style={styles.sidebarHeader}>
-                <Text style={styles.sidebarTitle}>Studio</Text>
-                <Text style={styles.sidebarSubtitle}>AI-powered ad creation</Text>
+                <Text style={styles.sidebarTitle}>{t('studio.title')}</Text>
+                <Text style={styles.sidebarSubtitle}>{t('studio.subtitle')}</Text>
               </View>
 
               {/* Vertical tab nav */}
-              <SectionLabel label="Tools" />
+              <SectionLabel label={t('studio.title')} />
               <View style={styles.verticalNav}>
                 {TAB_META.map((tab) => {
                   const active = activeTab === tab.key;
@@ -2174,13 +2263,13 @@ export default function StudioScreen() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.navLabel, active && styles.navLabelActive]}>
-                          {tab.label}
+                          {TAB_META_I18N[tab.key].label}
                         </Text>
-                        <Text style={styles.navDesc}>{tab.desc}</Text>
+                        <Text style={styles.navDesc}>{TAB_META_I18N[tab.key].desc}</Text>
                       </View>
                       {tab.comingSoon && (
                         <View style={styles.navBadge}>
-                          <Text style={styles.navBadgeText}>Soon</Text>
+                          <Text style={styles.navBadgeText}>{t('gallery.videoBadge')}</Text>
                         </View>
                       )}
                       {active && !tab.comingSoon && (
@@ -2232,7 +2321,7 @@ export default function StudioScreen() {
                 style={styles.wallpaperGenCloseBtn}
                 onPress={handleCloseWallpaperGenModal}
                 accessibilityRole="button"
-                accessibilityLabel="Close"
+                accessibilityLabel={t('common.close')}
               >
                 <Ionicons name="close" size={20} color={colors.text.secondary} />
               </Pressable>
@@ -2243,18 +2332,20 @@ export default function StudioScreen() {
                   contentContainerStyle={styles.wallpaperGenScrollContent}
                   keyboardShouldPersistTaps="handled"
                 >
-                  <Text style={styles.wallpaperGenTitle}>Generate Wallpaper</Text>
+                  <Text style={styles.wallpaperGenTitle}>{t('wallpapers.modal.title')}</Text>
                   <Text style={styles.wallpaperGenSubtitle}>
-                    Configure and generate an AI background
+                    {t('studio.wallpaperModal.subtitle')}
                   </Text>
 
-                  <Text style={styles.wallpaperGenSectionLabel}>Format</Text>
+                  <Text style={styles.wallpaperGenSectionLabel}>
+                    {t('wallpapers.modal.format')}
+                  </Text>
                   <View style={styles.wallpaperGenFormatRow}>
                     {(
                       [
-                        { value: '9:16', label: 'Vertical' },
-                        { value: '1:1', label: 'Square' },
-                        { value: '4:5', label: 'Portrait' },
+                        { value: '9:16', label: t('studio.wallpaperModal.verticalAspect') },
+                        { value: '1:1', label: t('studio.wallpaperModal.squareAspect') },
+                        { value: '4:5', label: t('studio.wallpaperModal.portraitAspect') },
                       ] as const
                     ).map((opt) => (
                       <Pressable
@@ -2291,7 +2382,7 @@ export default function StudioScreen() {
                   <Text style={styles.wallpaperGenSectionLabel}>Style prompt (optional)</Text>
                   <TextInput
                     style={styles.wallpaperGenInput}
-                    placeholder="e.g. warm sunset bokeh, soft pastel bakery, dark wood texture…"
+                    placeholder={t('studio.wallpaper.promptPlaceholder')}
                     placeholderTextColor={colors.text.muted}
                     value={wallpaperPrompt}
                     onChangeText={setWallpaperPrompt}
@@ -2301,7 +2392,9 @@ export default function StudioScreen() {
 
                   <View style={styles.wallpaperGenToggleRow}>
                     <View>
-                      <Text style={styles.wallpaperGenToggleLabel}>Include Logo</Text>
+                      <Text style={styles.wallpaperGenToggleLabel}>
+                        {t('wallpapers.modal.includeLogo')}
+                      </Text>
                       <Text style={styles.wallpaperGenToggleHint}>
                         Place your brand logo in the header
                       </Text>
@@ -2314,7 +2407,9 @@ export default function StudioScreen() {
                     />
                   </View>
 
-                  <Text style={styles.wallpaperGenSectionLabel}>Include brand info</Text>
+                  <Text style={styles.wallpaperGenSectionLabel}>
+                    {t('wallpapers.modal.includeBrand')}
+                  </Text>
                   <View>
                     {(
                       [
@@ -2374,7 +2469,7 @@ export default function StudioScreen() {
                       <Ionicons name="sparkles-outline" size={16} color="#fff" />
                     )}
                     <Text style={styles.wallpaperGenBtnText2}>
-                      {wallpaperGenGenerating ? 'Generating…' : 'Generate'}
+                      {wallpaperGenGenerating ? t('studio.generating') : t('studio.generate')}
                     </Text>
                   </Pressable>
                 </ScrollView>
@@ -2384,7 +2479,7 @@ export default function StudioScreen() {
                   contentContainerStyle={styles.wallpaperGenResultContainer}
                   keyboardShouldPersistTaps="handled"
                 >
-                  <Text style={styles.wallpaperGenTitle}>Wallpaper Generated</Text>
+                  <Text style={styles.wallpaperGenTitle}>{t('wallpapers.result.title')}</Text>
                   <Text style={styles.wallpaperGenSubtitle}>
                     Keep it as your background or generate a new one
                   </Text>
@@ -2406,7 +2501,7 @@ export default function StudioScreen() {
                         },
                       ]}
                       resizeMode="contain"
-                      accessibilityLabel="Generated wallpaper"
+                      accessibilityLabel={t('studio.a11y.generatedWallpaper')}
                     />
                   )}
 
@@ -2468,7 +2563,7 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="download-outline" size={16} color="#fff" />
-                        <Text style={styles.wallpaperGenResultBtnText}>Download</Text>
+                        <Text style={styles.wallpaperGenResultBtnText}>{t('studio.download')}</Text>
                       </Pressable>
                     )}
                   </View>
@@ -2486,7 +2581,9 @@ export default function StudioScreen() {
                     accessibilityRole="button"
                   >
                     <Ionicons name="refresh-outline" size={15} color={colors.text.secondary} />
-                    <Text style={styles.wallpaperGenSecondaryBtnText}>Generate Again</Text>
+                    <Text style={styles.wallpaperGenSecondaryBtnText}>
+                      {t('studio.generateAgain')}
+                    </Text>
                   </Pressable>
                 </ScrollView>
               )}
@@ -2506,8 +2603,8 @@ export default function StudioScreen() {
               {/* Dialog header */}
               <View style={styles.pickerHeader}>
                 <View>
-                  <Text style={styles.pickerTitle}>My Wallpapers</Text>
-                  <Text style={styles.pickerSubtitle}>Select a wallpaper to use as background</Text>
+                  <Text style={styles.pickerTitle}>{t('studio.myWallpapers')}</Text>
+                  <Text style={styles.pickerSubtitle}>{t('studio.wallpaper.pickFromGallery')}</Text>
                 </View>
                 <Pressable
                   style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
@@ -2618,7 +2715,11 @@ export default function StudioScreen() {
                     style={{ marginRight: 4 }}
                   />
                   <Text style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}>
-                    {tab === 'catalog' ? 'Catalog' : tab === 'announcements' ? 'Posts' : 'Video'}
+                    {tab === 'catalog'
+                      ? t('studio.tabCatalog')
+                      : tab === 'announcements'
+                        ? t('studio.tabAnnouncement')
+                        : 'Video'}
                   </Text>
                 </Pressable>
               );
@@ -2660,7 +2761,7 @@ export default function StudioScreen() {
                         style={{ marginRight: 4 }}
                       />
                       <Text style={[styles.segmentLabel, isActive && styles.segmentLabelActive]}>
-                        {mode === 'generate' ? 'Generate' : 'On Wallpaper'}
+                        {mode === 'generate' ? t('studio.generate') : t('studio.onWallpaperTab')}
                       </Text>
                     </Pressable>
                   );
@@ -2670,7 +2771,7 @@ export default function StudioScreen() {
               {catalogMode === 'generate' ? (
                 <>
                   <ChooseProductsSection
-                    subtitle="Select products to include in your catalog"
+                    subtitle={t('studio.subtitleCatalog')}
                     isDesktop={false}
                     products={products}
                     loadingProducts={loadingProducts}
@@ -2683,30 +2784,30 @@ export default function StudioScreen() {
                   />
 
                   <View style={styles.mobileSection}>
-                    <Text style={styles.sectionTitle}>Generation Options</Text>
-                    <OptionLabel label="Layout" />
+                    <Text style={styles.sectionTitle}>{t('studio.generationOptions')}</Text>
+                    <OptionLabel label={t('studio.opt.layout')} />
                     <ChipSelector
                       options={LAYOUT_OPTIONS}
                       selected={layout}
                       onSelect={setLayout}
-                      accessibilityLabel="Layout"
+                      accessibilityLabel={t('studio.opt.layout')}
                     />
-                    <OptionLabel label="Color Theme" />
+                    <OptionLabel label={t('studio.opt.colorTheme')} />
                     <ChipSelector
                       options={COLOR_OPTIONS}
                       selected={colorTheme}
                       onSelect={setColorTheme}
-                      accessibilityLabel="Color theme"
+                      accessibilityLabel={t('studio.opt.colorTheme')}
                     />
-                    <OptionLabel label="Format" />
+                    <OptionLabel label={t('studio.opt.format')} />
                     <ChipSelector
                       options={FORMAT_OPTIONS}
                       selected={catalogFormat}
                       onSelect={setCatalogFormat}
-                      accessibilityLabel="Format"
+                      accessibilityLabel={t('studio.opt.format')}
                     />
                     <View style={styles.toggleRow}>
-                      <Text style={styles.toggleLabel}>Show Prices</Text>
+                      <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
                       <Switch
                         value={showPrices}
                         onValueChange={setShowPrices}
@@ -2729,7 +2830,11 @@ export default function StudioScreen() {
                   <GenerateButton
                     loading={catalogGenerating}
                     disabled={selectedCount === 0}
-                    label={selectedCount === 0 ? 'Select products to generate' : 'Generate Catalog'}
+                    label={
+                      selectedCount === 0
+                        ? t('studio.selectProductsToGenerate')
+                        : t('studio.generateCatalog')
+                    }
                     onPress={handleCatalogGenerate}
                   />
 
@@ -2785,7 +2890,7 @@ export default function StudioScreen() {
                             accessibilityRole="button"
                           >
                             <Ionicons name="download-outline" size={15} color="#fff" />
-                            <Text style={styles.downloadBtnText}>Download</Text>
+                            <Text style={styles.downloadBtnText}>{t('studio.download')}</Text>
                           </Pressable>
                         )}
                       </View>
@@ -2796,7 +2901,7 @@ export default function StudioScreen() {
                 <>
                   {/* Products */}
                   <ChooseProductsSection
-                    subtitle="Select products to place on your wallpaper"
+                    subtitle={t('studio.subtitleWallpaper')}
                     isDesktop={false}
                     products={products}
                     loadingProducts={loadingProducts}
@@ -2810,7 +2915,7 @@ export default function StudioScreen() {
 
                   {/* Wallpaper picker */}
                   <View style={styles.mobileSection}>
-                    <Text style={styles.sectionTitle}>Background Wallpaper</Text>
+                    <Text style={styles.sectionTitle}>{t('studio.backgroundWallpaper')}</Text>
                     <Text
                       style={[
                         styles.emptyText,
@@ -2830,7 +2935,7 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="image-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>Import</Text>
+                        <Text style={styles.wallpaperActionText}>{t('studio.import')}</Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
@@ -2841,7 +2946,7 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="sparkles-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>Generate</Text>
+                        <Text style={styles.wallpaperActionText}>{t('studio.generate')}</Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
@@ -2852,7 +2957,7 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="albums-outline" size={15} color={colors.accent.primary} />
-                        <Text style={styles.wallpaperActionText}>My Wallpapers</Text>
+                        <Text style={styles.wallpaperActionText}>{t('studio.myWallpapers')}</Text>
                       </Pressable>
                     </View>
 
@@ -2872,7 +2977,7 @@ export default function StudioScreen() {
                           }}
                           style={styles.wallpaperPreviewImage}
                           resizeMode="cover"
-                          accessibilityLabel="Generated wallpaper preview"
+                          accessibilityLabel={t('studio.a11y.generatedWallpaperPreview')}
                         />
                         <View style={styles.wallpaperPreviewActions}>
                           <Pressable
@@ -2899,7 +3004,7 @@ export default function StudioScreen() {
                             accessibilityRole="button"
                           >
                             <Ionicons name="checkmark" size={14} color="#fff" />
-                            <Text style={styles.wallpaperConfirmBtnText}>Keep</Text>
+                            <Text style={styles.wallpaperConfirmBtnText}>{t('studio.keep')}</Text>
                           </Pressable>
                           <Pressable
                             style={[
@@ -2966,7 +3071,7 @@ export default function StudioScreen() {
                           }}
                           style={styles.wallpaperThumb}
                           resizeMode="cover"
-                          accessibilityLabel="Selected wallpaper"
+                          accessibilityLabel={t('studio.a11y.selectedWallpaper')}
                         />
                         <View style={{ flex: 1 }}>
                           <Text
@@ -3016,16 +3121,16 @@ export default function StudioScreen() {
 
                   {/* Placement options */}
                   <View style={styles.mobileSection}>
-                    <Text style={styles.sectionTitle}>Placement Options</Text>
-                    <OptionLabel label="Layout" />
+                    <Text style={styles.sectionTitle}>{t('studio.placementOptions')}</Text>
+                    <OptionLabel label={t('studio.opt.layout')} />
                     <ChipSelector
                       options={LAYOUT_OPTIONS}
                       selected={layout}
                       onSelect={setLayout}
-                      accessibilityLabel="Layout"
+                      accessibilityLabel={t('studio.opt.layout')}
                     />
                     <View style={styles.toggleRow}>
-                      <Text style={styles.toggleLabel}>Show Prices</Text>
+                      <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
                       <Switch
                         value={showPrices}
                         onValueChange={setShowPrices}
@@ -3047,10 +3152,10 @@ export default function StudioScreen() {
                     disabled={selectedCount === 0 || wallpaperBase64 === null}
                     label={
                       wallpaperBase64 === null
-                        ? 'Pick a wallpaper first'
+                        ? t('studio.pickWallpaperFirst')
                         : selectedCount === 0
-                          ? 'Select products first'
-                          : 'Place on Wallpaper'
+                          ? t('studio.selectProductsFirst')
+                          : t('studio.placeOnWallpaper')
                     }
                     onPress={handleWallpaperOnGenerate}
                   />
@@ -3107,7 +3212,7 @@ export default function StudioScreen() {
                             accessibilityRole="button"
                           >
                             <Ionicons name="download-outline" size={15} color="#fff" />
-                            <Text style={styles.downloadBtnText}>Download</Text>
+                            <Text style={styles.downloadBtnText}>{t('studio.download')}</Text>
                           </Pressable>
                         )}
                       </View>
@@ -3122,7 +3227,7 @@ export default function StudioScreen() {
           {activeTab === 'announcements' && (
             <>
               <View style={styles.mobileSection}>
-                <Text style={styles.sectionTitle}>Post Type</Text>
+                <Text style={styles.sectionTitle}>{t('studio.announcement.postType')}</Text>
                 <View style={[styles.typeRow, { marginTop: D.spacing.sm }]}>
                   {POST_TYPES.map(({ type, icon }) => {
                     const active = postType === type;
@@ -3150,35 +3255,35 @@ export default function StudioScreen() {
 
               {isJobPost ? (
                 <View style={styles.mobileSection}>
-                  <Text style={styles.sectionTitle}>Job details</Text>
-                  <OptionLabel label="Job title" />
+                  <Text style={styles.sectionTitle}>{t('studio.jobDetails')}</Text>
+                  <OptionLabel label={t('studio.opt.jobTitle')} />
                   <TextInput
                     style={styles.jobInput}
-                    placeholder="e.g. Cashier"
+                    placeholder={t('studio.announcement.jobTitlePlaceholderCashier')}
                     placeholderTextColor={colors.text.muted}
                     value={jobTitle}
                     onChangeText={setJobTitle}
                     editable={!annoGenerating}
                   />
-                  <OptionLabel label="Work schedule" />
+                  <OptionLabel label={t('studio.opt.jobSchedule')} />
                   <TextInput
                     style={styles.jobInput}
-                    placeholder="e.g. Part-time, weekends"
+                    placeholder={t('studio.announcement.jobSchedulePlaceholderShort')}
                     placeholderTextColor={colors.text.muted}
                     value={jobSchedule}
                     onChangeText={setJobSchedule}
                     editable={!annoGenerating}
                   />
-                  <OptionLabel label="Salary (optional)" />
+                  <OptionLabel label={t('studio.opt.jobSalary')} />
                   <TextInput
                     style={styles.jobInput}
-                    placeholder="e.g. $15/hr"
+                    placeholder={t('studio.announcement.jobSalaryPlaceholderShort')}
                     placeholderTextColor={colors.text.muted}
                     value={jobSalary}
                     onChangeText={setJobSalary}
                     editable={!annoGenerating}
                   />
-                  <OptionLabel label="Requirements (one per line)" />
+                  <OptionLabel label={t('studio.opt.jobRequirementsShort')} />
                   <TextInput
                     style={styles.jobTextArea}
                     placeholder={"Driver's license\nCommunication skills"}
@@ -3188,14 +3293,14 @@ export default function StudioScreen() {
                     multiline
                     editable={!annoGenerating}
                   />
-                  <OptionLabel label="Image style" />
+                  <OptionLabel label={t('studio.opt.jobImageStyle')} />
                   <ChipSelector
                     options={JOB_IMAGE_STYLE_OPTIONS}
                     selected={jobImageStyle}
                     onSelect={(v) => setJobImageStyle(v as 'with-person' | 'text-only')}
-                    accessibilityLabel="Job image style"
+                    accessibilityLabel={t('studio.a11y.jobImageStyle')}
                   />
-                  <OptionLabel label="Additional direction (optional)" />
+                  <OptionLabel label={t('studio.opt.additionalDirection')} />
                   <TextInput
                     style={styles.jobTextArea}
                     placeholder={'e.g. "Apply by email at jobs@example.com"'}
@@ -3208,7 +3313,7 @@ export default function StudioScreen() {
                 </View>
               ) : (
                 <View style={styles.mobileSection}>
-                  <Text style={styles.sectionTitle}>Content</Text>
+                  <Text style={styles.sectionTitle}>{t('studio.contentSection')}</Text>
                   <TextInput
                     style={[styles.textArea, { marginTop: D.spacing.sm }]}
                     placeholder={currentPostType.placeholder}
@@ -3222,20 +3327,20 @@ export default function StudioScreen() {
               )}
 
               <View style={styles.mobileSection}>
-                <Text style={styles.sectionTitle}>Style</Text>
-                <OptionLabel label="Tone" />
+                <Text style={styles.sectionTitle}>{t('studio.styleSection')}</Text>
+                <OptionLabel label={t('studio.opt.tone')} />
                 <ChipSelector
                   options={TONE_OPTIONS}
                   selected={tone}
                   onSelect={setTone}
-                  accessibilityLabel="Tone"
+                  accessibilityLabel={t('studio.opt.tone')}
                 />
-                <OptionLabel label="Format" />
+                <OptionLabel label={t('studio.opt.format')} />
                 <ChipSelector
                   options={FORMAT_OPTIONS}
                   selected={annoFormat}
                   onSelect={setAnnoFormat}
-                  accessibilityLabel="Format"
+                  accessibilityLabel={t('studio.opt.format')}
                 />
               </View>
 
@@ -3251,7 +3356,7 @@ export default function StudioScreen() {
 
               {postType === 'Promotion' && (
                 <ChooseProductsSection
-                  subtitle="Select products to use as visual reference (optional)"
+                  subtitle={t('studio.subtitleAnnouncement')}
                   isDesktop={false}
                   products={products}
                   loadingProducts={loadingProducts}
@@ -3267,7 +3372,7 @@ export default function StudioScreen() {
               <GenerateButton
                 loading={annoGenerating}
                 disabled={!annoReady}
-                label="Generate Graphic"
+                label={t('studio.generateGraphic')}
                 onPress={handleAnnoGenerate}
               />
 
@@ -3312,7 +3417,7 @@ export default function StudioScreen() {
                         accessibilityRole="button"
                       >
                         <Ionicons name="download-outline" size={15} color="#fff" />
-                        <Text style={styles.downloadBtnText}>Download</Text>
+                        <Text style={styles.downloadBtnText}>{t('studio.download')}</Text>
                       </Pressable>
                     )}
                   </View>
@@ -3333,19 +3438,17 @@ export default function StudioScreen() {
                 />
               </ReAnimated.View>
               <View style={styles.comingSoonBadge}>
-                <Text style={styles.comingSoonText}>Coming Soon</Text>
+                <Text style={styles.comingSoonText}>{t('studio.comingSoon')}</Text>
               </View>
-              <Text style={styles.videoTitle}>Video Ads</Text>
-              <Text style={styles.videoDescription}>
-                Generate professional short-form video ads powered by AI. Currently in development.
-              </Text>
+              <Text style={styles.videoTitle}>{t('studio.videoAdsTitle')}</Text>
+              <Text style={styles.videoDescription}>{t('studio.videoBody')}</Text>
               <View style={styles.stepsCard}>
-                <Text style={styles.stepsTitle}>{"What's coming"}</Text>
+                <Text style={styles.stepsTitle}>{t('studio.videoWhatsComing')}</Text>
                 {(
                   [
-                    { icon: 'film-outline', label: 'Storyboard your concept' },
-                    { icon: 'sparkles-outline', label: 'AI generates visuals' },
-                    { icon: 'cloud-upload-outline', label: 'Export & share' },
+                    { icon: 'film-outline', label: t('studio.videoStep1') },
+                    { icon: 'sparkles-outline', label: t('studio.videoStep2') },
+                    { icon: 'cloud-upload-outline', label: t('studio.videoStep3') },
                   ] as { icon: React.ComponentProps<typeof Ionicons>['name']; label: string }[]
                 ).map(({ icon, label }, i) => (
                   <View key={label} style={styles.stepRow}>
@@ -3385,7 +3488,7 @@ export default function StudioScreen() {
                 style={styles.wallpaperGenCloseBtn}
                 onPress={handleCloseWallpaperGenModal}
                 accessibilityRole="button"
-                accessibilityLabel="Close"
+                accessibilityLabel={t('common.close')}
               >
                 <Ionicons name="close" size={20} color={colors.text.secondary} />
               </Pressable>
@@ -3397,19 +3500,19 @@ export default function StudioScreen() {
                 contentContainerStyle={styles.wallpaperGenScrollContent}
                 keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.wallpaperGenTitle}>Generate Wallpaper</Text>
+                <Text style={styles.wallpaperGenTitle}>{t('wallpapers.modal.title')}</Text>
                 <Text style={styles.wallpaperGenSubtitle}>
-                  Configure and generate an AI background
+                  {t('studio.wallpaperModal.subtitle')}
                 </Text>
 
                 {/* Format */}
-                <Text style={styles.wallpaperGenSectionLabel}>Format</Text>
+                <Text style={styles.wallpaperGenSectionLabel}>{t('wallpapers.modal.format')}</Text>
                 <View style={styles.wallpaperGenFormatRow}>
                   {(
                     [
-                      { value: '9:16', label: 'Vertical' },
-                      { value: '1:1', label: 'Square' },
-                      { value: '16:9', label: 'Landscape' },
+                      { value: '9:16', label: t('studio.wallpaperModal.verticalAspect') },
+                      { value: '1:1', label: t('studio.wallpaperModal.squareAspect') },
+                      { value: '16:9', label: t('wallpapers.modal.formatLandscape') },
                     ] as const
                   ).map((opt) => (
                     <Pressable
@@ -3447,7 +3550,7 @@ export default function StudioScreen() {
                 <Text style={styles.wallpaperGenSectionLabel}>Style prompt (optional)</Text>
                 <TextInput
                   style={styles.wallpaperGenInput}
-                  placeholder="e.g. warm sunset bokeh, soft pastel bakery, dark wood texture…"
+                  placeholder={t('studio.wallpaper.promptPlaceholder')}
                   placeholderTextColor={colors.text.muted}
                   value={wallpaperPrompt}
                   onChangeText={setWallpaperPrompt}
@@ -3458,7 +3561,9 @@ export default function StudioScreen() {
                 {/* Include logo */}
                 <View style={styles.wallpaperGenToggleRow}>
                   <View>
-                    <Text style={styles.wallpaperGenToggleLabel}>Include Logo</Text>
+                    <Text style={styles.wallpaperGenToggleLabel}>
+                      {t('wallpapers.modal.includeLogo')}
+                    </Text>
                     <Text style={styles.wallpaperGenToggleHint}>
                       Place your brand logo in the header
                     </Text>
@@ -3472,7 +3577,9 @@ export default function StudioScreen() {
                 </View>
 
                 {/* Brand context */}
-                <Text style={styles.wallpaperGenSectionLabel}>Include brand info</Text>
+                <Text style={styles.wallpaperGenSectionLabel}>
+                  {t('wallpapers.modal.includeBrand')}
+                </Text>
                 <View>
                   {(
                     [
@@ -3532,7 +3639,7 @@ export default function StudioScreen() {
                     <Ionicons name="sparkles-outline" size={16} color="#fff" />
                   )}
                   <Text style={styles.wallpaperGenBtnText2}>
-                    {wallpaperGenGenerating ? 'Generating…' : 'Generate'}
+                    {wallpaperGenGenerating ? t('studio.generating') : t('studio.generate')}
                   </Text>
                 </Pressable>
               </ScrollView>
@@ -3542,7 +3649,7 @@ export default function StudioScreen() {
                 contentContainerStyle={styles.wallpaperGenResultContainer}
                 keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.wallpaperGenTitle}>Wallpaper Generated</Text>
+                <Text style={styles.wallpaperGenTitle}>{t('wallpapers.result.title')}</Text>
                 <Text style={styles.wallpaperGenSubtitle}>
                   Keep it as your background or generate a new one
                 </Text>
@@ -3564,7 +3671,7 @@ export default function StudioScreen() {
                       },
                     ]}
                     resizeMode="contain"
-                    accessibilityLabel="Generated wallpaper"
+                    accessibilityLabel={t('studio.a11y.generatedWallpaper')}
                   />
                 )}
 
@@ -3626,7 +3733,7 @@ export default function StudioScreen() {
                       accessibilityRole="button"
                     >
                       <Ionicons name="download-outline" size={16} color="#fff" />
-                      <Text style={styles.wallpaperGenResultBtnText}>Download</Text>
+                      <Text style={styles.wallpaperGenResultBtnText}>{t('studio.download')}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -3644,7 +3751,9 @@ export default function StudioScreen() {
                   accessibilityRole="button"
                 >
                   <Ionicons name="refresh-outline" size={15} color={colors.text.secondary} />
-                  <Text style={styles.wallpaperGenSecondaryBtnText}>Generate Again</Text>
+                  <Text style={styles.wallpaperGenSecondaryBtnText}>
+                    {t('studio.generateAgain')}
+                  </Text>
                 </Pressable>
               </ScrollView>
             )}
@@ -3661,7 +3770,7 @@ export default function StudioScreen() {
       >
         <View style={styles.pickerFullScreen}>
           <View style={styles.pickerHeader}>
-            <Text style={styles.pickerTitle}>My Wallpapers</Text>
+            <Text style={styles.pickerTitle}>{t('studio.myWallpapers')}</Text>
             <Pressable
               style={({ pressed }) => [styles.pickerClose, pressed && { opacity: 0.7 }]}
               onPress={() => setWallpaperPickerVisible(false)}
@@ -4604,6 +4713,23 @@ function makeStyles(
       fontSize: D.fontSize.xs,
       color: colors.text.secondary,
       lineHeight: 16,
+    },
+    currencyNotice: {
+      marginTop: D.spacing.sm,
+      marginBottom: D.spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: D.spacing.xs,
+      paddingHorizontal: D.spacing.sm,
+      borderRadius: D.radius.sm,
+      backgroundColor: colors.accent.dim,
+      alignSelf: 'flex-start',
+    },
+    currencyNoticeText: {
+      fontSize: D.fontSize.xs,
+      color: colors.accent.primary,
+      fontWeight: D.fontWeight.medium,
     },
   });
 }

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using MerchStoryAPI.Common;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Shop;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 
@@ -75,7 +76,7 @@ public static class ProductRoutes
                 .OrderByDescending(p => p.CreatedAt)
                 .Skip((resolvedPage - 1) * resolvedPageSize)
                 .Take(resolvedPageSize)
-                .Select(p => new ProductMetadata(p.Id, p.Name, p.Price, p.Category, p.CreatedAt, p.UpdatedAt, "image/png"))
+                .Select(p => new ProductMetadata(p.Id, p.Name, p.Price, p.Currency.ToString(), p.Category, p.CreatedAt, p.UpdatedAt, "image/png"))
                 .ToListAsync();
 
             return Results.Ok(new PagedResponse<ProductMetadata>(products, total, resolvedPage, resolvedPageSize));
@@ -146,6 +147,20 @@ public static class ProductRoutes
                 return Results.BadRequest("Price must be zero or greater.");
             }
 
+            Currency currency;
+            if (!string.IsNullOrWhiteSpace(request.Currency))
+            {
+                if (!ShopRoutes.TryParseCurrency(request.Currency, out currency))
+                {
+                    return Results.BadRequest("Invalid Currency. Allowed values: USD, EUR, RON.");
+                }
+            }
+            else
+            {
+                ShopProfile? shop = await db.ShopProfiles.SingleOrDefaultAsync(s => s.UserId == userId);
+                currency = shop?.Currency ?? Currency.USD;
+            }
+
             DateTime now = DateTime.UtcNow;
             Product product = new()
             {
@@ -153,6 +168,7 @@ public static class ProductRoutes
                 UserId = userId,
                 Name = request.Name.Trim(),
                 Price = request.Price,
+                Currency = currency,
                 ImageBase64 = request.ImageBase64,
                 Category = NormalizeCategory(request.Category),
                 CreatedAt = now,
@@ -164,7 +180,7 @@ public static class ProductRoutes
 
             return Results.Created(
                 $"/products/{product.Id}",
-                new ProductResponse(product.Id, product.Name, product.Price, product.ImageBase64, product.Category, product.CreatedAt, product.UpdatedAt));
+                new ProductResponse(product.Id, product.Name, product.Price, product.Currency.ToString(), product.ImageBase64, product.Category, product.CreatedAt, product.UpdatedAt));
         });
 
         group.MapPut("/{id:guid}", async (
@@ -197,6 +213,16 @@ public static class ProductRoutes
                 return Results.NotFound();
             }
 
+            if (!string.IsNullOrWhiteSpace(request.Currency))
+            {
+                if (!ShopRoutes.TryParseCurrency(request.Currency, out Currency updateCurrency))
+                {
+                    return Results.BadRequest("Invalid Currency. Allowed values: USD, EUR, RON.");
+                }
+
+                product.Currency = updateCurrency;
+            }
+
             product.Name = request.Name.Trim();
             product.Price = request.Price;
             product.ImageBase64 = request.ImageBase64;
@@ -205,7 +231,7 @@ public static class ProductRoutes
 
             await db.SaveChangesAsync();
 
-            return Results.Ok(new ProductResponse(product.Id, product.Name, product.Price, product.ImageBase64, product.Category, product.CreatedAt, product.UpdatedAt));
+            return Results.Ok(new ProductResponse(product.Id, product.Name, product.Price, product.Currency.ToString(), product.ImageBase64, product.Category, product.CreatedAt, product.UpdatedAt));
         });
 
         group.MapDelete("/{id:guid}", async (
@@ -299,11 +325,11 @@ public static class ProductRoutes
     }
 }
 
-internal sealed record ProductRequest(string Name, decimal Price, string? ImageBase64, string? Category);
+internal sealed record ProductRequest(string Name, decimal Price, string? ImageBase64, string? Category, string? Currency = null);
 
-internal sealed record ProductResponse(Guid Id, string Name, decimal Price, string? ImageBase64, string? Category, DateTime CreatedAt, DateTime UpdatedAt);
+internal sealed record ProductResponse(Guid Id, string Name, decimal Price, string Currency, string? ImageBase64, string? Category, DateTime CreatedAt, DateTime UpdatedAt);
 
-internal sealed record ProductMetadata(Guid Id, string Name, decimal Price, string? Category, DateTime CreatedAt, DateTime UpdatedAt, string MimeType);
+internal sealed record ProductMetadata(Guid Id, string Name, decimal Price, string Currency, string? Category, DateTime CreatedAt, DateTime UpdatedAt, string MimeType);
 
 internal sealed record ProductImageBytes(string ImageBase64, string MimeType);
 

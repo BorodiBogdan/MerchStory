@@ -36,8 +36,9 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
 
     private static string BuildPrompt(CatalogImageRequest r)
     {
+        string symbol = CurrencyFormatter.SymbolFor(r.Currency);
         var names = string.Join(", ", r.Products.Select(p =>
-            r.ShowPrices ? $"{p.Name} (${p.Price:F2})" : p.Name));
+            r.ShowPrices ? $"{p.Name} ({CurrencyFormatter.Format(p.Price, r.Currency)})" : p.Name));
 
         string logoNote = !string.IsNullOrWhiteSpace(r.LogoBase64)
             ? "Brand logo: a logo image has been provided as the first inline image. " +
@@ -55,12 +56,15 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
 
         return
             $"{SystemContext}\n\n" +
+            LanguageInstruction.For(r.Language) +
             BrandContextBlock(r.BrandContext) +
             logoNote +
             $"Create a professional product catalog ad image in {r.Format} format. " +
             $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}. Products: {names}. " +
             imageNote +
-            (r.ShowPrices ? "Display prices prominently." : "Do not show prices.") +
+            (r.ShowPrices
+                ? $"Display prices prominently using the {r.Currency} currency (symbol: {symbol})."
+                : "Do not show prices.") +
             " Make it look like a high-quality retail advertisement.";
     }
 

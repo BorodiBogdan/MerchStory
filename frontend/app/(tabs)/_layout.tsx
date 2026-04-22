@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs, useRouter } from 'expo-router';
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -16,19 +16,15 @@ import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
-import { getShopProfile } from '@/utils/api';
+import { useT } from '@/i18n';
 
 export default function TabLayout() {
   const { token, isLoading, isShopSetupComplete, signOut } = useAuth();
   const { colors, colorScheme, toggleTheme } = useTheme();
-  const { shopLogoUri, setShopLogoUri } = useShop();
+  const { profile } = useShop();
+  const t = useT();
+  const shopLogoUri = profile?.logoBase64 ?? null;
 
-  useEffect(() => {
-    if (!token) return;
-    getShopProfile()
-      .then((profile) => setShopLogoUri(profile?.logoBase64 ?? null))
-      .catch(() => {});
-  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
 
@@ -49,7 +45,7 @@ export default function TabLayout() {
       onPress={() => router.navigate('/(tabs)')}
       style={styles.logoButton}
       accessibilityRole="button"
-      accessibilityLabel="MerchStory home"
+      accessibilityLabel={t('tabs.home')}
     >
       <View style={styles.logoMark}>
         <Ionicons name="color-wand" size={13} color="#fff" />
@@ -67,7 +63,7 @@ export default function TabLayout() {
         onPress={toggleTheme}
         style={styles.iconButton}
         accessibilityRole="button"
-        accessibilityLabel={colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        accessibilityLabel={colorScheme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
       >
         <Ionicons
           name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
@@ -80,7 +76,7 @@ export default function TabLayout() {
         onPress={() => router.navigate('/(tabs)/profile')}
         style={styles.iconButton}
         accessibilityRole="button"
-        accessibilityLabel="Go to profile"
+        accessibilityLabel={t('tabs.profile')}
       >
         <View style={styles.avatarChip}>
           {shopLogoUri ? (
@@ -95,7 +91,7 @@ export default function TabLayout() {
         onPress={() => void signOut()}
         style={styles.iconButton}
         accessibilityRole="button"
-        accessibilityLabel="Sign out"
+        accessibilityLabel={t('common.signOut')}
       >
         <Ionicons name="log-out-outline" size={20} color={colors.destructive} />
       </Pressable>
@@ -122,7 +118,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          tabBarLabel: 'Studio',
+          tabBarLabel: t('tabs.studio'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={22} color={color} />
           ),
@@ -137,7 +133,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="gallery"
         options={{
-          tabBarLabel: 'Gallery',
+          tabBarLabel: t('tabs.gallery'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'images' : 'images-outline'} size={22} color={color} />
           ),
@@ -146,7 +142,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="products"
         options={{
-          tabBarLabel: 'Products',
+          tabBarLabel: t('tabs.products'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'pricetag' : 'pricetag-outline'} size={22} color={color} />
           ),
@@ -155,7 +151,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="analytics"
         options={{
-          tabBarLabel: 'Analytics',
+          tabBarLabel: t('tabs.analytics'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'bar-chart' : 'bar-chart-outline'} size={22} color={color} />
           ),

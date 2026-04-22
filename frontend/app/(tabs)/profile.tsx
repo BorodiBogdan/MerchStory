@@ -22,13 +22,16 @@ import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
+import { useI18n } from '@/i18n';
 import {
+  type AppLanguage,
   BrandColor,
+  type Currency,
   disconnectSocial,
   getFacebookConnectUrl,
-  getShopProfile,
   getSocialStatus,
   ShopProfileResponse,
+  updateAppLanguage,
   updateShopProfile,
 } from '@/utils/api';
 
@@ -117,14 +120,55 @@ function computeIsDirty(draft: DraftState | null, profile: ShopProfileResponse |
 export default function ProfileScreen() {
   const { colors } = useTheme();
   const { email: accountEmail } = useAuth();
-  const { setShopLogoUri } = useShop();
+  const { profile, setProfile, isProfileLoading, refreshProfile } = useShop();
+  const { language: appLanguage, setLanguage: setAppLanguage, t } = useI18n();
+
+  async function handleAppLanguageChange(next: AppLanguage) {
+    if (next === appLanguage) return;
+    await setAppLanguage(next);
+    try {
+      await updateAppLanguage(next);
+    } catch {
+      // non-critical: local preference is already saved
+    }
+  }
+
+  async function handlePreferenceSave(patch: {
+    currency?: Currency;
+    generationLanguage?: AppLanguage;
+  }) {
+    if (!profile) return;
+    try {
+      const updated = await updateShopProfile({
+        brandName: profile.brandName,
+        logoBase64: profile.logoBase64 ?? null,
+        brandColors: profile.brandColors,
+        slogan: profile.slogan ?? null,
+        businessDomain: profile.businessDomain,
+        otherDomain: profile.otherDomain ?? null,
+        targetAudience: profile.targetAudience ?? null,
+        shopType: profile.shopType ?? null,
+        competitors: profile.competitors ?? null,
+        phoneNumber: profile.phoneNumber,
+        email: profile.email,
+        addresses: profile.addresses ?? [],
+        instagramHandle: profile.instagramHandle ?? null,
+        facebookHandle: profile.facebookHandle ?? null,
+        tikTokHandle: profile.tikTokHandle ?? null,
+        currency: patch.currency ?? profile.currency,
+        generationLanguage: patch.generationLanguage ?? profile.generationLanguage,
+      });
+      setProfile(updated);
+    } catch {
+      // ignore; user can retry
+    }
+  }
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [profile, setProfile] = useState<ShopProfileResponse | null>(null);
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(isProfileLoading);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [colorPickerModal, setColorPickerModal] = useState<{ index: number; hex: string } | null>(
@@ -149,25 +193,33 @@ export default function ProfileScreen() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  useEffect(() => {
+    setIsLoading(isProfileLoading);
+  }, [isProfileLoading]);
+
   useFocusEffect(
     useCallback(() => {
-      void loadProfile();
+      void loadSocialStatus();
     }, [])
   );
 
-  async function loadProfile() {
-    setIsLoading(true);
-    setLoadError(null);
+  async function loadSocialStatus() {
     try {
-      const [p, social] = await Promise.all([getShopProfile(), getSocialStatus()]);
-      setProfile(p);
+      const social = await getSocialStatus();
       setSocialStatus({
         facebook: social.facebookConnected ? 'connected' : undefined,
       });
+    } catch {
+      // non-fatal
+    }
+  }
+
+  async function retryLoadProfile() {
+    setLoadError(null);
+    try {
+      await refreshProfile();
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load profile');
-    } finally {
-      setIsLoading(false);
     }
   }
 
@@ -308,9 +360,10 @@ export default function ProfileScreen() {
         instagramHandle: draft.instagramHandle.trim() || null,
         facebookHandle: draft.facebookHandle.trim() || null,
         tikTokHandle: draft.tikTokHandle.trim() || null,
+        currency: profile.currency,
+        generationLanguage: profile.generationLanguage,
       });
       setProfile(updated);
-      setShopLogoUri(updated.logoBase64 ?? null);
       setDraft(null);
       setIsEditing(false);
       if (Platform.OS !== 'web') {
@@ -343,8 +396,8 @@ export default function ProfileScreen() {
   if (loadError || !profile) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{loadError ?? 'Profile not found'}</Text>
-        <Pressable onPress={loadProfile} style={styles.retryButton}>
+        <Text style={styles.errorText}>{loadError ?? t('profile.notFound')}</Text>
+        <Pressable onPress={retryLoadProfile} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </Pressable>
       </View>
@@ -464,7 +517,7 @@ export default function ProfileScreen() {
                   </View>
                 )}
               </Pressable>
-              <Text style={styles.logoLabel}>Company Logo</Text>
+              <Text style={styles.logoLabel}>{t('profile.companyLogo')}</Text>
             </View>
 
             <View style={styles.headerText}>
@@ -483,27 +536,98 @@ export default function ProfileScreen() {
             onPress={isEditing ? cancelEditing : startEditing}
             style={[styles.editButton, isEditing && styles.cancelButton]}
             accessibilityRole="button"
-            accessibilityLabel={isEditing ? 'Cancel editing' : 'Edit profile'}
+            accessibilityLabel={isEditing ? t('common.cancel') : t('profile.edit')}
           >
             <Text style={[styles.editButtonText, isEditing && styles.cancelButtonText]}>
-              {isEditing ? 'Cancel' : 'Edit'}
+              {isEditing ? t('common.cancel') : t('profile.edit')}
             </Text>
           </Pressable>
         </View>
 
+        {/* ── Preferences ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('preferences')}</Text>
+
+          <View style={[styles.infoRow]}>
+            <Text style={styles.infoLabel}>{t('appLanguage')}</Text>
+            <View style={styles.prefChipRow}>
+              {(['EN', 'RO'] as AppLanguage[]).map((code) => {
+                const isSel = appLanguage === code;
+                return (
+                  <Pressable
+                    key={code}
+                    onPress={() => void handleAppLanguageChange(code)}
+                    style={[styles.prefChip, isSel && styles.prefChipSelected]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSel }}
+                  >
+                    <Text style={[styles.prefChipText, isSel && styles.prefChipTextSelected]}>
+                      {code === 'EN' ? t('english') : t('romanian')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={[styles.infoRow]}>
+            <Text style={styles.infoLabel}>{t('generationLanguage')}</Text>
+            <View style={styles.prefChipRow}>
+              {(['EN', 'RO'] as AppLanguage[]).map((code) => {
+                const isSel = profile.generationLanguage === code;
+                return (
+                  <Pressable
+                    key={code}
+                    onPress={() => void handlePreferenceSave({ generationLanguage: code })}
+                    style={[styles.prefChip, isSel && styles.prefChipSelected]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSel }}
+                  >
+                    <Text style={[styles.prefChipText, isSel && styles.prefChipTextSelected]}>
+                      {code === 'EN' ? t('english') : t('romanian')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={[styles.infoRow, styles.infoRowLast]}>
+            <Text style={styles.infoLabel}>{t('defaultCurrency')}</Text>
+            <View style={styles.prefChipRow}>
+              {(['USD', 'EUR', 'RON'] as Currency[]).map((code) => {
+                const isSel = profile.currency === code;
+                return (
+                  <Pressable
+                    key={code}
+                    onPress={() => void handlePreferenceSave({ currency: code })}
+                    style={[styles.prefChip, isSel && styles.prefChipSelected]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSel }}
+                  >
+                    <Text style={[styles.prefChipText, isSel && styles.prefChipTextSelected]}>
+                      {code}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
         {/* ── Visual Identity ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Visual Identity</Text>
+          <Text style={styles.sectionTitle}>{t('profile.sectionVisual')}</Text>
 
           <InfoRow
-            label="Brand Name"
+            label={t('profile.fieldBrandName')}
             value={profile.brandName}
             draftValue={draft?.brandName}
             onChangeText={(v) => updateDraft({ brandName: v })}
             autoCapitalize="words"
           />
           <InfoRow
-            label="Slogan"
+            label={t('profile.fieldSlogan')}
             value={profile.slogan ?? ''}
             draftValue={draft?.slogan}
             onChangeText={(v) => updateDraft({ slogan: v })}
@@ -512,7 +636,7 @@ export default function ProfileScreen() {
           {/* Brand Colors */}
           {!isEditing && (
             <View style={[styles.infoRow, styles.infoRowLast]}>
-              <Text style={styles.infoLabel}>Brand Colors</Text>
+              <Text style={styles.infoLabel}>{t('profile.fieldBrandColors')}</Text>
               <View style={styles.colorSwatchRow}>
                 {displayColors.map((c, i) => (
                   <View key={i} style={styles.colorChip}>
@@ -599,10 +723,10 @@ export default function ProfileScreen() {
 
         {/* ── Business DNA ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Business DNA</Text>
+          <Text style={styles.sectionTitle}>{t('profile.sectionBusiness')}</Text>
 
           <View style={[styles.infoRow, isEditing && styles.infoRowLast]}>
-            <Text style={styles.infoLabel}>Domain</Text>
+            <Text style={styles.infoLabel}>{t('profile.fieldDomain')}</Text>
             {(isEditing ? draft?.businessDomain : profile.businessDomain) ? (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
@@ -638,11 +762,14 @@ export default function ProfileScreen() {
           )}
 
           {!isEditing && profile.businessDomain === 'Other' && profile.otherDomain && (
-            <InfoRow label="Domain (Other)" value={profile.otherDomain} />
+            <InfoRow
+              label={`${t('profile.fieldDomain')} (${t('setup.step2.domainOther')})`}
+              value={profile.otherDomain}
+            />
           )}
 
           <View style={[styles.infoRow, isEditing && styles.infoRowLast]}>
-            <Text style={styles.infoLabel}>Shop Type</Text>
+            <Text style={styles.infoLabel}>{t('profile.fieldShopType')}</Text>
             {(isEditing ? draft?.shopType : profile.shopType) ? (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
@@ -665,14 +792,14 @@ export default function ProfileScreen() {
           )}
 
           <InfoRow
-            label="Target Audience"
+            label={t('profile.fieldAudience')}
             value={profile.targetAudience ?? ''}
             draftValue={draft?.targetAudience}
             onChangeText={(v) => updateDraft({ targetAudience: v })}
           />
 
           <InfoRow
-            label="Competitors"
+            label={t('profile.fieldCompetitors')}
             value={profile.competitors ?? ''}
             draftValue={draft?.competitors}
             onChangeText={(v) => updateDraft({ competitors: v })}
@@ -683,7 +810,7 @@ export default function ProfileScreen() {
 
         {/* ── Contact & Social ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Contact & Social</Text>
+          <Text style={styles.sectionTitle}>{t('profile.sectionContact')}</Text>
 
           <InfoRow
             label="Phone"
@@ -777,7 +904,7 @@ export default function ProfileScreen() {
         {/* ── Connected Accounts ── */}
         {!isEditing && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Connected Accounts</Text>
+            <Text style={styles.sectionTitle}>{t('profile.sectionConnected')}</Text>
 
             <View style={[styles.socialConnectRow, styles.infoRowLast]}>
               <View style={styles.socialConnectLeft}>
@@ -786,14 +913,14 @@ export default function ProfileScreen() {
               </View>
               {socialStatus.facebook === 'connected' ? (
                 <View style={styles.socialConnectActions}>
-                  <Text style={styles.socialConnectStatus}>✓ Connected</Text>
+                  <Text style={styles.socialConnectStatus}>{t('profile.connected')}</Text>
                   <Pressable
                     onPress={() => void handleDisconnect('facebook')}
                     style={({ pressed }) => [styles.disconnectBtn, pressed && { opacity: 0.7 }]}
                     accessibilityRole="button"
-                    accessibilityLabel="Disconnect Facebook"
+                    accessibilityLabel={t('profile.disconnect')}
                   >
-                    <Text style={styles.disconnectBtnText}>Disconnect</Text>
+                    <Text style={styles.disconnectBtnText}>{t('profile.disconnect')}</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -804,10 +931,10 @@ export default function ProfileScreen() {
                 >
                   <Text style={styles.socialConnectStatus}>
                     {socialStatus.facebook === 'connecting'
-                      ? 'Opening…'
+                      ? t('profile.connecting')
                       : socialStatus.facebook === 'error'
-                        ? 'Failed — retry'
-                        : 'Connect'}
+                        ? t('profile.connectError')
+                        : t('profile.connect')}
                   </Text>
                 </Pressable>
               )}
@@ -835,7 +962,7 @@ export default function ProfileScreen() {
               disabled={!isDirty || isSaving}
               style={[styles.saveButton, (!isDirty || isSaving) && styles.saveButtonDisabled]}
               accessibilityRole="button"
-              accessibilityLabel="Save changes"
+              accessibilityLabel={t('profile.save')}
               accessibilityState={{ disabled: !isDirty || isSaving, busy: isSaving }}
             >
               {isSaving ? (
@@ -847,7 +974,7 @@ export default function ProfileScreen() {
                     (!isDirty || isSaving) && styles.saveButtonTextDisabled,
                   ]}
                 >
-                  Save Changes
+                  {t('profile.save')}
                 </Text>
               )}
             </Pressable>
@@ -1216,6 +1343,33 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.text.muted,
     },
     chipTextActive: {
+      color: colors.accent.primary,
+      fontWeight: D.fontWeight.semibold,
+    },
+    prefChipRow: {
+      flexDirection: 'row',
+      gap: D.spacing.xs,
+      flex: 1,
+      justifyContent: 'flex-end',
+      flexWrap: 'wrap',
+    },
+    prefChip: {
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: 6,
+      borderRadius: D.radius.pill,
+      borderWidth: 1.5,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.elevated,
+    },
+    prefChipSelected: {
+      borderColor: colors.accent.primary,
+      backgroundColor: colors.accent.dim,
+    },
+    prefChipText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+    },
+    prefChipTextSelected: {
       color: colors.accent.primary,
       fontWeight: D.fontWeight.semibold,
     },

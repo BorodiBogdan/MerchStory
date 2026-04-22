@@ -30,12 +30,17 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
         return images.Count > 0 ? images : null;
     }
 
-    private static string BuildPrompt(AnnouncementImageRequest r) => r.PostType switch
+    private static string BuildPrompt(AnnouncementImageRequest r)
     {
-        "Job Post" => BuildJobPostPrompt(r),
-        "Promotion" => BuildPromotionPrompt(r),
-        _ => BuildAnnouncementPrompt(r),
-    };
+        string body = r.PostType switch
+        {
+            "Job Post" => BuildJobPostPrompt(r),
+            "Promotion" => BuildPromotionPrompt(r),
+            _ => BuildAnnouncementPrompt(r),
+        };
+
+        return LanguageInstruction.For(r.Language) + body;
+    }
 
     // ── Announcement (covers both event news and informational tip-cards) ────────
     private static string BuildAnnouncementPrompt(AnnouncementImageRequest r) =>

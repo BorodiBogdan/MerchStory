@@ -22,6 +22,7 @@ import { GalleryImage } from '@/components/ui/GalleryImage';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import {
   deleteGalleryItem,
   fetchGallery,
@@ -78,6 +79,7 @@ function downloadImage(result: GenerateImageResponse, filename: string) {
 
 export default function WallpapersScreen() {
   const { colors } = useTheme();
+  const t = useT();
   const { width: screenWidth } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -277,7 +279,7 @@ export default function WallpapersScreen() {
           <View style={styles.emptyIconCircle}>
             <Ionicons name="albums-outline" size={48} color={colors.accent.primary} />
           </View>
-          <Text style={styles.emptyTitle}>No wallpapers yet</Text>
+          <Text style={styles.emptyTitle}>{t('wallpapers.emptyTitle')}</Text>
           <Text style={styles.emptySubtitle}>
             Generate an AI background to use in your product catalogs
           </Text>
@@ -287,7 +289,7 @@ export default function WallpapersScreen() {
             accessibilityRole="button"
           >
             <Ionicons name="sparkles-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={styles.emptyButtonText}>Generate Wallpaper</Text>
+            <Text style={styles.emptyButtonText}>{t('wallpapers.modal.title')}</Text>
           </Pressable>
         </View>
       );
@@ -315,7 +317,7 @@ export default function WallpapersScreen() {
         {/* Header */}
         <View style={styles.pageHeader}>
           <View>
-            <Text style={styles.pageTitle}>Wallpapers</Text>
+            <Text style={styles.pageTitle}>{t('wallpapers.pageTitle')}</Text>
             <Text style={styles.pageSubtitle}>Your AI-generated backgrounds</Text>
           </View>
           <Pressable
@@ -324,7 +326,7 @@ export default function WallpapersScreen() {
             accessibilityRole="button"
           >
             <Ionicons name="sparkles-outline" size={15} color="#fff" />
-            <Text style={styles.generateBtnText}>Generate New</Text>
+            <Text style={styles.generateBtnText}>{t('wallpapers.generateNew')}</Text>
           </Pressable>
         </View>
 
@@ -352,11 +354,11 @@ export default function WallpapersScreen() {
                 contentContainerStyle={styles.sheetScrollContent}
                 keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.sheetTitle}>Generate Wallpaper</Text>
-                <Text style={styles.sheetSubtitle}>Configure and generate an AI background</Text>
+                <Text style={styles.sheetTitle}>{t('wallpapers.modal.title')}</Text>
+                <Text style={styles.sheetSubtitle}>{t('wallpapers.modal.subtitle')}</Text>
 
                 {/* Format picker */}
-                <Text style={styles.sectionLabel}>Format</Text>
+                <Text style={styles.sectionLabel}>{t('wallpapers.modal.format')}</Text>
                 <View style={styles.formatRow}>
                   {FORMAT_OPTIONS.map((opt) => (
                     <Pressable
@@ -387,10 +389,10 @@ export default function WallpapersScreen() {
                 </View>
 
                 {/* Prompt */}
-                <Text style={styles.sectionLabel}>Style prompt (optional)</Text>
+                <Text style={styles.sectionLabel}>{t('wallpapers.modal.prompt')}</Text>
                 <TextInput
                   style={styles.sheetInput}
-                  placeholder="e.g. warm sunset bokeh, soft pastel bakery, dark wood texture…"
+                  placeholder={t('wallpapers.modal.promptPlaceholder')}
                   placeholderTextColor={colors.text.muted}
                   value={prompt}
                   onChangeText={setPrompt}
@@ -401,7 +403,7 @@ export default function WallpapersScreen() {
                 {/* Include logo */}
                 <View style={styles.toggleRow}>
                   <View>
-                    <Text style={styles.toggleLabel}>Include Logo</Text>
+                    <Text style={styles.toggleLabel}>{t('wallpapers.modal.includeLogo')}</Text>
                     <Text style={styles.toggleHint}>Place your brand logo in the header</Text>
                   </View>
                   <Switch
@@ -413,7 +415,7 @@ export default function WallpapersScreen() {
                 </View>
 
                 {/* Brand context fields */}
-                <Text style={styles.sectionLabel}>Include brand info</Text>
+                <Text style={styles.sectionLabel}>{t('wallpapers.modal.includeBrand')}</Text>
                 <View style={styles.checkGrid}>
                   {BRAND_CONTEXT_OPTIONS.map((opt) => {
                     const checked = brandContextFields.includes(opt.key);
@@ -455,15 +457,15 @@ export default function WallpapersScreen() {
                     <Ionicons name="sparkles-outline" size={16} color="#fff" />
                   )}
                   <Text style={styles.sheetGenerateBtnText}>
-                    {generating ? 'Generating…' : 'Generate'}
+                    {generating ? t('wallpapers.modal.generating') : t('wallpapers.modal.generate')}
                   </Text>
                 </Pressable>
               </ScrollView>
             ) : (
               /* Result stage */
               <View style={styles.resultContainer}>
-                <Text style={styles.sheetTitle}>Wallpaper Generated</Text>
-                <Text style={styles.sheetSubtitle}>Keep it or generate a new one</Text>
+                <Text style={styles.sheetTitle}>{t('wallpapers.result.title')}</Text>
+                <Text style={styles.sheetSubtitle}>{t('wallpapers.result.subtitle')}</Text>
 
                 {generatedResult && (
                   <Image
@@ -510,7 +512,7 @@ export default function WallpapersScreen() {
                       accessibilityLabel="Download image"
                     >
                       <Ionicons name="download-outline" size={16} color="#fff" />
-                      <Text style={styles.actionBtnText}>Download</Text>
+                      <Text style={styles.actionBtnText}>{t('wallpapers.result.download')}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -524,7 +526,7 @@ export default function WallpapersScreen() {
                   accessibilityRole="button"
                 >
                   <Ionicons name="refresh-outline" size={15} color={colors.text.secondary} />
-                  <Text style={styles.secondaryBtnText}>Generate Again</Text>
+                  <Text style={styles.secondaryBtnText}>{t('wallpapers.result.again')}</Text>
                 </Pressable>
               </View>
             )}
@@ -551,14 +553,14 @@ export default function WallpapersScreen() {
             <View style={styles.confirmIconWrap}>
               <Ionicons name="trash-outline" size={28} color="#EF4444" />
             </View>
-            <Text style={styles.confirmTitle}>Delete wallpaper?</Text>
-            <Text style={styles.confirmBody}>This wallpaper will be permanently removed.</Text>
+            <Text style={styles.confirmTitle}>{t('wallpapers.deleteConfirm.title')}</Text>
+            <Text style={styles.confirmBody}>{t('wallpapers.deleteConfirm.body')}</Text>
             <View style={styles.confirmActions}>
               <Pressable
                 style={({ pressed }) => [styles.confirmCancel, pressed && { opacity: 0.7 }]}
                 onPress={() => setConfirmDeleteId(null)}
               >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
+                <Text style={styles.confirmCancelText}>{t('common.cancel')}</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [styles.confirmDelete, pressed && { opacity: 0.8 }]}
@@ -568,7 +570,7 @@ export default function WallpapersScreen() {
                   if (id) void handleDelete(id);
                 }}
               >
-                <Text style={styles.confirmDeleteText}>Delete</Text>
+                <Text style={styles.confirmDeleteText}>{t('common.delete')}</Text>
               </Pressable>
             </View>
           </Pressable>
