@@ -509,6 +509,7 @@ const en = {
   'studio.preset.badge': 'Badge',
   'studio.preset.outline': 'Outline',
   'studio.preset.friendly': 'Friendly',
+  'studio.preset.flyer': 'Flyer',
   // Browse products modal (title passed from parent)
   'studio.browseCatalog': 'Browse all products',
   'studio.browseSelected': 'Selected products',

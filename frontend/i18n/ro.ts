@@ -516,6 +516,7 @@ const ro: Dictionary = {
   'studio.preset.badge': 'Insignă',
   'studio.preset.outline': 'Contur',
   'studio.preset.friendly': 'Prietenos',
+  'studio.preset.flyer': 'Reclamă',
   // Browse products modal
   'studio.browseCatalog': 'Răsfoiește toate produsele',
   'studio.browseSelected': 'Produse selectate',
