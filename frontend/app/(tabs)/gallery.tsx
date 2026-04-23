@@ -38,7 +38,7 @@ import * as galleryImageCache from '@/utils/galleryImageCache';
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1600;
-const WEB_H_PADDING = 64;
+const WEB_H_PADDING = 80;
 const MOBILE_H_PADDING = D.spacing.md;
 const GAP = D.spacing.md;
 
@@ -66,7 +66,6 @@ export default function GalleryScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const styles = useMemo(() => makeStyles(colors, screenHeight), [colors, screenHeight]);
   const t = useT();
 
   const insets = useSafeAreaInsets();
@@ -83,21 +82,24 @@ export default function GalleryScreen() {
 
   const listRef = useRef<FlatList<GalleryItem>>(null);
 
-  const numColumns = isWeb
-    ? screenWidth < 600
-      ? 2
-      : screenWidth < 1024
-        ? 3
-        : screenWidth < 1500
-          ? 4
-          : 5
-    : 2;
+  const numColumns = isWeb ? (screenWidth < 600 ? 2 : screenWidth < 1024 ? 3 : 4) : 2;
 
   const useSidebar = isWeb && screenWidth >= 900;
-  const hPadding = isWeb ? WEB_H_PADDING : MOBILE_H_PADDING;
+  const hPadding = !isWeb
+    ? MOBILE_H_PADDING
+    : screenWidth < 600
+      ? MOBILE_H_PADDING
+      : screenWidth < 1100
+        ? D.spacing.xl
+        : WEB_H_PADDING;
   const sidebarReserved = useSidebar ? 272 + D.spacing.lg : 0;
   const effectiveWidth = Math.min(screenWidth, MAX_CONTENT_WIDTH) - hPadding * 2 - sidebarReserved;
   const cardWidth = (effectiveWidth - GAP * (numColumns - 1)) / numColumns;
+
+  const styles = useMemo(
+    () => makeStyles(colors, screenHeight, hPadding),
+    [colors, screenHeight, hPadding]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -393,7 +395,10 @@ export default function GalleryScreen() {
         numColumns={numColumns}
         key={numColumns}
         renderItem={renderPhoto}
-        contentContainerStyle={styles.grid}
+        contentContainerStyle={[
+          styles.grid,
+          isWeb && !useSidebar && { paddingHorizontal: hPadding },
+        ]}
         columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
         showsVerticalScrollIndicator={false}
         onEndReached={!isWeb ? () => void galleryCache.loadMore() : undefined}
@@ -680,7 +685,11 @@ export default function GalleryScreen() {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors'], _windowHeight: number) {
+function makeStyles(
+  colors: ReturnType<typeof useTheme>['colors'],
+  _windowHeight: number,
+  hPadding: number
+) {
   return StyleSheet.create({
     root: {
       flex: 1,
@@ -719,7 +728,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], _windowHeight
       alignItems: 'center',
       justifyContent: 'space-between',
       flexWrap: 'wrap',
-      paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
+      paddingHorizontal: hPadding,
       paddingTop: D.spacing.xl,
       paddingBottom: D.spacing.lg,
       gap: D.spacing.md,
@@ -837,13 +846,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], _windowHeight
 
     // ── Filter bar / sidebar ─────────────────────────────────────────────
     filterBarWrap: {
-      paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
+      paddingHorizontal: hPadding,
       paddingBottom: D.spacing.sm,
     },
     sidebarLayout: {
       flex: 1,
       flexDirection: 'row',
-      paddingHorizontal: WEB_H_PADDING,
+      paddingHorizontal: hPadding,
       gap: D.spacing.lg,
       paddingBottom: D.spacing.lg,
     },

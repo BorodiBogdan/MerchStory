@@ -27,7 +27,7 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const mobileTopPad = !isDesktop ? insets.top : 0;
 
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
   const router = useRouter();
 
   if (isLoading) {
@@ -173,7 +173,7 @@ export default function TabLayout() {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+function makeStyles(colors: ReturnType<typeof useTheme>['colors'], bottomInset: number) {
   return StyleSheet.create({
     loading: {
       flex: 1,
@@ -212,9 +212,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.bg.surface,
       borderTopWidth: 1,
       borderTopColor: colors.border.subtle,
-      height: Platform.OS === 'ios' ? 84 : 64,
+      height: (Platform.OS === 'ios' ? 64 : 56) + bottomInset,
       paddingTop: D.spacing.sm,
-      paddingBottom: Platform.OS === 'ios' ? D.spacing.lg : D.spacing.sm,
+      paddingBottom: D.spacing.sm + bottomInset,
     },
     tabBarLabel: {
       fontSize: D.fontSize.xs,

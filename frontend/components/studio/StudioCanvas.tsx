@@ -1196,11 +1196,11 @@ function ChooseProductsSection({
 
   // Desktop inline card width: 4 cards fit inside the right panel's section card.
   // Layout: right panel fills `screenWidth - SIDEBAR_WIDTH` (capped at 1280), minus
-  // rightPanelContent horizontal padding (D.spacing.xl * 2), minus desktopSection
+  // rightPanelContent horizontal padding (80 * 2), minus desktopSection
   // inner padding (D.spacing.lg * 2), minus the section's 1px border on each side.
   const rightPanelMax = 1280;
   const rightPanelWidth = Math.min(screenWidth - SIDEBAR_WIDTH, rightPanelMax);
-  const panelInner = rightPanelWidth - D.spacing.xl * 2 - D.spacing.lg * 2 - 2;
+  const panelInner = rightPanelWidth - 80 * 2 - D.spacing.lg * 2 - 2;
   const inlineCardWidth = Math.max(
     96,
     Math.floor((panelInner - D.spacing.sm * (DESKTOP_INLINE_LIMIT - 1)) / DESKTOP_INLINE_LIMIT)
@@ -4377,7 +4377,7 @@ function makeStyles(
       backgroundColor: colors.bg.base,
     },
     rightPanelContent: {
-      paddingHorizontal: D.spacing.xl,
+      paddingHorizontal: 80,
       paddingTop: D.spacing.lg,
       paddingBottom: D.spacing['2xl'],
       gap: D.spacing.lg,
