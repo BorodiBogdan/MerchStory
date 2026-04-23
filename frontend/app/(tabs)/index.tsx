@@ -733,7 +733,8 @@ function makeCardStyles(
 ) {
   return StyleSheet.create({
     cardWrap: {
-      flex: isDesktop ? 1 : 0,
+      flex: isDesktop ? 1 : undefined,
+      width: isDesktop ? undefined : '100%',
       minWidth: isDesktop ? 240 : undefined,
       position: 'relative',
     },
