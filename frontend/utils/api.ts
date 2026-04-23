@@ -96,6 +96,8 @@ async function fetchWithAuth(url: string, init: RequestInit): Promise<Response> 
 export interface GenerateImageResponse {
   imageBase64: string;
   mimeType: string;
+  warning?: string;
+  missingProducts?: string[];
 }
 
 export type Currency = 'USD' | 'EUR' | 'RON';
@@ -327,6 +329,7 @@ export interface GenerateCatalogImageParams {
   colorTheme: string;
   format: string;
   showPrices: boolean;
+  preserveProductImages?: boolean;
   brandContextFields?: string[];
   currency?: Currency;
   language?: AppLanguage;

@@ -11,4 +11,8 @@ public sealed record CatalogImageRequest(
     BrandContext? BrandContext = null,
     string? LogoBase64 = null,  // brand logo inline image
     string Currency = "USD",    // "USD" | "EUR" | "RON"
-    string Language = "EN");    // "EN" | "RO"
+    string Language = "EN",     // "EN" | "RO"
+    bool PreserveProductImages = false,
+    IReadOnlyList<ProductMarkerAssignment>? MarkerAssignments = null);
+
+public sealed record ProductMarkerAssignment(string ProductName, string MarkerHex);
