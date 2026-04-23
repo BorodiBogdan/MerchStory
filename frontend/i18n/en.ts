@@ -563,6 +563,19 @@ const en = {
   'studio.formatStory': 'Story 9:16',
   'studio.showPrices': 'Show prices',
   'studio.showProductNames': 'Show product names',
+  'studio.preserveProductImages.label': 'Preserve product images',
+  'studio.preserveProductImages.helper':
+    'When off, catalogs often look more polished and cinematic — but AI may subtly reinterpret your product photos (labels, shapes, or textures can shift). Turn this on to keep your product photos pixel-perfect, at the cost of slightly more structured placement.',
+  'studio.preserveProductImages.requiresPhotos':
+    'All selected products need a photo to use this option.',
+  'studio.preserveProductImages.noSafeColors':
+    'Your brand colors overlap with preserve-mode markers. Disable preserve or adjust brand colors.',
+  'studio.preserveProductImages.warningPartial':
+    'Preserved {preserved} of {total} products. Not placed: {missing}. Regenerate to retry.',
+  'studio.preserveProductImages.warningExtra': 'Preservation applied; extra placeholders ignored.',
+  'studio.preserveProductImages.warningNoRegions':
+    "Couldn't preserve products this time — used standard generation. Try again.",
+  'studio.tooManyProducts': 'Catalog supports up to 8 products. Please remove some.',
   'studio.fieldBrandName': 'Brand name',
   'studio.fieldSlogan': 'Slogan',
   'studio.fieldLogo': 'Logo',

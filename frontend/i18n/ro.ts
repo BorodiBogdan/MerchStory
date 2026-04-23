@@ -570,6 +570,20 @@ const ro: Dictionary = {
   'studio.formatStory': 'Story 9:16',
   'studio.showPrices': 'Afișează prețurile',
   'studio.showProductNames': 'Afișează numele produselor',
+  'studio.preserveProductImages.label': 'Păstrează imaginile produselor',
+  'studio.preserveProductImages.helper':
+    'Când este dezactivat, cataloagele arată adesea mai rafinat și mai cinematic — dar AI-ul poate reinterpreta subtil fotografiile produselor (etichete, forme sau texturi se pot schimba). Activează pentru a păstra fotografiile produselor perfecte, pixel cu pixel, în schimbul unei plasări puțin mai structurate.',
+  'studio.preserveProductImages.requiresPhotos':
+    'Toate produsele selectate trebuie să aibă o fotografie pentru a folosi această opțiune.',
+  'studio.preserveProductImages.noSafeColors':
+    'Culorile brandului tău se suprapun cu marcatorii modului preserve. Dezactivează preserve sau ajustează culorile brandului.',
+  'studio.preserveProductImages.warningPartial':
+    'Au fost păstrate {preserved} din {total} produse. Nu au fost plasate: {missing}. Regenerează pentru a reîncerca.',
+  'studio.preserveProductImages.warningExtra':
+    'Păstrare aplicată; marcatorii suplimentari au fost ignorați.',
+  'studio.preserveProductImages.warningNoRegions':
+    'Nu am putut păstra produsele de această dată — s-a folosit generarea standard. Încearcă din nou.',
+  'studio.tooManyProducts': 'Catalogul acceptă până la 8 produse. Te rugăm să elimini câteva.',
   'studio.brandContext': 'Date de brand de inclus',
   'studio.brandContextHint': 'Alege ce date de brand să includă prompt-ul AI',
   'studio.fieldBrandName': 'Numele brandului',

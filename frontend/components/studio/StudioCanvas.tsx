@@ -1605,6 +1605,8 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [catalogFormat, setCatalogFormat] = useState('Square');
   const [showPrices, setShowPrices] = useState(true);
   const [showProductNames, setShowProductNames] = useState(true);
+  const [preserveProductImages, setPreserveProductImages] = useState(false);
+  const [showPreserveHelp, setShowPreserveHelp] = useState(false);
   const [catalogGenerating, setCatalogGenerating] = useState(false);
   const [catalogResult, setCatalogResult] = useState<GenerateImageResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -1659,6 +1661,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           colorTheme,
           format: catalogFormat,
           showPrices,
+          preserveProductImages,
           brandContextFields: catalogContextFields.length > 0 ? catalogContextFields : undefined,
           currency: catalogCurrency,
         })
@@ -1976,6 +1979,32 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         catalogMode === 'generate' ? (
           <>
             <SectionLabel label={t('studio.generationOptions')} />
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleLabelRow}>
+                <Text style={styles.toggleLabel}>{t('studio.preserveProductImages.label')}</Text>
+                <Pressable
+                  onPress={() => setShowPreserveHelp((v) => !v)}
+                  hitSlop={8}
+                  style={styles.infoButton}
+                  accessibilityLabel={t('studio.preserveProductImages.label')}
+                >
+                  <Ionicons
+                    name={showPreserveHelp ? 'information-circle' : 'information-circle-outline'}
+                    size={18}
+                    color={colors.text.muted}
+                  />
+                </Pressable>
+              </View>
+              <Switch
+                value={preserveProductImages}
+                onValueChange={setPreserveProductImages}
+                thumbColor={preserveProductImages ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            {showPreserveHelp && (
+              <Text style={styles.toggleHelper}>{t('studio.preserveProductImages.helper')}</Text>
+            )}
             <OptionLabel label={t('studio.opt.layout')} />
             <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
             <OptionLabel label={t('studio.opt.colorTheme')} />
@@ -3148,6 +3177,40 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
 
                   <View style={styles.mobileSection}>
                     <Text style={styles.sectionTitle}>{t('studio.generationOptions')}</Text>
+                    <View style={styles.toggleRow}>
+                      <View style={styles.toggleLabelRow}>
+                        <Text style={styles.toggleLabel}>
+                          {t('studio.preserveProductImages.label')}
+                        </Text>
+                        <Pressable
+                          onPress={() => setShowPreserveHelp((v) => !v)}
+                          hitSlop={8}
+                          style={styles.infoButton}
+                          accessibilityLabel={t('studio.preserveProductImages.label')}
+                        >
+                          <Ionicons
+                            name={
+                              showPreserveHelp ? 'information-circle' : 'information-circle-outline'
+                            }
+                            size={18}
+                            color={colors.text.muted}
+                          />
+                        </Pressable>
+                      </View>
+                      <Switch
+                        value={preserveProductImages}
+                        onValueChange={setPreserveProductImages}
+                        thumbColor={
+                          preserveProductImages ? colors.accent.primary : colors.text.muted
+                        }
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                    {showPreserveHelp && (
+                      <Text style={styles.toggleHelper}>
+                        {t('studio.preserveProductImages.helper')}
+                      </Text>
+                    )}
                     <OptionLabel label={t('studio.opt.layout')} />
                     <ChipSelector
                       options={LAYOUT_OPTIONS}
@@ -4876,6 +4939,21 @@ function makeStyles(
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.medium,
       color: colors.text.primary,
+    },
+    toggleLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.xs,
+      flexShrink: 1,
+    },
+    infoButton: {
+      padding: 2,
+    },
+    toggleHelper: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginTop: D.spacing.xs,
+      lineHeight: 16,
     },
     typeRow: {
       flexDirection: 'row',

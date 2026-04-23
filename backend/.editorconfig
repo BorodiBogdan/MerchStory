@@ -95,6 +95,7 @@ dotnet_diagnostic.IDE0005.severity = warning
 dotnet_diagnostic.SA1633.severity = none  # file header required
 dotnet_diagnostic.SA1600.severity = none  # elements must be documented
 dotnet_diagnostic.SA1601.severity = none  # partial elements must be documented
+dotnet_diagnostic.SA1602.severity = none  # enumeration items must be documented
 dotnet_diagnostic.SA1402.severity = none  # file may only contain a single type
 dotnet_diagnostic.SA1649.severity = none  # file name must match first type name
 
