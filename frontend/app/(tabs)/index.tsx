@@ -60,6 +60,67 @@ const HUB_CARDS: HubCard[] = [
   },
 ];
 
+// ─── MOCK: "Ideas for you" ─────────────────────────────────────────────────────
+// Future feature: surface promo suggestions based on weather, news, holidays,
+// and seasonal trends. For now this is a static visual mock — no live data.
+type IdeaTone = 'weather' | 'holiday' | 'news' | 'trend';
+
+type PromoIdea = {
+  id: string;
+  tone: IdeaTone;
+  sourceLabel: string;
+  sourceIcon: React.ComponentProps<typeof Ionicons>['name'];
+  title: string;
+  meta: string;
+  body: string;
+  suggestedPost: string;
+};
+
+const PROMO_IDEAS: PromoIdea[] = [
+  {
+    id: 'rain',
+    tone: 'weather',
+    sourceLabel: 'Weather',
+    sourceIcon: 'rainy-outline',
+    title: 'Cold rain rolling in this weekend',
+    meta: 'Sat–Sun · 8°C · 85% rain',
+    body: 'Warm drinks, comfort food, and cozy apparel move fastest on rainy weekends. Push a "stay-in" promo.',
+    suggestedPost: 'Hot drinks · 15% off',
+  },
+  {
+    id: 'mothers-day',
+    tone: 'holiday',
+    sourceLabel: 'Holiday',
+    sourceIcon: 'gift-outline',
+    title: "Mother's Day is in 4 days",
+    meta: 'May 11 · national holiday',
+    body: 'Curate a gift bundle — beauty, handmade goods and flowers historically outsell everything else this week.',
+    suggestedPost: "Mother's Day gift guide",
+  },
+  {
+    id: 'marathon',
+    tone: 'news',
+    sourceLabel: 'Local news',
+    sourceIcon: 'newspaper-outline',
+    title: 'Downtown half-marathon on Saturday',
+    meta: 'Runs past your street · ~4k runners',
+    body: 'Thousands will walk past your shop. Run a hydration promo or a finisher-reward bundle on race day.',
+    suggestedPost: 'Marathon weekend special',
+  },
+  {
+    id: 'spring-clean',
+    tone: 'trend',
+    sourceLabel: 'Trending',
+    sourceIcon: 'flame-outline',
+    title: 'Spring-cleaning searches peaking',
+    meta: 'Google Trends · +62% this week',
+    body: 'Home organizers, cleaning kits and storage solutions are seeing their biggest national lift of the year.',
+    suggestedPost: 'Spring refresh bundle',
+  },
+];
+
+// Per-tone label kept for the source pill copy; color comes from the theme.
+
 export default function StudioHub() {
   const { colors } = useTheme();
   const t = useT();
@@ -99,8 +160,161 @@ export default function StudioHub() {
             />
           ))}
         </View>
+
+        <IdeasForYouSection isDesktop={isDesktop} colors={colors} />
       </View>
     </ScrollView>
+  );
+}
+
+// ─── Ideas for you (mocked) ───────────────────────────────────────────────────
+function IdeasForYouSection({
+  isDesktop,
+  colors,
+}: {
+  isDesktop: boolean;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const styles = useMemo(() => makeIdeasStyles(colors, isDesktop), [colors, isDesktop]);
+
+  return (
+    <View style={styles.sectionWrap}>
+      <View style={styles.header}>
+        <View style={styles.headerText}>
+          <View style={styles.eyebrow}>
+            <View style={styles.eyebrowDot} />
+            <Text style={styles.eyebrowText}>Ideas for you</Text>
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
+          </View>
+          <Text style={styles.title}>Promo angles worth posting today</Text>
+          <Text style={styles.subtitle}>
+            AI-picked from weather, local news, holidays and trending searches — updated every
+            morning.
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Refresh ideas"
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+            styles.refreshButton,
+            (pressed || hovered) && { borderColor: colors.accent.primary },
+          ]}
+          onPress={() => {}}
+        >
+          <Ionicons name="refresh" size={14} color={colors.text.secondary} />
+          <Text style={styles.refreshText}>Refresh</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.grid}>
+        {PROMO_IDEAS.map((idea, index) => (
+          <IdeaCard key={idea.id} idea={idea} index={index} isDesktop={isDesktop} colors={colors} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function IdeaCard({
+  idea,
+  index,
+  isDesktop,
+  colors,
+}: {
+  idea: PromoIdea;
+  index: number;
+  isDesktop: boolean;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const styles = useMemo(() => makeIdeaCardStyles(colors, isDesktop), [colors, isDesktop]);
+
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translate = useRef(new Animated.Value(14)).current;
+  const scale = useRef(new Animated.Value(1)).current;
+  const hover = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: D.duration.entrance,
+        delay: 270 + index * 70,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(translate, {
+        toValue: 0,
+        duration: D.duration.entrance,
+        delay: 270 + index * 70,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [opacity, translate, index]);
+
+  const springTo = (v: Animated.Value, to: number) =>
+    Animated.spring(v, { toValue: to, friction: 6, tension: 180, useNativeDriver: true }).start();
+  const timingTo = (v: Animated.Value, to: number) =>
+    Animated.timing(v, {
+      toValue: to,
+      duration: D.duration.normal,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: false,
+    }).start();
+
+  const haloOpacity = hover.interpolate({ inputRange: [0, 1], outputRange: [0, 0.8] });
+  const borderColor = hover.interpolate({
+    inputRange: [0, 1],
+    outputRange: [colors.border.subtle, colors.accent.primary],
+  });
+
+  return (
+    <Animated.View
+      style={[styles.cardWrap, { opacity, transform: [{ translateY: translate }, { scale }] }]}
+    >
+      <Animated.View pointerEvents="none" style={[styles.halo, { opacity: haloOpacity }]} />
+      <Pressable
+        onPressIn={() => springTo(scale, 0.98)}
+        onPressOut={() => springTo(scale, 1)}
+        onHoverIn={() => Platform.OS === 'web' && timingTo(hover, 1)}
+        onHoverOut={() => Platform.OS === 'web' && timingTo(hover, 0)}
+        onPress={() => {}}
+        accessibilityRole="button"
+        accessibilityLabel={`${idea.sourceLabel}: ${idea.title}`}
+        style={styles.pressable}
+      >
+        <Animated.View style={[styles.card, { borderColor }]}>
+          <View style={styles.sourceRow}>
+            <View style={styles.sourcePill}>
+              <Ionicons name={idea.sourceIcon} size={12} color={colors.text.muted} />
+              <Text style={styles.sourceText}>{idea.sourceLabel}</Text>
+            </View>
+            <Text style={styles.meta}>{idea.meta}</Text>
+          </View>
+
+          <Text style={styles.cardTitle}>{idea.title}</Text>
+          <Text style={styles.cardBody} numberOfLines={3}>
+            {idea.body}
+          </Text>
+
+          <View style={styles.footer}>
+            <View style={styles.suggested}>
+              <Ionicons name="sparkles" size={12} color={colors.accent.primary} />
+              <Text style={styles.suggestedText} numberOfLines={1}>
+                {idea.suggestedPost}
+              </Text>
+            </View>
+            <View style={styles.generateBtn}>
+              <Text style={styles.generateText}>Generate</Text>
+              <Ionicons name="arrow-forward" size={12} color={colors.accent.primary} />
+            </View>
+          </View>
+        </Animated.View>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -239,6 +453,233 @@ function HubOptionCard({ card, index, isDesktop, onPress, t, colors }: HubOption
       </Pressable>
     </Animated.View>
   );
+}
+
+function makeIdeasStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
+  return StyleSheet.create({
+    sectionWrap: {
+      marginTop: isDesktop ? D.spacing['2xl'] : D.spacing.xl,
+      paddingTop: isDesktop ? D.spacing.xl : D.spacing.lg,
+      borderTopWidth: 1,
+      borderTopColor: colors.border.subtle,
+    },
+    header: {
+      flexDirection: isDesktop ? 'row' : 'column',
+      alignItems: isDesktop ? 'flex-end' : 'flex-start',
+      justifyContent: 'space-between',
+      gap: D.spacing.md,
+      marginBottom: D.spacing.lg,
+    },
+    headerText: {
+      flex: 1,
+      maxWidth: 640,
+    },
+    eyebrow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: D.spacing.sm,
+    },
+    eyebrowDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.accent.primary,
+    },
+    eyebrowText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+    },
+    liveBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      marginLeft: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: D.radius.pill,
+      backgroundColor: 'rgba(74,222,128,0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(74,222,128,0.45)',
+    },
+    liveDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: '#4ADE80',
+    },
+    liveText: {
+      fontSize: 9,
+      fontWeight: D.fontWeight.bold,
+      color: '#4ADE80',
+      letterSpacing: 1,
+    },
+    title: {
+      fontSize: isDesktop ? D.fontSize.xl : D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.4,
+      lineHeight: isDesktop ? 28 : 24,
+    },
+    subtitle: {
+      marginTop: 4,
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
+      lineHeight: 20,
+    },
+    refreshButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: 8,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.surface,
+      ...(Platform.OS === 'web'
+        ? ({ outlineWidth: 0, cursor: 'pointer', transitionDuration: '180ms' } as any)
+        : {}),
+    } as any,
+    refreshText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
+    },
+    grid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: isDesktop ? D.spacing.md : D.spacing.sm,
+    },
+  });
+}
+
+function makeIdeaCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
+  return StyleSheet.create({
+    cardWrap: {
+      position: 'relative',
+      width: isDesktop ? ('calc(50% - 8px)' as any) : '100%',
+      ...(isDesktop ? {} : {}),
+    } as any,
+    halo: {
+      position: 'absolute',
+      inset: 0,
+      borderRadius: D.radius.xl,
+      backgroundColor: colors.accent.primary,
+      opacity: 0,
+      ...(Platform.OS === 'web'
+        ? ({ filter: 'blur(24px)', transform: [{ scale: 0.97 }] } as any)
+        : {}),
+    } as any,
+    pressable: {
+      borderRadius: D.radius.xl,
+      ...(Platform.OS === 'web'
+        ? ({ outlineWidth: 0, cursor: 'pointer', transitionDuration: '200ms' } as any)
+        : {}),
+    } as any,
+    card: {
+      backgroundColor: colors.bg.surface,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      borderRadius: D.radius.xl,
+      padding: isDesktop ? D.spacing.lg : D.spacing.md,
+      minHeight: isDesktop ? 200 : undefined,
+      gap: D.spacing.sm,
+      overflow: 'hidden',
+      ...(Platform.OS === 'web'
+        ? ({
+            transitionProperty: 'border-color, background-color',
+            transitionDuration: '220ms',
+          } as any)
+        : {}),
+    } as any,
+    sourceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    sourcePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    sourceText: {
+      fontSize: 10,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.muted,
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+    },
+    meta: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      flexShrink: 1,
+      textAlign: 'right',
+    },
+    cardTitle: {
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.3,
+      lineHeight: 22,
+      marginTop: 4,
+    },
+    cardBody: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
+      lineHeight: 19,
+      flex: 1,
+    },
+    footer: {
+      marginTop: D.spacing.sm,
+      paddingTop: D.spacing.sm,
+      borderTopWidth: 1,
+      borderTopColor: colors.border.subtle,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: D.spacing.sm,
+    },
+    suggested: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    suggestedText: {
+      flex: 1,
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.primary,
+    },
+    generateBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.accent.primary,
+    },
+    generateText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 0.4,
+    },
+  });
 }
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
