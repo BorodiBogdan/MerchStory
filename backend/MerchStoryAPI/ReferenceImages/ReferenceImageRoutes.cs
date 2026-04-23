@@ -42,6 +42,14 @@ public static class ReferenceImageRoutes
             {
                 embedding = clipService.Embed(imageBytes);
             }
+            catch (ClipServiceUnavailableException ex)
+            {
+                logger.LogWarning(ex, "Image search service unavailable while adding reference image '{Name}'.", request.Name);
+                return Results.Problem(
+                    title: "Service unavailable",
+                    detail: "Image search service is currently unavailable. Please try again later.",
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to embed reference image '{Name}'", request.Name);
@@ -85,6 +93,14 @@ public static class ReferenceImageRoutes
             try
             {
                 queryEmbedding = clipService.Embed(imageBytes);
+            }
+            catch (ClipServiceUnavailableException ex)
+            {
+                logger.LogWarning(ex, "Image search service unavailable while processing query.");
+                return Results.Problem(
+                    title: "Service unavailable",
+                    detail: "Image search service is currently unavailable. Please try again later.",
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
             }
             catch (Exception ex)
             {

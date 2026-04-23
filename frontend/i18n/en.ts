@@ -400,6 +400,11 @@ const en = {
   'studio.announcement.describe': 'Describe what you want to communicate',
   'studio.videoAdsTitle': 'Video Ads',
   'studio.comingSoon': 'Coming Soon',
+  'studio.back': 'Back',
+  'studio.hub.cardCtaOpen': 'Open',
+  'studio.video.comingSoonBody':
+    "AI-generated video ads for your products are on the way. We're polishing the model right now.",
+  'studio.video.comingSoonHint': "We'll let you know the moment it's ready.",
   'studio.tools': 'Tools',
   'studio.toolsCatalogDesc': 'Product catalogs with prices',
   'studio.toolsAnnouncementsDesc': 'Job posts, promos, info graphics',

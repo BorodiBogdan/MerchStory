@@ -17,29 +17,45 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
     private static readonly float[] Mean = [0.48145466f, 0.4578275f, 0.40821073f];
     private static readonly float[] Std = [0.26862954f, 0.26130258f, 0.27577711f];
 
-    private readonly InferenceSession session;
+    private readonly InferenceSession? session;
     private readonly ILogger<ClipEmbeddingService> logger;
 
     public ClipEmbeddingService(IConfiguration configuration, ILogger<ClipEmbeddingService> logger)
     {
         this.logger = logger;
 
-        string modelPath = configuration["Clip:ModelPath"]
-            ?? throw new InvalidOperationException("Clip:ModelPath is not configured.");
-
-        if (!File.Exists(modelPath))
+        string? modelPath = configuration["Clip:ModelPath"];
+        if (string.IsNullOrEmpty(modelPath))
         {
-            EnsureModelDownloaded(configuration, modelPath, logger);
+            logger.LogWarning("CLIP model path is not configured; image-search features will be unavailable.");
+            return;
         }
 
-        var options = new Microsoft.ML.OnnxRuntime.SessionOptions();
-        options.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
-        this.session = new InferenceSession(modelPath, options);
-        this.logger.LogInformation("CLIP model loaded from {ModelPath}", modelPath);
+        try
+        {
+            if (!File.Exists(modelPath) && !TryDownloadModel(configuration, modelPath, logger))
+            {
+                return;
+            }
+
+            var options = new Microsoft.ML.OnnxRuntime.SessionOptions();
+            options.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+            this.session = new InferenceSession(modelPath, options);
+            this.logger.LogInformation("CLIP model loaded from {ModelPath}", modelPath);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to initialize CLIP model; image-search features will be unavailable.");
+        }
     }
 
     public Vector Embed(byte[] imageBytes)
     {
+        if (this.session is null)
+        {
+            throw new ClipServiceUnavailableException();
+        }
+
         float[] tensor = this.Preprocess(imageBytes);
         var inputTensor = new DenseTensor<float>(tensor, [1, 3, InputSize, InputSize]);
         var inputs = new List<NamedOnnxValue>
@@ -58,9 +74,9 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
         return new Vector(normalized);
     }
 
-    public void Dispose() => this.session.Dispose();
+    public void Dispose() => this.session?.Dispose();
 
-    private static void EnsureModelDownloaded(IConfiguration configuration, string modelPath, ILogger logger)
+    private static bool TryDownloadModel(IConfiguration configuration, string modelPath, ILogger logger)
     {
         string? blobConnection = configuration["Azure:BlobConnectionString"];
         string? container = configuration["Clip:ModelBlobContainer"];
@@ -68,17 +84,28 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
 
         if (string.IsNullOrEmpty(blobConnection) || string.IsNullOrEmpty(container) || string.IsNullOrEmpty(blobName))
         {
-            throw new FileNotFoundException(
-                $"CLIP model not found at '{modelPath}' and Blob download is not configured " +
-                "(set Azure:BlobConnectionString, Clip:ModelBlobContainer, Clip:ModelBlobName).",
+            logger.LogWarning(
+                "CLIP model not found at '{ModelPath}' and blob download is not configured " +
+                "(set Azure:BlobConnectionString, Clip:ModelBlobContainer, Clip:ModelBlobName). " +
+                "Image-search features will be unavailable.",
                 modelPath);
+            return false;
         }
 
-        logger.LogInformation("Downloading CLIP model from blob {Container}/{Blob} to {Path}", container, blobName, modelPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
-        var blobClient = new BlobClient(blobConnection, container, blobName);
-        blobClient.DownloadTo(modelPath);
-        logger.LogInformation("CLIP model downloaded ({Size} bytes)", new FileInfo(modelPath).Length);
+        try
+        {
+            logger.LogInformation("Downloading CLIP model from blob {Container}/{Blob} to {Path}", container, blobName, modelPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
+            var blobClient = new BlobClient(blobConnection, container, blobName);
+            blobClient.DownloadTo(modelPath);
+            logger.LogInformation("CLIP model downloaded ({Size} bytes)", new FileInfo(modelPath).Length);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to download CLIP model from blob storage.");
+            return false;
+        }
     }
 
     private static float[] L2Normalize(float[] v)

@@ -408,6 +408,11 @@ const ro: Dictionary = {
   'studio.announcement.describe': 'Descrie ce vrei să comunici',
   'studio.videoAdsTitle': 'Anunțuri video',
   'studio.comingSoon': 'În curând',
+  'studio.back': 'Înapoi',
+  'studio.hub.cardCtaOpen': 'Deschide',
+  'studio.video.comingSoonBody':
+    'Anunțurile video generate de AI pentru produsele tale sunt pe drum. Lucrăm la punerea la punct a modelului chiar acum.',
+  'studio.video.comingSoonHint': 'Te anunțăm imediat ce este gata.',
   'studio.tools': 'Unelte',
   'studio.toolsCatalogDesc': 'Cataloage de produse cu prețuri',
   'studio.toolsAnnouncementsDesc': 'Anunțuri de angajare, promoții, grafice informative',
