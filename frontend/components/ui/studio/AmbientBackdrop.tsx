@@ -21,7 +21,7 @@ export function AmbientBackdrop() {
           width: 460,
           height: 460,
           borderRadius: 230,
-          backgroundColor: colors.accent.glow,
+          backgroundColor: colors.accent.primary,
           opacity: 0.35,
         }}
       />

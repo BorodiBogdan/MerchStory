@@ -115,6 +115,12 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="studio"
+          options={{
+            tabBarItemStyle: { display: 'none' },
+          }}
+        />
+        <Tabs.Screen
           name="gallery"
           options={{
             tabBarLabel: t('tabs.gallery'),
