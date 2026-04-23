@@ -76,7 +76,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddAuthorization();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddScoped<FacebookSocialPostSyncService>();
-builder.Services.AddMerchStoryImageGeneration();
+builder.Services.AddMerchStoryImageGeneration(builder.Configuration);
 builder.Services.AddSingleton<IClipEmbeddingService, ClipEmbeddingService>();
 
 var app = builder.Build();
