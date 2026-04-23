@@ -1,6 +1,5 @@
 using MerchStoryImageGeneration.Models;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -48,11 +47,8 @@ internal static class ProductPlaceholderCompositor
     private const double MinAreaFraction = 0.002;
     private const int MinAreaFloor = 400;
     private const double MaxAspectRatio = 20.0;
-    private const int EdgeStripWidth = 5;
-    private const double EdgeCoverageThreshold = 0.70;
     private const int BgSampleStripWidth = 12;
     private const int CleanupExpansion = 14;
-    private const int FillDilation = 4;
 
     public static CompositeResult Composite(
         byte[] imageBytes,
@@ -75,21 +71,25 @@ internal static class ProductPlaceholderCompositor
         var missingProducts = new List<string>();
         var diagnostics = new List<ColorDiagnostic>();
 
+        // Build DISJOINT masks — each candidate marker pixel is assigned to the SINGLE
+        // closest target color (by Chebyshev distance in RGB). This prevents two products
+        // whose loose thresholds overlap (e.g. magenta and electric violet, both with
+        // G≈0 and B≈255) from claiming the same pixels → same bbox → same region.
+        var targets = markerAssignments.Select(a => HexToRgb(a.MarkerHex)).ToList();
+        var disjointMasks = BuildDisjointMasks(canvas, targets, maxDistance: 80);
+
         for (int i = 0; i < products.Count; i++)
         {
             var assignment = markerAssignments[i];
             var target = HexToRgb(assignment.MarkerHex);
             var tight = ColorThresholds.Tight(target);
-            var loose = ColorThresholds.Loose(target);
 
-            // Detection uses LOOSE threshold — tight threshold misses the anti-aliased
-            // fringe of Gemini's outlines, causing the mask to fragment into many small
-            // disconnected components. Loose threshold catches the full outline as one
-            // connected shape. We still keep tightPixelCount for diagnostics.
+            // tightCount is only for diagnostics — report how many pixels would have
+            // matched the strict threshold, regardless of disambiguation.
             var tightMask = BuildMask(canvas, tight);
             int tightCount = CountTrue(tightMask);
 
-            var mask = BuildMask(canvas, loose);
+            var mask = disjointMasks[i];
             int looseCount = CountTrue(mask);
 
             var components = LabelComponents(mask, width, height);
@@ -165,20 +165,25 @@ internal static class ProductPlaceholderCompositor
                 .Select(a => ColorThresholds.Loose(HexToRgb(a.MarkerHex)))
                 .ToList();
 
+            // For each detected region:
+            //   1) sample a bg color from the scene just outside the bbox (skipping marker fringe)
+            //      — we still need this for CleanResidual to erase anti-aliased fringe outside the paste
+            //   2) paste the user's product in COVER mode (fills bbox + dilation, overflows cleanly)
+            //      — the paste itself erases the outline and Gemini's rendered product; no pre-fill needed
             var bgColorByProduct = new Dictionary<int, Rgba32>();
-            foreach (var (productIndex, region) in perColorRegions)
+            List<Rectangle> allBounds = [.. perColorRegions.Select(x => x.Region.Bounds)];
+            foreach ((int productIndex, Region region) in perColorRegions)
             {
-                var bgColor = SampleBackground(
+                Rgba32 bgColor = SampleBackground(
                     canvas,
                     region.Bounds,
-                    perColorRegions.Select(x => x.Region.Bounds).ToList(),
+                    allBounds,
                     allLooseThresholds);
                 bgColorByProduct[productIndex] = bgColor;
-                FillInterior(canvas, region.Bounds, bgColor);
 
                 if (productImages.TryGetValue(productIndex, out var productImg))
                 {
-                    PasteProduct(canvas, region.Bounds, productImg);
+                    PasteProduct(canvas, region, productImg);
                 }
             }
 
@@ -230,6 +235,60 @@ internal static class ProductPlaceholderCompositor
         }
 
         return count;
+    }
+
+    // ── Disjoint nearest-neighbor masks ──────────────────────────────────────
+    // For each pixel, assigns it to the target color that's closest in RGB (Chebyshev
+    // distance ≤ maxDistance). If no target is within reach, the pixel is not in any mask.
+    // This ensures overlapping loose thresholds don't cause two products to claim the
+    // same pixels → same region.
+    private static bool[][,] BuildDisjointMasks(
+        Image<Rgba32> canvas,
+        IReadOnlyList<(byte R, byte G, byte B)> targets,
+        int maxDistance)
+    {
+        int w = canvas.Width;
+        int h = canvas.Height;
+        int n = targets.Count;
+        var masks = new bool[n][,];
+        for (int i = 0; i < n; i++)
+        {
+            masks[i] = new bool[h, w];
+        }
+
+        canvas.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < h; y++)
+            {
+                var row = accessor.GetRowSpan(y);
+                for (int x = 0; x < w; x++)
+                {
+                    var p = row[x];
+                    int bestIdx = -1;
+                    int bestDist = int.MaxValue;
+                    for (int i = 0; i < n; i++)
+                    {
+                        var t = targets[i];
+                        int dr = Math.Abs(p.R - t.R);
+                        int dg = Math.Abs(p.G - t.G);
+                        int db = Math.Abs(p.B - t.B);
+                        int dist = Math.Max(dr, Math.Max(dg, db));
+                        if (dist < bestDist)
+                        {
+                            bestDist = dist;
+                            bestIdx = i;
+                        }
+                    }
+
+                    if (bestIdx >= 0 && bestDist <= maxDistance)
+                    {
+                        masks[bestIdx][y, x] = true;
+                    }
+                }
+            }
+        });
+
+        return masks;
     }
 
     // ── Threshold / mask ─────────────────────────────────────────────────────
@@ -329,6 +388,11 @@ internal static class ProductPlaceholderCompositor
     }
 
     // ── Shape filtering ──────────────────────────────────────────────────────
+    // Accepts:
+    //   - Solid fills (fill ratio ≥ 70%) — Gemini occasionally fills instead of outlining.
+    //   - Closed contours (fill ratio < 70% AND encloses a non-trivial area) — silhouette
+    //     outlines that trace the product's shape. Check via flood-fill from outside the
+    //     bbox: pixels not reached by the flood = enclosed by the outline.
     private static List<Region> FilterShapes(List<RawComponent> components, int w, int h, bool[,] mask)
     {
         int minArea = Math.Max(MinAreaFloor, (int)(w * h * MinAreaFraction));
@@ -355,60 +419,128 @@ internal static class ProductPlaceholderCompositor
             }
 
             double fillRatio = c.Area / (double)(bw * bh);
-            bool isOutline = fillRatio is >= 0.03 and <= 0.30;
-            bool isSolidFill = fillRatio >= 0.70;
 
-            if (!isOutline && !isSolidFill)
+            if (fillRatio >= 0.70)
+            {
+                // Solid-fill marker — accept.
+                kept.Add(new Region(c.Bounds, c.Area, 1.0));
+                continue;
+            }
+
+            // Outline case: require the outline to enclose a meaningful area.
+            // Flood-fill the bbox (plus 1-px padding) starting from a corner using !mask.
+            // Pixels that remain unvisited AND are not part of the mask = enclosed by the outline.
+            int enclosedArea = CountEnclosedArea(c.Bounds, mask);
+            double enclosedRatio = enclosedArea / (double)(bw * bh);
+
+            // Require at least 30% of the bbox to be enclosed — rules out open strokes
+            // that happen to loop back on themselves slightly.
+            if (enclosedRatio < 0.30)
             {
                 continue;
             }
 
-            double edgeScore = ComputeEdgeCoverage(c.Bounds, mask);
-            if (isOutline && edgeScore < EdgeCoverageThreshold)
-            {
-                continue;
-            }
-
-            kept.Add(new Region(c.Bounds, c.Area, edgeScore));
+            kept.Add(new Region(c.Bounds, c.Area, enclosedRatio));
         }
 
         return kept;
     }
 
-    private static double ComputeEdgeCoverage(Rectangle bounds, bool[,] mask)
+    // Flood-fills the bbox area (padded by 1 px) from the top-left corner using pixels
+    // where mask == false. Any pixel inside the bbox that is NOT mask AND NOT reached by
+    // the flood is "enclosed" by the outline — returns the count of those pixels.
+    private static int CountEnclosedArea(Rectangle bounds, bool[,] mask)
     {
         int h = mask.GetLength(0);
         int w = mask.GetLength(1);
-        int x0 = Math.Max(0, bounds.Left);
-        int x1 = Math.Min(w - 1, bounds.Right - 1);
-        int y0 = Math.Max(0, bounds.Top);
-        int y1 = Math.Min(h - 1, bounds.Bottom - 1);
 
-        double topCov = EdgeStripCoverage(mask, x0, x1, y0, Math.Min(y1, y0 + EdgeStripWidth - 1));
-        double bottomCov = EdgeStripCoverage(mask, x0, x1, Math.Max(y0, y1 - EdgeStripWidth + 1), y1);
-        double leftCov = EdgeStripCoverage(mask, x0, Math.Min(x1, x0 + EdgeStripWidth - 1), y0, y1);
-        double rightCov = EdgeStripCoverage(mask, Math.Max(x0, x1 - EdgeStripWidth + 1), x1, y0, y1);
+        int x0 = Math.Max(0, bounds.Left - 1);
+        int y0 = Math.Max(0, bounds.Top - 1);
+        int x1 = Math.Min(w - 1, bounds.Right);
+        int y1 = Math.Min(h - 1, bounds.Bottom);
 
-        return Math.Min(Math.Min(topCov, bottomCov), Math.Min(leftCov, rightCov));
-    }
+        int regW = x1 - x0 + 1;
+        int regH = y1 - y0 + 1;
+        var visited = new bool[regH, regW];
 
-    private static double EdgeStripCoverage(bool[,] mask, int x0, int x1, int y0, int y1)
-    {
-        int total = 0;
-        int hits = 0;
+        var queue = new Queue<(int Y, int X)>();
+
+        // Seed from all four edges of the padded bbox — any of those that aren't masked
+        // must be "outside" the outline (since we padded 1 px around the blob's bbox).
+        for (int x = x0; x <= x1; x++)
+        {
+            SeedIfOpen(mask, visited, queue, y0, x, x0, y0);
+            SeedIfOpen(mask, visited, queue, y1, x, x0, y0);
+        }
+
         for (int y = y0; y <= y1; y++)
         {
-            for (int x = x0; x <= x1; x++)
+            SeedIfOpen(mask, visited, queue, y, x0, x0, y0);
+            SeedIfOpen(mask, visited, queue, y, x1, x0, y0);
+        }
+
+        while (queue.Count > 0)
+        {
+            var (cy, cx) = queue.Dequeue();
+            for (int dy = -1; dy <= 1; dy++)
             {
-                total++;
-                if (mask[y, x])
+                for (int dx = -1; dx <= 1; dx++)
                 {
-                    hits++;
+                    if (dx == 0 && dy == 0)
+                    {
+                        continue;
+                    }
+
+                    int ny = cy + dy;
+                    int nx = cx + dx;
+                    if (ny < y0 || ny > y1 || nx < x0 || nx > x1)
+                    {
+                        continue;
+                    }
+
+                    int ly = ny - y0;
+                    int lx = nx - x0;
+                    if (visited[ly, lx] || mask[ny, nx])
+                    {
+                        continue;
+                    }
+
+                    visited[ly, lx] = true;
+                    queue.Enqueue((ny, nx));
                 }
             }
         }
 
-        return total == 0 ? 0.0 : hits / (double)total;
+        // Count pixels inside the original bounds that are neither masked nor visited — they
+        // are enclosed by the outline.
+        int enclosed = 0;
+        for (int y = bounds.Top; y < bounds.Bottom; y++)
+        {
+            for (int x = bounds.Left; x < bounds.Right; x++)
+            {
+                int ly = y - y0;
+                int lx = x - x0;
+                if (!mask[y, x] && !visited[ly, lx])
+                {
+                    enclosed++;
+                }
+            }
+        }
+
+        return enclosed;
+    }
+
+    private static void SeedIfOpen(bool[,] mask, bool[,] visited, Queue<(int Y, int X)> queue, int y, int x, int offsetX, int offsetY)
+    {
+        int ly = y - offsetY;
+        int lx = x - offsetX;
+        if (visited[ly, lx] || mask[y, x])
+        {
+            return;
+        }
+
+        visited[ly, lx] = true;
+        queue.Enqueue((y, x));
     }
 
     private static Region? SelectBestRegion(List<Region> candidates)
@@ -418,7 +550,15 @@ internal static class ProductPlaceholderCompositor
             return null;
         }
 
-        return candidates.OrderByDescending(r => r.EdgeCoverageScore).ThenByDescending(r => r.Area).First();
+        // When multiple candidates survive (e.g. Gemini hallucinated two outlines in the
+        // same color — maybe a tiny decorative one + the real product), pick the one with
+        // the LARGEST bbox area. The real product is almost always the bigger enclosed
+        // region; small duplicates are noise. Pixel-area is used as tiebreaker.
+        return candidates
+            .OrderByDescending(r => r.Bounds.Width * r.Bounds.Height)
+            .ThenByDescending(r => r.Area)
+            .ThenByDescending(r => r.EdgeCoverageScore)
+            .First();
     }
 
     // ── Background sampling ──────────────────────────────────────────────────
@@ -504,35 +644,129 @@ internal static class ProductPlaceholderCompositor
             255);
     }
 
-    // ── Fill + paste ────────────────────────────────────────────────────────
-    private static void FillInterior(Image<Rgba32> canvas, Rectangle bounds, Rgba32 color)
+    // ── Paste ───────────────────────────────────────────────────────────────
+    private static void PasteProduct(Image<Rgba32> canvas, Region region, Image<Rgba32> product)
     {
-        // Dilate by FillDilation pixels so any anti-aliased outline fringe just outside
-        // the detected bbox is covered by bg color, not left as visible marker remnants.
-        int w = canvas.Width;
-        int h = canvas.Height;
-        int x = Math.Max(0, bounds.X - FillDilation);
-        int y = Math.Max(0, bounds.Y - FillDilation);
-        int width = Math.Min(w - x, bounds.Width + (2 * FillDilation));
-        int height = Math.Min(h - y, bounds.Height + (2 * FillDilation));
-        var rect = new RectangleF(x, y, width, height);
-        canvas.Mutate(ctx => ctx.Fill(Color.FromRgba(color.R, color.G, color.B, color.A), rect));
+        Rectangle bounds = region.Bounds;
+
+        // Estimate the outline's actual thickness from its pixel area and the bbox perimeter.
+        // For a thin ring, outlineArea ≈ 2 × (W + H) × thickness, so thickness ≈ area / perimeter.
+        int perimeter = Math.Max(1, 2 * (bounds.Width + bounds.Height));
+        int measuredThickness = Math.Max(2, region.Area / perimeter);
+
+        // Dilate paste by ~½× the measured thickness + 2 px buffer — tight fit that just
+        // covers the outline + anti-aliased fringe without overshooting much beyond the
+        // product silhouette. Minimum 4 px floor for small regions.
+        int pasteDilation = Math.Max(4, (measuredThickness / 2) + 4);
+        int canvasW = canvas.Width;
+        int canvasH = canvas.Height;
+        int px0 = Math.Max(0, bounds.X - pasteDilation);
+        int py0 = Math.Max(0, bounds.Y - pasteDilation);
+        int px1 = Math.Min(canvasW, bounds.Right + pasteDilation);
+        int py1 = Math.Min(canvasH, bounds.Bottom + pasteDilation);
+        int pasteW = px1 - px0;
+        int pasteH = py1 - py0;
+
+        // Crop the product PNG to the bounding box of its non-transparent pixels so the
+        // scaling is based on the visible product, not the full PNG including padding.
+        Rectangle opaqueBounds = FindOpaqueBounds(product);
+        using Image<Rgba32> cropped = opaqueBounds == new Rectangle(0, 0, product.Width, product.Height)
+            ? product.Clone(ctx => { })
+            : product.Clone(ctx => ctx.Crop(opaqueBounds));
+
+        // Orientation-match: Gemini is allowed to rotate products by whole 90° increments
+        // (0°/90°/180°/270°) for layout reasons. The prompt tells it so — but the rendered
+        // outline will trace the rotated silhouette, so the bbox's aspect can differ from
+        // the user's PNG aspect. We detect a large aspect mismatch and rotate the PNG 90°
+        // to compensate so the paste aligns visually. (180°/270° are indistinguishable in
+        // aspect from 0°/90°, and choosing right-side-up is better left to Gemini's pose
+        // guidance in the prompt — we only correct aspect, not upside-down flips.)
+        double pngAspect = cropped.Width / (double)cropped.Height;
+        double bboxAspect = bounds.Width / (double)bounds.Height;
+        double directMismatch = Math.Abs(Math.Log(pngAspect) - Math.Log(bboxAspect));
+        double rotatedMismatch = Math.Abs(Math.Log(1.0 / pngAspect) - Math.Log(bboxAspect));
+        if (rotatedMismatch + 0.2 < directMismatch)
+        {
+            cropped.Mutate(ctx => ctx.Rotate(90));
+        }
+
+        // COVER-fit on the (possibly rotated) CROPPED product so it fills the paste area on both axes.
+        double scaleW = pasteW / (double)cropped.Width;
+        double scaleH = pasteH / (double)cropped.Height;
+        double scale = Math.Max(scaleW, scaleH);
+        int fittedW = Math.Max(1, (int)Math.Round(cropped.Width * scale));
+        int fittedH = Math.Max(1, (int)Math.Round(cropped.Height * scale));
+
+        // If COVER scaling caused overflow on one axis, center-crop the resized product so
+        // it never exceeds the paste area. This prevents a wide product (e.g. Milka bar)
+        // in a tall bbox from spilling hundreds of pixels left/right onto neighbouring
+        // products.
+        using Image<Rgba32> resized = cropped.Clone(ctx => ctx.Resize(fittedW, fittedH));
+        int overflowX = Math.Max(0, fittedW - pasteW);
+        int overflowY = Math.Max(0, fittedH - pasteH);
+        if (overflowX > 0 || overflowY > 0)
+        {
+            int cropX = overflowX / 2;
+            int cropY = overflowY / 2;
+            int cropW = Math.Min(pasteW, fittedW);
+            int cropH = Math.Min(pasteH, fittedH);
+            resized.Mutate(ctx => ctx.Crop(new Rectangle(cropX, cropY, cropW, cropH)));
+        }
+
+        int px = px0 + Math.Max(0, (pasteW - resized.Width) / 2);
+        int py = py0 + Math.Max(0, (pasteH - resized.Height) / 2);
+
+        canvas.Mutate(ctx => ctx.DrawImage(resized, new Point(px, py), 1f));
     }
 
-    private static void PasteProduct(Image<Rgba32> canvas, Rectangle bounds, Image<Rgba32> product)
+    private static Rectangle FindOpaqueBounds(Image<Rgba32> image)
     {
-        // Letterbox-fit: preserve aspect ratio, no squash.
-        double scaleW = bounds.Width / (double)product.Width;
-        double scaleH = bounds.Height / (double)product.Height;
-        double scale = Math.Min(scaleW, scaleH);
-        int fittedW = Math.Max(1, (int)Math.Round(product.Width * scale));
-        int fittedH = Math.Max(1, (int)Math.Round(product.Height * scale));
+        int w = image.Width;
+        int h = image.Height;
+        int minX = w;
+        int maxX = -1;
+        int minY = h;
+        int maxY = -1;
 
-        int px = bounds.X + ((bounds.Width - fittedW) / 2);
-        int py = bounds.Y + bounds.Height - fittedH; // bottom-align so the product "sits" on the scene surface
+        image.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < h; y++)
+            {
+                var row = accessor.GetRowSpan(y);
+                for (int x = 0; x < w; x++)
+                {
+                    if (row[x].A > 16)
+                    {
+                        if (x < minX)
+                        {
+                            minX = x;
+                        }
 
-        using var resized = product.Clone(ctx => ctx.Resize(fittedW, fittedH));
-        canvas.Mutate(ctx => ctx.DrawImage(resized, new Point(px, py), 1f));
+                        if (x > maxX)
+                        {
+                            maxX = x;
+                        }
+
+                        if (y < minY)
+                        {
+                            minY = y;
+                        }
+
+                        if (y > maxY)
+                        {
+                            maxY = y;
+                        }
+                    }
+                }
+            }
+        });
+
+        if (maxX < 0)
+        {
+            return new Rectangle(0, 0, w, h);
+        }
+
+        return new Rectangle(minX, minY, maxX - minX + 1, maxY - minY + 1);
     }
 
     // ── Residual cleanup ─────────────────────────────────────────────────────
