@@ -144,15 +144,44 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             $"Create a professional product catalog ad image in {r.Format} format. " +
             $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}. " + priceLine + "\n\n" +
             "Render the products, scene, backdrop, props, brand elements, logo, and pricing badges naturally — " +
-            "with appropriate shadows, reflections, and ambient lighting around each product so the scene looks cohesive.\n\n" +
-            "Draw one rectangular outline around each product, using the assigned colors below (one unique color per product):\n" +
+            "with rich ambient lighting across the scene for atmosphere.\n\n" +
+            "🚫 NO DROP SHADOWS OR GROUND REFLECTIONS UNDER PRODUCTS 🚫\n" +
+            "Do NOT draw cast shadows, drop shadows, ground shadows, reflections, puddles, mirror glare, " +
+            "glossy floor reflections, or any darkened/tinted patch on the surface directly below or around each product. " +
+            "The area directly under and immediately around each outlined product must be clean, uniform scene background — " +
+            "no darkening, no tint, no reflection, no highlight fading to darker tones. " +
+            "This is important: we add a clean synthetic shadow under each product AFTER generation, " +
+            "and any shadow you draw will absorb the outline color and leak it into the final composite. " +
+            "Scene-wide ambient light and lighting on OTHER scene elements (props, backdrop, signage) is fine — " +
+            "the rule applies only to the product-ground contact zone.\n\n" +
+            "Draw one tight silhouette outline around each product, using the assigned colors below (one unique color per product):\n" +
             productBlock + "\n\n" +
+            "🚫 THE OUTLINE IS A SILHOUETTE, NOT A RECTANGLE OR BOUNDING BOX 🚫\n" +
+            "The outline is ONE continuous closed curve that traces the product's actual contour — following every curve, " +
+            "handle, cap, neck, corner, and non-rectangular feature of the product. It is NEVER a rectangle, square, box frame, " +
+            "panel border, bounding rectangle, or any rectilinear shape around the product. Do NOT draw BOTH a silhouette " +
+            "outline AND a rectangle/frame around the product — draw ONLY the silhouette. There must be exactly ONE outline " +
+            "per product, and that outline must be the silhouette contour — no second rectangular frame, no outer box, no panel border, nothing else.\n\n" +
+            "🚫 OUTLINES EXIST ONLY ON PRODUCTS — NOWHERE ELSE IN THE ENTIRE IMAGE 🚫\n" +
+            "The silhouette outlines described above are the ONLY outlines, borders, frames, strokes, rings, or edge-traces " +
+            "that appear anywhere in the entire generated image. Everything else is rendered FLAT, with NO decorative outline " +
+            "of any kind. Specifically, the following elements must have absolutely NO outline, border, frame, stroke, edge-trace, " +
+            "ring, shadow-line, glow-line, or any other decorative edge treatment:\n" +
+            "- Price labels, price tags, price badges, price numbers, currency symbols — flat typography only, no surrounding box/pill/ring/stroke in any color\n" +
+            "- Product name labels, captions, descriptions — flat typography only\n" +
+            "- Headline text, title text, slogan text, brand name text, call-to-action text — flat typography only, no text outline, no text stroke, no surrounding frame\n" +
+            "- Contact information (phone, email, address) — flat typography only\n" +
+            "- Logo area, brand mark — reproduced as-is, no added frame\n" +
+            "- Decorative elements, dividers, separator lines, icons, bullet points — none of these may carry an outline\n" +
+            "- The overall image canvas — no outer border/frame around the whole composition\n" +
+            "- Grid cells, product zones, or layout sections — no visible cell borders, grid lines, panel edges, or section dividers\n\n" +
+            "If your usual design instinct is to stroke a price badge with a contrasting border, or to frame a headline with a " +
+            "decorative line, or to add a pill-shape behind a price — DO NOT. Every non-product element is pure flat typography " +
+            "or flat shape on clean background. Outlines belong to products, and to products only.\n\n" +
             "Each outline is a crisp, **solid, flat, uniformly-colored line exactly 4 pixels thick** — no gradient, no glow, " +
             "no shadow, no soft edge, no luminosity effect, no neon halo, no fade. Just a plain solid line of the exact " +
             "assigned hex color, edge-to-edge. The line must be the SAME pixel color along its entire length. " +
-            "The outline must follow the **exact silhouette / contour of the product** — tracing the product's actual shape closely, " +
-            "not a rectangle around it. The outline hugs the product edge tightly (within 1–2 pixels of the product's real silhouette), " +
-            "following curves, handles, caps, and any non-rectangular features. " +
+            "The outline hugs the product edge tightly (within 1–2 pixels of the product's real silhouette). " +
             "The outline must be a fully closed loop (no gaps) that traces the complete product silhouette. " +
             "Outlines must NOT overlap each other and must NOT overlap any text, logo, or brand element. " +
             "Do NOT add any effect to the outline — no drop shadow, no bloom, no outer glow, no inner shadow, " +
@@ -161,27 +190,47 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             "The final image will replace whatever is inside the outline with the user's actual product photo. " +
             "So anything you place on top of or crossing into an outlined region will be DESTROYED by the paste — or worse, " +
             "it will be partially visible and look broken. Treat the outlined regions as RESERVED 'do-not-touch' zones.\n\n" +
-            "🚫 ABSOLUTE RULE — NOTHING TOUCHES, CROSSES, OR OVERLAPS THE PRODUCTS OR THEIR OUTLINES 🚫\n" +
-            "Under no circumstances may ANYTHING — of ANY kind, AT ALL — be placed on top of, in front of, bleeding into, or crossing into a product or its outlined region. " +
-            "This is an absolute, zero-exception rule. There is no scenario, no composition need, no aesthetic reason that justifies breaking it.\n\n" +
-            "Specifically forbidden ON or CROSSING a product (non-exhaustive — the rule covers EVERYTHING, not just these):\n" +
-            "- NO price tags, price labels, price numbers, currency symbols, discount badges, '%' stickers, sale ribbons, deal stamps\n" +
-            "- NO text of any kind (headlines, captions, product names, descriptions, taglines, CTAs, brand mentions, contact info)\n" +
-            "- NO colors bleeding onto the product from the background (no gradient washes, no color overlays, no tinted highlights)\n" +
-            "- NO decorations (leaves, flowers, confetti, stars, sparkles, hearts, bubbles, rays, lines, dots, patterns)\n" +
-            "- NO props (other objects, utensils, foods, drinks, fabrics, plants, hands, accessories) touching or in front of the product\n" +
-            "- NO shadows, reflections, or highlights of OTHER objects falling onto the product surface\n" +
-            "- NO speech bubbles, callouts, arrows, tooltips, labels, annotations, badges, ribbons, scrolls\n" +
-            "- NO brand elements, logos, icons, symbols placed on the product\n" +
-            "- NO dividers, frames, borders other than the assigned marker outline itself\n" +
-            "- NO graphic layering, overlay, blend mode, filter, sticker, or decorative treatment touching the product\n" +
-            "- NO partial occlusions — nothing peeks from behind, overhangs, or drapes over the product\n\n" +
-            "Every pixel inside each product outline belongs to the product alone. Every pixel CROSSING the outline belongs to the product alone. The surrounding scene stays entirely outside.\n\n" +
-            "STRICT RULE ON PRICES: prices MUST appear in the image (when shown), BUT they must be placed " +
-            "**below or beside each product — NEVER on top of, crossing into, or overlapping the product or its outline.** " +
-            "Acceptable layouts: a price tag directly BELOW each product in a dedicated row beneath the product lineup, OR a price banner at the bottom of the image. " +
-            "UNACCEPTABLE: a price label slapped across the product, a discount badge pinned on top of a bag of chips, a sticker floating over a bottle, a '10 Lei' number sitting on the product packaging. " +
-            "If the layout forces a choice, MOVE the price rather than put it over the product — shrink it, reposition it, but do not let it touch the product.\n\n" +
+            "🚫 ABSOLUTE RULE — NOTHING APPEARS ON, OVER, OR CROSSING ANY PRODUCT 🚫\n" +
+            "Each product appears COMPLETELY PLAIN — as if cut out of its reference photo and pasted onto the scene, untouched. " +
+            "NOTHING — of ANY kind, with ZERO exceptions — is drawn on top of, in front of, overlapping, touching, crossing, " +
+            "clipping, bleeding into, or casting onto any product or its outlined region. If something is not part of the " +
+            "product's own original packaging as shown in the reference, IT DOES NOT APPEAR on or across the product. Period.\n\n" +
+            "This rule is ABSOLUTE and UNIVERSAL — no listing can enumerate every possibility, so do not treat any list as the " +
+            "boundary of what's forbidden. Everything you might be tempted to add — a price tag, a sticker, a water splash, a " +
+            "motion effect, a light ray, a sparkle, a ribbon, a shadow of another object, a rectangle frame, a marketing flair " +
+            "typical of the brand's own ads — is forbidden, along with anything else you can imagine. If the product is " +
+            "conventionally advertised with signature effects (JBL speakers with water, drinks with condensation, cosmetics " +
+            "with glitter, etc.), IGNORE that convention completely. The product is rendered plain, still, and isolated.\n\n" +
+            "Every pixel inside each product's outline belongs to the product alone. Every pixel crossing the outline belongs " +
+            "to the product alone. The surrounding scene stays entirely OUTSIDE the silhouette line — it never reaches across.\n\n" +
+            "🚫 STRICT SPATIAL SEPARATION BETWEEN PRICES AND PRODUCTS 🚫\n" +
+            "Every price label, tag, badge, or number MUST sit in its own dedicated zone, clearly and VISIBLY separated from " +
+            "EVERY product and its silhouette outline.\n\n" +
+            "MANDATORY CLEARANCE: between the bounding box of any price element and the outline of ANY product, there MUST be " +
+            "a visible gap of at least 5 % of the image's shortest side on all sides of the price. A price may NEVER:\n" +
+            "• overlap a product or its outline — not even by a single pixel, ever\n" +
+            "• touch a product outline — not even at a single point of contact\n" +
+            "• sit flush against or adjacent to a product outline\n" +
+            "• nestle into a product's silhouette concavity, corner, or notch\n" +
+            "• be placed such that its bounding box and the product's outline share or touch any edge\n\n" +
+            "REQUIRED LAYOUT — each price sits DIRECTLY UNDERNEATH its OWN product, inside the same grid cell / column as " +
+            "that product, with a visible strip of empty background between the price and the product outline above (the 5 % " +
+            "clearance). Each product–price pair forms its own self-contained cell: product on top, matching price label " +
+            "just below it, separated by clean background.\n\n" +
+            "ABSOLUTE PAIRING RULE: a viewer glancing at the image MUST instantly see which price belongs to which product — " +
+            "the price for product A sits directly under product A and is spatially closer to A than to any other product. " +
+            "The following are LAYOUT FAILURES:\n" +
+            "• all four prices bunched together at the bottom edge of the image far from their products\n" +
+            "• prices floating in a shared bottom banner/row with no clear mapping to individual products\n" +
+            "• a price closer to product B than to product A, yet meant to be for product A\n" +
+            "• any arrangement where you'd have to read the number to figure out which product it belongs to\n\n" +
+            "The pairing is spatial and unambiguous: price under its matching product, inside the product's own grid cell, with the clearance.\n\n" +
+            "CRITICAL — WHY THIS MATTERS: the outlined product regions will be REPLACED by a paste operation after generation. " +
+            "Any price touching, adjacent to, overlapping, or nestled into a product outline will be DESTROYED by the paste, " +
+            "or worse, half-destroyed — leaving a broken-looking half-price hanging off the product edge. " +
+            "Placing a price adjacent to the outline is just as broken as placing it on the outline. Both are unacceptable.\n\n" +
+            "If horizontal space is tight, make the PRODUCT SMALLER (shrink the silhouette) to create room for the price row. " +
+            "NEVER shrink, compress, or skip the clearance. Clearance is an absolute constraint; layout works around it.\n\n" +
             "⚠ RESERVED MARKER COLORS — ABSOLUTE EXCLUSION RULE ⚠\n" +
             "The following hex colors: " + reservedHexList + "\n" +
             "are reserved EXCLUSIVELY for the product outlines described above. They must appear NOWHERE ELSE in the entire image. " +
