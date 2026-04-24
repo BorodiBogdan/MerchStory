@@ -17,6 +17,12 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Allow large multipart uploads (admin zip-import endpoint can receive up to ~500MB).
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 500_000_000;
+});
+
 builder.Services.AddOpenApi();
 builder.Services.AddCors(options =>
 {
@@ -73,7 +79,10 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddHttpClient();
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy => policy.RequireClaim("is_admin", "true"));
+});
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddScoped<FacebookSocialPostSyncService>();
 builder.Services.AddMerchStoryImageGeneration(builder.Configuration);
