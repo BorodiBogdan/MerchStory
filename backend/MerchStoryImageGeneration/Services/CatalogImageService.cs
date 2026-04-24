@@ -165,7 +165,7 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             "that appear anywhere in the entire generated image. Everything else is rendered FLAT, with NO decorative outline " +
             "of any kind. Specifically, the following elements must have absolutely NO outline, border, frame, stroke, edge-trace, " +
             "ring, shadow-line, glow-line, or any other decorative edge treatment:\n" +
-            "- Price labels, price tags, price badges, price numbers, currency symbols — flat typography only, no surrounding box/pill/ring/stroke in any color\n" +
+            "- Price labels, price numbers, currency symbols — the typography itself is flat (no text outline, text stroke, or glow). Prices MAY sit on a filled pill, chip, tag-shape, or colored panel, but that shape itself is a flat fill with NO decorative outline/border/ring/stroke, and must NOT use any reserved marker color (see reserved-color rule below).\n" +
             "- Product name labels, captions, descriptions — flat typography only\n" +
             "- Headline text, title text, slogan text, brand name text, call-to-action text — flat typography only, no text outline, no text stroke, no surrounding frame\n" +
             "- Contact information (phone, email, address) — flat typography only\n" +
@@ -174,8 +174,8 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             "- The overall image canvas — no outer border/frame around the whole composition\n" +
             "- Grid cells, product zones, or layout sections — no visible cell borders, grid lines, panel edges, or section dividers\n\n" +
             "If your usual design instinct is to stroke a price badge with a contrasting border, or to frame a headline with a " +
-            "decorative line, or to add a pill-shape behind a price — DO NOT. Every non-product element is pure flat typography " +
-            "or flat shape on clean background. Outlines belong to products, and to products only.\n\n" +
+            "decorative line — DO NOT. A filled pill/chip behind a price is fine; a decorative outline around it is not. " +
+            "Outlines belong to products, and to products only.\n\n" +
             "Each outline is a crisp, **solid, flat, uniformly-colored line exactly 4 pixels thick** — no gradient, no glow, " +
             "no shadow, no soft edge, no luminosity effect, no neon halo, no fade. Just a plain solid line of the exact " +
             "assigned hex color, edge-to-edge. The line must be the SAME pixel color along its entire length. " +
@@ -184,6 +184,18 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             "Outlines must NOT overlap each other and must NOT overlap any text, logo, or brand element. " +
             "Do NOT add any effect to the outline — no drop shadow, no bloom, no outer glow, no inner shadow, " +
             "no color grading, no blending mode. Treat it as a flat printed line on top of the scene.\n\n" +
+            "🟩 QUIET ZONE AROUND EACH OUTLINE 🟩\n" +
+            "Immediately surrounding each product outline there must be a QUIET ZONE — a strip of clean, uniform, " +
+            "low-contrast scene background at least 40 pixels wide (or roughly one price line-height, whichever is " +
+            "larger) on every side of the outline. The quiet zone is flat: a single soft scene tone, no text, no " +
+            "typography, no price numbers, no logos, no icons, no stars, no sparkles, no dots, no chips, no tags, " +
+            "no badges, no pills, no decorative shapes, no secondary products, no patterns, no gradients, no " +
+            "saturated accent colors, no darkened patches. The zone is as quiet as a passport-photo background. " +
+            "Every character, label, badge, decorative element, and prop must begin OUTSIDE this quiet zone.\n\n" +
+            "Why: after generation, each outline is erased by sampling the pixel immediately outside it and painting " +
+            "that color over the outline. If a letter, number, badge, or accent shape sits inside the quiet zone, " +
+            "the eraser will copy THAT pixel instead of clean background, stamping a visible fragment of text or " +
+            "color in a ring around the product. Keep the quiet zone boring — quiet zone = clean erase.\n\n" +
             "PURPOSE: Each outlined region marks where a REAL photographic product image will be pasted AFTER this generation. " +
             "The final image will replace whatever is inside the outline with the user's actual product photo. " +
             "So anything you place on top of or crossing into an outlined region will be DESTROYED by the paste — or worse, " +
@@ -201,34 +213,22 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             "with glitter, etc.), IGNORE that convention completely. The product is rendered plain, still, and isolated.\n\n" +
             "Every pixel inside each product's outline belongs to the product alone. Every pixel crossing the outline belongs " +
             "to the product alone. The surrounding scene stays entirely OUTSIDE the silhouette line — it never reaches across.\n\n" +
-            "🚫 STRICT SPATIAL SEPARATION BETWEEN PRICES AND PRODUCTS 🚫\n" +
-            "Every price label, tag, badge, or number MUST sit in its own dedicated zone, clearly and VISIBLY separated from " +
-            "EVERY product and its silhouette outline.\n\n" +
-            "MANDATORY CLEARANCE: between the bounding box of any price element and the outline of ANY product, there MUST be " +
-            "a visible gap of at least 5 % of the image's shortest side on all sides of the price. A price may NEVER:\n" +
-            "• overlap a product or its outline — not even by a single pixel, ever\n" +
-            "• touch a product outline — not even at a single point of contact\n" +
-            "• sit flush against or adjacent to a product outline\n" +
-            "• nestle into a product's silhouette concavity, corner, or notch\n" +
-            "• be placed such that its bounding box and the product's outline share or touch any edge\n\n" +
-            "REQUIRED LAYOUT — each price sits DIRECTLY UNDERNEATH its OWN product, inside the same grid cell / column as " +
-            "that product, with a visible strip of empty background between the price and the product outline above (the 5 % " +
-            "clearance). Each product–price pair forms its own self-contained cell: product on top, matching price label " +
-            "just below it, separated by clean background.\n\n" +
-            "ABSOLUTE PAIRING RULE: a viewer glancing at the image MUST instantly see which price belongs to which product — " +
-            "the price for product A sits directly under product A and is spatially closer to A than to any other product. " +
-            "The following are LAYOUT FAILURES:\n" +
-            "• all four prices bunched together at the bottom edge of the image far from their products\n" +
-            "• prices floating in a shared bottom banner/row with no clear mapping to individual products\n" +
-            "• a price closer to product B than to product A, yet meant to be for product A\n" +
-            "• any arrangement where you'd have to read the number to figure out which product it belongs to\n\n" +
-            "The pairing is spatial and unambiguous: price under its matching product, inside the product's own grid cell, with the clearance.\n\n" +
-            "CRITICAL — WHY THIS MATTERS: the outlined product regions will be REPLACED by a paste operation after generation. " +
-            "Any price touching, adjacent to, overlapping, or nestled into a product outline will be DESTROYED by the paste, " +
-            "or worse, half-destroyed — leaving a broken-looking half-price hanging off the product edge. " +
-            "Placing a price adjacent to the outline is just as broken as placing it on the outline. Both are unacceptable.\n\n" +
-            "If horizontal space is tight, make the PRODUCT SMALLER (shrink the silhouette) to create room for the price row. " +
-            "NEVER shrink, compress, or skip the clearance. Clearance is an absolute constraint; layout works around it.\n\n" +
+            "🚫 CLEARANCE RULE — EVERY NON-PRODUCT ELEMENT 🚫\n" +
+            "The QUIET ZONE clearance above applies to every non-product element in the image, not only prices. " +
+            "That includes: price labels, price numbers, currency symbols, product names, captions, subtitles, " +
+            "headlines, contact info, brand text, logos, icons, arrows, stars, sparkles, dots, bullet points, " +
+            "chips, tags, badges, pills, decorative shapes, accent blocks, color swatches, and any secondary " +
+            "product or prop.\n\n" +
+            "None of these may overlap, touch, sit flush against, nestle into, or sit adjacent to a product " +
+            "outline. Between the bounding box of ANY such element and the outline of ANY product there must be " +
+            "a visible gap at least as wide as the QUIET ZONE (≥ 40 px, or ~one price line-height, whichever is larger).\n\n" +
+            "LAYOUT: each price sits directly underneath its own product, inside the same column as that product, " +
+            "with the full quiet-zone gap between the outline and the top of the price. Product-price pairing must " +
+            "be visually unambiguous — a viewer must not need to read numbers to know which price belongs to which product.\n\n" +
+            "If space is tight, SHRINK THE PRODUCT (and its outline) to create room for the quiet zone. Never compress, " +
+            "skip, or share the quiet zone. Clearance is an absolute constraint; layout works around it.\n\n" +
+            "LAYOUT FAILURES: prices bunched in a shared bottom banner, a price closer to product B than to its own " +
+            "product A, any chip/pill/tag-shape/badge extending into the quiet zone, any decorative accent within the quiet zone.\n\n" +
             "⚠ RESERVED MARKER COLORS — ABSOLUTE EXCLUSION RULE ⚠\n" +
             "The following hex colors: " + reservedHexList + "\n" +
             "are reserved EXCLUSIVELY for the product outlines described above. They must appear NOWHERE ELSE in the entire image. " +
@@ -251,6 +251,7 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             "If your natural composition would use one of these colors anywhere else, substitute with a visibly different hue — use a near-but-distinct alternative (e.g., instead of #FF00FF use #E040C0 or a neutral).\n\n" +
             saturatedThemeNote +
             "FINAL REMINDER: the reserved marker colors (" + reservedHexList + ") appear ONLY as product-silhouette outlines. Anywhere else they appear — text, price, background, decoration — is an error. Check your output before finalizing.\n\n" +
+            "Self-check before finalizing: (1) reserved marker colors appear ONLY on product outlines; (2) the quiet zone around every outline is clean, flat scene with no typography, no badges/pills, and no decoration; (3) any price pill/chip/badge sits entirely OUTSIDE the quiet zone of every product outline.\n\n" +
             "Make it look like a high-quality retail advertisement.";
     }
 

@@ -886,9 +886,9 @@ export default function ProductsScreen() {
                                       <Text style={styles.similarCardName} numberOfLines={2}>
                                         {item.name}
                                       </Text>
-                                      {item.category && (
+                                      {item.categoryPath && (
                                         <Text style={styles.similarCardCategory} numberOfLines={1}>
-                                          {item.category}
+                                          {item.categoryPath}
                                         </Text>
                                       )}
                                     </View>

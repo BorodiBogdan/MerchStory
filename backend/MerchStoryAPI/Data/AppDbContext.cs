@@ -23,6 +23,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
     public DbSet<ReferenceImage> ReferenceImages => this.Set<ReferenceImage>();
 
+    public DbSet<Category> Categories => this.Set<Category>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -133,8 +135,13 @@ public class AppDbContext : IdentityDbContext<AppUser>
         {
             entity.HasKey(r => r.Id);
             entity.Property(r => r.Name).HasMaxLength(200).IsRequired();
-            entity.Property(r => r.Category).HasMaxLength(100);
             entity.Property(r => r.ImageBase64).HasColumnType("text").IsRequired();
+
+            entity.HasOne(r => r.Category)
+                  .WithMany()
+                  .HasForeignKey(r => r.CategoryId)
+                  .OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(r => r.CategoryId);
 
             if (isRelational)
             {
@@ -149,6 +156,19 @@ public class AppDbContext : IdentityDbContext<AppUser>
             {
                 entity.Ignore(r => r.Embedding);
             }
+        });
+
+        builder.Entity<Category>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.Name).HasMaxLength(150).IsRequired();
+
+            entity.HasOne(c => c.ParentCategory)
+                  .WithMany(c => c.Children)
+                  .HasForeignKey(c => c.ParentCategoryId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(c => new { c.ParentCategoryId, c.Name }).IsUnique();
         });
     }
 }

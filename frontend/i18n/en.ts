@@ -664,6 +664,43 @@ const en = {
   'keepModal.nameRequired': 'Please enter a name.',
   'keepModal.nameTooLong': 'Name must be {max} characters or fewer.',
   'keepModal.saveFailed': 'Failed to save. Try again.',
+
+  // ── Add Professional Photo (admin) ───────────────────────────────────────
+  'addProfessional.title': 'Add Professional Photo',
+  'addProfessional.subtitle': 'These photos become the reference library for similarity search.',
+  'addProfessional.adminOnly.title': 'Admins only',
+  'addProfessional.adminOnly.body': 'You do not have access to this page.',
+  'addProfessional.adminOnly.back': 'Go back',
+  'addProfessional.success': 'Added "{name}". Total this session: {count}.',
+  'addProfessional.zip.title': 'Bulk import from ZIP',
+  'addProfessional.zip.subtitle':
+    'Upload a .zip whose folder structure is {pattern}. Folders become categories; each filename becomes the product name.',
+  'addProfessional.zip.pattern': 'category/subcategory/image.png',
+  'addProfessional.zip.choose': 'Choose ZIP file',
+  'addProfessional.zip.result': 'Imported {imported} · Skipped {skipped} · Failed {failed}',
+  'addProfessional.imagePlaceholder': 'Tap to choose photo',
+  'addProfessional.nameLabel': 'Name',
+  'addProfessional.namePlaceholder': 'e.g. Minimalist Coffee Mug — White',
+  'addProfessional.categoryLabel': 'Category (optional)',
+  'addProfessional.submit': 'Add to library',
+  'addProfessional.errors.nameRequired': 'Name is required.',
+  'addProfessional.errors.imageRequired': 'Please select an image.',
+  'addProfessional.errors.addFailed': 'Failed to add reference image.',
+  'addProfessional.errors.zipFailed': 'Failed to import zip.',
+  'addProfessional.a11y.back': 'Back',
+  'addProfessional.a11y.pickReference': 'Pick reference photo',
+
+  // ── Category path picker ─────────────────────────────────────────────────
+  'categoryPicker.levelTop': 'Top-level category',
+  'categoryPicker.levelSub': 'Subcategory',
+  'categoryPicker.levelSubSub': 'Sub-subcategory',
+  'categoryPicker.loading': 'Loading categories…',
+  'categoryPicker.newPlaceholder': 'Type new name',
+  'categoryPicker.addBtn': 'Add',
+  'categoryPicker.newChip': 'New',
+  'categoryPicker.clearA11y': 'Clear category',
+  'categoryPicker.addA11y': 'Add new category',
+  'categoryPicker.cancelA11y': 'Cancel new category',
 };
 
 export default en;
