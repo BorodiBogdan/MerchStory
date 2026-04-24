@@ -96,6 +96,8 @@ async function fetchWithAuth(url: string, init: RequestInit): Promise<Response> 
 export interface GenerateImageResponse {
   imageBase64: string;
   mimeType: string;
+  warning?: string;
+  missingProducts?: string[];
 }
 
 export type Currency = 'USD' | 'EUR' | 'RON';
@@ -327,6 +329,7 @@ export interface GenerateCatalogImageParams {
   colorTheme: string;
   format: string;
   showPrices: boolean;
+  preserveProductImages?: boolean;
   brandContextFields?: string[];
   currency?: Currency;
   language?: AppLanguage;
@@ -775,21 +778,21 @@ export interface RemoveBackgroundResponse {
 export interface ReferenceImage {
   id: string;
   name: string;
-  category: string | null;
+  categoryPath: string | null;
   imageBase64: string;
   similarity: number;
 }
 
 export interface AddReferenceImagePayload {
   name: string;
-  category?: string | null;
+  categoryPath?: string | null;
   imageBase64: string;
 }
 
 export async function addReferenceImage(payload: AddReferenceImagePayload): Promise<{
   id: string;
   name: string;
-  category: string | null;
+  categoryPath: string | null;
   createdAt: string;
 }> {
   const response = await fetchWithAuth(`${API_URL}/reference-images/`, {
@@ -804,9 +807,44 @@ export async function addReferenceImage(payload: AddReferenceImagePayload): Prom
   return response.json() as Promise<{
     id: string;
     name: string;
-    category: string | null;
+    categoryPath: string | null;
     createdAt: string;
   }>;
+}
+
+export interface ReferenceCategoryNode {
+  name: string;
+  children: ReferenceCategoryNode[];
+}
+
+export async function fetchReferenceCategories(): Promise<ReferenceCategoryNode[]> {
+  const response = await fetchWithAuth(`${API_URL}/reference-images/categories`, { method: 'GET' });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to load categories (${response.status})`);
+  }
+  return response.json() as Promise<ReferenceCategoryNode[]>;
+}
+
+export interface ImportReferenceZipResult {
+  imported: number;
+  skipped: number;
+  failed: number;
+  errors: string[];
+}
+
+export async function importReferenceZip(file: File | Blob): Promise<ImportReferenceZipResult> {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await fetchWithAuth(`${API_URL}/reference-images/import-zip`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Zip import failed (${response.status})`);
+  }
+  return response.json() as Promise<ImportReferenceZipResult>;
 }
 
 export async function searchReferenceImages(

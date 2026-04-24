@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <AdditionalFiles Include="stylecop.json" />
+    <InternalsVisibleTo Include="MerchStory.Tests" />
   </ItemGroup>
 
   <ItemGroup>

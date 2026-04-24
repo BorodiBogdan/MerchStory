@@ -29,10 +29,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(setup)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        <Stack.Screen
-          name="add-products-professional"
-          options={{ title: 'Add Professional Products' }}
-        />
+        <Stack.Screen name="add-products-professional" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
     </NavThemeProvider>

@@ -106,6 +106,31 @@ namespace MerchStoryAPI.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("MerchStoryAPI.Models.Category", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("ParentCategoryId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentCategoryId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Categories");
+                });
+
             modelBuilder.Entity("MerchStoryAPI.Models.GeneratedImage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -192,9 +217,8 @@ namespace MerchStoryAPI.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Category")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                    b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -213,6 +237,8 @@ namespace MerchStoryAPI.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
 
                     b.HasIndex("Embedding")
                         .HasAnnotation("Npgsql:StorageParameter:ef_construction", 64)
@@ -533,6 +559,16 @@ namespace MerchStoryAPI.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("MerchStoryAPI.Models.Category", b =>
+                {
+                    b.HasOne("MerchStoryAPI.Models.Category", "ParentCategory")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ParentCategory");
+                });
+
             modelBuilder.Entity("MerchStoryAPI.Models.GeneratedImage", b =>
                 {
                     b.HasOne("MerchStoryAPI.Models.AppUser", "User")
@@ -553,6 +589,16 @@ namespace MerchStoryAPI.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MerchStoryAPI.Models.ReferenceImage", b =>
+                {
+                    b.HasOne("MerchStoryAPI.Models.Category", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Category");
                 });
 
             modelBuilder.Entity("MerchStoryAPI.Models.RefreshToken", b =>
@@ -642,6 +688,11 @@ namespace MerchStoryAPI.Migrations
             modelBuilder.Entity("MerchStoryAPI.Models.AppUser", b =>
                 {
                     b.Navigation("ShopProfile");
+                });
+
+            modelBuilder.Entity("MerchStoryAPI.Models.Category", b =>
+                {
+                    b.Navigation("Children");
                 });
 #pragma warning restore 612, 618
         }

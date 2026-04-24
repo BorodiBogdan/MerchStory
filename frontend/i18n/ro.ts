@@ -570,6 +570,20 @@ const ro: Dictionary = {
   'studio.formatStory': 'Story 9:16',
   'studio.showPrices': 'Afișează prețurile',
   'studio.showProductNames': 'Afișează numele produselor',
+  'studio.preserveProductImages.label': 'Păstrează imaginile produselor',
+  'studio.preserveProductImages.helper':
+    'Când este dezactivat, cataloagele arată adesea mai rafinat și mai cinematic — dar AI-ul poate reinterpreta subtil fotografiile produselor (etichete, forme sau texturi se pot schimba). Activează pentru a păstra fotografiile produselor perfecte, pixel cu pixel, în schimbul unei plasări puțin mai structurate.',
+  'studio.preserveProductImages.requiresPhotos':
+    'Toate produsele selectate trebuie să aibă o fotografie pentru a folosi această opțiune.',
+  'studio.preserveProductImages.noSafeColors':
+    'Culorile brandului tău se suprapun cu marcatorii modului preserve. Dezactivează preserve sau ajustează culorile brandului.',
+  'studio.preserveProductImages.warningPartial':
+    'Au fost păstrate {preserved} din {total} produse. Nu au fost plasate: {missing}. Regenerează pentru a reîncerca.',
+  'studio.preserveProductImages.warningExtra':
+    'Păstrare aplicată; marcatorii suplimentari au fost ignorați.',
+  'studio.preserveProductImages.warningNoRegions':
+    'Nu am putut păstra produsele de această dată — s-a folosit generarea standard. Încearcă din nou.',
+  'studio.tooManyProducts': 'Catalogul acceptă până la 8 produse. Te rugăm să elimini câteva.',
   'studio.brandContext': 'Date de brand de inclus',
   'studio.brandContextHint': 'Alege ce date de brand să includă prompt-ul AI',
   'studio.fieldBrandName': 'Numele brandului',
@@ -662,6 +676,44 @@ const ro: Dictionary = {
   'keepModal.nameRequired': 'Te rugăm să introduci un nume.',
   'keepModal.nameTooLong': 'Numele trebuie să aibă maxim {max} caractere.',
   'keepModal.saveFailed': 'Salvarea a eșuat. Încearcă din nou.',
+
+  // ── Add Professional Photo (admin) ───────────────────────────────────────
+  'addProfessional.title': 'Adaugă fotografie profesională',
+  'addProfessional.subtitle':
+    'Aceste fotografii alcătuiesc biblioteca de referință pentru căutarea după imagine.',
+  'addProfessional.adminOnly.title': 'Doar pentru administratori',
+  'addProfessional.adminOnly.body': 'Nu ai acces la această pagină.',
+  'addProfessional.adminOnly.back': 'Înapoi',
+  'addProfessional.success': 'Ai adăugat „{name}”. Total în sesiunea curentă: {count}.',
+  'addProfessional.zip.title': 'Import în masă din ZIP',
+  'addProfessional.zip.subtitle':
+    'Încarcă un .zip a cărui structură de foldere este {pattern}. Folderele devin categorii; fiecare nume de fișier devine numele produsului.',
+  'addProfessional.zip.pattern': 'categorie/subcategorie/imagine.png',
+  'addProfessional.zip.choose': 'Alege fișierul ZIP',
+  'addProfessional.zip.result': 'Importate {imported} · Omise {skipped} · Eșuate {failed}',
+  'addProfessional.imagePlaceholder': 'Atinge pentru a alege o fotografie',
+  'addProfessional.nameLabel': 'Nume',
+  'addProfessional.namePlaceholder': 'ex. Cană minimalistă de cafea — alb',
+  'addProfessional.categoryLabel': 'Categorie (opțional)',
+  'addProfessional.submit': 'Adaugă în bibliotecă',
+  'addProfessional.errors.nameRequired': 'Numele este obligatoriu.',
+  'addProfessional.errors.imageRequired': 'Te rugăm să selectezi o imagine.',
+  'addProfessional.errors.addFailed': 'Adăugarea imaginii de referință a eșuat.',
+  'addProfessional.errors.zipFailed': 'Importul arhivei zip a eșuat.',
+  'addProfessional.a11y.back': 'Înapoi',
+  'addProfessional.a11y.pickReference': 'Alege fotografia de referință',
+
+  // ── Category path picker ─────────────────────────────────────────────────
+  'categoryPicker.levelTop': 'Categorie principală',
+  'categoryPicker.levelSub': 'Subcategorie',
+  'categoryPicker.levelSubSub': 'Sub-subcategorie',
+  'categoryPicker.loading': 'Se încarcă categoriile…',
+  'categoryPicker.newPlaceholder': 'Scrie un nume nou',
+  'categoryPicker.addBtn': 'Adaugă',
+  'categoryPicker.newChip': 'Nou',
+  'categoryPicker.clearA11y': 'Șterge categoria',
+  'categoryPicker.addA11y': 'Adaugă o categorie nouă',
+  'categoryPicker.cancelA11y': 'Anulează categoria nouă',
 };
 
 export default ro;

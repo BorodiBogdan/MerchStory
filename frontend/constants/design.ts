@@ -33,8 +33,8 @@ export type DesignColors = {
 export const darkColors: DesignColors = {
   bg: {
     base: '#0B0E14',
-    surface: '#1A2030',
-    elevated: '#242C42',
+    surface: '#11151F',
+    elevated: '#1A2030',
     input: 'rgba(255,255,255,0.08)',
     inputFocus: 'rgba(129,140,248,0.14)',
   },

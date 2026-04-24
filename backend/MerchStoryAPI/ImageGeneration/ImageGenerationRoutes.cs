@@ -26,6 +26,11 @@ public static class ImageGenerationRoutes
                 return Results.BadRequest(new { error = "At least one product is required." });
             }
 
+            if (request.Products.Count > 8)
+            {
+                return Results.BadRequest(new { error = "too_many_products", max = 8 });
+            }
+
             string[] distinctCurrencies = request.Products
                 .Select(p => (p.Currency ?? "USD").Trim().ToUpperInvariant())
                 .Distinct()
@@ -49,8 +54,60 @@ public static class ImageGenerationRoutes
 
             string resolvedLanguage = await ResolveLanguageAsync(db, userId, request.Language);
 
-            return await HandleGeneration(
-                () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext, logoBase64, resolvedCurrency, resolvedLanguage)),
+            if (!request.PreserveProductImages)
+            {
+                return await HandleGeneration(
+                    () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext, logoBase64, resolvedCurrency, resolvedLanguage)),
+                    logger);
+            }
+
+            // Preserve mode: all products must carry a photo.
+            var missingPhotos = request.Products
+                .Where(p => string.IsNullOrWhiteSpace(p.ImageBase64))
+                .Select(p => p.Name)
+                .ToList();
+            if (missingPhotos.Count > 0)
+            {
+                return Results.BadRequest(new
+                {
+                    error = "preserve_requires_all_product_images",
+                    missing = missingPhotos,
+                });
+            }
+
+            // Always fetch brand colors in preserve mode (even if not included in the prompt)
+            // so the marker palette can avoid conflicts with the shop's palette.
+            string? brandColorsForSafety = brandContext?.BrandColors ?? await FetchBrandColorsAsync(db, userId);
+
+            // Pick marker colors that don't conflict with brand colors or the chosen color theme.
+            PaletteSelectionResult palette = MarkerPaletteSelector.Select(
+                request.Products.Count,
+                brandColorsForSafety,
+                request.ColorTheme);
+
+            if (!palette.Satisfied)
+            {
+                return Results.BadRequest(new
+                {
+                    error = "preserve_no_safe_colors",
+                    brandColors = brandContext?.BrandColors,
+                    availableColors = palette.Colors.Select(c => c.Hex).ToArray(),
+                    suggestedAction = "reduce_products_or_disable_preserve",
+                });
+            }
+
+            var assignments = request.Products
+                .Select((p, i) => new ProductMarkerAssignment(p.Name, palette.Colors[i].Hex))
+                .ToList();
+
+            return await HandlePreserveGeneration(
+                request,
+                brandContext,
+                logoBase64,
+                resolvedCurrency,
+                resolvedLanguage,
+                assignments,
+                catalogService,
                 logger);
         })
         .WithName("GenerateCatalogImage")
@@ -199,6 +256,32 @@ public static class ImageGenerationRoutes
                     ? result
                     : null;
 
+    private static async Task<string?> FetchBrandColorsAsync(AppDbContext db, string? userId)
+    {
+        if (userId is null)
+        {
+            return null;
+        }
+
+        string? brandColorsJson = await db.ShopProfiles
+            .Where(s => s.UserId == userId)
+            .Select(s => s.BrandColorsJson)
+            .FirstOrDefaultAsync();
+
+        if (string.IsNullOrEmpty(brandColorsJson))
+        {
+            return null;
+        }
+
+        BrandColorDto[]? colors = JsonSerializer.Deserialize<BrandColorDto[]>(brandColorsJson);
+        if (colors is null || colors.Length == 0)
+        {
+            return null;
+        }
+
+        return string.Join(", ", colors.Select(c => c.Hex));
+    }
+
     private static async Task<string?> FetchLogoIfRequestedAsync(
         AppDbContext db,
         string? userId,
@@ -299,6 +382,143 @@ public static class ImageGenerationRoutes
             return Results.Problem("Image generation failed.", statusCode: 502);
         }
     }
+
+    private static async Task<IResult> HandlePreserveGeneration(
+        CatalogImageApiRequest request,
+        BrandContext? brandContext,
+        string? logoBase64,
+        string resolvedCurrency,
+        string resolvedLanguage,
+        IReadOnlyList<ProductMarkerAssignment> assignments,
+        ICatalogImageService catalogService,
+        ILogger logger)
+    {
+        try
+        {
+            CatalogImageRequest preserveRequest = request.ToServiceRequest(
+                brandContext,
+                logoBase64,
+                resolvedCurrency,
+                resolvedLanguage,
+                assignments);
+
+            ImageGenerationResult rawResult = await catalogService.GenerateCatalogImageAsync(preserveRequest);
+
+            IReadOnlyList<CatalogProductItem> products = preserveRequest.Products;
+            CompositeResult composite = ProductPlaceholderCompositor.Composite(
+                rawResult.ImageData,
+                products,
+                assignments);
+
+            // Always log a composite summary + per-color detection + per-region inpaint stats.
+            // This runs on every request, not only on fallback, so we can see exactly what
+            // happened for any given generation (detection hits, inpaint target/replaced counts,
+            // and how much marker colour remains on the final canvas).
+            logger.LogInformation(
+                "Preserve composite: detected={Detected}/{Expected} fallback={Fallback} globalStragglersReplaced={Stragglers} finalMarkerPixels={FinalMarker}",
+                composite.DetectedRegions,
+                composite.ExpectedRegions,
+                composite.FallbackReason?.ToString() ?? "None",
+                composite.GlobalStragglersReplaced,
+                composite.FinalMarkerPixelCount);
+
+            if (composite.Diagnostics is not null)
+            {
+                foreach (ColorDiagnostic diag in composite.Diagnostics)
+                {
+                    logger.LogInformation(
+                        "  detect '{Product}' marker={Marker} tightPx={Tight} loosePx={Loose} comps={Comps} passedShape={Passed} detected={Detected} reject='{Reason}'",
+                        diag.ProductName,
+                        diag.MarkerHex,
+                        diag.TightPixelCount,
+                        diag.LoosePixelCount,
+                        diag.ComponentCount,
+                        diag.ComponentsPassedShape,
+                        diag.Detected,
+                        diag.RejectReason ?? "n/a");
+                }
+            }
+
+            // If detection found no regions at all, return the raw Gemini image as-is
+            // (with a warning) instead of regenerating. This lets the user inspect what
+            // Gemini actually drew and diagnose why detection failed.
+            if (composite.FallbackReason == FallbackReason.NoRegions)
+            {
+                logger.LogWarning(
+                    "Preserve mode detected zero regions. Returning raw Gemini image for diagnosis. " +
+                    "Expected {Expected} products, detected {Detected}. Missing: {Missing}",
+                    composite.ExpectedRegions,
+                    composite.DetectedRegions,
+                    string.Join(", ", composite.MissingProductNames));
+
+                if (composite.Diagnostics is not null)
+                {
+                    foreach (ColorDiagnostic diag in composite.Diagnostics)
+                    {
+                        logger.LogWarning(
+                            "Preserve diagnostic — product='{Product}' marker={Marker} tightPixels={Tight} loosePixels={Loose} components={Components} passedShape={Passed} detected={Detected} reject='{Reason}'",
+                            diag.ProductName,
+                            diag.MarkerHex,
+                            diag.TightPixelCount,
+                            diag.LoosePixelCount,
+                            diag.ComponentCount,
+                            diag.ComponentsPassedShape,
+                            diag.Detected,
+                            diag.RejectReason ?? "n/a");
+                    }
+                }
+
+                string rawBase64 = Convert.ToBase64String(rawResult.ImageData);
+                return Results.Ok(new
+                {
+                    imageBase64 = rawBase64,
+                    mimeType = rawResult.MimeType,
+                    warning = "preserve_detection_failed_returning_raw",
+                    missingProducts = composite.MissingProductNames,
+                    diagnostics = composite.Diagnostics?.Select(d => new
+                    {
+                        d.ProductName,
+                        d.MarkerHex,
+                        d.TightPixelCount,
+                        d.LoosePixelCount,
+                        d.ComponentCount,
+                        d.ComponentsPassedShape,
+                        d.Detected,
+                        d.RejectReason,
+                    }),
+                });
+            }
+
+            string compositeBase64 = Convert.ToBase64String(composite.Image.ImageData);
+            string? warning = composite.FallbackReason switch
+            {
+                FallbackReason.PartialPreserve => "preserve_partial_missing_products",
+                FallbackReason.ExtraRegionsDiscarded => "preserve_extra_regions_discarded",
+                _ => null,
+            };
+
+            return Results.Ok(new
+            {
+                imageBase64 = compositeBase64,
+                mimeType = composite.Image.MimeType,
+                warning,
+                missingProducts = composite.MissingProductNames.Count > 0
+                    ? composite.MissingProductNames
+                    : null,
+            });
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains("not configured", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogError("{Message}", ex.Message);
+            return Results.Problem("Image generation is not configured.", statusCode: 503);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Preserve-mode catalog generation failed.");
+            return Results.Problem("Image generation failed.", statusCode: 502);
+        }
+    }
 }
 
 // ── API-layer DTOs ────────────────────────────────────────────────────────────
@@ -312,9 +532,15 @@ internal sealed record CatalogImageApiRequest(
     bool ShowPrices,
     List<string>? BrandContextFields,
     string? Currency = null,
-    string? Language = null)
+    string? Language = null,
+    bool PreserveProductImages = false)
 {
-    public CatalogImageRequest ToServiceRequest(BrandContext? brandContext, string? logoBase64, string currency, string language) =>
+    public CatalogImageRequest ToServiceRequest(
+        BrandContext? brandContext,
+        string? logoBase64,
+        string currency,
+        string language,
+        IReadOnlyList<ProductMarkerAssignment>? markerAssignments = null) =>
         new(
             this.Products!.Select(p => new CatalogProductItem(p.Name, p.Price, p.ImageBase64)).ToList(),
             this.Layout,
@@ -324,7 +550,9 @@ internal sealed record CatalogImageApiRequest(
             brandContext,
             logoBase64,
             currency,
-            language);
+            language,
+            this.PreserveProductImages,
+            markerAssignments);
 }
 
 internal sealed record WallpaperApiRequest(string Prompt, string Format, bool IncludeLogo, List<string>? BrandContextFields, string? Language = null)

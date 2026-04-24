@@ -70,7 +70,7 @@ const CURRENCY_CHOICES: Currency[] = ['USD', 'EUR', 'RON'];
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1600;
-const WEB_H_PADDING = 64;
+const WEB_H_PADDING = 80;
 const MOBILE_H_PADDING = D.spacing.md;
 const GAP = D.spacing.md;
 
@@ -105,7 +105,6 @@ function SectionLabel({ icon, text, color, mutedColor }: SectionLabelProps) {
 export default function ProductsScreen() {
   const { colors } = useTheme();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const styles = useMemo(() => makeStyles(colors, screenHeight), [colors, screenHeight]);
   const router = useRouter();
   const { isAdmin } = useAuth();
 
@@ -170,20 +169,23 @@ export default function ProductsScreen() {
 
   // Responsive column count
   const baseWidth = Math.min(screenWidth, MAX_CONTENT_WIDTH);
-  const hPadding = isWeb ? WEB_H_PADDING : MOBILE_H_PADDING;
+  const hPadding = !isWeb
+    ? MOBILE_H_PADDING
+    : screenWidth < 600
+      ? MOBILE_H_PADDING
+      : screenWidth < 1100
+        ? D.spacing.xl
+        : WEB_H_PADDING;
   const gridInnerWidth = useSidebar
     ? baseWidth - hPadding * 2 - SIDEBAR_WIDTH - SIDEBAR_GAP
     : baseWidth - hPadding * 2;
-  const numColumns = isWeb
-    ? gridInnerWidth < 420
-      ? 2
-      : gridInnerWidth < 720
-        ? 3
-        : gridInnerWidth < 1100
-          ? 4
-          : 5
-    : 2;
+  const numColumns = isWeb ? (gridInnerWidth < 420 ? 2 : gridInnerWidth < 720 ? 3 : 4) : 2;
   const cardWidth = (gridInnerWidth - GAP * (numColumns - 1)) / numColumns;
+
+  const styles = useMemo(
+    () => makeStyles(colors, screenHeight, hPadding),
+    [colors, screenHeight, hPadding]
+  );
 
   const toApiFilters = useCallback((f: ProductFilterState): ProductFilters => {
     const apiFilters: ProductFilters = {};
@@ -884,9 +886,9 @@ export default function ProductsScreen() {
                                       <Text style={styles.similarCardName} numberOfLines={2}>
                                         {item.name}
                                       </Text>
-                                      {item.category && (
+                                      {item.categoryPath && (
                                         <Text style={styles.similarCardCategory} numberOfLines={1}>
-                                          {item.category}
+                                          {item.categoryPath}
                                         </Text>
                                       )}
                                     </View>
@@ -1510,7 +1512,11 @@ export default function ProductsScreen() {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors'], windowHeight: number) {
+function makeStyles(
+  colors: ReturnType<typeof useTheme>['colors'],
+  windowHeight: number,
+  hPadding: number
+) {
   const modalMaxHeight = Math.round(windowHeight * (isWeb ? 0.9 : 0.92));
   return StyleSheet.create({
     root: {
@@ -1550,7 +1556,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], windowHeight:
       alignItems: 'center',
       justifyContent: 'space-between',
       flexWrap: 'wrap',
-      paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
+      paddingHorizontal: hPadding,
       paddingTop: D.spacing.xl,
       paddingBottom: D.spacing.lg,
       gap: D.spacing.md,
@@ -1652,7 +1658,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], windowHeight:
 
     // ── Grid ─────────────────────────────────────────────────────────────
     grid: {
-      paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
+      paddingHorizontal: hPadding,
       paddingTop: D.spacing.sm,
       paddingBottom: D.spacing.xl,
     },
@@ -1765,13 +1771,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], windowHeight:
 
     // ── Filter bar / sidebar ─────────────────────────────────────────────
     filterBarWrap: {
-      paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
+      paddingHorizontal: hPadding,
       paddingBottom: D.spacing.sm,
     },
     sidebarLayout: {
       flex: 1,
       flexDirection: 'row',
-      paddingHorizontal: WEB_H_PADDING,
+      paddingHorizontal: hPadding,
       gap: D.spacing.lg,
       paddingBottom: D.spacing.lg,
     },

@@ -30,7 +30,7 @@ import {
 
 const isWeb = Platform.OS === 'web';
 const MAX_CONTENT_WIDTH = 1600;
-const WEB_H_PADDING = 64;
+const WEB_H_PADDING = 80;
 const MOBILE_H_PADDING = D.spacing.md;
 const GAP = D.spacing.md;
 
@@ -39,8 +39,6 @@ export default function AnalyticsScreen() {
   const t = useT();
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-
   const [fbPosts, setFbPosts] = useState<FacebookMediaItem[]>([]);
   const [fbConnected, setFbConnected] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -52,9 +50,17 @@ export default function AnalyticsScreen() {
   const [detailsLoading, setDetailsLoading] = useState(false);
 
   const numColumns = isWeb ? (screenWidth < 600 ? 2 : screenWidth < 1024 ? 3 : 4) : 2;
-  const hPadding = isWeb ? WEB_H_PADDING : MOBILE_H_PADDING;
+  const hPadding = !isWeb
+    ? MOBILE_H_PADDING
+    : screenWidth < 600
+      ? MOBILE_H_PADDING
+      : screenWidth < 1100
+        ? D.spacing.xl
+        : WEB_H_PADDING;
   const effectiveWidth = Math.min(screenWidth, MAX_CONTENT_WIDTH) - hPadding * 2;
   const cardWidth = (effectiveWidth - GAP * (numColumns - 1)) / numColumns;
+
+  const styles = useMemo(() => makeStyles(colors, hPadding), [colors, hPadding]);
 
   useFocusEffect(
     useCallback(() => {
@@ -499,7 +505,7 @@ export default function AnalyticsScreen() {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+function makeStyles(colors: ReturnType<typeof useTheme>['colors'], hPadding: number) {
   return StyleSheet.create({
     root: {
       flex: 1,
@@ -538,7 +544,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       alignItems: 'flex-start',
       justifyContent: 'space-between',
       flexWrap: 'wrap',
-      paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
+      paddingHorizontal: hPadding,
       paddingTop: D.spacing.xl,
       paddingBottom: D.spacing.md,
       gap: D.spacing.md,
@@ -640,7 +646,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
 
     // ── Segmented switcher ───────────────────────────────────────────────
     segmentWrapper: {
-      paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
+      paddingHorizontal: hPadding,
       marginBottom: D.spacing.md,
     },
     segmentTrack: {
@@ -700,7 +706,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
 
     // ── Grid ─────────────────────────────────────────────────────────────
     grid: {
-      paddingHorizontal: isWeb ? WEB_H_PADDING : MOBILE_H_PADDING,
+      paddingHorizontal: hPadding,
       paddingTop: D.spacing.sm,
       paddingBottom: D.spacing.xl,
     },
