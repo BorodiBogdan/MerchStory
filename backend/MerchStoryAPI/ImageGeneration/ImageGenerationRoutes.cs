@@ -410,6 +410,35 @@ public static class ImageGenerationRoutes
                 products,
                 assignments);
 
+            // Always log a composite summary + per-color detection + per-region inpaint stats.
+            // This runs on every request, not only on fallback, so we can see exactly what
+            // happened for any given generation (detection hits, inpaint target/replaced counts,
+            // and how much marker colour remains on the final canvas).
+            logger.LogInformation(
+                "Preserve composite: detected={Detected}/{Expected} fallback={Fallback} globalStragglersReplaced={Stragglers} finalMarkerPixels={FinalMarker}",
+                composite.DetectedRegions,
+                composite.ExpectedRegions,
+                composite.FallbackReason?.ToString() ?? "None",
+                composite.GlobalStragglersReplaced,
+                composite.FinalMarkerPixelCount);
+
+            if (composite.Diagnostics is not null)
+            {
+                foreach (ColorDiagnostic diag in composite.Diagnostics)
+                {
+                    logger.LogInformation(
+                        "  detect '{Product}' marker={Marker} tightPx={Tight} loosePx={Loose} comps={Comps} passedShape={Passed} detected={Detected} reject='{Reason}'",
+                        diag.ProductName,
+                        diag.MarkerHex,
+                        diag.TightPixelCount,
+                        diag.LoosePixelCount,
+                        diag.ComponentCount,
+                        diag.ComponentsPassedShape,
+                        diag.Detected,
+                        diag.RejectReason ?? "n/a");
+                }
+            }
+
             // If detection found no regions at all, return the raw Gemini image as-is
             // (with a warning) instead of regenerating. This lets the user inspect what
             // Gemini actually drew and diagnose why detection failed.
