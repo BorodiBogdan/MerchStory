@@ -159,17 +159,33 @@ internal static class ProductPlaceholderCompositor
                 }
             }
 
-            // Build a list of ALL marker loose thresholds so the bg sampler can reject
-            // anti-aliased marker pixels from polluting the background color estimate.
             var allLooseThresholds = markerAssignments
                 .Select(a => ColorThresholds.Loose(HexToRgb(a.MarkerHex)))
                 .ToList();
+            var markerTargets = markerAssignments.Select(a => HexToRgb(a.MarkerHex)).ToList();
 
-            // For each detected region, paste the user's product in CONTAIN mode with a
-            // synthetic shadow. CONTAIN keeps the whole product visible (e.g. tall bottles
-            // don't get cropped); the paste is alpha-blended so whatever was underneath
-            // (outline + Gemini's fake product rendering) stays on the canvas in the margin
-            // areas and will be cleaned up per-pixel by the scene inpaint pass below.
+            // Inpaint BEFORE paste. If we pasted first, DrawImage's source-over blend
+            // would pull the outline's cyan colour into each product PNG's 1–3 px
+            // anti-aliased fringe, and the inpaint's A > 16 opaque-skip would then
+            // refuse to clean those fringe pixels — leaving a visible marker-tinted
+            // ring around every product silhouette. Cleaning the outline off the
+            // pristine canvas first means the subsequent paste blends over pure
+            // scene pixels, so the fringe stays untainted.
+            var preInpaintInfos = perColorRegions
+                .Select(r => new PasteInfo(
+                    Bounds: r.Region.Bounds,
+                    PasteRect: default,
+                    ProductRect: default,
+                    ProductOpaque: new bool[0, 0]))
+                .ToList();
+            int globalStragglersReplaced = InpaintGlobalMarkerStragglers(
+                canvas, allLooseThresholds, markerTargets, preInpaintInfos);
+
+            // For each detected region, paste the user's product in CONTAIN mode with
+            // a synthetic shadow. CONTAIN keeps the whole product visible (e.g. tall
+            // bottles don't get cropped); the paste now lands on a canvas whose marker
+            // pixels have already been replaced with scene colour, so alpha-blended
+            // edges come out clean.
             var pasteInfos = new List<PasteInfo>();
             foreach ((int productIndex, Region region) in perColorRegions)
             {
@@ -179,18 +195,9 @@ internal static class ProductPlaceholderCompositor
                 }
             }
 
-            // One global inpaint pass. For EVERY canvas pixel that matches any marker
-            // loose threshold, replace it with a distance-weighted radial average of the
-            // nearest non-marker neighbours in 8 directions. Sample rays skip pixels
-            // covered by opaque product paste so product colour can't bleed back into
-            // the outline replacement. This single pass handles both the main selected
-            // outline and all fragmented stragglers the shape filter discarded.
-            var markerTargets = markerAssignments.Select(a => HexToRgb(a.MarkerHex)).ToList();
-            int globalStragglersReplaced = InpaintGlobalMarkerStragglers(canvas, allLooseThresholds, markerTargets, pasteInfos);
-
-            // Count how many marker-coloured pixels remain on the FINAL canvas, as a last
-            // sanity-check. After the global pass this should be near-zero except for
-            // legitimate marker-like colours on the real product packaging itself.
+            // Post-composite sanity check. After the pre-paste inpaint plus the paste
+            // overwriting the interior, this should be near-zero except for legitimate
+            // marker-like colours on the real product packaging itself.
             int finalMarkerCount = CountMarkerPixels(canvas, allLooseThresholds);
 
             FallbackReason? reason = null;
@@ -641,12 +648,7 @@ internal static class ProductPlaceholderCompositor
         // + fake product rendering in the margin) is what we'll clean up via scene inpaint.
         canvas.Mutate(ctx => ctx.DrawImage(resized, new Point(px, py), 1f));
 
-        // Synthetic shadow under the product — a soft elliptical darken centered on the
-        // product's bottom edge. Replaces Gemini's shadow (which would have leaked the
-        // marker color) with a deterministic, clean gradient that looks consistent across
-        // all generations.
         var productBounds = new Rectangle(px, py, resized.Width, resized.Height);
-        DrawSyntheticShadow(canvas, productBounds);
 
         return new PasteInfo(
             Bounds: bounds,
@@ -679,73 +681,6 @@ internal static class ProductPlaceholderCompositor
             }
         });
         return mask;
-    }
-
-    // Stamps a soft elliptical shadow under the product. Quadratic alpha falloff from
-    // center to edge, multiplicative darkening (pixel *= 1 - alpha), so the shadow is
-    // luminance-adaptive — strong on bright backgrounds, nearly invisible on dark ones,
-    // with no explicit branching.
-    private static void DrawSyntheticShadow(Image<Rgba32> canvas, Rectangle productBounds)
-    {
-        int shadowWidth = (int)(productBounds.Width * 0.90);
-        int shadowHeight = Math.Max(10, productBounds.Height / 11);
-        if (shadowWidth <= 0 || shadowHeight <= 0)
-        {
-            return;
-        }
-
-        int shadowX = productBounds.X + ((productBounds.Width - shadowWidth) / 2);
-        int shadowY = productBounds.Bottom - (shadowHeight / 3); // overlap product bottom slightly
-
-        float cx = shadowWidth / 2f;
-        float cy = shadowHeight / 2f;
-        float rx = Math.Max(1f, cx);
-        float ry = Math.Max(1f, cy);
-
-        int canvasW = canvas.Width;
-        int canvasH = canvas.Height;
-
-        canvas.ProcessPixelRows(accessor =>
-        {
-            for (int dy = 0; dy < shadowHeight; dy++)
-            {
-                int y = shadowY + dy;
-                if (y < 0 || y >= canvasH)
-                {
-                    continue;
-                }
-
-                var row = accessor.GetRowSpan(y);
-                for (int dx = 0; dx < shadowWidth; dx++)
-                {
-                    int x = shadowX + dx;
-                    if (x < 0 || x >= canvasW)
-                    {
-                        continue;
-                    }
-
-                    float fx = (dx - cx) / rx;
-                    float fy = (dy - cy) / ry;
-                    float rr = (fx * fx) + (fy * fy);
-                    if (rr >= 1f)
-                    {
-                        continue;
-                    }
-
-                    // Quadratic falloff; peak ~35 % darken at center, 0 at ellipse edge.
-                    float t = 1f - rr;
-                    float alpha = t * t * 0.35f;
-                    float keep = 1f - alpha;
-
-                    var p = row[x];
-                    row[x] = new Rgba32(
-                        (byte)(p.R * keep),
-                        (byte)(p.G * keep),
-                        (byte)(p.B * keep),
-                        p.A);
-                }
-            }
-        });
     }
 
     private static Rectangle FindOpaqueBounds(Image<Rgba32> image)
@@ -1100,14 +1035,18 @@ internal static class ProductPlaceholderCompositor
             return 0;
         }
 
-        // Scene = valid replacement sample pool. Every pixel OUTSIDE the consider
-        // region (and not opaque product) is automatically scene — we never flagged
-        // those as outline or barrier because we don't touch them at all, so they're
-        // trusted as-is. From that outer shell, we flood INWARD into the consider
-        // region through !barrier pixels so the interior sources are also filtered.
+        // Scene = valid replacement sample pool. Restricted to pixels OUTSIDE the
+        // consider region (and not opaque product). Crucially, we do NOT flood
+        // inward through !outline paths: Gemini's outlines almost always have at
+        // least one sub-threshold gap (anti-aliased dropouts, thin spots, typography
+        // crossings), and any flood would spill through that gap into the fake-
+        // product interior. The interior pixels — darker glass, product shadows,
+        // label colours — would then leak into outline replacements via the 8-ray
+        // sampling below, producing visible dark halos around each product. By
+        // keeping scene strictly "outside consider", rays walk through every
+        // consider-region pixel (outline AND non-outline) with `continue` until
+        // they hit an outside-consider pixel, which is guaranteed clean scene.
         var scene = new bool[h, w];
-        var queue = new Queue<(int Y, int X)>();
-
         for (int y = 0; y < h; y++)
         {
             for (int x = 0; x < w; x++)
@@ -1115,44 +1054,14 @@ internal static class ProductPlaceholderCompositor
                 if (!consider[y, x] && !opaque[y, x])
                 {
                     scene[y, x] = true;
-                    queue.Enqueue((y, x));
                 }
             }
         }
 
-        while (queue.Count > 0)
-        {
-            var (cy, cx) = queue.Dequeue();
-            for (int dy = -1; dy <= 1; dy++)
-            {
-                for (int dx = -1; dx <= 1; dx++)
-                {
-                    if (dx == 0 && dy == 0)
-                    {
-                        continue;
-                    }
-
-                    int ny = cy + dy;
-                    int nx = cx + dx;
-                    if (ny < 0 || ny >= h || nx < 0 || nx >= w)
-                    {
-                        continue;
-                    }
-
-                    if (scene[ny, nx] || outline[ny, nx] || opaque[ny, nx])
-                    {
-                        continue;
-                    }
-
-                    scene[ny, nx] = true;
-                    queue.Enqueue((ny, nx));
-                }
-            }
-        }
-
-        // For each outline pixel, cast 8 rays and sample the first FLOOD-REACHED scene
-        // pixel on each ray. These samples are guaranteed to be clean background (the
-        // flood cannot cross a marker pixel, so it stops at the outermost outline edge).
+        // For each outline pixel, cast 8 rays and sample the first outside-consider
+        // scene pixel on each ray. Those samples come from pixels untouched by the
+        // outline detection and its halo, so they're pure backdrop — no fake-interior
+        // colours, no marker tint.
         var replacement = new Rgba32[h, w];
         var replaced = new bool[h, w];
 

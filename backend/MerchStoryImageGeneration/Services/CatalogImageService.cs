@@ -150,8 +150,6 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             "glossy floor reflections, or any darkened/tinted patch on the surface directly below or around each product. " +
             "The area directly under and immediately around each outlined product must be clean, uniform scene background — " +
             "no darkening, no tint, no reflection, no highlight fading to darker tones. " +
-            "This is important: we add a clean synthetic shadow under each product AFTER generation, " +
-            "and any shadow you draw will absorb the outline color and leak it into the final composite. " +
             "Scene-wide ambient light and lighting on OTHER scene elements (props, backdrop, signage) is fine — " +
             "the rule applies only to the product-ground contact zone.\n\n" +
             "Draw one tight silhouette outline around each product, using the assigned colors below (one unique color per product):\n" +
