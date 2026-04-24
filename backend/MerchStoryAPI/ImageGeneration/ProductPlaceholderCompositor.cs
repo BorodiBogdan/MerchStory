@@ -582,13 +582,13 @@ internal static class ProductPlaceholderCompositor
         int perimeter = Math.Max(1, 2 * (bounds.Width + bounds.Height));
         int measuredThickness = Math.Max(2, region.Area / perimeter);
 
-        // Dilate paste generously: outline thickness + ~12 px extra to cover Gemini's
-        // anti-aliased halo around the outline (typically 5-8 px wide). The real product
-        // ends up slightly larger than the outline Gemini drew, physically covering both
-        // the outline core AND its soft fringe — so even any marker residue that escapes
-        // the global inpaint ends up underneath the paste and stays invisible. Minimum
-        // 14 px floor ensures small outlines still get adequate coverage.
-        int pasteDilation = Math.Max(14, measuredThickness + 12);
+        // Dilate paste just past the outline. The pre-paste inpaint already replaced
+        // the outline and its halo with clean scene colour, so the paste no longer has
+        // to physically cover the halo — it only needs to extend a hair past the
+        // outline itself so the product's silhouette sits slightly larger than the
+        // shape Gemini drew (looks better than a product that ends flush with, or
+        // inside, the original outline).
+        int pasteDilation = Math.Max(3, measuredThickness + 1);
         int canvasW = canvas.Width;
         int canvasH = canvas.Height;
         int px0 = Math.Max(0, bounds.X - pasteDilation);
@@ -755,35 +755,36 @@ internal static class ProductPlaceholderCompositor
         IReadOnlyList<(byte R, byte G, byte B)> markerTargets,
         IReadOnlyList<PasteInfo> pasteInfos)
     {
-        const int MaxSearchRadius = 256;
-
-        // Within the tightly-bounded consider region, we use the SAME permissive
-        // thresholds for both "what to replace" and "flood-fill barrier". Any pixel
-        // with even a hint of chroma leaning toward a marker colour gets repainted
-        // with clean scene. This eliminates the sub-threshold fine lines that earlier
-        // stricter target settings were leaving behind. The spatial restriction
-        // (ConsiderMargin below) keeps us from touching unrelated scene content.
-        const int MarkerChebBand = 230;
+        // Both stages of detection must remain within the SAME Chebyshev band that the
+        // initial disjoint-mask classifier used (maxDistance = 80 in BuildDisjointMasks).
+        // The prior values (Seed = 120, Target = 230) were loose enough that catalog
+        // layout elements coloured close to a marker — price badges, chips, accent
+        // panels — became seeds and then had their interiors flagged and ray-replaced,
+        // producing vertical stripe artefacts across the badge. Holding the whole
+        // inpaint to Cheb ≤ 80 keeps it on the actual outline and its 1–3 px anti-
+        // aliased halo; anything chromatically further is not outline and is left alone.
+        const int MarkerChebBand = 200;
         const int MinChroma = 10;
 
         // Spatial scope — two-stage gating so only pixels near REAL outline get touched.
         //
         // SEED detection is STRICT: only pixels with high chroma AND close to a marker
         // colour qualify. This guarantees seeds are actual outline pixels (not naturally-
-        // tinted scene like bluish shadows near the cyan marker in RGB space).
+        // tinted scene like bluish shadows near the cyan marker in RGB space, or the
+        // catalog's coloured price-badge backgrounds).
         //
-        // DILATION around the strict seeds is WIDE (25 px) so the consider band covers
-        // the full anti-aliased halo that Gemini renders around each outline — but
-        // CENTRED on real outline pixels, not on scene that happened to lean toward
-        // marker hues.
+        // DILATION around the strict seeds is MODERATE (12 px) — wide enough to cover
+        // the anti-aliased halo Gemini renders around each outline, but not so wide
+        // that a lone mis-classified seed would drag a whole nearby layout element
+        // (a price chip, a divider) into the consider band.
         //
-        // Inside the consider band, the TARGET check is permissive — any chromatic
-        // pixel leaning toward a marker gets replaced. Since the band is tight around
-        // actual outline, this permissiveness can't touch unrelated scene content.
-        const int CoarseMargin = 30;    // initial bbox expansion for seed detection
-        const int SeedProximity = 25;   // dilation radius around seed outline pixels
+        // Inside the consider band, the TARGET check uses the SAME Cheb ≤ 80 budget
+        // as the initial disjoint classifier — so only pixels that genuinely belong
+        // to an outline (core + immediate halo) get replaced.
+        const int CoarseMargin = 20;    // initial bbox expansion for seed detection
+        const int SeedProximity = 12;   // dilation radius around seed outline pixels
         const int SeedChroma = 45;      // STRICT: only clearly-tinted pixels qualify
-        const int SeedChebBand = 120;   // STRICT: close enough to marker in RGB cheb
+        const int SeedChebBand = 100;    // STRICT: matches BuildDisjointMasks maxDistance
 
         int w = canvas.Width;
         int h = canvas.Height;
@@ -1058,15 +1059,17 @@ internal static class ProductPlaceholderCompositor
             }
         }
 
-        // For each outline pixel, cast 8 rays and sample the first outside-consider
-        // scene pixel on each ray. Those samples come from pixels untouched by the
-        // outline detection and its halo, so they're pure backdrop — no fake-interior
-        // colours, no marker tint.
+        // For each outline pixel, classify which region bbox edge it's closest to
+        // (Top / Bottom / Left / Right) and scan STRICTLY in that single cardinal
+        // direction until we hit a scene pixel. Copy that one pixel's colour —
+        // no averaging, no ray mixing, no diagonal interpolation. Because scene
+        // is already restricted to pixels outside the consider region, the first
+        // scene pixel hit on the outward ray is guaranteed to be a clean backdrop
+        // pixel immediately adjacent to the product silhouette, which visually
+        // matches the surrounding scene.
+        const int MaxScan = 256;
         var replacement = new Rgba32[h, w];
         var replaced = new bool[h, w];
-
-        int[] ddx = [0, 1, 1, 1, 0, -1, -1, -1];
-        int[] ddy = [-1, -1, 0, 1, 1, 1, 0, -1];
 
         for (int y = 0; y < h; y++)
         {
@@ -1077,45 +1080,81 @@ internal static class ProductPlaceholderCompositor
                     continue;
                 }
 
-                double accR = 0, accG = 0, accB = 0, accWeight = 0;
-                for (int d = 0; d < 8; d++)
+                // Assign to the region whose bbox is closest (Chebyshev distance).
+                // Most outline pixels are inside or right next to exactly one bbox.
+                int bestRegion = -1;
+                int bestDist = int.MaxValue;
+                for (int i = 0; i < pasteInfos.Count; i++)
                 {
-                    int sx = ddx[d];
-                    int sy = ddy[d];
-                    int cx = x;
-                    int cy = y;
-                    for (int step = 1; step <= MaxSearchRadius; step++)
+                    Rectangle b = pasteInfos[i].Bounds;
+                    int dx = x < b.Left ? b.Left - x
+                           : x >= b.Right ? x - (b.Right - 1)
+                           : 0;
+                    int dy = y < b.Top ? b.Top - y
+                           : y >= b.Bottom ? y - (b.Bottom - 1)
+                           : 0;
+                    int dist = Math.Max(dx, dy);
+                    if (dist < bestDist)
                     {
-                        cx += sx;
-                        cy += sy;
-                        if (cx < 0 || cx >= w || cy < 0 || cy >= h)
-                        {
-                            break;
-                        }
-
-                        if (!scene[cy, cx])
-                        {
-                            continue;
-                        }
-
-                        double weight = 1.0 / step;
-                        var sample = buf[cy, cx];
-                        accR += sample.R * weight;
-                        accG += sample.G * weight;
-                        accB += sample.B * weight;
-                        accWeight += weight;
-                        break;
+                        bestDist = dist;
+                        bestRegion = i;
                     }
                 }
 
-                if (accWeight > 0)
+                if (bestRegion < 0)
                 {
-                    replacement[y, x] = new Rgba32(
-                        (byte)Math.Clamp(Math.Round(accR / accWeight), 0, 255),
-                        (byte)Math.Clamp(Math.Round(accG / accWeight), 0, 255),
-                        (byte)Math.Clamp(Math.Round(accB / accWeight), 0, 255),
-                        255);
+                    continue;
+                }
+
+                Rectangle bounds = pasteInfos[bestRegion].Bounds;
+                int dTop = y - bounds.Top;
+                int dBottom = bounds.Bottom - 1 - y;
+                int dLeft = x - bounds.Left;
+                int dRight = bounds.Right - 1 - x;
+
+                // Deterministic tiebreak order: Top, Bottom, Left, Right.
+                int sx = 0, sy = 0;
+                int minEdge = dTop;
+                sy = -1;
+                if (dBottom < minEdge)
+                {
+                    minEdge = dBottom;
+                    sy = 1;
+                    sx = 0;
+                }
+
+                if (dLeft < minEdge)
+                {
+                    minEdge = dLeft;
+                    sy = 0;
+                    sx = -1;
+                }
+
+                if (dRight < minEdge)
+                {
+                    sy = 0;
+                    sx = 1;
+                }
+
+                int cx = x;
+                int cy = y;
+                for (int step = 1; step <= MaxScan; step++)
+                {
+                    cx += sx;
+                    cy += sy;
+                    if (cx < 0 || cx >= w || cy < 0 || cy >= h)
+                    {
+                        break;
+                    }
+
+                    if (!scene[cy, cx])
+                    {
+                        continue;
+                    }
+
+                    replacement[y, x] = buf[cy, cx];
                     replaced[y, x] = true;
+                    break;
                 }
             }
         }
