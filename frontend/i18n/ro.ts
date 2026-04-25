@@ -125,6 +125,14 @@ const ro: Dictionary = {
   'setup.step2.countryOther': 'Altă țară',
   'setup.step2.otherCountry': 'Cod de țară (2 litere, ex. DE)',
 
+  'ideas.toneWeather': 'Vremea',
+  'ideas.toneHoliday': 'Sărbătoare',
+  'ideas.toneNews': 'Știri locale',
+  'ideas.toneTrend': 'În tendință',
+  'ideas.loading': 'Se încarcă ideile…',
+  'ideas.error': 'Nu am putut încărca ideile. Încearcă din nou.',
+  'ideas.empty': 'Finalizează profilul magazinului pentru idei personalizate.',
+
   'setup.step3.title': 'Contact și social',
   'setup.step3.subtitle': 'Cum te pot găsi clienții și AI-ul nostru.',
   'setup.step3.phone': 'Număr de telefon',

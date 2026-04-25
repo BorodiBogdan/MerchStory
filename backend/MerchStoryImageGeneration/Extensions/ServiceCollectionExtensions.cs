@@ -1,4 +1,5 @@
 using MerchStoryImageGeneration.Services;
+using MerchStoryImageGeneration.Services.Recommendations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -33,6 +34,27 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICatalogImageService, CatalogImageService>();
         services.AddScoped<IAnnouncementImageService, AnnouncementImageService>();
         services.AddScoped<IWallpaperImageService, WallpaperImageService>();
+
+        return services;
+    }
+
+    public static IServiceCollection AddMerchStoryRecommendations(
+        this IServiceCollection services,
+        IConfiguration? configuration = null)
+    {
+        // Phase 1: only Mock is implemented. Phase 3 adds "LmStudio".
+        // Default to Mock so dev/test environments don't depend on a running LLM.
+        string providerType = configuration?["Recommendations:ProviderType"] ?? "Mock";
+
+        if (string.Equals(providerType, "Mock", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<IRecommendationProvider, MockRecommendationProvider>();
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Unknown Recommendations:ProviderType '{providerType}'. Phase 1 supports 'Mock' only.");
+        }
 
         return services;
     }

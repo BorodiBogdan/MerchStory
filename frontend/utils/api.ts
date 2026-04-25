@@ -884,3 +884,42 @@ export async function removeBackground(imageBase64: string): Promise<RemoveBackg
 
   return response.json() as Promise<RemoveBackgroundResponse>;
 }
+
+// ── Recommendations ──────────────────────────────────────────────────────────
+
+export type IdeaTone = 'weather' | 'holiday' | 'news' | 'trend';
+
+export interface IdeaItem {
+  id: string;
+  tone: IdeaTone;
+  title: string;
+  meta: string;
+  body: string;
+  suggestedPost: string;
+}
+
+export interface RecommendationsTodayResponse {
+  id: string;
+  generatedAtUtc: string;
+  ideas: IdeaItem[];
+}
+
+export async function fetchIdeas(): Promise<RecommendationsTodayResponse> {
+  const response = await fetchWithAuth(`${API_URL}/recommendations/today`, {});
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to load ideas (${response.status})`);
+  }
+  return response.json() as Promise<RecommendationsTodayResponse>;
+}
+
+export async function refreshIdeas(): Promise<RecommendationsTodayResponse> {
+  const response = await fetchWithAuth(`${API_URL}/recommendations/refresh`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to refresh ideas (${response.status})`);
+  }
+  return response.json() as Promise<RecommendationsTodayResponse>;
+}

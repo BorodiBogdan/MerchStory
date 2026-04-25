@@ -25,6 +25,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
     public DbSet<Category> Categories => this.Set<Category>();
 
+    public DbSet<DailyRecommendation> DailyRecommendations => this.Set<DailyRecommendation>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -171,6 +173,22 @@ public class AppDbContext : IdentityDbContext<AppUser>
                   .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(c => new { c.ParentCategoryId, c.Name }).IsUnique();
+        });
+
+        builder.Entity<DailyRecommendation>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+
+            entity.Property(r => r.ContextSnapshotJson).HasColumnType("text").IsRequired();
+            entity.Property(r => r.IdeasJson).HasColumnType("text").IsRequired();
+
+            entity.HasIndex(r => new { r.UserId, r.GeneratedAtUtc })
+                  .IsDescending(false, true);
+
+            entity.HasOne(r => r.User)
+                  .WithMany()
+                  .HasForeignKey(r => r.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

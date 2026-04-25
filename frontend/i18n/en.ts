@@ -121,6 +121,14 @@ const en = {
   'setup.step2.countryOther': 'Other',
   'setup.step2.otherCountry': 'Country code (2 letters, e.g. DE)',
 
+  'ideas.toneWeather': 'Weather',
+  'ideas.toneHoliday': 'Holiday',
+  'ideas.toneNews': 'Local news',
+  'ideas.toneTrend': 'Trending',
+  'ideas.loading': 'Loading ideas…',
+  'ideas.error': 'Could not load ideas. Try again.',
+  'ideas.empty': 'Complete your shop setup to see tailored ideas.',
+
   'setup.step3.title': 'Contact & Social',
   'setup.step3.subtitle': 'How customers and our AI can reach your shop.',
   'setup.step3.phone': 'Phone Number',

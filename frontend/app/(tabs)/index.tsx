@@ -17,7 +17,9 @@ import {
 import { StudioPageHero } from '@/components/ui/studio/StudioPageHero';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
+import { useIdeas } from '@/hooks/useIdeas';
 import { useT } from '@/i18n';
+import type { IdeaItem, IdeaTone } from '@/utils/api';
 
 const DESKTOP_BREAKPOINT = 768;
 const CARD_STAGGER_MS = 90;
@@ -60,11 +62,13 @@ const HUB_CARDS: HubCard[] = [
   },
 ];
 
-// ─── MOCK: "Ideas for you" ─────────────────────────────────────────────────────
-// Future feature: surface promo suggestions based on weather, news, holidays,
-// and seasonal trends. For now this is a static visual mock — no live data.
-type IdeaTone = 'weather' | 'holiday' | 'news' | 'trend';
-
+// ─── "Ideas for you" — live data ──────────────────────────────────────────────
+// Daily-rotating promo angles served by the backend recommendation pipeline
+// (Phase 1 returns a Mock provider seed; Phase 3+ swaps in LM Studio + RAG).
+//
+// PromoIdea is the on-screen shape: it adds a localized source label and an
+// Ionicons name resolved from the API's `tone` field. Mapping happens here so
+// the backend stays presentation-agnostic.
 type PromoIdea = {
   id: string;
   tone: IdeaTone;
@@ -76,50 +80,27 @@ type PromoIdea = {
   suggestedPost: string;
 };
 
-const PROMO_IDEAS: PromoIdea[] = [
-  {
-    id: 'rain',
-    tone: 'weather',
-    sourceLabel: 'Weather',
-    sourceIcon: 'rainy-outline',
-    title: 'Cold rain rolling in this weekend',
-    meta: 'Sat–Sun · 8°C · 85% rain',
-    body: 'Warm drinks, comfort food, and cozy apparel move fastest on rainy weekends. Push a "stay-in" promo.',
-    suggestedPost: 'Hot drinks · 15% off',
-  },
-  {
-    id: 'mothers-day',
-    tone: 'holiday',
-    sourceLabel: 'Holiday',
-    sourceIcon: 'gift-outline',
-    title: "Mother's Day is in 4 days",
-    meta: 'May 11 · national holiday',
-    body: 'Curate a gift bundle — beauty, handmade goods and flowers historically outsell everything else this week.',
-    suggestedPost: "Mother's Day gift guide",
-  },
-  {
-    id: 'marathon',
-    tone: 'news',
-    sourceLabel: 'Local news',
-    sourceIcon: 'newspaper-outline',
-    title: 'Downtown half-marathon on Saturday',
-    meta: 'Runs past your street · ~4k runners',
-    body: 'Thousands will walk past your shop. Run a hydration promo or a finisher-reward bundle on race day.',
-    suggestedPost: 'Marathon weekend special',
-  },
-  {
-    id: 'spring-clean',
-    tone: 'trend',
-    sourceLabel: 'Trending',
-    sourceIcon: 'flame-outline',
-    title: 'Spring-cleaning searches peaking',
-    meta: 'Google Trends · +62% this week',
-    body: 'Home organizers, cleaning kits and storage solutions are seeing their biggest national lift of the year.',
-    suggestedPost: 'Spring refresh bundle',
-  },
-];
+const TONE_ICON: Record<IdeaTone, React.ComponentProps<typeof Ionicons>['name']> = {
+  weather: 'rainy-outline',
+  holiday: 'gift-outline',
+  news: 'newspaper-outline',
+  trend: 'flame-outline',
+};
 
-// Per-tone label kept for the source pill copy; color comes from the theme.
+function toneLabelKey(
+  tone: IdeaTone
+): 'ideas.toneWeather' | 'ideas.toneHoliday' | 'ideas.toneNews' | 'ideas.toneTrend' {
+  switch (tone) {
+    case 'weather':
+      return 'ideas.toneWeather';
+    case 'holiday':
+      return 'ideas.toneHoliday';
+    case 'news':
+      return 'ideas.toneNews';
+    case 'trend':
+      return 'ideas.toneTrend';
+  }
+}
 
 export default function StudioHub() {
   const { colors } = useTheme();
@@ -161,21 +142,60 @@ export default function StudioHub() {
           ))}
         </View>
 
-        <IdeasForYouSection isDesktop={isDesktop} colors={colors} />
+        <IdeasForYouSection isDesktop={isDesktop} colors={colors} t={t} router={router} />
       </View>
     </ScrollView>
   );
 }
 
-// ─── Ideas for you (mocked) ───────────────────────────────────────────────────
+// ─── Ideas for you (live) ─────────────────────────────────────────────────────
 function IdeasForYouSection({
   isDesktop,
   colors,
+  t,
+  router,
 }: {
   isDesktop: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
+  t: ReturnType<typeof useT>;
+  router: ReturnType<typeof useRouter>;
 }) {
   const styles = useMemo(() => makeIdeasStyles(colors, isDesktop), [colors, isDesktop]);
+  const { ideas: rawIdeas, isLoading, isRefreshing, error, refresh } = useIdeas();
+
+  const promoIdeas = useMemo<PromoIdea[]>(
+    () =>
+      rawIdeas.map((it: IdeaItem) => ({
+        id: it.id,
+        tone: it.tone,
+        sourceLabel: t(toneLabelKey(it.tone)),
+        sourceIcon: TONE_ICON[it.tone],
+        title: it.title,
+        meta: it.meta,
+        body: it.body,
+        suggestedPost: it.suggestedPost,
+      })),
+    [rawIdeas, t]
+  );
+
+  const refreshDisabled = isRefreshing || isLoading;
+
+  function handleRefresh() {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    void refresh();
+  }
+
+  function handleIdeaPress(idea: PromoIdea) {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    router.push({
+      pathname: '/(tabs)/studio/announcements',
+      params: { brief: idea.suggestedPost },
+    });
+  }
 
   return (
     <View style={styles.sectionWrap}>
@@ -198,22 +218,40 @@ function IdeasForYouSection({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Refresh ideas"
+          accessibilityState={{ busy: isRefreshing, disabled: refreshDisabled }}
+          disabled={refreshDisabled}
           style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
             styles.refreshButton,
-            (pressed || hovered) && { borderColor: colors.accent.primary },
+            (pressed || hovered) && !refreshDisabled && { borderColor: colors.accent.primary },
+            refreshDisabled && { opacity: 0.5 },
           ]}
-          onPress={() => {}}
+          onPress={handleRefresh}
         >
           <Ionicons name="refresh" size={14} color={colors.text.secondary} />
           <Text style={styles.refreshText}>Refresh</Text>
         </Pressable>
       </View>
 
-      <View style={styles.grid}>
-        {PROMO_IDEAS.map((idea, index) => (
-          <IdeaCard key={idea.id} idea={idea} index={index} isDesktop={isDesktop} colors={colors} />
-        ))}
-      </View>
+      {isLoading && <Text style={styles.statusText}>{t('ideas.loading')}</Text>}
+      {error && !isLoading && <Text style={styles.errorText}>{error}</Text>}
+      {!isLoading && !error && promoIdeas.length === 0 && (
+        <Text style={styles.statusText}>{t('ideas.empty')}</Text>
+      )}
+
+      {promoIdeas.length > 0 && (
+        <View style={styles.grid}>
+          {promoIdeas.map((idea, index) => (
+            <IdeaCard
+              key={idea.id}
+              idea={idea}
+              index={index}
+              isDesktop={isDesktop}
+              colors={colors}
+              onPress={() => handleIdeaPress(idea)}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -223,11 +261,13 @@ function IdeaCard({
   index,
   isDesktop,
   colors,
+  onPress,
 }: {
   idea: PromoIdea;
   index: number;
   isDesktop: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
+  onPress?: () => void;
 }) {
   const styles = useMemo(() => makeIdeaCardStyles(colors, isDesktop), [colors, isDesktop]);
 
@@ -281,7 +321,7 @@ function IdeaCard({
         onPressOut={() => springTo(scale, 1)}
         onHoverIn={() => Platform.OS === 'web' && timingTo(hover, 1)}
         onHoverOut={() => Platform.OS === 'web' && timingTo(hover, 0)}
-        onPress={() => {}}
+        onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`${idea.sourceLabel}: ${idea.title}`}
         style={styles.pressable}
@@ -553,6 +593,16 @@ function makeIdeasStyles(colors: ReturnType<typeof useTheme>['colors'], isDeskto
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: isDesktop ? D.spacing.md : D.spacing.sm,
+    },
+    statusText: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      paddingVertical: D.spacing.md,
+    },
+    errorText: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.error,
+      paddingVertical: D.spacing.md,
     },
   });
 }

@@ -7,6 +7,7 @@ using MerchStoryAPI.Geocoding;
 using MerchStoryAPI.ImageGeneration;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Products;
+using MerchStoryAPI.Recommendations;
 using MerchStoryAPI.ReferenceImages;
 using MerchStoryAPI.Shop;
 using MerchStoryAPI.Social;
@@ -87,6 +88,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddScoped<FacebookSocialPostSyncService>();
 builder.Services.AddMerchStoryImageGeneration(builder.Configuration);
+builder.Services.AddMerchStoryRecommendations(builder.Configuration);
 builder.Services.AddSingleton<IClipEmbeddingService, ClipEmbeddingService>();
 builder.Services.AddScoped<IGeocodingService, NominatimGeocodingService>();
 
@@ -123,6 +125,7 @@ app.MapFacebookEndpoints();
 app.MapSocialEndpoints();
 app.MapImageGenerationEndpoints();
 app.MapReferenceImageEndpoints();
+app.MapRecommendationsEndpoints();
 
 app.Run();
 
