@@ -38,11 +38,24 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             cancellationToken);
     }
 
+    private static string BackgroundStyleHint(string style) =>
+        string.Equals(style, "Realistic", StringComparison.OrdinalIgnoreCase)
+            ? "Background style: place the products in a realistic retail/lifestyle environment — " +
+              "for example a store shelf, counter, market stall, or in-context setting that fits the brand. " +
+              "Use natural ambient lighting consistent with that environment. "
+            : "Background style: a clean, flat social-media-post aesthetic — solid color blocks, soft gradients, " +
+              "or simple geometric shapes inspired by polished Instagram brand posts. " +
+              "No real-world environment, no shelves, no store fixtures, no physical props. " +
+              "The backdrop reads as graphic design, not photography. ";
+
     private static string BuildPrompt(CatalogImageRequest r)
     {
         string symbol = CurrencyFormatter.SymbolFor(r.Currency);
-        var names = string.Join(", ", r.Products.Select(p =>
-            r.ShowPrices ? $"{p.Name} ({CurrencyFormatter.Format(p.Price, r.Currency)})" : p.Name));
+        string nameList = string.Join(", ", r.Products.Select(p => p.Name));
+        string namedWithPrices = string.Join(", ", r.Products.Select(p =>
+            $"{p.Name} ({CurrencyFormatter.Format(p.Price, r.Currency)})"));
+        string priceList = string.Join(", ", r.Products.Select(p =>
+            CurrencyFormatter.Format(p.Price, r.Currency)));
 
         string logoNote = !string.IsNullOrWhiteSpace(r.LogoBase64)
             ? "Brand logo: a logo image has been provided as the first inline image. " +
@@ -58,18 +71,30 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             ? "Use the provided product photos as the basis for the visuals. "
             : string.Empty;
 
+        string productsClause = (r.ShowProductNames, r.ShowPrices) switch
+        {
+            (true, true) => $"Products: {namedWithPrices}. Render each product's name as flat typography near its product. ",
+            (true, false) => $"Products: {nameList}. Render each product's name as flat typography near its product. ",
+            (false, true) => $"Products (in order): {nameList}. Show only the prices ({priceList}) — one price per product, in the same order — and do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
+            (false, false) => $"Products (in order, for context only): {nameList}. Do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
+        };
+
+        string priceClause = r.ShowPrices
+            ? $"Display prices prominently using the {r.Currency} currency (symbol: {symbol})."
+            : "Do not show prices.";
+
         return
             $"{SystemContext}\n\n" +
             LanguageInstruction.For(r.Language) +
             BrandContextBlock(r.BrandContext) +
             logoNote +
             $"Create a professional product catalog ad image in {r.Format} format. " +
-            $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}. Products: {names}. " +
+            $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}. " +
+            productsClause +
             imageNote +
-            (r.ShowPrices
-                ? $"Display prices prominently using the {r.Currency} currency (symbol: {symbol})."
-                : "Do not show prices.") +
-            " Make it look like a high-quality retail advertisement.";
+            priceClause + " " +
+            BackgroundStyleHint(r.BackgroundStyle) +
+            "Make it look like a high-quality retail advertisement.";
     }
 
     private static string BuildOutlinePrompt(CatalogImageRequest r)
@@ -135,14 +160,23 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
               "This is essential because the real reference image will be composited over your rendering afterward; any deviation in shape, position, orientation, or aspect ratio will cause a visible misalignment where the composited product stretches, crops, or falls off-center.\n\n"
             : string.Empty;
 
+        string nameSuppression = r.ShowProductNames
+            ? "PRODUCT NAME TEXT — DO render each product's name as flat, clearly readable typography near (but outside the quiet zone of) its corresponding product. " +
+              "One name per product, paired unambiguously with its product. Flat typography only — no decorative outline, frame, or stroke around the name text.\n\n"
+            : "PRODUCT NAME TEXT — DO NOT render any product name labels, captions, headings, or product-name typography in the image. " +
+              "The product silhouettes and the scene speak for themselves; no name text appears anywhere in the rendered output. " +
+              "The product names listed in the marker assignments above are STRUCTURAL only (used to associate each product with its outline color) — they are NOT to appear as visible text.\n\n";
+
         return
             $"{SystemContext}\n\n" +
             LanguageInstruction.For(r.Language) +
             BrandContextBlock(r.BrandContext) +
             logoNote +
             productRefNote +
+            nameSuppression +
             $"Create a professional product catalog ad image in {r.Format} format. " +
             $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}. " + priceLine + "\n\n" +
+            BackgroundStyleHint(r.BackgroundStyle) + "\n" +
             "Render the products, scene, backdrop, props, brand elements, logo, and pricing badges naturally — " +
             "with rich ambient lighting across the scene for atmosphere.\n\n" +
             "🚫 NO DROP SHADOWS OR GROUND REFLECTIONS UNDER PRODUCTS 🚫\n" +

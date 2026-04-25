@@ -659,6 +659,12 @@ function getFormatOptions(tr: TranslateFn) {
     { value: 'Story', label: tr('studio.formatStoryLabel') },
   ];
 }
+function getBackgroundStyleOptions(tr: TranslateFn) {
+  return [
+    { value: 'SocialPost', label: tr('studio.backgroundStyle.socialPost') },
+    { value: 'Realistic', label: tr('studio.backgroundStyle.realistic') },
+  ];
+}
 function getPostTypes(tr: TranslateFn): {
   type: PostType;
   label: string;
@@ -1505,6 +1511,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const LAYOUT_OPTIONS = useMemo(() => getLayoutOptions(tr), [tr]);
   const COLOR_OPTIONS = useMemo(() => getColorOptions(tr), [tr]);
   const FORMAT_OPTIONS = useMemo(() => getFormatOptions(tr), [tr]);
+  const BACKGROUND_STYLE_OPTIONS = useMemo(() => getBackgroundStyleOptions(tr), [tr]);
   const POST_TYPES = useMemo(() => getPostTypes(tr), [tr]);
   const JOB_IMAGE_STYLE_OPTIONS = useMemo(() => getJobImageStyleOptions(tr), [tr]);
   const TONE_OPTIONS = useMemo(() => getToneOptions(tr), [tr]);
@@ -1605,8 +1612,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [catalogFormat, setCatalogFormat] = useState('Square');
   const [showPrices, setShowPrices] = useState(true);
   const [showProductNames, setShowProductNames] = useState(true);
+  const [showCatalogProductNames, setShowCatalogProductNames] = useState(false);
+  const [backgroundStyle, setBackgroundStyle] = useState<'SocialPost' | 'Realistic'>('SocialPost');
   const [preserveProductImages, setPreserveProductImages] = useState(false);
   const [showPreserveHelp, setShowPreserveHelp] = useState(false);
+  const [showPricesHelp, setShowPricesHelp] = useState(false);
+  const [showNamesHelp, setShowNamesHelp] = useState(false);
+  const [showBackgroundStyleHelp, setShowBackgroundStyleHelp] = useState(false);
   const [catalogGenerating, setCatalogGenerating] = useState(false);
   const [catalogResult, setCatalogResult] = useState<GenerateImageResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -1661,6 +1673,8 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           colorTheme,
           format: catalogFormat,
           showPrices,
+          showProductNames: showCatalogProductNames,
+          backgroundStyle,
           preserveProductImages,
           brandContextFields: catalogContextFields.length > 0 ? catalogContextFields : undefined,
           currency: catalogCurrency,
@@ -2005,6 +2019,83 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             {showPreserveHelp && (
               <Text style={styles.toggleHelper}>{t('studio.preserveProductImages.helper')}</Text>
             )}
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleLabelRow}>
+                <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
+                <Pressable
+                  onPress={() => setShowPricesHelp((v) => !v)}
+                  hitSlop={8}
+                  style={styles.infoButton}
+                  accessibilityLabel={t('studio.showPrices')}
+                >
+                  <Ionicons
+                    name={showPricesHelp ? 'information-circle' : 'information-circle-outline'}
+                    size={18}
+                    color={colors.text.muted}
+                  />
+                </Pressable>
+              </View>
+              <Switch
+                value={showPrices}
+                onValueChange={setShowPrices}
+                thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            {showPricesHelp && (
+              <Text style={styles.toggleHelper}>{t('studio.showPrices.helper')}</Text>
+            )}
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleLabelRow}>
+                <Text style={styles.toggleLabel}>{t('studio.showProductNames')}</Text>
+                <Pressable
+                  onPress={() => setShowNamesHelp((v) => !v)}
+                  hitSlop={8}
+                  style={styles.infoButton}
+                  accessibilityLabel={t('studio.showProductNames')}
+                >
+                  <Ionicons
+                    name={showNamesHelp ? 'information-circle' : 'information-circle-outline'}
+                    size={18}
+                    color={colors.text.muted}
+                  />
+                </Pressable>
+              </View>
+              <Switch
+                value={showCatalogProductNames}
+                onValueChange={setShowCatalogProductNames}
+                thumbColor={showCatalogProductNames ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            {showNamesHelp && (
+              <Text style={styles.toggleHelper}>{t('studio.showProductNames.helper')}</Text>
+            )}
+            <View style={styles.toggleLabelRow}>
+              <OptionLabel label={t('studio.opt.backgroundStyle')} />
+              <Pressable
+                onPress={() => setShowBackgroundStyleHelp((v) => !v)}
+                hitSlop={8}
+                style={styles.infoButton}
+                accessibilityLabel={t('studio.opt.backgroundStyle')}
+              >
+                <Ionicons
+                  name={
+                    showBackgroundStyleHelp ? 'information-circle' : 'information-circle-outline'
+                  }
+                  size={18}
+                  color={colors.text.muted}
+                />
+              </Pressable>
+            </View>
+            <SidebarOptionGroup
+              options={BACKGROUND_STYLE_OPTIONS}
+              selected={backgroundStyle}
+              onSelect={(v) => setBackgroundStyle(v as 'SocialPost' | 'Realistic')}
+            />
+            {showBackgroundStyleHelp && (
+              <Text style={styles.toggleHelper}>{t('studio.backgroundStyle.helper')}</Text>
+            )}
             <OptionLabel label={t('studio.opt.layout')} />
             <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
             <OptionLabel label={t('studio.opt.colorTheme')} />
@@ -2019,15 +2110,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
               selected={catalogFormat}
               onSelect={setCatalogFormat}
             />
-            <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
-              <Switch
-                value={showPrices}
-                onValueChange={setShowPrices}
-                thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
-                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
-              />
-            </View>
             <BrandContextSection
               items={contextItems}
               selected={catalogContextFields}
@@ -3211,6 +3293,92 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         {t('studio.preserveProductImages.helper')}
                       </Text>
                     )}
+                    <View style={styles.toggleRow}>
+                      <View style={styles.toggleLabelRow}>
+                        <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
+                        <Pressable
+                          onPress={() => setShowPricesHelp((v) => !v)}
+                          hitSlop={8}
+                          style={styles.infoButton}
+                          accessibilityLabel={t('studio.showPrices')}
+                        >
+                          <Ionicons
+                            name={
+                              showPricesHelp ? 'information-circle' : 'information-circle-outline'
+                            }
+                            size={18}
+                            color={colors.text.muted}
+                          />
+                        </Pressable>
+                      </View>
+                      <Switch
+                        value={showPrices}
+                        onValueChange={setShowPrices}
+                        thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                    {showPricesHelp && (
+                      <Text style={styles.toggleHelper}>{t('studio.showPrices.helper')}</Text>
+                    )}
+                    <View style={styles.toggleRow}>
+                      <View style={styles.toggleLabelRow}>
+                        <Text style={styles.toggleLabel}>{t('studio.showProductNames')}</Text>
+                        <Pressable
+                          onPress={() => setShowNamesHelp((v) => !v)}
+                          hitSlop={8}
+                          style={styles.infoButton}
+                          accessibilityLabel={t('studio.showProductNames')}
+                        >
+                          <Ionicons
+                            name={
+                              showNamesHelp ? 'information-circle' : 'information-circle-outline'
+                            }
+                            size={18}
+                            color={colors.text.muted}
+                          />
+                        </Pressable>
+                      </View>
+                      <Switch
+                        value={showCatalogProductNames}
+                        onValueChange={setShowCatalogProductNames}
+                        thumbColor={
+                          showCatalogProductNames ? colors.accent.primary : colors.text.muted
+                        }
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                    {showNamesHelp && (
+                      <Text style={styles.toggleHelper}>{t('studio.showProductNames.helper')}</Text>
+                    )}
+                    <View style={styles.toggleLabelRow}>
+                      <OptionLabel label={t('studio.opt.backgroundStyle')} />
+                      <Pressable
+                        onPress={() => setShowBackgroundStyleHelp((v) => !v)}
+                        hitSlop={8}
+                        style={styles.infoButton}
+                        accessibilityLabel={t('studio.opt.backgroundStyle')}
+                      >
+                        <Ionicons
+                          name={
+                            showBackgroundStyleHelp
+                              ? 'information-circle'
+                              : 'information-circle-outline'
+                          }
+                          size={18}
+                          color={colors.text.muted}
+                        />
+                      </Pressable>
+                    </View>
+                    <ChipSelector
+                      options={BACKGROUND_STYLE_OPTIONS}
+                      selected={backgroundStyle}
+                      onSelect={(v) => setBackgroundStyle(v as 'SocialPost' | 'Realistic')}
+                      accessibilityLabel={t('studio.opt.backgroundStyle')}
+                    />
+                    {showBackgroundStyleHelp && (
+                      <Text style={styles.toggleHelper}>{t('studio.backgroundStyle.helper')}</Text>
+                    )}
                     <OptionLabel label={t('studio.opt.layout')} />
                     <ChipSelector
                       options={LAYOUT_OPTIONS}
@@ -3232,15 +3400,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                       onSelect={setCatalogFormat}
                       accessibilityLabel={t('studio.opt.format')}
                     />
-                    <View style={styles.toggleRow}>
-                      <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
-                      <Switch
-                        value={showPrices}
-                        onValueChange={setShowPrices}
-                        thumbColor={showPrices ? colors.accent.primary : colors.text.muted}
-                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
-                      />
-                    </View>
                   </View>
 
                   {contextItems.length > 0 && (

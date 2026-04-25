@@ -533,7 +533,9 @@ internal sealed record CatalogImageApiRequest(
     List<string>? BrandContextFields,
     string? Currency = null,
     string? Language = null,
-    bool PreserveProductImages = false)
+    bool PreserveProductImages = false,
+    string BackgroundStyle = "SocialPost",
+    bool ShowProductNames = false)
 {
     public CatalogImageRequest ToServiceRequest(
         BrandContext? brandContext,
@@ -552,7 +554,9 @@ internal sealed record CatalogImageApiRequest(
             currency,
             language,
             this.PreserveProductImages,
-            markerAssignments);
+            markerAssignments,
+            this.BackgroundStyle,
+            this.ShowProductNames);
 }
 
 internal sealed record WallpaperApiRequest(string Prompt, string Format, bool IncludeLogo, List<string>? BrandContextFields, string? Language = null)

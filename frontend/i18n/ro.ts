@@ -569,7 +569,16 @@ const ro: Dictionary = {
   'studio.formatPortrait': 'Portret 4:5',
   'studio.formatStory': 'Story 9:16',
   'studio.showPrices': 'Afișează prețurile',
+  'studio.showPrices.helper':
+    'Când este activat, AI-ul afișează prețul fiecărui produs vizibil. Când este dezactivat, prețurile sunt omise complet din imagine.',
   'studio.showProductNames': 'Afișează numele produselor',
+  'studio.showProductNames.helper':
+    'Când este activat, fiecare produs este etichetat cu numele său. Când este dezactivat, nu se afișează niciun text cu nume — produsele și prețurile vorbesc de la sine.',
+  'studio.opt.backgroundStyle': 'Stil fundal',
+  'studio.backgroundStyle.socialPost': 'Postare social',
+  'studio.backgroundStyle.realistic': 'Realist',
+  'studio.backgroundStyle.helper':
+    'Postare social: un fundal grafic plat — culori solide, gradienți, forme geometrice, ca o postare Instagram rafinată. Realist: o scenă de magazin sau de viață reală — raft, tejghea sau ambient natural.',
   'studio.preserveProductImages.label': 'Păstrează imaginile produselor',
   'studio.preserveProductImages.helper':
     'Când este dezactivat, cataloagele arată adesea mai rafinat și mai cinematic — dar AI-ul poate reinterpreta subtil fotografiile produselor (etichete, forme sau texturi se pot schimba). Activează pentru a păstra fotografiile produselor perfecte, pixel cu pixel, în schimbul unei plasări puțin mai structurate.',
