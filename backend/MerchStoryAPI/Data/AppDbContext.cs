@@ -68,6 +68,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
             entity.Property(s => s.TargetAudience).HasMaxLength(300);
             entity.Property(s => s.ShopType).HasMaxLength(30);
             entity.Property(s => s.Competitors).HasMaxLength(500);
+            entity.Property(s => s.City).HasMaxLength(100);
+            entity.Property(s => s.CountryCode).HasMaxLength(2).IsRequired();
 
             entity.HasIndex(s => s.UserId).IsUnique();
 

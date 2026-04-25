@@ -34,14 +34,38 @@ export default function Step2Screen() {
     { value: 'MidRange', label: t('setup.step2.shopTypeMidRange') },
     { value: 'Budget', label: t('setup.step2.shopTypeBudget') },
   ];
+  const COUNTRY_OPTIONS = [
+    { value: 'RO', label: t('setup.step2.countryRO') },
+    { value: 'MD', label: t('setup.step2.countryMD') },
+    { value: 'HU', label: t('setup.step2.countryHU') },
+    { value: 'BG', label: t('setup.step2.countryBG') },
+    { value: 'Other', label: t('setup.step2.countryOther') },
+  ];
+  const KNOWN_COUNTRY_CODES = ['RO', 'MD', 'HU', 'BG'];
 
   const [domain, setDomain] = useState(data.businessDomain);
   const [otherDomain, setOtherDomain] = useState(data.otherDomain);
   const [audience, setAudience] = useState(data.targetAudience);
   const [shopType, setShopType] = useState(data.shopType);
   const [competitors, setCompetitors] = useState(data.competitors);
+  const [city, setCity] = useState(data.city);
+  const initialCountry = data.countryCode || 'RO';
+  const [countryChip, setCountryChip] = useState(
+    KNOWN_COUNTRY_CODES.includes(initialCountry) ? initialCountry : 'Other'
+  );
+  const [otherCountry, setOtherCountry] = useState(
+    KNOWN_COUNTRY_CODES.includes(initialCountry) ? '' : initialCountry
+  );
 
   const canProceed = domain.length > 0 && (domain !== 'Other' || otherDomain.trim().length > 0);
+
+  function resolveCountryCode(): string {
+    if (countryChip === 'Other') {
+      const code = otherCountry.trim().toUpperCase().slice(0, 2);
+      return code.length === 2 ? code : 'RO';
+    }
+    return countryChip;
+  }
 
   function handleNext() {
     updateStep2({
@@ -50,6 +74,8 @@ export default function Step2Screen() {
       targetAudience: audience,
       shopType,
       competitors,
+      city: city.trim(),
+      countryCode: resolveCountryCode(),
     });
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -116,6 +142,40 @@ export default function Step2Screen() {
         autoCapitalize="words"
       />
 
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>{t('setup.step2.location')}</Text>
+        <Text style={styles.locationHint}>{t('setup.step2.locationHint')}</Text>
+        <FloatingInput
+          label={t('setup.step2.city')}
+          value={city}
+          onChangeText={setCity}
+          accessibilityLabel={t('setup.step2.city')}
+          accessibilityHint={t('setup.step2.cityHint')}
+          autoCapitalize="words"
+        />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>{t('setup.step2.country')}</Text>
+        <ChipSelector
+          options={COUNTRY_OPTIONS}
+          selected={countryChip}
+          onSelect={setCountryChip}
+          accessibilityLabel={t('setup.step2.country')}
+        />
+        {countryChip === 'Other' && (
+          <View style={styles.otherInput}>
+            <FloatingInput
+              label={t('setup.step2.otherCountry')}
+              value={otherCountry}
+              onChangeText={(v) => setOtherCountry(v.toUpperCase().slice(0, 2))}
+              accessibilityLabel={t('setup.step2.otherCountry')}
+              autoCapitalize="characters"
+            />
+          </View>
+        )}
+      </View>
+
       <View style={styles.buttons}>
         <Pressable
           onPress={() => router.back()}
@@ -168,6 +228,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       textTransform: 'uppercase',
       letterSpacing: 0.8,
       marginBottom: D.spacing.sm,
+    },
+    locationHint: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginBottom: D.spacing.sm,
+      lineHeight: 16,
     },
     otherInput: {
       marginTop: D.spacing.sm,

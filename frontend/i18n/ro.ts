@@ -112,6 +112,18 @@ const ro: Dictionary = {
   'setup.step2.shopTypeLuxury': 'Lux',
   'setup.step2.shopTypeMidRange': 'Mediu',
   'setup.step2.shopTypeBudget': 'Accesibil',
+  'setup.step2.location': 'Locație (opțional)',
+  'setup.step2.locationHint':
+    'Folosită pentru a personaliza ideile de promovare cu vremea, sărbătorile și evenimentele locale.',
+  'setup.step2.city': 'Oraș',
+  'setup.step2.cityHint': 'ex. București',
+  'setup.step2.country': 'Țara',
+  'setup.step2.countryRO': 'România',
+  'setup.step2.countryMD': 'Republica Moldova',
+  'setup.step2.countryHU': 'Ungaria',
+  'setup.step2.countryBG': 'Bulgaria',
+  'setup.step2.countryOther': 'Altă țară',
+  'setup.step2.otherCountry': 'Cod de țară (2 litere, ex. DE)',
 
   'setup.step3.title': 'Contact și social',
   'setup.step3.subtitle': 'Cum te pot găsi clienții și AI-ul nostru.',

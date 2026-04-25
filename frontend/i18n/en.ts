@@ -108,6 +108,18 @@ const en = {
   'setup.step2.shopTypeLuxury': 'Luxury',
   'setup.step2.shopTypeMidRange': 'Mid-range',
   'setup.step2.shopTypeBudget': 'Budget',
+  'setup.step2.location': 'Location (optional)',
+  'setup.step2.locationHint':
+    'Used to surface weather, holidays, and local events when we suggest promo ideas.',
+  'setup.step2.city': 'City',
+  'setup.step2.cityHint': 'e.g. Bucharest',
+  'setup.step2.country': 'Country',
+  'setup.step2.countryRO': 'Romania',
+  'setup.step2.countryMD': 'Moldova',
+  'setup.step2.countryHU': 'Hungary',
+  'setup.step2.countryBG': 'Bulgaria',
+  'setup.step2.countryOther': 'Other',
+  'setup.step2.otherCountry': 'Country code (2 letters, e.g. DE)',
 
   'setup.step3.title': 'Contact & Social',
   'setup.step3.subtitle': 'How customers and our AI can reach your shop.',

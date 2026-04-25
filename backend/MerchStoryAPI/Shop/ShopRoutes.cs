@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
+using MerchStoryAPI.Geocoding;
 using MerchStoryAPI.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -40,7 +41,9 @@ public static class ShopRoutes
             ShopProfileRequest request,
             ClaimsPrincipal principal,
             AppDbContext db,
-            ILogger<Program> logger) =>
+            IGeocodingService geocoding,
+            ILogger<Program> logger,
+            CancellationToken ct) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -113,7 +116,48 @@ public static class ShopRoutes
                 return Results.BadRequest("At least one address is required.");
             }
 
-            ShopProfile? existing = await db.ShopProfiles.SingleOrDefaultAsync(s => s.UserId == userId);
+            string countryCode;
+            if (string.IsNullOrWhiteSpace(request.CountryCode))
+            {
+                countryCode = "RO";
+            }
+            else
+            {
+                string trimmed = request.CountryCode.Trim().ToUpperInvariant();
+                if (trimmed.Length != 2 || !trimmed.All(char.IsAsciiLetter))
+                {
+                    return Results.BadRequest("Invalid CountryCode (must be ISO 3166-1 alpha-2, e.g. RO).");
+                }
+
+                countryCode = trimmed;
+            }
+
+            string? city = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
+
+            ShopProfile? existing = await db.ShopProfiles.SingleOrDefaultAsync(s => s.UserId == userId, ct);
+
+            // Re-geocode only when the (city, countryCode) pair changes — keeps Nominatim usage low
+            // and respects their fair-use policy.
+            double? latitude = existing?.Latitude;
+            double? longitude = existing?.Longitude;
+            bool locationChanged = existing is null
+                || !string.Equals(existing.City, city, StringComparison.Ordinal)
+                || !string.Equals(existing.CountryCode, countryCode, StringComparison.Ordinal);
+            if (locationChanged)
+            {
+                if (city is null)
+                {
+                    latitude = null;
+                    longitude = null;
+                }
+                else
+                {
+                    GeocodeResult? geo = await geocoding.GeocodeAsync(city, countryCode, ct);
+                    latitude = geo?.Latitude;
+                    longitude = geo?.Longitude;
+                }
+            }
+
             DateTime now = DateTime.UtcNow;
 
             if (existing is null)
@@ -131,6 +175,10 @@ public static class ShopRoutes
                     TargetAudience = request.TargetAudience?.Trim(),
                     ShopType = request.ShopType,
                     Competitors = request.Competitors?.Trim(),
+                    City = city,
+                    CountryCode = countryCode,
+                    Latitude = latitude,
+                    Longitude = longitude,
                     PhoneNumber = request.PhoneNumber.Trim(),
                     Email = request.Email.Trim(),
                     Addresses = JsonSerializer.Serialize(validAddresses),
@@ -144,7 +192,7 @@ public static class ShopRoutes
                 };
 
                 db.ShopProfiles.Add(profile);
-                await db.SaveChangesAsync();
+                await db.SaveChangesAsync(ct);
                 return Results.Created("/shop/profile", MapToResponse(profile));
             }
 
@@ -157,6 +205,10 @@ public static class ShopRoutes
             existing.TargetAudience = request.TargetAudience?.Trim();
             existing.ShopType = request.ShopType;
             existing.Competitors = request.Competitors?.Trim();
+            existing.City = city;
+            existing.CountryCode = countryCode;
+            existing.Latitude = latitude;
+            existing.Longitude = longitude;
             existing.PhoneNumber = request.PhoneNumber.Trim();
             existing.Email = request.Email.Trim();
             existing.Addresses = JsonSerializer.Serialize(validAddresses);
@@ -167,7 +219,7 @@ public static class ShopRoutes
             existing.GenerationLanguage = generationLanguage;
             existing.UpdatedAt = now;
 
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
             return Results.Ok(MapToResponse(existing));
         });
 
@@ -266,6 +318,10 @@ public static class ShopRoutes
             p.TargetAudience,
             p.ShopType,
             p.Competitors,
+            p.City,
+            p.CountryCode,
+            p.Latitude,
+            p.Longitude,
             p.PhoneNumber,
             p.Email,
             addresses,

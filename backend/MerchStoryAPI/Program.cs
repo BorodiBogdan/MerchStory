@@ -3,6 +3,7 @@ using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Facebook;
 using MerchStoryAPI.Gallery;
+using MerchStoryAPI.Geocoding;
 using MerchStoryAPI.ImageGeneration;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Products;
@@ -87,6 +88,7 @@ builder.Services.AddHostedService<RefreshTokenCleanupService>();
 builder.Services.AddScoped<FacebookSocialPostSyncService>();
 builder.Services.AddMerchStoryImageGeneration(builder.Configuration);
 builder.Services.AddSingleton<IClipEmbeddingService, ClipEmbeddingService>();
+builder.Services.AddScoped<IGeocodingService, NominatimGeocodingService>();
 
 var app = builder.Build();
 

@@ -128,6 +128,8 @@ export interface ShopProfilePayload {
   targetAudience?: string | null;
   shopType?: string | null;
   competitors?: string | null;
+  city?: string | null;
+  countryCode?: string | null;
   phoneNumber: string;
   email: string;
   addresses: string[];
@@ -140,6 +142,9 @@ export interface ShopProfilePayload {
 
 export interface ShopProfileResponse extends ShopProfilePayload {
   id: string;
+  countryCode: string;
+  latitude: number | null;
+  longitude: number | null;
   createdAt: string;
   updatedAt: string;
 }
