@@ -92,6 +92,22 @@ builder.Services.AddMerchStoryRecommendations(builder.Configuration);
 builder.Services.AddSingleton<IClipEmbeddingService, ClipEmbeddingService>();
 builder.Services.AddScoped<IGeocodingService, NominatimGeocodingService>();
 
+// Recommendation context providers. Each provider gathers signals
+// from one external source; ContextAggregator runs them in parallel with
+// per-provider failure isolation. Adding a new source = AddScoped + new file,
+// no other wiring needed.
+builder.Services.AddScoped<MerchStoryAPI.Recommendations.Context.HolidayCache>();
+builder.Services.AddScoped<MerchStoryAPI.Recommendations.Context.IContextProvider, MerchStoryAPI.Recommendations.Context.WeatherContextProvider>();
+builder.Services.AddScoped<MerchStoryAPI.Recommendations.Context.IContextProvider, MerchStoryAPI.Recommendations.Context.HolidayContextProvider>();
+builder.Services.AddScoped<MerchStoryAPI.Recommendations.Context.IContextProvider, MerchStoryAPI.Recommendations.Context.NewsContextProvider>();
+builder.Services.AddScoped<MerchStoryAPI.Recommendations.Context.ContextAggregator>();
+
+// Recommendation job machinery (Phase 3). Orchestrator is scoped (uses DbContext);
+// registry + runner are singletons so jobs survive across requests.
+builder.Services.AddScoped<RecommendationOrchestrator>();
+builder.Services.AddSingleton<RecommendationJobRegistry>();
+builder.Services.AddSingleton<RecommendationJobRunner>();
+
 var app = builder.Build();
 
 using (IServiceScope scope = app.Services.CreateScope())

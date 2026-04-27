@@ -42,18 +42,23 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration? configuration = null)
     {
-        // Phase 1: only Mock is implemented. Phase 3 adds "LmStudio".
         // Default to Mock so dev/test environments don't depend on a running LLM.
+        // "Llm" routes through any OpenAI-compatible endpoint configured under
+        // Recommendations:Llm:* (LM Studio by default, but Ollama/vLLM/etc work too).
         string providerType = configuration?["Recommendations:ProviderType"] ?? "Mock";
 
         if (string.Equals(providerType, "Mock", StringComparison.OrdinalIgnoreCase))
         {
             services.AddScoped<IRecommendationProvider, MockRecommendationProvider>();
         }
+        else if (string.Equals(providerType, "Llm", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<IRecommendationProvider, LlmRecommendationProvider>();
+        }
         else
         {
             throw new InvalidOperationException(
-                $"Unknown Recommendations:ProviderType '{providerType}'. Phase 1 supports 'Mock' only.");
+                $"Unknown Recommendations:ProviderType '{providerType}'. Supported: Mock, Llm.");
         }
 
         return services;

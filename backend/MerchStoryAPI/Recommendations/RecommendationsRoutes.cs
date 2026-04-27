@@ -3,7 +3,6 @@ using System.Text.Json;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using MerchStoryImageGeneration.Models.Recommendations;
-using MerchStoryImageGeneration.Services.Recommendations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 
@@ -17,13 +16,16 @@ public static class RecommendationsRoutes
 
         group.MapGet("/today", GetToday);
         group.MapPost("/refresh", RefreshToday);
+        group.MapGet("/jobs/{jobId:guid}", GetJob);
     }
 
+    // GET /recommendations/today
+    // - If a row already exists for this user and the current UTC day → returns "ready" inline.
+    // - Otherwise kicks off a background generation job → returns "generating" + jobId.
     private static async Task<IResult> GetToday(
         ClaimsPrincipal principal,
         AppDbContext db,
-        IRecommendationProvider provider,
-        IConfiguration configuration,
+        RecommendationJobRunner runner,
         CancellationToken ct)
     {
         string? userId = GetUserId(principal);
@@ -43,20 +45,34 @@ public static class RecommendationsRoutes
 
         if (existing is not null)
         {
-            return Results.Ok(MapToResponse(existing));
+            return Results.Ok(MapReady(existing));
         }
 
-        DailyRecommendation? generated = await GenerateAndPersist(userId, db, provider, configuration, ct);
-        return generated is null
-            ? Results.BadRequest("Shop profile required before generating recommendations.")
-            : Results.Ok(MapToResponse(generated));
+        Guid jobId = runner.StartGeneration(userId);
+        return Results.Ok(MapGenerating(jobId));
     }
 
-    private static async Task<IResult> RefreshToday(
+    // POST /recommendations/refresh — always kicks off a new job; cache hit is ignored.
+    private static IResult RefreshToday(
+        ClaimsPrincipal principal,
+        RecommendationJobRunner runner)
+    {
+        string? userId = GetUserId(principal);
+        if (userId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        Guid jobId = runner.StartGeneration(userId);
+        return Results.Ok(MapGenerating(jobId));
+    }
+
+    // GET /recommendations/jobs/{jobId} — polling endpoint.
+    private static async Task<IResult> GetJob(
+        Guid jobId,
         ClaimsPrincipal principal,
         AppDbContext db,
-        IRecommendationProvider provider,
-        IConfiguration configuration,
+        RecommendationJobRegistry registry,
         CancellationToken ct)
     {
         string? userId = GetUserId(principal);
@@ -65,73 +81,83 @@ public static class RecommendationsRoutes
             return Results.Unauthorized();
         }
 
-        DailyRecommendation? generated = await GenerateAndPersist(userId, db, provider, configuration, ct);
-        return generated is null
-            ? Results.BadRequest("Shop profile required before generating recommendations.")
-            : Results.Ok(MapToResponse(generated));
-    }
-
-    private static async Task<DailyRecommendation?> GenerateAndPersist(
-        string userId,
-        AppDbContext db,
-        IRecommendationProvider provider,
-        IConfiguration configuration,
-        CancellationToken ct)
-    {
-        ShopProfile? shop = await db.ShopProfiles.SingleOrDefaultAsync(s => s.UserId == userId, ct);
-        if (shop is null)
+        JobEntry? entry = registry.Get(jobId);
+        if (entry is null || entry.UserId != userId)
         {
-            return null;
+            return Results.NotFound();
         }
 
-        int ideasPerDay = configuration.GetValue("Recommendations:IdeasPerDay", 5);
-
-        RecommendationContext context = new(
-            UserId: userId,
-            BrandName: shop.BrandName,
-            BusinessDomain: shop.BusinessDomain,
-            OtherDomain: shop.OtherDomain,
-            TargetAudience: shop.TargetAudience,
-            ShopType: shop.ShopType,
-            City: shop.City,
-            CountryCode: shop.CountryCode,
-            Latitude: shop.Latitude,
-            Longitude: shop.Longitude,
-            GenerationLanguage: shop.GenerationLanguage.ToString(),
-            IdeasPerDay: ideasPerDay);
-
-        RecommendationResult result = await provider.GenerateAsync(context, ct);
-
-        DailyRecommendation row = new()
+        switch (entry.State)
         {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            GeneratedAtUtc = DateTime.UtcNow,
-            ContextSnapshotJson = result.ContextSnapshotJson,
-            IdeasJson = JsonSerializer.Serialize(result.Ideas),
-        };
+            case JobState.Generating:
+                return Results.Ok(MapGenerating(entry.JobId));
 
-        db.DailyRecommendations.Add(row);
-        await db.SaveChangesAsync(ct);
+            case JobState.Failed:
+                return Results.Ok(new RecommendationResponse(
+                    Status: "failed",
+                    JobId: entry.JobId,
+                    Id: null,
+                    GeneratedAtUtc: null,
+                    Ideas: null,
+                    Error: entry.Error));
 
-        return row;
+            case JobState.Ready when entry.RecommendationId is { } recId:
+                // Re-read from DB to get the canonical persisted shape.
+                DailyRecommendation? row = await db.DailyRecommendations
+                    .FirstOrDefaultAsync(r => r.Id == recId, ct);
+                if (row is null)
+                {
+                    return Results.Ok(new RecommendationResponse(
+                        Status: "failed",
+                        JobId: entry.JobId,
+                        Id: null,
+                        GeneratedAtUtc: null,
+                        Ideas: null,
+                        Error: "Recommendation row missing after job completion."));
+                }
+
+                return Results.Ok(MapReady(row));
+
+            default:
+                return Results.Ok(MapGenerating(entry.JobId));
+        }
     }
 
-    private static TodayResponse MapToResponse(DailyRecommendation row)
+    private static RecommendationResponse MapReady(DailyRecommendation row)
     {
         IReadOnlyList<IdeaDto> ideas = string.IsNullOrEmpty(row.IdeasJson)
             ? Array.Empty<IdeaDto>()
             : JsonSerializer.Deserialize<IdeaDto[]>(row.IdeasJson) ?? Array.Empty<IdeaDto>();
 
-        return new TodayResponse(row.Id, row.GeneratedAtUtc, ideas);
+        return new RecommendationResponse(
+            Status: "ready",
+            JobId: null,
+            Id: row.Id,
+            GeneratedAtUtc: row.GeneratedAtUtc,
+            Ideas: ideas,
+            Error: null);
     }
+
+    private static RecommendationResponse MapGenerating(Guid jobId) => new(
+        Status: "generating",
+        JobId: jobId,
+        Id: null,
+        GeneratedAtUtc: null,
+        Ideas: null,
+        Error: null);
 
     private static string? GetUserId(ClaimsPrincipal principal) =>
         principal.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
 }
 
-public record TodayResponse(
-    Guid Id,
-    DateTime GeneratedAtUtc,
-    IReadOnlyList<IdeaDto> Ideas);
+// Discriminated response. Status is the only always-present field; everything
+// else is null-omitted by System.Text.Json defaults so the wire payload stays
+// tight per state.
+public record RecommendationResponse(
+    string Status,
+    Guid? JobId,
+    Guid? Id,
+    DateTime? GeneratedAtUtc,
+    IReadOnlyList<IdeaDto>? Ideas,
+    string? Error);

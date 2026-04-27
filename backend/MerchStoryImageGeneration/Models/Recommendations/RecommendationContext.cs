@@ -1,6 +1,6 @@
 namespace MerchStoryImageGeneration.Models.Recommendations;
 
-// Inputs to a recommendation provider. Phase 1 carries only shop-profile data;
+// Inputs to a recommendation provider. Phase 1 carried only shop-profile data;
 // Phase 2 adds external context signals (weather/holidays/news), Phase 5 adds
 // RAG hits (PromoPlaybook + PreviousIdeas).
 public record RecommendationContext(
@@ -15,4 +15,6 @@ public record RecommendationContext(
     double? Latitude,
     double? Longitude,
     string GenerationLanguage,
-    int IdeasPerDay);
+    int IdeasPerDay,
+    IReadOnlyList<ContextSignal> Signals,
+    IReadOnlyList<string> DegradedSources);

@@ -27,6 +27,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
     public DbSet<DailyRecommendation> DailyRecommendations => this.Set<DailyRecommendation>();
 
+    public DbSet<Holiday> Holidays => this.Set<Holiday>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -189,6 +191,18 @@ public class AppDbContext : IdentityDbContext<AppUser>
                   .WithMany()
                   .HasForeignKey(r => r.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Holiday>(entity =>
+        {
+            entity.HasKey(h => h.Id);
+
+            entity.Property(h => h.CountryCode).HasMaxLength(2).IsRequired();
+            entity.Property(h => h.LocalName).HasMaxLength(200).IsRequired();
+            entity.Property(h => h.Name).HasMaxLength(200).IsRequired();
+
+            entity.HasIndex(h => new { h.CountryCode, h.Year, h.Date })
+                  .IsUnique();
         });
     }
 }

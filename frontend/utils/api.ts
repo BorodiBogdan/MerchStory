@@ -898,22 +898,50 @@ export interface IdeaItem {
   suggestedPost: string;
 }
 
-export interface RecommendationsTodayResponse {
-  id: string;
-  generatedAtUtc: string;
-  ideas: IdeaItem[];
+// Discriminated response shape — Phase 3 introduces async job semantics.
+// Mock provider responds with "ready" inline; LLM provider responds with
+// "generating" + jobId and the frontend polls via /recommendations/jobs/{jobId}.
+export type RecommendationResponse =
+  | { status: 'ready'; id: string; generatedAtUtc: string; ideas: IdeaItem[] }
+  | { status: 'generating'; jobId: string }
+  | { status: 'failed'; error: string };
+
+interface RawRecommendationResponse {
+  status: 'ready' | 'generating' | 'failed';
+  jobId?: string | null;
+  id?: string | null;
+  generatedAtUtc?: string | null;
+  ideas?: IdeaItem[] | null;
+  error?: string | null;
 }
 
-export async function fetchIdeas(): Promise<RecommendationsTodayResponse> {
+function normalizeRecommendationResponse(raw: RawRecommendationResponse): RecommendationResponse {
+  if (raw.status === 'ready') {
+    return {
+      status: 'ready',
+      id: raw.id ?? '',
+      generatedAtUtc: raw.generatedAtUtc ?? '',
+      ideas: raw.ideas ?? [],
+    };
+  }
+  if (raw.status === 'generating') {
+    return { status: 'generating', jobId: raw.jobId ?? '' };
+  }
+  return { status: 'failed', error: raw.error ?? 'Unknown error' };
+}
+
+export async function fetchIdeas(): Promise<RecommendationResponse> {
   const response = await fetchWithAuth(`${API_URL}/recommendations/today`, {});
   if (!response.ok) {
     const err = await response.text().catch(() => '');
     throw new Error(err || `Failed to load ideas (${response.status})`);
   }
-  return response.json() as Promise<RecommendationsTodayResponse>;
+  return normalizeRecommendationResponse(
+    await (response.json() as Promise<RawRecommendationResponse>)
+  );
 }
 
-export async function refreshIdeas(): Promise<RecommendationsTodayResponse> {
+export async function refreshIdeas(): Promise<RecommendationResponse> {
   const response = await fetchWithAuth(`${API_URL}/recommendations/refresh`, {
     method: 'POST',
   });
@@ -921,5 +949,18 @@ export async function refreshIdeas(): Promise<RecommendationsTodayResponse> {
     const err = await response.text().catch(() => '');
     throw new Error(err || `Failed to refresh ideas (${response.status})`);
   }
-  return response.json() as Promise<RecommendationsTodayResponse>;
+  return normalizeRecommendationResponse(
+    await (response.json() as Promise<RawRecommendationResponse>)
+  );
+}
+
+export async function pollIdeasJob(jobId: string): Promise<RecommendationResponse> {
+  const response = await fetchWithAuth(`${API_URL}/recommendations/jobs/${jobId}`, {});
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to poll job (${response.status})`);
+  }
+  return normalizeRecommendationResponse(
+    await (response.json() as Promise<RawRecommendationResponse>)
+  );
 }
