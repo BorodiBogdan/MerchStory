@@ -964,3 +964,27 @@ export async function pollIdeasJob(jobId: string): Promise<RecommendationRespons
     await (response.json() as Promise<RawRecommendationResponse>)
   );
 }
+
+export type IdeaFeedbackAction =
+  | 'viewed'
+  | 'thumbs_up'
+  | 'thumbs_down'
+  | 'dismissed'
+  | 'generated_from';
+
+export async function submitIdeaFeedback(
+  recommendationId: string,
+  ideaId: string,
+  action: IdeaFeedbackAction
+): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/recommendations/${recommendationId}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ideaId, action }),
+  });
+  // Best-effort: log + swallow non-2xx so feedback failures don't disrupt the user flow.
+  if (!response.ok) {
+    // eslint-disable-next-line no-console
+    console.warn('Idea feedback submission failed', response.status);
+  }
+}

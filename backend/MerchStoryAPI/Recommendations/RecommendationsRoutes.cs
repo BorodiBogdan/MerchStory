@@ -10,6 +10,15 @@ namespace MerchStoryAPI.Recommendations;
 
 public static class RecommendationsRoutes
 {
+    private static readonly HashSet<string> ValidFeedbackActions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "viewed",
+        "thumbs_up",
+        "thumbs_down",
+        "dismissed",
+        "generated_from",
+    };
+
     public static void MapRecommendationsEndpoints(this WebApplication app)
     {
         RouteGroupBuilder group = app.MapGroup("/recommendations").RequireAuthorization();
@@ -17,6 +26,7 @@ public static class RecommendationsRoutes
         group.MapGet("/today", GetToday);
         group.MapPost("/refresh", RefreshToday);
         group.MapGet("/jobs/{jobId:guid}", GetJob);
+        group.MapPost("/{recId:guid}/feedback", PostFeedback);
     }
 
     // GET /recommendations/today
@@ -123,6 +133,55 @@ public static class RecommendationsRoutes
         }
     }
 
+    // POST /recommendations/{recId}/feedback
+    private static async Task<IResult> PostFeedback(
+        Guid recId,
+        FeedbackRequest request,
+        ClaimsPrincipal principal,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        string? userId = GetUserId(principal);
+        if (userId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (string.IsNullOrWhiteSpace(request.IdeaId))
+        {
+            return Results.BadRequest("ideaId is required.");
+        }
+
+        string action = request.Action?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (!ValidFeedbackActions.Contains(action))
+        {
+            return Results.BadRequest(
+                $"Invalid action '{action}'. Allowed: {string.Join(", ", ValidFeedbackActions)}");
+        }
+
+        // Cross-tenant guard: a user can only record feedback against their own
+        // recommendation rows.
+        bool ownsRow = await db.DailyRecommendations
+            .AnyAsync(r => r.Id == recId && r.UserId == userId, ct);
+        if (!ownsRow)
+        {
+            return Results.NotFound();
+        }
+
+        db.IdeaInteractions.Add(new IdeaInteraction
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            DailyRecommendationId = recId,
+            IdeaId = request.IdeaId.Trim(),
+            Action = action,
+            CreatedAt = DateTime.UtcNow,
+        });
+
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
     private static RecommendationResponse MapReady(DailyRecommendation row)
     {
         IReadOnlyList<IdeaDto> ideas = string.IsNullOrEmpty(row.IdeasJson)
@@ -161,3 +220,5 @@ public record RecommendationResponse(
     DateTime? GeneratedAtUtc,
     IReadOnlyList<IdeaDto>? Ideas,
     string? Error);
+
+public record FeedbackRequest(string IdeaId, string Action);

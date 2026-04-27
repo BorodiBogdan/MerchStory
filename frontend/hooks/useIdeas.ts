@@ -10,6 +10,7 @@ import {
 
 interface UseIdeasResult {
   ideas: IdeaItem[];
+  recommendationId: string | null;
   isLoading: boolean;
   isRefreshing: boolean;
   error: string | null;
@@ -21,14 +22,21 @@ const POLL_TIMEOUT_MS = 90_000;
 
 class AbortError extends Error {}
 
-// Drive the response shape to ideas. If the backend is ready inline (Mock or
-// cached row) we get the array immediately. If it returned a job, we poll
-// /recommendations/jobs/{jobId} every 2s until ready / failed / timeout.
+interface ResolvedIdeas {
+  ideas: IdeaItem[];
+  recommendationId: string;
+}
+
+// Drive the response shape to ideas + recommendationId. If the backend is ready
+// inline (Mock or cached row) we get both immediately. If it returned a job, we
+// poll /recommendations/jobs/{jobId} every 2s until ready / failed / timeout.
 async function awaitGeneration(
   initial: RecommendationResponse,
   signal: AbortSignal
-): Promise<IdeaItem[]> {
-  if (initial.status === 'ready') return initial.ideas;
+): Promise<ResolvedIdeas> {
+  if (initial.status === 'ready') {
+    return { ideas: initial.ideas, recommendationId: initial.id };
+  }
   if (initial.status === 'failed') throw new Error(initial.error || 'Generation failed');
 
   const startedAt = Date.now();
@@ -44,7 +52,9 @@ async function awaitGeneration(
     if (signal.aborted) throw new AbortError();
 
     const result = await pollIdeasJob(jobId);
-    if (result.status === 'ready') return result.ideas;
+    if (result.status === 'ready') {
+      return { ideas: result.ideas, recommendationId: result.id };
+    }
     if (result.status === 'failed') throw new Error(result.error || 'Generation failed');
     // status === 'generating' → continue polling
   }
@@ -52,6 +62,7 @@ async function awaitGeneration(
 
 export function useIdeas(): UseIdeasResult {
   const [ideas, setIdeas] = useState<IdeaItem[]>([]);
+  const [recommendationId, setRecommendationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +74,8 @@ export function useIdeas(): UseIdeasResult {
         const initial = await fetchIdeas();
         const next = await awaitGeneration(initial, controller.signal);
         if (!controller.signal.aborted) {
-          setIdeas(next);
+          setIdeas(next.ideas);
+          setRecommendationId(next.recommendationId);
           setError(null);
         }
       } catch (err) {
@@ -82,7 +94,8 @@ export function useIdeas(): UseIdeasResult {
     try {
       const initial = await refreshIdeasApi();
       const next = await awaitGeneration(initial, controller.signal);
-      setIdeas(next);
+      setIdeas(next.ideas);
+      setRecommendationId(next.recommendationId);
       setError(null);
     } catch (err) {
       if (err instanceof AbortError) return;
@@ -92,5 +105,5 @@ export function useIdeas(): UseIdeasResult {
     }
   }, []);
 
-  return { ideas, isLoading, isRefreshing, error, refresh };
+  return { ideas, recommendationId, isLoading, isRefreshing, error, refresh };
 }

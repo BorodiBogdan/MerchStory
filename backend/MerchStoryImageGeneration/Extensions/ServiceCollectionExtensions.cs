@@ -61,6 +61,10 @@ public static class ServiceCollectionExtensions
                 $"Unknown Recommendations:ProviderType '{providerType}'. Supported: Mock, Llm.");
         }
 
+        // Embedding service is always registered (Phase 5+ uses it for RAG even
+        // when ProviderType=Mock — the Mock provider just doesn't query it).
+        services.AddSingleton<IEmbeddingService, LlmEmbeddingService>();
+
         return services;
     }
 }

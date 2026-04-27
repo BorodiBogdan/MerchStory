@@ -29,6 +29,11 @@ public class RecommendationJobRegistry
             && existing.State == JobState.Generating
             && DateTime.UtcNow - existing.CreatedAt < StaleAfter)
         {
+            this.logger.LogInformation(
+                "[Job] dedup user={UserId} → returning in-flight {JobId} (started {AgeMs}ms ago)",
+                userId,
+                existingJobId,
+                (int)(DateTime.UtcNow - existing.CreatedAt).TotalMilliseconds);
             return existingJobId;
         }
 

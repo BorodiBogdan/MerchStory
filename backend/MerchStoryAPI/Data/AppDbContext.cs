@@ -29,6 +29,12 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
     public DbSet<Holiday> Holidays => this.Set<Holiday>();
 
+    public DbSet<PromoPlaybookEntry> PromoPlaybookEntries => this.Set<PromoPlaybookEntry>();
+
+    public DbSet<IdeaEmbedding> IdeaEmbeddings => this.Set<IdeaEmbedding>();
+
+    public DbSet<IdeaInteraction> IdeaInteractions => this.Set<IdeaInteraction>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -203,6 +209,89 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
             entity.HasIndex(h => new { h.CountryCode, h.Year, h.Date })
                   .IsUnique();
+        });
+
+        builder.Entity<PromoPlaybookEntry>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+
+            entity.Property(p => p.BusinessDomain).HasMaxLength(30).IsRequired();
+            entity.Property(p => p.Theme).HasMaxLength(200).IsRequired();
+            entity.Property(p => p.TriggerType).HasMaxLength(30).IsRequired();
+            entity.Property(p => p.Trigger).HasColumnType("text").IsRequired();
+            entity.Property(p => p.Tactics).HasColumnType("text").IsRequired();
+            entity.Property(p => p.ExampleCopy).HasColumnType("text").IsRequired();
+
+            // Pre-filter index for per-domain RAG retrieval.
+            entity.HasIndex(p => p.BusinessDomain);
+
+            // Idempotent on (Domain, Theme) so the data-ingestion CLI can re-run safely.
+            entity.HasIndex(p => new { p.BusinessDomain, p.Theme })
+                  .IsUnique();
+
+            if (isRelational)
+            {
+                entity.Property(p => p.Embedding).HasColumnType("vector(768)").IsRequired();
+                entity.HasIndex(p => p.Embedding)
+                      .HasMethod("hnsw")
+                      .HasOperators("vector_cosine_ops")
+                      .HasStorageParameter("m", 16)
+                      .HasStorageParameter("ef_construction", 64);
+            }
+            else
+            {
+                entity.Ignore(p => p.Embedding);
+            }
+        });
+
+        builder.Entity<IdeaEmbedding>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.IdeaId).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Title).HasMaxLength(300).IsRequired();
+            entity.Property(e => e.Body).HasColumnType("text").IsRequired();
+
+            entity.HasIndex(e => new { e.UserId, e.GeneratedAtUtc })
+                  .IsDescending(false, true);
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            if (isRelational)
+            {
+                entity.Property(e => e.Embedding).HasColumnType("vector(768)").IsRequired();
+                entity.HasIndex(e => e.Embedding)
+                      .HasMethod("hnsw")
+                      .HasOperators("vector_cosine_ops")
+                      .HasStorageParameter("m", 16)
+                      .HasStorageParameter("ef_construction", 64);
+            }
+            else
+            {
+                entity.Ignore(e => e.Embedding);
+            }
+        });
+
+        builder.Entity<IdeaInteraction>(entity =>
+        {
+            entity.HasKey(i => i.Id);
+
+            entity.Property(i => i.IdeaId).HasMaxLength(100).IsRequired();
+            entity.Property(i => i.Action).HasMaxLength(30).IsRequired();
+
+            // Common query: "what feedback did this user give for this rec?"
+            entity.HasIndex(i => new { i.UserId, i.DailyRecommendationId });
+
+            // For future fine-tuning corpus extraction.
+            entity.HasIndex(i => i.Action);
+
+            entity.HasOne(i => i.User)
+                  .WithMany()
+                  .HasForeignKey(i => i.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

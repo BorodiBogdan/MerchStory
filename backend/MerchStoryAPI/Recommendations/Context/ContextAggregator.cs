@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using MerchStoryAPI.Models;
 using MerchStoryImageGeneration.Models.Recommendations;
 
@@ -20,7 +21,12 @@ public class ContextAggregator
 
     public async Task<AggregatedContext> GatherAsync(ShopProfile shop, CancellationToken ct)
     {
+        Stopwatch sw = Stopwatch.StartNew();
         IContextProvider[] providerList = this.providers.ToArray();
+        this.logger.LogInformation(
+            "[Context] aggregate start providers=[{Names}]",
+            string.Join(",", providerList.Select(p => p.SourceName)));
+
         Task<ProviderRun>[] tasks = providerList
             .Select(p => this.RunOneAsync(p, shop, ct))
             .ToArray();
@@ -40,22 +46,36 @@ public class ContextAggregator
             signals.AddRange(run.Signals);
         }
 
+        this.logger.LogInformation(
+            "[Context] aggregate done in {Ms}ms signals={Total} degraded=[{Degraded}]",
+            sw.ElapsedMilliseconds,
+            signals.Count,
+            string.Join(",", degraded));
+
         return new AggregatedContext(signals, degraded);
     }
 
     private async Task<ProviderRun> RunOneAsync(IContextProvider provider, ShopProfile shop, CancellationToken ct)
     {
+        Stopwatch sw = Stopwatch.StartNew();
+        this.logger.LogInformation("[Context] source={Source} fetch start", provider.SourceName);
         try
         {
             IReadOnlyList<ContextSignal> signals = await provider.GetSignalsAsync(shop, ct);
+            this.logger.LogInformation(
+                "[Context] source={Source} done in {Ms}ms signals={Count}",
+                provider.SourceName,
+                sw.ElapsedMilliseconds,
+                signals.Count);
             return new ProviderRun(provider.SourceName, signals, Failed: false);
         }
         catch (Exception ex)
         {
             this.logger.LogWarning(
                 ex,
-                "Context provider {SourceName} failed; pipeline will continue with degraded signals.",
-                provider.SourceName);
+                "[Context] source={Source} FAILED in {Ms}ms — degraded run continues without it",
+                provider.SourceName,
+                sw.ElapsedMilliseconds);
             return new ProviderRun(provider.SourceName, Array.Empty<ContextSignal>(), Failed: true);
         }
     }

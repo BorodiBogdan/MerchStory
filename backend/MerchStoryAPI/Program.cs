@@ -108,6 +108,14 @@ builder.Services.AddScoped<RecommendationOrchestrator>();
 builder.Services.AddSingleton<RecommendationJobRegistry>();
 builder.Services.AddSingleton<RecommendationJobRunner>();
 
+// Phase 5a: PlaybookRetriever wraps embedding + pgvector cosine search over
+// the seeded PromoPlaybookEntry table.
+builder.Services.AddScoped<PlaybookRetriever>();
+
+// Phase 5b: IdeaEmbeddingService owns both the per-user "DON'T REPEAT"
+// retrieval AND the post-generation persistence of fresh idea embeddings.
+builder.Services.AddScoped<IdeaEmbeddingService>();
+
 var app = builder.Build();
 
 using (IServiceScope scope = app.Services.CreateScope())

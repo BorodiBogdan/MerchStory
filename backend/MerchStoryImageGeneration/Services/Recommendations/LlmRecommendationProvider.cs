@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using MerchStoryImageGeneration.Models.Recommendations;
@@ -31,6 +32,14 @@ public class LlmRecommendationProvider : IRecommendationProvider
     private const string RetryAddendum =
         "\n\nIMPORTANT: your previous response was not valid JSON. Output ONLY a JSON object matching the schema, with no prose, no code fences.";
 
+    // Lenient parse: tolerates trailing commas + // /* */ comments — both common
+    // from open-weight models like Gemma 3 that don't strictly follow JSON spec.
+    private static readonly JsonDocumentOptions LenientJsonOpts = new()
+    {
+        AllowTrailingCommas = true,
+        CommentHandling = JsonCommentHandling.Skip,
+    };
+
     private readonly Kernel strategistKernel;
     private readonly Kernel writerKernel;
     private readonly OpenAIPromptExecutionSettings strategistSettings;
@@ -50,19 +59,26 @@ public class LlmRecommendationProvider : IRecommendationProvider
         this.writerModel = configuration["Recommendations:Llm:WriterModel"] ?? defaultModel;
         int timeoutSec = configuration.GetValue("Recommendations:Llm:RequestTimeoutSeconds", 90);
 
+        // Many local open-weight models (Gemma 3, Llama 3.1, etc.) — and the
+        // LM Studio runtime for them — reject OpenAI's `response_format: json_object`
+        // flag with a 400. Toggle this off when running smaller models; the
+        // prompt itself still demands JSON-only output and the parser strips
+        // code fences as a safety net.
+        bool useJsonMode = configuration.GetValue("Recommendations:Llm:UseJsonMode", true);
+
         this.strategistKernel = BuildKernel(this.strategistModel, baseUrl, timeoutSec);
         this.writerKernel = BuildKernel(this.writerModel, baseUrl, timeoutSec);
 
         this.strategistSettings = new OpenAIPromptExecutionSettings
         {
-            ResponseFormat = "json_object",
+            ResponseFormat = useJsonMode ? "json_object" : null,
             MaxTokens = 1200,
             Temperature = 0.4, // planning likes lower temperature
         };
 
         this.writerSettings = new OpenAIPromptExecutionSettings
         {
-            ResponseFormat = "json_object",
+            ResponseFormat = useJsonMode ? "json_object" : null,
             MaxTokens = 600,
             Temperature = 0.8, // writing benefits from variation
         };
@@ -73,16 +89,21 @@ public class LlmRecommendationProvider : IRecommendationProvider
     public async Task<RecommendationResult> GenerateAsync(RecommendationContext context, CancellationToken ct)
     {
         Stopwatch sw = Stopwatch.StartNew();
+        this.logger.LogInformation(
+            "[LLM] Generate start strategist={Strategist} writer={Writer} signals={SignalCount} playbookHits={PlaybookCount} previousIdeas={PreviousCount} ideasPerDay={N}",
+            this.strategistModel,
+            this.writerModel,
+            context.Signals.Count,
+            context.PlaybookHits.Count,
+            context.PreviousIdeas.Count,
+            context.IdeasPerDay);
 
         Angle[] angles = await this.RunStrategistAsync(context, ct);
         long strategistMs = sw.ElapsedMilliseconds;
-        this.logger.LogInformation(
-            "Recommendations.Strategist completed in {ElapsedMs}ms with {AngleCount} angles",
-            strategistMs,
-            angles.Length);
 
         if (angles.Length == 0)
         {
+            this.logger.LogError("[LLM] Strategist returned 0 angles — pipeline cannot continue");
             throw new InvalidOperationException(
                 "Strategist returned no usable angles. Inspect the loaded model's JSON-mode support.");
         }
@@ -92,25 +113,86 @@ public class LlmRecommendationProvider : IRecommendationProvider
             angles.Select((angle, idx) => this.RunWriterAsync(angle, context, idx, ct)));
         long writerMs = sw.ElapsedMilliseconds - writerStart;
         this.logger.LogInformation(
-            "Recommendations.Writers x{Count} completed in {ElapsedMs}ms (wall-clock, parallel)",
+            "[LLM] Writers x{Count} done in {ElapsedMs}ms (wall-clock, parallel) titles=[{Titles}]",
             ideas.Length,
-            writerMs);
-
-        string snapshot = JsonSerializer.Serialize(new
-        {
-            provider = "llm",
-            strategistModel = this.strategistModel,
-            writerModel = this.writerModel,
-            strategistMs,
             writerMs,
-            angleCount = angles.Length,
-            ideaCount = ideas.Length,
-        });
+            string.Join(" | ", ideas.Select(i => i.Title)));
+
+        ProviderRunSnapshot snapshotShape = new(
+            Provider: "llm",
+            StrategistModel: this.strategistModel,
+            WriterModel: this.writerModel,
+            StrategistMs: strategistMs,
+            WriterMs: writerMs,
+            AngleCount: angles.Length,
+            IdeaCount: ideas.Length);
+        string snapshot = JsonSerializer.Serialize(snapshotShape);
 
         return new RecommendationResult(ideas, snapshot, Array.Empty<string>());
     }
 
     // ── Static helpers (parsing + prompts) ────────────────────────────────────
+
+    // Brace-match the first balanced {...} object in the text. Tolerates:
+    //   - leading prose / preamble before the JSON
+    //   - markdown ```json fences (inside or outside the matched range)
+    //   - trailing prose after the closing brace
+    //   - escaped quotes and braces inside string values
+    // Returns null if no balanced object is found.
+    private static string? ExtractFirstJsonObject(string text)
+    {
+        int start = text.IndexOf('{');
+        if (start < 0)
+        {
+            return null;
+        }
+
+        int depth = 0;
+        bool inString = false;
+        bool escape = false;
+        for (int i = start; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (escape)
+            {
+                escape = false;
+                continue;
+            }
+
+            if (c == '\\' && inString)
+            {
+                escape = true;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString)
+            {
+                continue;
+            }
+
+            if (c == '{')
+            {
+                depth++;
+            }
+            else if (c == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return text.Substring(start, i - start + 1);
+                }
+            }
+        }
+
+        return null;
+    }
+
     private static Angle[]? TryParseAngles(string raw, int target)
     {
         if (string.IsNullOrWhiteSpace(raw))
@@ -118,10 +200,19 @@ public class LlmRecommendationProvider : IRecommendationProvider
             return null;
         }
 
+        // Try direct parse on stripped fences first; fall back to brace-match
+        // extraction if there's prose around the JSON.
         string cleaned = StripCodeFences(raw);
+        JsonDocument? doc = TryParseJsonDocument(cleaned)
+            ?? TryParseJsonDocument(ExtractFirstJsonObject(cleaned) ?? string.Empty)
+            ?? TryParseJsonDocument(ExtractFirstJsonObject(raw) ?? string.Empty);
+        if (doc is null)
+        {
+            return null;
+        }
+
         try
         {
-            using JsonDocument doc = JsonDocument.Parse(cleaned);
             JsonElement root = doc.RootElement;
             if (!root.TryGetProperty("angles", out JsonElement arr) || arr.ValueKind != JsonValueKind.Array)
             {
@@ -158,9 +249,9 @@ public class LlmRecommendationProvider : IRecommendationProvider
 
             return angles.Count == 0 ? null : angles.Take(target > 0 ? target : angles.Count).ToArray();
         }
-        catch (JsonException)
+        finally
         {
-            return null;
+            doc.Dispose();
         }
     }
 
@@ -172,21 +263,26 @@ public class LlmRecommendationProvider : IRecommendationProvider
         }
 
         string cleaned = StripCodeFences(raw);
+        JsonDocument? doc = TryParseJsonDocument(cleaned)
+            ?? TryParseJsonDocument(ExtractFirstJsonObject(cleaned) ?? string.Empty)
+            ?? TryParseJsonDocument(ExtractFirstJsonObject(raw) ?? string.Empty);
+        if (doc is null)
+        {
+            return null;
+        }
+
         try
         {
-            using JsonDocument doc = JsonDocument.Parse(cleaned);
             JsonElement el = doc.RootElement;
             if (el.ValueKind != JsonValueKind.Object)
             {
-                // Some models wrap in {"idea": {...}}
-                if (el.ValueKind == JsonValueKind.Object && el.TryGetProperty("idea", out JsonElement inner))
-                {
-                    el = inner;
-                }
-                else
-                {
-                    return null;
-                }
+                return null;
+            }
+
+            // Some models wrap the result in {"idea": {...}} — unwrap.
+            if (el.TryGetProperty("idea", out JsonElement inner) && inner.ValueKind == JsonValueKind.Object)
+            {
+                el = inner;
             }
 
             string id = StringFromProp(el, "id") ?? $"angle-{index}";
@@ -199,6 +295,24 @@ public class LlmRecommendationProvider : IRecommendationProvider
                 ?? string.Empty;
 
             return new IdeaDto(id, tone, title, meta, body, suggestedPost);
+        }
+        finally
+        {
+            doc.Dispose();
+        }
+    }
+
+    // Attempt JsonDocument.Parse without throwing. Empty/whitespace input → null.
+    private static JsonDocument? TryParseJsonDocument(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonDocument.Parse(s, LenientJsonOpts);
         }
         catch (JsonException)
         {
@@ -288,6 +402,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("== TODAY'S SIGNALS ==");
         AppendSignals(sb, ctx);
         sb.AppendLine();
+        AppendPlaybookHits(sb, ctx);
         sb.AppendLine("== TASK ==");
         sb.AppendLine($"Pick exactly {ctx.IdeasPerDay} distinct angles. Vary the tones — don't return 5 weather angles.");
         sb.AppendLine("Each angle must be grounded in either a specific signal above or a clear seasonal opportunity for this domain.");
@@ -315,14 +430,15 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("You are the WRITER in a two-stage marketing pipeline. The Strategist already picked the angle; your job is to turn it into a posting-ready promo idea card.");
         sb.AppendLine();
         sb.AppendLine("== ANGLE TO DEVELOP ==");
-        sb.AppendLine($"Theme: {angle.Theme}");
-        sb.AppendLine($"Tone: {angle.Tone}");
-        sb.AppendLine($"Trigger: {angle.TriggerSignal}");
-        sb.AppendLine($"Rationale: {angle.Rationale}");
+        sb.AppendLine("Theme: " + angle.Theme);
+        sb.AppendLine("Tone: " + angle.Tone);
+        sb.AppendLine("Trigger: " + angle.TriggerSignal);
+        sb.AppendLine("Rationale: " + angle.Rationale);
         sb.AppendLine();
         sb.AppendLine("== SHOP ==");
         AppendShop(sb, ctx);
         sb.AppendLine();
+        AppendPreviousIdeas(sb, ctx);
         sb.AppendLine("== TASK ==");
         sb.AppendLine("Quality bar:");
         sb.AppendLine("- Concrete and actionable, grounded in this shop's domain.");
@@ -361,6 +477,55 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine($"Location: {ctx.City ?? "unspecified city"}, {ctx.CountryCode}");
     }
 
+    private static void AppendPreviousIdeas(StringBuilder sb, RecommendationContext ctx)
+    {
+        if (ctx.PreviousIdeas.Count == 0)
+        {
+            return;
+        }
+
+        sb.AppendLine("== RECENT IDEAS — DO NOT REPEAT THESE THEMES ==");
+        sb.AppendLine("These ideas have already been pitched to this shop in the last 30 days.");
+        sb.AppendLine("Pick a clearly different angle — avoid the same theme, structure, or hook.");
+        sb.AppendLine();
+        int n = 1;
+        foreach (PreviousIdeaHit prev in ctx.PreviousIdeas)
+        {
+            string when = prev.GeneratedAtUtc.ToString("MMM d", CultureInfo.InvariantCulture);
+            sb.AppendLine("[" + n + "] (" + when + ") " + prev.Title);
+            n++;
+        }
+
+        sb.AppendLine();
+    }
+
+    private static void AppendPlaybookHits(StringBuilder sb, RecommendationContext ctx)
+    {
+        if (ctx.PlaybookHits.Count == 0)
+        {
+            return;
+        }
+
+        sb.AppendLine("== RELEVANT PLAYBOOK ENTRIES ==");
+        sb.AppendLine("These are proven promo recipes that match this shop's domain and today's signals.");
+        sb.AppendLine("Use them as INSPIRATION — adapt to the specific shop, don't copy verbatim.");
+        sb.AppendLine();
+        int i = 1;
+        foreach (PlaybookHit hit in ctx.PlaybookHits)
+        {
+            string header = $"[{i++}] {hit.Theme} (trigger type: {hit.TriggerType})";
+            sb.AppendLine(header);
+            sb.AppendLine("    Trigger: " + hit.Trigger);
+            sb.AppendLine("    Tactics: " + hit.Tactics.Trim());
+            if (!string.IsNullOrWhiteSpace(hit.ExampleCopy))
+            {
+                sb.AppendLine("    Example copy: \"" + hit.ExampleCopy + "\"");
+            }
+        }
+
+        sb.AppendLine();
+    }
+
     private static void AppendSignals(StringBuilder sb, RecommendationContext ctx)
     {
         if (ctx.Signals.Count == 0)
@@ -389,47 +554,96 @@ public class LlmRecommendationProvider : IRecommendationProvider
     // ── Instance pipeline (Strategist → Writer → kernel invocation) ───────────
     private async Task<Angle[]> RunStrategistAsync(RecommendationContext ctx, CancellationToken ct)
     {
+        Stopwatch sw = Stopwatch.StartNew();
         string prompt = BuildStrategistPrompt(ctx);
+        this.logger.LogInformation(
+            "[LLM] Strategist start promptChars={Chars} model={Model}",
+            prompt.Length,
+            this.strategistModel);
+
         string raw = await this.InvokeAsync(this.strategistKernel, prompt, this.strategistSettings, ct);
+        this.logger.LogInformation(
+            "[LLM] Strategist response after {Ms}ms responseChars={Chars}",
+            sw.ElapsedMilliseconds,
+            raw.Length);
 
         Angle[]? parsed = TryParseAngles(raw, ctx.IdeasPerDay);
         if (parsed is null)
         {
             this.logger.LogWarning(
-                "Strategist JSON parse failed on first attempt, retrying once. Raw head: {Head}",
-                Truncate(raw, 200));
+                "[LLM] Strategist JSON parse FAILED on first attempt, retrying once. FULL response:\n{Body}",
+                Truncate(raw, 4000));
 
             string retryPrompt = prompt + RetryAddendum;
             string retryRaw = await this.InvokeAsync(this.strategistKernel, retryPrompt, this.strategistSettings, ct);
             parsed = TryParseAngles(retryRaw, ctx.IdeasPerDay);
+            if (parsed is null)
+            {
+                this.logger.LogError(
+                    "[LLM] Strategist JSON parse FAILED on retry too. FULL retry response:\n{Body}",
+                    Truncate(retryRaw, 4000));
+            }
         }
 
-        return parsed ?? Array.Empty<Angle>();
+        Angle[] result = parsed ?? Array.Empty<Angle>();
+        this.logger.LogInformation(
+            "[LLM] Strategist done in {Ms}ms angles={Count} themes=[{Themes}]",
+            sw.ElapsedMilliseconds,
+            result.Length,
+            string.Join(" | ", result.Select(a => a.Theme)));
+        return result;
     }
 
     private async Task<IdeaDto> RunWriterAsync(Angle angle, RecommendationContext ctx, int index, CancellationToken ct)
     {
+        Stopwatch sw = Stopwatch.StartNew();
         string prompt = BuildWriterPrompt(angle, ctx);
+        this.logger.LogInformation(
+            "[LLM] Writer[{Idx}] start theme='{Theme}' tone={Tone} promptChars={Chars}",
+            index,
+            angle.Theme,
+            angle.Tone,
+            prompt.Length);
+
         string raw = await this.InvokeAsync(this.writerKernel, prompt, this.writerSettings, ct);
 
         IdeaDto? parsed = TryParseIdea(raw, angle, index);
         if (parsed is not null)
         {
+            this.logger.LogInformation(
+                "[LLM] Writer[{Idx}] done in {Ms}ms title='{Title}'",
+                index,
+                sw.ElapsedMilliseconds,
+                parsed.Title);
             return parsed;
         }
 
         this.logger.LogWarning(
-            "Writer #{Index} JSON parse failed, retrying once. Raw head: {Head}",
+            "[LLM] Writer[{Idx}] JSON parse FAILED, retrying once. FULL response:\n{Body}",
             index,
-            Truncate(raw, 200));
+            Truncate(raw, 4000));
 
         string retryPrompt = prompt + RetryAddendum;
         string retryRaw = await this.InvokeAsync(this.writerKernel, retryPrompt, this.writerSettings, ct);
         parsed = TryParseIdea(retryRaw, angle, index);
 
+        if (parsed is not null)
+        {
+            this.logger.LogInformation(
+                "[LLM] Writer[{Idx}] done in {Ms}ms (recovered on retry) title='{Title}'",
+                index,
+                sw.ElapsedMilliseconds,
+                parsed.Title);
+            return parsed;
+        }
+
         // If still broken, fabricate a minimal IdeaDto from the angle so the
         // pipeline doesn't fail the whole batch on one writer's bad JSON.
-        return parsed ?? new IdeaDto(
+        this.logger.LogError(
+            "[LLM] Writer[{Idx}] JSON parse FAILED on retry too — fabricating from angle. FULL retry response:\n{Body}",
+            index,
+            Truncate(retryRaw, 4000));
+        return new IdeaDto(
             Id: $"angle-{index}",
             Tone: angle.Tone,
             Title: angle.Theme,
@@ -444,12 +658,38 @@ public class LlmRecommendationProvider : IRecommendationProvider
         OpenAIPromptExecutionSettings settings,
         CancellationToken ct)
     {
-        FunctionResult result = await kernel.InvokePromptAsync(
-            prompt,
-            new KernelArguments(settings),
-            cancellationToken: ct);
-        return result.GetValue<string>() ?? string.Empty;
+        try
+        {
+            FunctionResult result = await kernel.InvokePromptAsync(
+                prompt,
+                new KernelArguments(settings),
+                cancellationToken: ct);
+            return result.GetValue<string>() ?? string.Empty;
+        }
+        catch (Microsoft.SemanticKernel.HttpOperationException ex)
+        {
+            // SK swallows the response body in HttpOperationException.ToString().
+            // Reach into ResponseContent so the user can see *why* the LLM said 400.
+            string body = ex.ResponseContent ?? "(no body captured)";
+            this.logger.LogError(
+                ex,
+                "[LLM] HTTP {Status} from chat endpoint. Response body: {Body}",
+                ex.StatusCode,
+                Truncate(body, 800));
+            throw;
+        }
     }
 
     private record Angle(string Theme, string Tone, string TriggerSignal, string Rationale);
+
+    // Concrete shape for the diagnostic snapshot string. Anonymous-type version
+    // got hit by dotnet watch hot-reload renaming '<>f__AnonymousTypeN' indices.
+    private record ProviderRunSnapshot(
+        string Provider,
+        string StrategistModel,
+        string WriterModel,
+        long StrategistMs,
+        long WriterMs,
+        int AngleCount,
+        int IdeaCount);
 }

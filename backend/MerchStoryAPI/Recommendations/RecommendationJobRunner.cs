@@ -27,12 +27,22 @@ public class RecommendationJobRunner
     {
         return this.registry.StartIfNotRunning(userId, async (jobId, ct) =>
         {
+            DateTime startedAt = DateTime.UtcNow;
+            this.logger.LogInformation(
+                "[Job] {JobId} START user={UserId}",
+                jobId,
+                userId);
+
             using IServiceScope scope = this.scopeFactory.CreateScope();
             RecommendationOrchestrator orchestrator = scope.ServiceProvider.GetRequiredService<RecommendationOrchestrator>();
 
             DailyRecommendation? row = await orchestrator.GenerateAndPersistAsync(userId, ct);
             if (row is null)
             {
+                this.logger.LogWarning(
+                    "[Job] {JobId} FAILED — no shop profile for user={UserId}",
+                    jobId,
+                    userId);
                 this.registry.MarkFailed(jobId, "Shop profile required before generating recommendations.");
                 return;
             }
@@ -43,10 +53,11 @@ public class RecommendationJobRunner
 
             this.registry.MarkReady(jobId, row.Id, row.GeneratedAtUtc, ideas);
             this.logger.LogInformation(
-                "Recommendation job {JobId} ready in {ElapsedMs}ms with {IdeaCount} ideas",
+                "[Job] {JobId} READY in {ElapsedMs}ms ideas={IdeaCount} recId={RecId}",
                 jobId,
-                (int)(DateTime.UtcNow - row.GeneratedAtUtc).TotalMilliseconds,
-                ideas.Length);
+                (int)(DateTime.UtcNow - startedAt).TotalMilliseconds,
+                ideas.Length,
+                row.Id);
         });
     }
 }

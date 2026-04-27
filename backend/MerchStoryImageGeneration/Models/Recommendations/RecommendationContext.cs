@@ -17,4 +17,6 @@ public record RecommendationContext(
     string GenerationLanguage,
     int IdeasPerDay,
     IReadOnlyList<ContextSignal> Signals,
-    IReadOnlyList<string> DegradedSources);
+    IReadOnlyList<string> DegradedSources,
+    IReadOnlyList<PlaybookHit> PlaybookHits,
+    IReadOnlyList<PreviousIdeaHit> PreviousIdeas);

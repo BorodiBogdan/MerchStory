@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { type Href, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  type GestureResponderEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -19,7 +20,7 @@ import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import { useIdeas } from '@/hooks/useIdeas';
 import { useT } from '@/i18n';
-import type { IdeaItem, IdeaTone } from '@/utils/api';
+import { type IdeaItem, type IdeaTone, submitIdeaFeedback } from '@/utils/api';
 
 const DESKTOP_BREAKPOINT = 768;
 const CARD_STAGGER_MS = 90;
@@ -161,7 +162,7 @@ function IdeasForYouSection({
   router: ReturnType<typeof useRouter>;
 }) {
   const styles = useMemo(() => makeIdeasStyles(colors, isDesktop), [colors, isDesktop]);
-  const { ideas: rawIdeas, isLoading, isRefreshing, error, refresh } = useIdeas();
+  const { ideas: rawIdeas, recommendationId, isLoading, isRefreshing, error, refresh } = useIdeas();
 
   const promoIdeas = useMemo<PromoIdea[]>(
     () =>
@@ -191,10 +192,21 @@ function IdeasForYouSection({
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
+    if (recommendationId) {
+      void submitIdeaFeedback(recommendationId, idea.id, 'generated_from');
+    }
     router.push({
       pathname: '/(tabs)/studio/announcements',
       params: { brief: idea.suggestedPost },
     });
+  }
+
+  function handleThumb(idea: PromoIdea, action: 'thumbs_up' | 'thumbs_down') {
+    if (!recommendationId) return;
+    if (Platform.OS !== 'web') {
+      Haptics.selectionAsync().catch(() => {});
+    }
+    void submitIdeaFeedback(recommendationId, idea.id, action);
   }
 
   return (
@@ -248,6 +260,7 @@ function IdeasForYouSection({
               isDesktop={isDesktop}
               colors={colors}
               onPress={() => handleIdeaPress(idea)}
+              onThumb={(action) => handleThumb(idea, action)}
             />
           ))}
         </View>
@@ -262,13 +275,27 @@ function IdeaCard({
   isDesktop,
   colors,
   onPress,
+  onThumb,
 }: {
   idea: PromoIdea;
   index: number;
   isDesktop: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
   onPress?: () => void;
+  onThumb?: (action: 'thumbs_up' | 'thumbs_down') => void;
 }) {
+  // Local thumb state — clicking the active one clears it; clicking the
+  // inactive switches. Optimistic; backend records each click as a separate
+  // IdeaInteraction row, the dataset captures the trajectory.
+  const [thumbState, setThumbState] = useState<null | 'up' | 'down'>(null);
+
+  function handleThumbPress(direction: 'up' | 'down', e: GestureResponderEvent) {
+    e.stopPropagation();
+    const next = thumbState === direction ? null : direction;
+    setThumbState(next);
+    if (next === 'up') onThumb?.('thumbs_up');
+    if (next === 'down') onThumb?.('thumbs_down');
+  }
   const styles = useMemo(() => makeIdeaCardStyles(colors, isDesktop), [colors, isDesktop]);
 
   const opacity = useRef(new Animated.Value(0)).current;
@@ -347,9 +374,39 @@ function IdeaCard({
                 {idea.suggestedPost}
               </Text>
             </View>
-            <View style={styles.generateBtn}>
-              <Text style={styles.generateText}>Generate</Text>
-              <Ionicons name="arrow-forward" size={12} color={colors.accent.primary} />
+            <View style={styles.footerActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Thumbs up"
+                accessibilityState={{ selected: thumbState === 'up' }}
+                hitSlop={6}
+                onPress={(e) => handleThumbPress('up', e)}
+                style={styles.thumbBtn}
+              >
+                <Ionicons
+                  name={thumbState === 'up' ? 'thumbs-up' : 'thumbs-up-outline'}
+                  size={14}
+                  color={thumbState === 'up' ? colors.accent.primary : colors.text.muted}
+                />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Thumbs down"
+                accessibilityState={{ selected: thumbState === 'down' }}
+                hitSlop={6}
+                onPress={(e) => handleThumbPress('down', e)}
+                style={styles.thumbBtn}
+              >
+                <Ionicons
+                  name={thumbState === 'down' ? 'thumbs-down' : 'thumbs-down-outline'}
+                  size={14}
+                  color={thumbState === 'down' ? colors.text.error : colors.text.muted}
+                />
+              </Pressable>
+              <View style={styles.generateBtn}>
+                <Text style={styles.generateText}>Generate</Text>
+                <Ionicons name="arrow-forward" size={12} color={colors.accent.primary} />
+              </View>
             </View>
           </View>
         </Animated.View>
@@ -728,6 +785,18 @@ function makeIdeaCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDes
       fontWeight: D.fontWeight.bold,
       color: colors.accent.primary,
       letterSpacing: 0.4,
+    },
+    footerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    thumbBtn: {
+      width: 28,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: D.radius.pill,
     },
   });
 }
