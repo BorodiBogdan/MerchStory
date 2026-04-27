@@ -106,6 +106,8 @@ export default function Step3Screen() {
         targetAudience: data.targetAudience || null,
         shopType: data.shopType || null,
         competitors: data.competitors || null,
+        city: data.city.trim() || null,
+        countryCode: data.countryCode || 'RO',
         phoneNumber: phoneNumber.trim(),
         email: email.trim(),
         addresses: cleanAddresses,
