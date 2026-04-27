@@ -754,6 +754,57 @@ const en = {
   'categoryPicker.clearA11y': 'Clear category',
   'categoryPicker.addA11y': 'Add new category',
   'categoryPicker.cancelA11y': 'Cancel new category',
+
+  // ── Wallet & coins ───────────────────────────────────────────────────────
+  'wallet.title': 'Wallet',
+  'wallet.eyebrow': 'Coins',
+  'wallet.balance.label': 'Current balance',
+  'wallet.balance.unit': 'coins',
+  'wallet.costs.title': 'Generation costs',
+  'wallet.costs.announcement': 'Announcement',
+  'wallet.costs.catalog': 'Catalog',
+  'wallet.costs.wallpaper': 'Wallpaper',
+  'wallet.costs.catalogOnWallpaper': 'Catalog on wallpaper',
+  'wallet.costs.free': 'Free',
+  'wallet.transactions.title': 'Activity',
+  'wallet.transactions.empty': 'No transactions yet.',
+  'wallet.transactions.loading': 'Loading…',
+  'wallet.refreshA11y': 'Refresh wallet',
+
+  'wallet.choice.title': 'Where to?',
+  'wallet.choice.body': 'Open your profile or your coin wallet.',
+  'wallet.choice.profile': 'Profile',
+  'wallet.choice.wallet': 'Wallet',
+
+  'wallet.insufficient.title': 'Not enough coins',
+  'wallet.insufficient.body':
+    'This action costs {cost} coin. Top up your wallet to keep generating.',
+  'wallet.insufficient.openWallet': 'Open wallet',
+  'wallet.insufficient.dismiss': 'Cancel',
+
+  'wallet.cost.suffix': '{cost} coin',
+  'wallet.cost.free': 'Free',
+  'wallet.cost.suffixSeparator': ' · ',
+
+  'admin.options.grantCoins.title': 'Grant coins',
+  'admin.options.grantCoins.description': "Top up a user's coin balance for testing or support.",
+
+  'adminGrant.title': 'Grant coins',
+  'adminGrant.subtitle': "Top up a user's coin balance.",
+  'adminGrant.email.label': 'User email',
+  'adminGrant.email.placeholder': 'name@example.com',
+  'adminGrant.amount.label': 'Amount',
+  'adminGrant.amount.placeholder': 'e.g. 10',
+  'adminGrant.note.label': 'Note (optional)',
+  'adminGrant.note.placeholder': 'Why are you granting these coins?',
+  'adminGrant.submit': 'Grant',
+  'adminGrant.submitting': 'Granting…',
+  'adminGrant.lookup.empty': 'No users matched.',
+  'adminGrant.lookup.hint': 'Type at least 2 characters to search.',
+  'adminGrant.success': 'Granted {amount} coins to {email}. New balance: {balance}.',
+  'adminGrant.error.amount': 'Amount must be a positive whole number.',
+  'adminGrant.error.email': 'Pick a user from the list.',
+  'adminGrant.error.failed': 'Grant failed. Try again.',
 };
 
 export default en;

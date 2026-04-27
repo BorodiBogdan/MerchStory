@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs, useRouter } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
   Pressable,
   StyleSheet,
+  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -13,13 +14,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { CoinIcon } from '@/components/ui/CoinIcon';
+import { ProfileWalletChoiceModal } from '@/components/ui/ProfileWalletChoiceModal';
+import { ProfileWalletDropdown } from '@/components/ui/ProfileWalletDropdown';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 
 export default function TabLayout() {
-  const { token, isLoading, isShopSetupComplete } = useAuth();
+  const { token, isLoading, isShopSetupComplete, coinBalance, email, isAdmin, signOut } = useAuth();
+  const [showChoice, setShowChoice] = useState(false);
   const { colors, colorScheme, toggleTheme } = useTheme();
   const t = useT();
   const { width } = useWindowDimensions();
@@ -56,6 +61,19 @@ export default function TabLayout() {
   const headerRight = () => (
     <View style={styles.headerActions}>
       <Pressable
+        onPress={() => router.push('/wallet')}
+        style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+          styles.balancePill,
+          (pressed || hovered) && { backgroundColor: colors.bg.input },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={`${t('wallet.title')}: ${coinBalance}`}
+      >
+        <CoinIcon size={16} />
+        <Text style={styles.balancePillText}>{coinBalance}</Text>
+      </Pressable>
+
+      <Pressable
         onPress={toggleTheme}
         style={styles.iconButton}
         accessibilityRole="button"
@@ -69,7 +87,7 @@ export default function TabLayout() {
       </Pressable>
 
       <Pressable
-        onPress={() => router.navigate('/(tabs)/profile')}
+        onPress={() => setShowChoice(true)}
         style={styles.iconButton}
         accessibilityRole="button"
         accessibilityLabel={t('tabs.profile')}
@@ -110,6 +128,12 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="wallpapers"
+          options={{
+            tabBarItemStyle: { display: 'none' },
+          }}
+        />
+        <Tabs.Screen
+          name="wallet"
           options={{
             tabBarItemStyle: { display: 'none' },
           }}
@@ -167,8 +191,53 @@ export default function TabLayout() {
                   ),
                 }
           }
+          listeners={{
+            tabPress: (e) => {
+              e.preventDefault();
+              setShowChoice(true);
+            },
+          }}
         />
       </Tabs>
+      {isDesktop ? (
+        <ProfileWalletDropdown
+          visible={showChoice}
+          email={email}
+          coinBalance={coinBalance}
+          isAdmin={isAdmin}
+          onChooseProfile={() => {
+            setShowChoice(false);
+            router.navigate('/(tabs)/profile');
+          }}
+          onChooseWallet={() => {
+            setShowChoice(false);
+            router.push('/wallet');
+          }}
+          onChooseAdmin={() => {
+            setShowChoice(false);
+            router.push('/admin');
+          }}
+          onSignOut={async () => {
+            setShowChoice(false);
+            await signOut();
+          }}
+          onDismiss={() => setShowChoice(false)}
+        />
+      ) : (
+        <ProfileWalletChoiceModal
+          visible={showChoice}
+          coinBalance={coinBalance}
+          onChooseProfile={() => {
+            setShowChoice(false);
+            router.navigate('/(tabs)/profile');
+          }}
+          onChooseWallet={() => {
+            setShowChoice(false);
+            router.push('/wallet');
+          }}
+          onDismiss={() => setShowChoice(false)}
+        />
+      )}
     </View>
   );
 }
@@ -207,6 +276,27 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], bottomInset: 
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
+    },
+    balancePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      height: 32,
+      paddingHorizontal: 12,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: 'transparent',
+      outlineWidth: 0,
+      ...(Platform.OS === 'web'
+        ? ({ transitionDuration: '120ms', transitionProperty: 'background-color' } as object)
+        : {}),
+    },
+    balancePillText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: 0.2,
     },
     tabBar: {
       backgroundColor: colors.bg.surface,

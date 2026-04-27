@@ -69,6 +69,13 @@ export default function AdminScreen() {
       description: t('admin.options.addProfessional.description'),
       onPress: () => router.push('/add-products-professional'),
     },
+    {
+      key: 'grant-coins',
+      icon: 'cash-outline',
+      title: t('admin.options.grantCoins.title'),
+      description: t('admin.options.grantCoins.description'),
+      onPress: () => router.push('/admin-grant-coins'),
+    },
   ];
 
   return (

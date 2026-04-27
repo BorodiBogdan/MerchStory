@@ -18,9 +18,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CoinIcon } from '@/components/ui/CoinIcon';
 import { GalleryImage } from '@/components/ui/GalleryImage';
+import { InsufficientCoinsModal } from '@/components/ui/InsufficientCoinsModal';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { D } from '@/constants/design';
+import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 import {
@@ -29,6 +32,7 @@ import {
   type GalleryItem,
   type GenerateImageResponse,
   generateWallpaper,
+  InsufficientCoinsError,
   saveToGallery,
 } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
@@ -83,6 +87,8 @@ export default function WallpapersScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const { coinBalance, setCoinBalance, refreshCoinBalance } = useAuth();
+  const [insufficientVisible, setInsufficientVisible] = useState(false);
 
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -165,6 +171,10 @@ export default function WallpapersScreen() {
   }
 
   async function handleGenerate() {
+    if (coinBalance < 1) {
+      setInsufficientVisible(true);
+      return;
+    }
     setGenerating(true);
     setGenerateError(null);
     try {
@@ -178,8 +188,18 @@ export default function WallpapersScreen() {
       setIsKept(false);
       setKeepError(null);
       setGenerateStage('result');
+      if (typeof result.balance === 'number') {
+        setCoinBalance(result.balance);
+      } else {
+        refreshCoinBalance();
+      }
     } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : 'Generation failed.');
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficientVisible(true);
+        setGenerateError('Not enough coins.');
+      } else {
+        setGenerateError(err instanceof Error ? err.message : 'Generation failed.');
+      }
     } finally {
       setGenerating(false);
     }
@@ -465,8 +485,11 @@ export default function WallpapersScreen() {
                     <Ionicons name="sparkles-outline" size={16} color="#fff" />
                   )}
                   <Text style={styles.sheetGenerateBtnText}>
-                    {generating ? t('wallpapers.modal.generating') : t('wallpapers.modal.generate')}
+                    {generating
+                      ? t('wallpapers.modal.generating')
+                      : `${t('wallpapers.modal.generate')} · 1`}
                   </Text>
+                  {!generating && <CoinIcon size={16} />}
                 </Pressable>
               </ScrollView>
             ) : (
@@ -632,6 +655,11 @@ export default function WallpapersScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <InsufficientCoinsModal
+        visible={insufficientVisible}
+        onDismiss={() => setInsufficientVisible(false)}
+      />
     </View>
   );
 }

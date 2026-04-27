@@ -767,6 +767,58 @@ const ro: Dictionary = {
   'categoryPicker.clearA11y': 'Șterge categoria',
   'categoryPicker.addA11y': 'Adaugă o categorie nouă',
   'categoryPicker.cancelA11y': 'Anulează categoria nouă',
+
+  // ── Portofel & monede ────────────────────────────────────────────────────
+  'wallet.title': 'Portofel',
+  'wallet.eyebrow': 'Monede',
+  'wallet.balance.label': 'Sold curent',
+  'wallet.balance.unit': 'monede',
+  'wallet.costs.title': 'Costuri de generare',
+  'wallet.costs.announcement': 'Anunț',
+  'wallet.costs.catalog': 'Catalog',
+  'wallet.costs.wallpaper': 'Wallpaper',
+  'wallet.costs.catalogOnWallpaper': 'Catalog pe wallpaper',
+  'wallet.costs.free': 'Gratuit',
+  'wallet.transactions.title': 'Activitate',
+  'wallet.transactions.empty': 'Nicio tranzacție încă.',
+  'wallet.transactions.loading': 'Se încarcă…',
+  'wallet.refreshA11y': 'Reîmprospătează portofelul',
+
+  'wallet.choice.title': 'Unde mergem?',
+  'wallet.choice.body': 'Deschide profilul tău sau portofelul cu monede.',
+  'wallet.choice.profile': 'Profil',
+  'wallet.choice.wallet': 'Portofel',
+
+  'wallet.insufficient.title': 'Nu ai destule monede',
+  'wallet.insufficient.body':
+    'Această acțiune costă {cost} monedă. Adaugă monede pentru a continua.',
+  'wallet.insufficient.openWallet': 'Deschide portofelul',
+  'wallet.insufficient.dismiss': 'Anulează',
+
+  'wallet.cost.suffix': '{cost} monedă',
+  'wallet.cost.free': 'Gratuit',
+  'wallet.cost.suffixSeparator': ' · ',
+
+  'admin.options.grantCoins.title': 'Adaugă monede',
+  'admin.options.grantCoins.description':
+    'Adaugă monede în portofelul unui utilizator pentru testare sau suport.',
+
+  'adminGrant.title': 'Adaugă monede',
+  'adminGrant.subtitle': 'Adaugă monede în portofelul unui utilizator.',
+  'adminGrant.email.label': 'Email utilizator',
+  'adminGrant.email.placeholder': 'nume@exemplu.com',
+  'adminGrant.amount.label': 'Cantitate',
+  'adminGrant.amount.placeholder': 'ex. 10',
+  'adminGrant.note.label': 'Notă (opțional)',
+  'adminGrant.note.placeholder': 'De ce adaugi aceste monede?',
+  'adminGrant.submit': 'Adaugă',
+  'adminGrant.submitting': 'Se adaugă…',
+  'adminGrant.lookup.empty': 'Niciun utilizator găsit.',
+  'adminGrant.lookup.hint': 'Scrie cel puțin 2 caractere pentru a căuta.',
+  'adminGrant.success': 'Ai adăugat {amount} monede la {email}. Sold nou: {balance}.',
+  'adminGrant.error.amount': 'Cantitatea trebuie să fie un număr întreg pozitiv.',
+  'adminGrant.error.email': 'Alege un utilizator din listă.',
+  'adminGrant.error.failed': 'Adăugarea a eșuat. Încearcă din nou.',
 };
 
 export default ro;
