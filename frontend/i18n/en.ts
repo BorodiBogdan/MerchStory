@@ -705,6 +705,19 @@ const en = {
   'keepModal.nameTooLong': 'Name must be {max} characters or fewer.',
   'keepModal.saveFailed': 'Failed to save. Try again.',
 
+  // ── Admin hub ────────────────────────────────────────────────────────────
+  'admin.eyebrow': 'Admin',
+  'admin.title': 'Admin Tools',
+  'admin.subtitle': 'Internal tools available only to administrators.',
+  'admin.openButton': 'Admin',
+  'admin.adminOnly.title': 'Admins only',
+  'admin.adminOnly.body': 'You do not have access to this page.',
+  'admin.adminOnly.back': 'Go back',
+  'admin.a11y.back': 'Back',
+  'admin.options.addProfessional.title': 'Add professional product',
+  'admin.options.addProfessional.description':
+    'Upload reference photos that power similarity search across the catalog.',
+
   // ── Add Professional Photo (admin) ───────────────────────────────────────
   'addProfessional.title': 'Add Professional Photo',
   'addProfessional.subtitle': 'These photos become the reference library for similarity search.',

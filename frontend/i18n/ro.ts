@@ -717,6 +717,19 @@ const ro: Dictionary = {
   'keepModal.nameTooLong': 'Numele trebuie să aibă maxim {max} caractere.',
   'keepModal.saveFailed': 'Salvarea a eșuat. Încearcă din nou.',
 
+  // ── Admin hub ────────────────────────────────────────────────────────────
+  'admin.eyebrow': 'Admin',
+  'admin.title': 'Unelte de administrator',
+  'admin.subtitle': 'Unelte interne disponibile doar pentru administratori.',
+  'admin.openButton': 'Admin',
+  'admin.adminOnly.title': 'Doar pentru administratori',
+  'admin.adminOnly.body': 'Nu ai acces la această pagină.',
+  'admin.adminOnly.back': 'Înapoi',
+  'admin.a11y.back': 'Înapoi',
+  'admin.options.addProfessional.title': 'Adaugă produs profesional',
+  'admin.options.addProfessional.description':
+    'Încarcă fotografii de referință folosite pentru căutarea după imagine în catalog.',
+
   // ── Add Professional Photo (admin) ───────────────────────────────────────
   'addProfessional.title': 'Adaugă fotografie profesională',
   'addProfessional.subtitle':
