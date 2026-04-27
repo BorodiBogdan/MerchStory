@@ -930,8 +930,16 @@ function normalizeRecommendationResponse(raw: RawRecommendationResponse): Recomm
   return { status: 'failed', error: raw.error ?? 'Unknown error' };
 }
 
-export async function fetchIdeas(): Promise<RecommendationResponse> {
-  const response = await fetchWithAuth(`${API_URL}/recommendations/today`, {});
+// Recommendation endpoints accept an optional ?lang= query param so the
+// backend can project idea text in the user's currently-active app language —
+// the frontend's useI18n() value is the source of truth. EN/RO are the only
+// supported codes; anything else falls back to AppUser.PreferredLanguage.
+function langQuery(lang?: AppLanguage): string {
+  return lang ? `?lang=${lang.toLowerCase()}` : '';
+}
+
+export async function fetchIdeas(lang?: AppLanguage): Promise<RecommendationResponse> {
+  const response = await fetchWithAuth(`${API_URL}/recommendations/today${langQuery(lang)}`, {});
   if (!response.ok) {
     const err = await response.text().catch(() => '');
     throw new Error(err || `Failed to load ideas (${response.status})`);
@@ -941,6 +949,8 @@ export async function fetchIdeas(): Promise<RecommendationResponse> {
   );
 }
 
+// refreshIdeas always kicks off a new generation (returns "generating" + jobId).
+// No lang param needed — the follow-up pollIdeasJob carries the language.
 export async function refreshIdeas(): Promise<RecommendationResponse> {
   const response = await fetchWithAuth(`${API_URL}/recommendations/refresh`, {
     method: 'POST',
@@ -954,8 +964,14 @@ export async function refreshIdeas(): Promise<RecommendationResponse> {
   );
 }
 
-export async function pollIdeasJob(jobId: string): Promise<RecommendationResponse> {
-  const response = await fetchWithAuth(`${API_URL}/recommendations/jobs/${jobId}`, {});
+export async function pollIdeasJob(
+  jobId: string,
+  lang?: AppLanguage
+): Promise<RecommendationResponse> {
+  const response = await fetchWithAuth(
+    `${API_URL}/recommendations/jobs/${jobId}${langQuery(lang)}`,
+    {}
+  );
   if (!response.ok) {
     const err = await response.text().catch(() => '');
     throw new Error(err || `Failed to poll job (${response.status})`);

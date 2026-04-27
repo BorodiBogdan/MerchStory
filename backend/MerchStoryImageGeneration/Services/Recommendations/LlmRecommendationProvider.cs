@@ -32,6 +32,8 @@ public class LlmRecommendationProvider : IRecommendationProvider
     private const string RetryAddendum =
         "\n\nIMPORTANT: your previous response was not valid JSON. Output ONLY a JSON object matching the schema, with no prose, no code fences.";
 
+    private const string TranslationLang = "ro";
+
     // Lenient parse: tolerates trailing commas + // /* */ comments — both common
     // from open-weight models like Gemma 3 that don't strictly follow JSON spec.
     private static readonly JsonDocumentOptions LenientJsonOpts = new()
@@ -86,9 +88,15 @@ public class LlmRecommendationProvider : IRecommendationProvider
         this.logger = logger;
     }
 
+    // Pipeline always emits canonical English in the IdeaDto base fields,
+    // then runs a Translator stage to populate Translations["ro"]. The user's
+    // current GenerationLanguage is consulted at READ time (route handler) to
+    // pick which version to serve. Switching languages doesn't trigger
+    // regeneration — both versions are persisted.
     public async Task<RecommendationResult> GenerateAsync(RecommendationContext context, CancellationToken ct)
     {
         Stopwatch sw = Stopwatch.StartNew();
+
         this.logger.LogInformation(
             "[LLM] Generate start strategist={Strategist} writer={Writer} signals={SignalCount} playbookHits={PlaybookCount} previousIdeas={PreviousCount} ideasPerDay={N}",
             this.strategistModel,
@@ -109,14 +117,51 @@ public class LlmRecommendationProvider : IRecommendationProvider
         }
 
         long writerStart = sw.ElapsedMilliseconds;
-        IdeaDto[] ideas = await Task.WhenAll(
+        IdeaDto[] englishIdeas = await Task.WhenAll(
             angles.Select((angle, idx) => this.RunWriterAsync(angle, context, idx, ct)));
         long writerMs = sw.ElapsedMilliseconds - writerStart;
         this.logger.LogInformation(
             "[LLM] Writers x{Count} done in {ElapsedMs}ms (wall-clock, parallel) titles=[{Titles}]",
-            ideas.Length,
+            englishIdeas.Length,
             writerMs,
-            string.Join(" | ", ideas.Select(i => i.Title)));
+            string.Join(" | ", englishIdeas.Select(i => i.Title)));
+
+        // Translator stage — always runs, populates Translations["ro"] on each
+        // idea. Runs in parallel per idea; one writer's bad JSON doesn't kill
+        // the batch (parser falls back to null and the projection later falls
+        // through to the English base fields).
+        long translatorStart = sw.ElapsedMilliseconds;
+        this.logger.LogInformation(
+            "[LLM] Translator start targetLang={Lang} ideas={Count}",
+            TranslationLang,
+            englishIdeas.Length);
+
+        IdeaTranslation?[] translations = await Task.WhenAll(
+            englishIdeas.Select((idea, idx) => this.RunTranslatorAsync(idea, TranslationLang, idx, ct)));
+
+        long translatorMs = sw.ElapsedMilliseconds - translatorStart;
+        int successCount = translations.Count(t => t is not null);
+        this.logger.LogInformation(
+            "[LLM] Translator done in {ElapsedMs}ms succeeded={Ok}/{Total}",
+            translatorMs,
+            successCount,
+            translations.Length);
+
+        IdeaDto[] localizedIdeas = englishIdeas
+            .Select((idea, idx) =>
+            {
+                if (translations[idx] is null)
+                {
+                    return idea;
+                }
+
+                Dictionary<string, IdeaTranslation> dict = new(StringComparer.OrdinalIgnoreCase)
+                {
+                    [TranslationLang] = translations[idx]!,
+                };
+                return idea with { Translations = dict };
+            })
+            .ToArray();
 
         ProviderRunSnapshot snapshotShape = new(
             Provider: "llm",
@@ -125,10 +170,96 @@ public class LlmRecommendationProvider : IRecommendationProvider
             StrategistMs: strategistMs,
             WriterMs: writerMs,
             AngleCount: angles.Length,
-            IdeaCount: ideas.Length);
+            IdeaCount: localizedIdeas.Length);
         string snapshot = JsonSerializer.Serialize(snapshotShape);
 
-        return new RecommendationResult(ideas, snapshot, Array.Empty<string>());
+        return new RecommendationResult(localizedIdeas, snapshot, Array.Empty<string>());
+    }
+
+    private static IdeaTranslation? TryParseTranslation(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        string cleaned = StripCodeFences(raw);
+        JsonDocument? doc = TryParseJsonDocument(cleaned)
+            ?? TryParseJsonDocument(ExtractFirstJsonObject(cleaned) ?? string.Empty)
+            ?? TryParseJsonDocument(ExtractFirstJsonObject(raw) ?? string.Empty);
+        if (doc is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            JsonElement el = doc.RootElement;
+            if (el.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            string? title = StringFromProp(el, "title");
+            string? meta = StringFromProp(el, "meta");
+            string? body = StringFromProp(el, "body");
+            string? suggestedPost = StringFromProp(el, "suggestedPost") ?? StringFromProp(el, "suggested_post");
+
+            // Need at least the title — the rest can fall back individually
+            // through the projection if we wanted, but for now require all 4
+            // since a partial translation is worse than no translation (mixed
+            // languages on screen looks broken).
+            if (string.IsNullOrWhiteSpace(title) ||
+                string.IsNullOrWhiteSpace(meta) ||
+                string.IsNullOrWhiteSpace(body) ||
+                string.IsNullOrWhiteSpace(suggestedPost))
+            {
+                return null;
+            }
+
+            return new IdeaTranslation(title!, meta!, body!, suggestedPost!);
+        }
+        finally
+        {
+            doc.Dispose();
+        }
+    }
+
+    private static string BuildTranslatorPrompt(IdeaDto idea, string targetLang)
+    {
+        string targetLangName = string.Equals(targetLang, "ro", StringComparison.OrdinalIgnoreCase)
+            ? "Romanian"
+            : targetLang;
+
+        StringBuilder sb = new();
+        sb.AppendLine("You are translating a small-shop promo idea card from English to " + targetLangName + ".");
+        sb.AppendLine("The voice is a real shop owner texting friends — casual, simple, no marketing-speak.");
+        sb.AppendLine();
+        sb.AppendLine("== ENGLISH SOURCE ==");
+        sb.AppendLine("title: " + idea.Title);
+        sb.AppendLine("meta: " + idea.Meta);
+        sb.AppendLine("body: " + idea.Body);
+        sb.AppendLine("suggestedPost: " + idea.SuggestedPost);
+        sb.AppendLine();
+        sb.AppendLine("== HOW TO TRANSLATE ==");
+        sb.AppendLine("- Preserve brand names, product names, place names — don't translate them.");
+        sb.AppendLine("- Preserve numbers, dates, percentages exactly.");
+        sb.AppendLine("- Keep the casual tone — short sentences, everyday words.");
+        sb.AppendLine("- Translate suggestedPost as something a real shop owner would actually type — not a slogan.");
+        sb.AppendLine();
+        sb.AppendLine("AVOID Romanian marketing-speak (these scream AI):");
+        sb.AppendLine("  'descoperă', 'bucură-te', 'experiență unică', 'exclusiv', 'premium', 'autentic',");
+        sb.AppendLine("  'redescoperă', 'savurează', 'momente de neuitat', 'nu rata'");
+        sb.AppendLine();
+        sb.AppendLine("== OUTPUT ==");
+        sb.AppendLine("Return ONLY a JSON object, no prose, no code fences:");
+        sb.AppendLine("{");
+        sb.AppendLine("  \"title\": \"<" + targetLangName + " translation of title>\",");
+        sb.AppendLine("  \"meta\": \"<" + targetLangName + " translation of meta>\",");
+        sb.AppendLine("  \"body\": \"<" + targetLangName + " translation of body>\",");
+        sb.AppendLine("  \"suggestedPost\": \"<" + targetLangName + " translation of suggestedPost>\"");
+        sb.AppendLine("}");
+        return sb.ToString();
     }
 
     // ── Static helpers (parsing + prompts) ────────────────────────────────────
@@ -407,15 +538,19 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine($"Pick exactly {ctx.IdeasPerDay} distinct angles. Vary the tones — don't return 5 weather angles.");
         sb.AppendLine("Each angle must be grounded in either a specific signal above or a clear seasonal opportunity for this domain.");
         sb.AppendLine();
+        sb.AppendLine("Themes should be plain and concrete. The next stage will turn them into copy.");
+        sb.AppendLine("Avoid marketing-speak (no 'unlock', 'curated', 'premium', 'authentic', 'discover', 'embrace').");
+        sb.AppendLine("GOOD theme: 'Rainy weekend soup ingredients'  |  BAD theme: 'Discover the comfort of authentic flavors'");
+        sb.AppendLine();
         sb.AppendLine("== OUTPUT ==");
         sb.AppendLine("Return ONLY a JSON object, no prose, no code fences:");
         sb.AppendLine("{");
         sb.AppendLine("  \"angles\": [");
         sb.AppendLine("    {");
-        sb.AppendLine("      \"theme\": \"4-7 word descriptor of the angle\",");
+        sb.AppendLine("      \"theme\": \"4-7 plain words describing the angle\",");
         sb.AppendLine("      \"tone\": \"weather\" | \"holiday\" | \"news\" | \"trend\",");
         sb.AppendLine("      \"triggerSignal\": \"reference to a signal above OR a seasonal opportunity\",");
-        sb.AppendLine("      \"rationale\": \"1 sentence on why this angle works for THIS shop today\"");
+        sb.AppendLine("      \"rationale\": \"1 sentence — what's happening, what to push, why now\"");
         sb.AppendLine("    }");
         sb.AppendLine("  ]");
         sb.AppendLine("}");
@@ -424,39 +559,54 @@ public class LlmRecommendationProvider : IRecommendationProvider
 
     private static string BuildWriterPrompt(Angle angle, RecommendationContext ctx)
     {
-        string lang = string.Equals(ctx.GenerationLanguage, "RO", StringComparison.OrdinalIgnoreCase) ? "Romanian" : "English";
-
         StringBuilder sb = new();
-        sb.AppendLine("You are the WRITER in a two-stage marketing pipeline. The Strategist already picked the angle; your job is to turn it into a posting-ready promo idea card.");
+        sb.AppendLine("You are helping a small shop owner write a promo idea they'd actually post on their own Facebook page.");
+        sb.AppendLine("The shop owner is a real person, not a marketing agency. Match their voice.");
         sb.AppendLine();
-        sb.AppendLine("== ANGLE TO DEVELOP ==");
+        sb.AppendLine("== THE ANGLE ==");
         sb.AppendLine("Theme: " + angle.Theme);
         sb.AppendLine("Tone: " + angle.Tone);
         sb.AppendLine("Trigger: " + angle.TriggerSignal);
-        sb.AppendLine("Rationale: " + angle.Rationale);
+        sb.AppendLine("Why it works: " + angle.Rationale);
         sb.AppendLine();
-        sb.AppendLine("== SHOP ==");
+        sb.AppendLine("== THE SHOP ==");
         AppendShop(sb, ctx);
         sb.AppendLine();
         AppendPreviousIdeas(sb, ctx);
-        sb.AppendLine("== TASK ==");
-        sb.AppendLine("Quality bar:");
-        sb.AppendLine("- Concrete and actionable, grounded in this shop's domain.");
-        sb.AppendLine("- The body explains why THIS shop should run THIS promo today — not a generic write-up.");
-        sb.AppendLine("- The suggestedPost must be a punchy 5-9 word headline ready to post — like ad copy, not a description.");
+        sb.AppendLine("== HOW TO WRITE ==");
+        sb.AppendLine("Plain, simple, human. Like a neighbor texting their friends, not a brand running an ad.");
+        sb.AppendLine();
+        sb.AppendLine("DO:");
+        sb.AppendLine("- Use everyday words. Short sentences. Specific items the shop actually sells.");
+        sb.AppendLine("- Sound like a person, not a campaign. Casual is fine.");
+        sb.AppendLine("- The suggestedPost should read like something a shop owner would type into Facebook in 30 seconds — not a slogan.");
+        sb.AppendLine();
+        sb.AppendLine("AVOID (these scream 'AI wrote this'):");
+        sb.AppendLine("- Marketing-speak: 'unlock', 'elevate', 'discover', 'experience', 'curated', 'crafted', 'unleash', 'embrace'");
+        sb.AppendLine("- Hype words: 'amazing', 'incredible', 'ultimate', 'the best', 'must-have', 'game-changer'");
+        sb.AppendLine("- Buzzword sandwiches: 'authentic flavors', 'premium quality', 'unforgettable moments'");
+        sb.AppendLine("- Calls-to-action templates: 'don't miss out', 'limited time only', 'act now'");
+        sb.AppendLine("- Title-case everywhere; sentence case is fine");
+        sb.AppendLine("- Emojis (the shop owner can add their own)");
+        sb.AppendLine();
+        sb.AppendLine("Examples of the tone we want:");
+        sb.AppendLine("  GOOD: \"Cold rain Saturday — Sunday-soup kit, three ingredients\"");
+        sb.AppendLine("  BAD:  \"Embrace the rainy weekend with our curated comfort food experience\"");
+        sb.AppendLine("  GOOD: \"It's hot — these watermelons leave the room in 30 minutes\"");
+        sb.AppendLine("  BAD:  \"Beat the heat with our premium watermelon selection\"");
         sb.AppendLine();
         sb.AppendLine("== OUTPUT ==");
-        sb.AppendLine("Return ONLY a JSON object, no prose, no code fences, with this exact shape:");
+        sb.AppendLine("Return ONLY a JSON object, no prose, no code fences:");
         sb.AppendLine("{");
         sb.AppendLine("  \"id\": \"short-kebab-case-id\",");
         sb.AppendLine($"  \"tone\": \"{angle.Tone}\",");
-        sb.AppendLine("  \"title\": \"4-8 words, attention-grabbing\",");
-        sb.AppendLine("  \"meta\": \"date or short context, e.g. 'Sat May 11' or 'Trending +62%'\",");
-        sb.AppendLine("  \"body\": \"1-2 sentences explaining why this works for this shop today\",");
-        sb.AppendLine("  \"suggestedPost\": \"5-9 word headline ready to post\"");
+        sb.AppendLine("  \"title\": \"4-8 words, plain language, no hype\",");
+        sb.AppendLine("  \"meta\": \"short factual context — a date, a number, what's happening (e.g. 'Sâmbătă · 8°C', 'Paștele · în 5 zile')\",");
+        sb.AppendLine("  \"body\": \"1-2 sentences explaining the idea simply, like you'd say it out loud to the shop owner\",");
+        sb.AppendLine("  \"suggestedPost\": \"5-9 words a real shop owner would type. Not a slogan. Not branded. Just human.\"");
         sb.AppendLine("}");
         sb.AppendLine();
-        sb.AppendLine($"Write all title / meta / body / suggestedPost text in {lang}. Field names stay in English.");
+        sb.AppendLine("Write title / meta / body / suggestedPost in English. A separate translator handles other languages.");
         return sb.ToString();
     }
 
@@ -549,6 +699,46 @@ public class LlmRecommendationProvider : IRecommendationProvider
             sb.AppendLine();
             sb.AppendLine($"(Note: these signal sources failed and are unavailable: {string.Join(", ", ctx.DegradedSources)})");
         }
+    }
+
+    // Single translator call per idea. Focused single-task prompt — translation
+    // is much more reliable than asking the Writer to write in Romanian directly.
+    private async Task<IdeaTranslation?> RunTranslatorAsync(IdeaDto idea, string targetLang, int idx, CancellationToken ct)
+    {
+        Stopwatch sw = Stopwatch.StartNew();
+        string prompt = BuildTranslatorPrompt(idea, targetLang);
+
+        string raw;
+        try
+        {
+            raw = await this.InvokeAsync(this.writerKernel, prompt, this.writerSettings, ct);
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogWarning(
+                ex,
+                "[LLM] Translator[{Idx}] FAILED at HTTP — idea will fall back to English at read time",
+                idx);
+            return null;
+        }
+
+        IdeaTranslation? parsed = TryParseTranslation(raw);
+        if (parsed is null)
+        {
+            this.logger.LogWarning(
+                "[LLM] Translator[{Idx}] JSON parse FAILED in {Ms}ms. FULL response:\n{Body}",
+                idx,
+                sw.ElapsedMilliseconds,
+                Truncate(raw, 2000));
+            return null;
+        }
+
+        this.logger.LogInformation(
+            "[LLM] Translator[{Idx}] done in {Ms}ms title='{Title}'",
+            idx,
+            sw.ElapsedMilliseconds,
+            parsed.Title);
+        return parsed;
     }
 
     // ── Instance pipeline (Strategist → Writer → kernel invocation) ───────────

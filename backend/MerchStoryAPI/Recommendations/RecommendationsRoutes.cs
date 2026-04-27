@@ -29,13 +29,17 @@ public static class RecommendationsRoutes
         group.MapPost("/{recId:guid}/feedback", PostFeedback);
     }
 
-    // GET /recommendations/today
+    // GET /recommendations/today?lang=ro|en
     // - If a row already exists for this user and the current UTC day → returns "ready" inline.
     // - Otherwise kicks off a background generation job → returns "generating" + jobId.
+    // The optional `lang` query param takes priority over AppUser.PreferredLanguage —
+    // lets the frontend's live language toggle work immediately without waiting
+    // for the next /auth/language sync round-trip.
     private static async Task<IResult> GetToday(
         ClaimsPrincipal principal,
         AppDbContext db,
         RecommendationJobRunner runner,
+        string? lang,
         CancellationToken ct)
     {
         string? userId = GetUserId(principal);
@@ -55,7 +59,8 @@ public static class RecommendationsRoutes
 
         if (existing is not null)
         {
-            return Results.Ok(MapReady(existing));
+            string targetLang = await ResolveTargetLangAsync(db, userId, lang, ct);
+            return Results.Ok(MapReady(existing, targetLang));
         }
 
         Guid jobId = runner.StartGeneration(userId);
@@ -77,12 +82,13 @@ public static class RecommendationsRoutes
         return Results.Ok(MapGenerating(jobId));
     }
 
-    // GET /recommendations/jobs/{jobId} — polling endpoint.
+    // GET /recommendations/jobs/{jobId}?lang=ro|en — polling endpoint.
     private static async Task<IResult> GetJob(
         Guid jobId,
         ClaimsPrincipal principal,
         AppDbContext db,
         RecommendationJobRegistry registry,
+        string? lang,
         CancellationToken ct)
     {
         string? userId = GetUserId(principal);
@@ -126,7 +132,8 @@ public static class RecommendationsRoutes
                         Error: "Recommendation row missing after job completion."));
                 }
 
-                return Results.Ok(MapReady(row));
+                string targetLangForJob = await ResolveTargetLangAsync(db, userId, lang, ct);
+                return Results.Ok(MapReady(row, targetLangForJob));
 
             default:
                 return Results.Ok(MapGenerating(entry.JobId));
@@ -182,19 +189,91 @@ public static class RecommendationsRoutes
         return Results.NoContent();
     }
 
-    private static RecommendationResponse MapReady(DailyRecommendation row)
+    private static RecommendationResponse MapReady(DailyRecommendation row, string targetLang)
     {
-        IReadOnlyList<IdeaDto> ideas = string.IsNullOrEmpty(row.IdeasJson)
+        IdeaDto[] persistedIdeas = string.IsNullOrEmpty(row.IdeasJson)
             ? Array.Empty<IdeaDto>()
             : JsonSerializer.Deserialize<IdeaDto[]>(row.IdeasJson) ?? Array.Empty<IdeaDto>();
+
+        // Project each idea to the user's current language. Translations are
+        // stored alongside the canonical English text so toggling languages
+        // never requires regeneration. Translations dict is stripped before the
+        // wire response — frontend gets a flat IdeaDto in the picked language.
+        IdeaDto[] localized = persistedIdeas.Select(i => Project(i, targetLang)).ToArray();
 
         return new RecommendationResponse(
             Status: "ready",
             JobId: null,
             Id: row.Id,
             GeneratedAtUtc: row.GeneratedAtUtc,
-            Ideas: ideas,
+            Ideas: localized,
             Error: null);
+    }
+
+    private static IdeaDto Project(IdeaDto idea, string targetLang)
+    {
+        // English (or unknown lang) → use base fields; just clear translations.
+        if (string.Equals(targetLang, "en", StringComparison.OrdinalIgnoreCase) || idea.Translations is null)
+        {
+            return idea with { Translations = null };
+        }
+
+        if (idea.Translations.TryGetValue(targetLang, out IdeaTranslation? t))
+        {
+            return idea with
+            {
+                Title = t.Title,
+                Meta = t.Meta,
+                Body = t.Body,
+                SuggestedPost = t.SuggestedPost,
+                Translations = null,
+            };
+        }
+
+        // Translation missing for this language — fall back to English.
+        return idea with { Translations = null };
+    }
+
+    // Resolves the language to project ideas in. Priority:
+    //   1. Explicit `?lang=` query param from the frontend (its useI18n() value).
+    //      The frontend's i18n state is the source of truth — it can change
+    //      faster than AppUser.PreferredLanguage syncs.
+    //   2. AppUser.PreferredLanguage as fallback when the param is absent /
+    //      malformed (e.g. someone hits the API directly).
+    //   3. "en" when no user record either.
+    private static async Task<string> ResolveTargetLangAsync(
+        AppDbContext db,
+        string userId,
+        string? queryLang,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(queryLang))
+        {
+            string normalized = queryLang.Trim().ToLowerInvariant();
+            if (normalized is "en" or "ro")
+            {
+                return normalized;
+            }
+        }
+
+        return await GetTargetLangAsync(db, userId, ct);
+    }
+
+    // Reads the user's app-language preference (AppUser.PreferredLanguage)
+    // and normalizes to an ISO-639-1 lang code matching the keys in
+    // IdeaDto.Translations. Returns "en" when the user record is missing.
+    private static async Task<string> GetTargetLangAsync(AppDbContext db, string userId, CancellationToken ct)
+    {
+        AppLanguage? lang = await db.Users
+            .Where(u => u.Id == userId)
+            .Select(u => (AppLanguage?)u.PreferredLanguage)
+            .FirstOrDefaultAsync(ct);
+
+        return lang switch
+        {
+            AppLanguage.RO => "ro",
+            _ => "en",
+        };
     }
 
     private static RecommendationResponse MapGenerating(Guid jobId) => new(

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { useI18n } from '@/i18n';
 import {
+  type AppLanguage,
   fetchIdeas,
   type IdeaItem,
   pollIdeasJob,
@@ -30,9 +32,12 @@ interface ResolvedIdeas {
 // Drive the response shape to ideas + recommendationId. If the backend is ready
 // inline (Mock or cached row) we get both immediately. If it returned a job, we
 // poll /recommendations/jobs/{jobId} every 2s until ready / failed / timeout.
+// `lang` is forwarded to the polling endpoint so the projected text matches
+// the user's currently-active app language.
 async function awaitGeneration(
   initial: RecommendationResponse,
-  signal: AbortSignal
+  signal: AbortSignal,
+  lang: AppLanguage
 ): Promise<ResolvedIdeas> {
   if (initial.status === 'ready') {
     return { ideas: initial.ideas, recommendationId: initial.id };
@@ -51,7 +56,7 @@ async function awaitGeneration(
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     if (signal.aborted) throw new AbortError();
 
-    const result = await pollIdeasJob(jobId);
+    const result = await pollIdeasJob(jobId, lang);
     if (result.status === 'ready') {
       return { ideas: result.ideas, recommendationId: result.id };
     }
@@ -61,18 +66,21 @@ async function awaitGeneration(
 }
 
 export function useIdeas(): UseIdeasResult {
+  const { language } = useI18n();
   const [ideas, setIdeas] = useState<IdeaItem[]>([]);
   const [recommendationId, setRecommendationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Re-fetch when the app language changes — backend stores both EN+RO,
+  // so this just swaps the projection without triggering regeneration.
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
       try {
-        const initial = await fetchIdeas();
-        const next = await awaitGeneration(initial, controller.signal);
+        const initial = await fetchIdeas(language);
+        const next = await awaitGeneration(initial, controller.signal, language);
         if (!controller.signal.aborted) {
           setIdeas(next.ideas);
           setRecommendationId(next.recommendationId);
@@ -86,14 +94,14 @@ export function useIdeas(): UseIdeasResult {
       }
     })();
     return () => controller.abort();
-  }, []);
+  }, [language]);
 
   const refresh = useCallback(async () => {
     setIsRefreshing(true);
     const controller = new AbortController();
     try {
       const initial = await refreshIdeasApi();
-      const next = await awaitGeneration(initial, controller.signal);
+      const next = await awaitGeneration(initial, controller.signal, language);
       setIdeas(next.ideas);
       setRecommendationId(next.recommendationId);
       setError(null);
@@ -103,7 +111,7 @@ export function useIdeas(): UseIdeasResult {
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [language]);
 
   return { ideas, recommendationId, isLoading, isRefreshing, error, refresh };
 }

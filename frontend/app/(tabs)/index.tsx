@@ -6,6 +6,7 @@ import {
   Animated,
   Easing,
   type GestureResponderEvent,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -188,13 +189,20 @@ function IdeasForYouSection({
     void refresh();
   }
 
+  const [selectedIdea, setSelectedIdea] = useState<PromoIdea | null>(null);
+
   function handleIdeaPress(idea: PromoIdea) {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
+    setSelectedIdea(idea);
+  }
+
+  function handleGenerateFromModal(idea: PromoIdea) {
     if (recommendationId) {
       void submitIdeaFeedback(recommendationId, idea.id, 'generated_from');
     }
+    setSelectedIdea(null);
     router.push({
       pathname: '/(tabs)/studio/announcements',
       params: { brief: idea.suggestedPost },
@@ -215,21 +223,18 @@ function IdeasForYouSection({
         <View style={styles.headerText}>
           <View style={styles.eyebrow}>
             <View style={styles.eyebrowDot} />
-            <Text style={styles.eyebrowText}>Ideas for you</Text>
+            <Text style={styles.eyebrowText}>{t('ideas.sectionEyebrow')}</Text>
             <View style={styles.liveBadge}>
               <View style={styles.liveDot} />
-              <Text style={styles.liveText}>LIVE</Text>
+              <Text style={styles.liveText}>{t('ideas.sectionLive')}</Text>
             </View>
           </View>
-          <Text style={styles.title}>Promo angles worth posting today</Text>
-          <Text style={styles.subtitle}>
-            AI-picked from weather, local news, holidays and trending searches — updated every
-            morning.
-          </Text>
+          <Text style={styles.title}>{t('ideas.sectionTitle')}</Text>
+          <Text style={styles.subtitle}>{t('ideas.sectionSubtitle')}</Text>
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Refresh ideas"
+          accessibilityLabel={t('ideas.refresh')}
           accessibilityState={{ busy: isRefreshing, disabled: refreshDisabled }}
           disabled={refreshDisabled}
           style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
@@ -240,7 +245,7 @@ function IdeasForYouSection({
           onPress={handleRefresh}
         >
           <Ionicons name="refresh" size={14} color={colors.text.secondary} />
-          <Text style={styles.refreshText}>Refresh</Text>
+          <Text style={styles.refreshText}>{t('ideas.refresh')}</Text>
         </Pressable>
       </View>
 
@@ -259,13 +264,92 @@ function IdeasForYouSection({
               index={index}
               isDesktop={isDesktop}
               colors={colors}
+              t={t}
               onPress={() => handleIdeaPress(idea)}
               onThumb={(action) => handleThumb(idea, action)}
             />
           ))}
         </View>
       )}
+
+      <IdeaDetailModal
+        idea={selectedIdea}
+        colors={colors}
+        t={t}
+        onClose={() => setSelectedIdea(null)}
+        onGenerate={handleGenerateFromModal}
+      />
     </View>
+  );
+}
+
+// ─── Idea-detail modal ─────────────────────────────────────────────────────
+// Pops up when a card is pressed. Shows full title / meta / body / suggestedPost
+// untruncated, plus a Generate button that navigates to announcements.
+function IdeaDetailModal({
+  idea,
+  colors,
+  t,
+  onClose,
+  onGenerate,
+}: {
+  idea: PromoIdea | null;
+  colors: ReturnType<typeof useTheme>['colors'];
+  t: ReturnType<typeof useT>;
+  onClose: () => void;
+  onGenerate: (idea: PromoIdea) => void;
+}) {
+  const styles = useMemo(() => makeIdeaModalStyles(colors), [colors]);
+
+  return (
+    <Modal visible={idea !== null} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={t('common.close')}>
+        {idea !== null && (
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.headerRow}>
+              <View style={styles.sourcePill}>
+                <Ionicons name={idea.sourceIcon} size={12} color={colors.text.muted} />
+                <Text style={styles.sourceText}>{idea.sourceLabel}</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('common.close')}
+                onPress={onClose}
+                style={styles.closeBtn}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={18} color={colors.text.secondary} />
+              </Pressable>
+            </View>
+
+            <Text style={styles.meta}>{idea.meta}</Text>
+            <Text style={styles.title}>{idea.title}</Text>
+            <Text style={styles.body}>{idea.body}</Text>
+
+            <View style={styles.suggestedBlock}>
+              <View style={styles.suggestedRow}>
+                <Ionicons name="sparkles" size={14} color={colors.accent.primary} />
+                <Text style={styles.suggestedLabel}>{t('ideas.modalSuggestedLabel')}</Text>
+              </View>
+              <Text style={styles.suggestedText}>{idea.suggestedPost}</Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('ideas.generate')}
+              onPress={() => onGenerate(idea)}
+              style={({ pressed }: { pressed: boolean }) => [
+                styles.generateBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={styles.generateText}>{t('ideas.generate')}</Text>
+              <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+            </Pressable>
+          </Pressable>
+        )}
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -274,6 +358,7 @@ function IdeaCard({
   index,
   isDesktop,
   colors,
+  t,
   onPress,
   onThumb,
 }: {
@@ -281,6 +366,7 @@ function IdeaCard({
   index: number;
   isDesktop: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
+  t: ReturnType<typeof useT>;
   onPress?: () => void;
   onThumb?: (action: 'thumbs_up' | 'thumbs_down') => void;
 }) {
@@ -404,7 +490,7 @@ function IdeaCard({
                 />
               </Pressable>
               <View style={styles.generateBtn}>
-                <Text style={styles.generateText}>Generate</Text>
+                <Text style={styles.generateText}>{t('ideas.generate')}</Text>
                 <Ionicons name="arrow-forward" size={12} color={colors.accent.primary} />
               </View>
             </View>
@@ -797,6 +883,116 @@ function makeIdeaCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDes
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: D.radius.pill,
+    },
+  });
+}
+
+function makeIdeaModalStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: D.spacing.lg,
+    },
+    sheet: {
+      width: '100%',
+      maxWidth: 480,
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      padding: D.spacing.xl,
+      gap: D.spacing.md,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    sourcePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    sourceText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.secondary,
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+    },
+    closeBtn: {
+      width: 32,
+      height: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: D.radius.pill,
+    },
+    meta: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+    },
+    title: {
+      fontSize: D.fontSize.xl,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.4,
+      lineHeight: 28,
+    },
+    body: {
+      fontSize: D.fontSize.base,
+      color: colors.text.secondary,
+      lineHeight: 22,
+    },
+    suggestedBlock: {
+      backgroundColor: colors.bg.elevated,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      padding: D.spacing.md,
+      gap: 6,
+    },
+    suggestedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    suggestedLabel: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+    },
+    suggestedText: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.primary,
+      lineHeight: 22,
+    },
+    generateBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      height: 48,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.primary,
+      ...D.shadow.glow,
+    },
+    generateText: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+      color: '#FFFFFF',
+      letterSpacing: 0.3,
     },
   });
 }

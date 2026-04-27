@@ -58,6 +58,8 @@ const SHOP_TYPE_OPTIONS = [
   { value: 'Budget', label: 'Budget' },
 ];
 
+const KNOWN_COUNTRY_CODES = ['RO', 'MD', 'HU', 'BG'];
+
 function labelFor(options: { value: string; label: string }[], value: string) {
   return options.find((o) => o.value === value)?.label ?? value;
 }
@@ -72,6 +74,9 @@ type DraftState = {
   targetAudience: string;
   shopType: string;
   competitors: string;
+  city: string;
+  countryChip: string;
+  otherCountry: string;
   phoneNumber: string;
   email: string;
   addresses: string[];
@@ -81,6 +86,8 @@ type DraftState = {
 };
 
 function profileToDraft(p: ShopProfileResponse): DraftState {
+  const code = (p.countryCode ?? 'RO').toUpperCase();
+  const isKnown = KNOWN_COUNTRY_CODES.includes(code);
   return {
     brandName: p.brandName ?? '',
     slogan: p.slogan ?? '',
@@ -94,6 +101,9 @@ function profileToDraft(p: ShopProfileResponse): DraftState {
     targetAudience: p.targetAudience ?? '',
     shopType: p.shopType ?? '',
     competitors: p.competitors ?? '',
+    city: p.city ?? '',
+    countryChip: isKnown ? code : 'Other',
+    otherCountry: isKnown ? '' : code,
     phoneNumber: p.phoneNumber ?? '',
     email: p.email ?? '',
     addresses: p.addresses?.length > 0 ? p.addresses : [''],
@@ -101,6 +111,14 @@ function profileToDraft(p: ShopProfileResponse): DraftState {
     facebookHandle: p.facebookHandle ?? '',
     tikTokHandle: p.tikTokHandle ?? '',
   };
+}
+
+function resolveCountryCode(draft: DraftState, fallback: string): string {
+  if (draft.countryChip === 'Other') {
+    const code = draft.otherCountry.trim().toUpperCase().slice(0, 2);
+    return code.length === 2 ? code : fallback;
+  }
+  return draft.countryChip || fallback;
 }
 
 function computeIsDirty(draft: DraftState | null, profile: ShopProfileResponse | null): boolean {
@@ -115,6 +133,7 @@ function computeIsDirty(draft: DraftState | null, profile: ShopProfileResponse |
     'targetAudience',
     'shopType',
     'competitors',
+    'city',
     'phoneNumber',
     'email',
     'instagramHandle',
@@ -122,6 +141,10 @@ function computeIsDirty(draft: DraftState | null, profile: ShopProfileResponse |
     'tikTokHandle',
   ];
   if (scalar.some((k) => draft[k] !== orig[k])) return true;
+  if (
+    resolveCountryCode(draft, profile.countryCode) !== resolveCountryCode(orig, profile.countryCode)
+  )
+    return true;
   if (JSON.stringify(draft.brandColors) !== JSON.stringify(orig.brandColors)) return true;
   return JSON.stringify(draft.addresses) !== JSON.stringify(orig.addresses);
 }
@@ -161,6 +184,8 @@ export default function ProfileScreen() {
         targetAudience: profile.targetAudience ?? null,
         shopType: profile.shopType ?? null,
         competitors: profile.competitors ?? null,
+        city: profile.city ?? null,
+        countryCode: profile.countryCode,
         phoneNumber: profile.phoneNumber,
         email: profile.email,
         addresses: profile.addresses ?? [],
@@ -398,6 +423,8 @@ export default function ProfileScreen() {
         targetAudience: draft.targetAudience || null,
         shopType: draft.shopType || null,
         competitors: draft.competitors || null,
+        city: draft.city.trim() || null,
+        countryCode: resolveCountryCode(draft, profile.countryCode),
         phoneNumber: draft.phoneNumber.trim(),
         email: draft.email.trim(),
         addresses: cleanAddresses,
@@ -486,10 +513,12 @@ export default function ProfileScreen() {
       options,
       selected,
       onSelect,
+      deselectable = true,
     }: {
       options: { value: string; label: string }[];
       selected: string;
       onSelect: (v: string) => void;
+      deselectable?: boolean;
     }) => (
       <View style={styles.chipRow}>
         {options.map((opt) => {
@@ -497,7 +526,7 @@ export default function ProfileScreen() {
           return (
             <Pressable
               key={opt.value}
-              onPress={() => onSelect(active ? '' : opt.value)}
+              onPress={() => onSelect(active && deselectable ? '' : opt.value)}
               style={[styles.chip, active && styles.chipActive]}
               accessibilityRole="button"
             >
@@ -838,6 +867,61 @@ export default function ProfileScreen() {
     </Section>
   );
 
+  const COUNTRY_OPTIONS = [
+    { value: 'RO', label: t('setup.step2.countryRO') },
+    { value: 'MD', label: t('setup.step2.countryMD') },
+    { value: 'HU', label: t('setup.step2.countryHU') },
+    { value: 'BG', label: t('setup.step2.countryBG') },
+    { value: 'Other', label: t('setup.step2.countryOther') },
+  ];
+
+  const displayedCountryCode =
+    isEditing && draft ? resolveCountryCode(draft, profile.countryCode) : profile.countryCode;
+  const displayedCountryLabel = KNOWN_COUNTRY_CODES.includes(displayedCountryCode)
+    ? labelFor(COUNTRY_OPTIONS, displayedCountryCode)
+    : displayedCountryCode;
+
+  const locationSection = (
+    <Section icon="globe-outline" title={t('profile.sectionLocation')}>
+      <InfoRow
+        label={t('profile.fieldCity')}
+        value={profile.city ?? ''}
+        draftValue={draft?.city}
+        onChangeText={(v) => updateDraft({ city: v })}
+        autoCapitalize="words"
+        leftIcon="location-outline"
+      />
+
+      <View style={[styles.infoRow, isEditing && styles.infoRowLast]}>
+        <Text style={styles.infoLabel}>{t('profile.fieldCountry')}</Text>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{displayedCountryLabel || '—'}</Text>
+        </View>
+      </View>
+      {isEditing && draft && (
+        <>
+          <ChipRow
+            options={COUNTRY_OPTIONS}
+            selected={draft.countryChip}
+            onSelect={(v) => updateDraft({ countryChip: v })}
+            deselectable={false}
+          />
+          {draft.countryChip === 'Other' && (
+            <TextInput
+              style={[styles.infoValue, styles.infoInput, styles.otherDomainInput]}
+              value={draft.otherCountry}
+              onChangeText={(v) => updateDraft({ otherCountry: v.toUpperCase().slice(0, 2) })}
+              placeholder={t('setup.step2.otherCountry')}
+              placeholderTextColor={colors.text.muted}
+              autoCapitalize="characters"
+              accessibilityLabel={t('setup.step2.otherCountry')}
+            />
+          )}
+        </>
+      )}
+    </Section>
+  );
+
   const contactSection = (
     <Section icon="call-outline" title={t('profile.sectionContact')}>
       <InfoRow
@@ -1100,6 +1184,7 @@ export default function ProfileScreen() {
                 <View style={styles.column}>
                   {preferencesSection}
                   {visualIdentitySection}
+                  {locationSection}
                 </View>
                 <View style={styles.column}>
                   {businessSection}
@@ -1111,6 +1196,7 @@ export default function ProfileScreen() {
                 {preferencesSection}
                 {visualIdentitySection}
                 {businessSection}
+                {locationSection}
                 {contactSection}
               </>
             )}
