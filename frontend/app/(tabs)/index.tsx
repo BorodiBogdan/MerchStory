@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { type Href, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  type GestureResponderEvent,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -17,7 +19,9 @@ import {
 import { StudioPageHero } from '@/components/ui/studio/StudioPageHero';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
+import { useIdeas } from '@/hooks/useIdeas';
 import { useT } from '@/i18n';
+import { type IdeaItem, type IdeaTone, submitIdeaFeedback } from '@/utils/api';
 
 const DESKTOP_BREAKPOINT = 768;
 const CARD_STAGGER_MS = 90;
@@ -60,11 +64,13 @@ const HUB_CARDS: HubCard[] = [
   },
 ];
 
-// ─── MOCK: "Ideas for you" ─────────────────────────────────────────────────────
-// Future feature: surface promo suggestions based on weather, news, holidays,
-// and seasonal trends. For now this is a static visual mock — no live data.
-type IdeaTone = 'weather' | 'holiday' | 'news' | 'trend';
-
+// ─── "Ideas for you" — live data ──────────────────────────────────────────────
+// Daily-rotating promo angles served by the backend recommendation pipeline
+// (Phase 1 returns a Mock provider seed; Phase 3+ swaps in LM Studio + RAG).
+//
+// PromoIdea is the on-screen shape: it adds a localized source label and an
+// Ionicons name resolved from the API's `tone` field. Mapping happens here so
+// the backend stays presentation-agnostic.
 type PromoIdea = {
   id: string;
   tone: IdeaTone;
@@ -76,50 +82,27 @@ type PromoIdea = {
   suggestedPost: string;
 };
 
-const PROMO_IDEAS: PromoIdea[] = [
-  {
-    id: 'rain',
-    tone: 'weather',
-    sourceLabel: 'Weather',
-    sourceIcon: 'rainy-outline',
-    title: 'Cold rain rolling in this weekend',
-    meta: 'Sat–Sun · 8°C · 85% rain',
-    body: 'Warm drinks, comfort food, and cozy apparel move fastest on rainy weekends. Push a "stay-in" promo.',
-    suggestedPost: 'Hot drinks · 15% off',
-  },
-  {
-    id: 'mothers-day',
-    tone: 'holiday',
-    sourceLabel: 'Holiday',
-    sourceIcon: 'gift-outline',
-    title: "Mother's Day is in 4 days",
-    meta: 'May 11 · national holiday',
-    body: 'Curate a gift bundle — beauty, handmade goods and flowers historically outsell everything else this week.',
-    suggestedPost: "Mother's Day gift guide",
-  },
-  {
-    id: 'marathon',
-    tone: 'news',
-    sourceLabel: 'Local news',
-    sourceIcon: 'newspaper-outline',
-    title: 'Downtown half-marathon on Saturday',
-    meta: 'Runs past your street · ~4k runners',
-    body: 'Thousands will walk past your shop. Run a hydration promo or a finisher-reward bundle on race day.',
-    suggestedPost: 'Marathon weekend special',
-  },
-  {
-    id: 'spring-clean',
-    tone: 'trend',
-    sourceLabel: 'Trending',
-    sourceIcon: 'flame-outline',
-    title: 'Spring-cleaning searches peaking',
-    meta: 'Google Trends · +62% this week',
-    body: 'Home organizers, cleaning kits and storage solutions are seeing their biggest national lift of the year.',
-    suggestedPost: 'Spring refresh bundle',
-  },
-];
+const TONE_ICON: Record<IdeaTone, React.ComponentProps<typeof Ionicons>['name']> = {
+  weather: 'rainy-outline',
+  holiday: 'gift-outline',
+  news: 'newspaper-outline',
+  trend: 'flame-outline',
+};
 
-// Per-tone label kept for the source pill copy; color comes from the theme.
+function toneLabelKey(
+  tone: IdeaTone
+): 'ideas.toneWeather' | 'ideas.toneHoliday' | 'ideas.toneNews' | 'ideas.toneTrend' {
+  switch (tone) {
+    case 'weather':
+      return 'ideas.toneWeather';
+    case 'holiday':
+      return 'ideas.toneHoliday';
+    case 'news':
+      return 'ideas.toneNews';
+    case 'trend':
+      return 'ideas.toneTrend';
+  }
+}
 
 export default function StudioHub() {
   const { colors } = useTheme();
@@ -161,21 +144,78 @@ export default function StudioHub() {
           ))}
         </View>
 
-        <IdeasForYouSection isDesktop={isDesktop} colors={colors} />
+        <IdeasForYouSection isDesktop={isDesktop} colors={colors} t={t} router={router} />
       </View>
     </ScrollView>
   );
 }
 
-// ─── Ideas for you (mocked) ───────────────────────────────────────────────────
+// ─── Ideas for you (live) ─────────────────────────────────────────────────────
 function IdeasForYouSection({
   isDesktop,
   colors,
+  t,
+  router,
 }: {
   isDesktop: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
+  t: ReturnType<typeof useT>;
+  router: ReturnType<typeof useRouter>;
 }) {
   const styles = useMemo(() => makeIdeasStyles(colors, isDesktop), [colors, isDesktop]);
+  const { ideas: rawIdeas, recommendationId, isLoading, isRefreshing, error, refresh } = useIdeas();
+
+  const promoIdeas = useMemo<PromoIdea[]>(
+    () =>
+      rawIdeas.map((it: IdeaItem) => ({
+        id: it.id,
+        tone: it.tone,
+        sourceLabel: t(toneLabelKey(it.tone)),
+        sourceIcon: TONE_ICON[it.tone],
+        title: it.title,
+        meta: it.meta,
+        body: it.body,
+        suggestedPost: it.suggestedPost,
+      })),
+    [rawIdeas, t]
+  );
+
+  const refreshDisabled = isRefreshing || isLoading;
+
+  function handleRefresh() {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    void refresh();
+  }
+
+  const [selectedIdea, setSelectedIdea] = useState<PromoIdea | null>(null);
+
+  function handleIdeaPress(idea: PromoIdea) {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    setSelectedIdea(idea);
+  }
+
+  function handleGenerateFromModal(idea: PromoIdea) {
+    if (recommendationId) {
+      void submitIdeaFeedback(recommendationId, idea.id, 'generated_from');
+    }
+    setSelectedIdea(null);
+    router.push({
+      pathname: '/(tabs)/studio/announcements',
+      params: { brief: idea.suggestedPost },
+    });
+  }
+
+  function handleThumb(idea: PromoIdea, action: 'thumbs_up' | 'thumbs_down') {
+    if (!recommendationId) return;
+    if (Platform.OS !== 'web') {
+      Haptics.selectionAsync().catch(() => {});
+    }
+    void submitIdeaFeedback(recommendationId, idea.id, action);
+  }
 
   return (
     <View style={styles.sectionWrap}>
@@ -183,38 +223,133 @@ function IdeasForYouSection({
         <View style={styles.headerText}>
           <View style={styles.eyebrow}>
             <View style={styles.eyebrowDot} />
-            <Text style={styles.eyebrowText}>Ideas for you</Text>
+            <Text style={styles.eyebrowText}>{t('ideas.sectionEyebrow')}</Text>
             <View style={styles.liveBadge}>
               <View style={styles.liveDot} />
-              <Text style={styles.liveText}>LIVE</Text>
+              <Text style={styles.liveText}>{t('ideas.sectionLive')}</Text>
             </View>
           </View>
-          <Text style={styles.title}>Promo angles worth posting today</Text>
-          <Text style={styles.subtitle}>
-            AI-picked from weather, local news, holidays and trending searches — updated every
-            morning.
-          </Text>
+          <Text style={styles.title}>{t('ideas.sectionTitle')}</Text>
+          <Text style={styles.subtitle}>{t('ideas.sectionSubtitle')}</Text>
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Refresh ideas"
+          accessibilityLabel={t('ideas.refresh')}
+          accessibilityState={{ busy: isRefreshing, disabled: refreshDisabled }}
+          disabled={refreshDisabled}
           style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
             styles.refreshButton,
-            (pressed || hovered) && { borderColor: colors.accent.primary },
+            (pressed || hovered) && !refreshDisabled && { borderColor: colors.accent.primary },
+            refreshDisabled && { opacity: 0.5 },
           ]}
-          onPress={() => {}}
+          onPress={handleRefresh}
         >
           <Ionicons name="refresh" size={14} color={colors.text.secondary} />
-          <Text style={styles.refreshText}>Refresh</Text>
+          <Text style={styles.refreshText}>{t('ideas.refresh')}</Text>
         </Pressable>
       </View>
 
-      <View style={styles.grid}>
-        {PROMO_IDEAS.map((idea, index) => (
-          <IdeaCard key={idea.id} idea={idea} index={index} isDesktop={isDesktop} colors={colors} />
-        ))}
-      </View>
+      {isLoading && <Text style={styles.statusText}>{t('ideas.loading')}</Text>}
+      {error && !isLoading && <Text style={styles.errorText}>{error}</Text>}
+      {!isLoading && !error && promoIdeas.length === 0 && (
+        <Text style={styles.statusText}>{t('ideas.empty')}</Text>
+      )}
+
+      {promoIdeas.length > 0 && (
+        <View style={styles.grid}>
+          {promoIdeas.map((idea, index) => (
+            <IdeaCard
+              key={idea.id}
+              idea={idea}
+              index={index}
+              isDesktop={isDesktop}
+              colors={colors}
+              t={t}
+              onPress={() => handleIdeaPress(idea)}
+              onThumb={(action) => handleThumb(idea, action)}
+            />
+          ))}
+        </View>
+      )}
+
+      <IdeaDetailModal
+        idea={selectedIdea}
+        colors={colors}
+        t={t}
+        onClose={() => setSelectedIdea(null)}
+        onGenerate={handleGenerateFromModal}
+      />
     </View>
+  );
+}
+
+// ─── Idea-detail modal ─────────────────────────────────────────────────────
+// Pops up when a card is pressed. Shows full title / meta / body / suggestedPost
+// untruncated, plus a Generate button that navigates to announcements.
+function IdeaDetailModal({
+  idea,
+  colors,
+  t,
+  onClose,
+  onGenerate,
+}: {
+  idea: PromoIdea | null;
+  colors: ReturnType<typeof useTheme>['colors'];
+  t: ReturnType<typeof useT>;
+  onClose: () => void;
+  onGenerate: (idea: PromoIdea) => void;
+}) {
+  const styles = useMemo(() => makeIdeaModalStyles(colors), [colors]);
+
+  return (
+    <Modal visible={idea !== null} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={t('common.close')}>
+        {idea !== null && (
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.headerRow}>
+              <View style={styles.sourcePill}>
+                <Ionicons name={idea.sourceIcon} size={12} color={colors.text.muted} />
+                <Text style={styles.sourceText}>{idea.sourceLabel}</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('common.close')}
+                onPress={onClose}
+                style={styles.closeBtn}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={18} color={colors.text.secondary} />
+              </Pressable>
+            </View>
+
+            <Text style={styles.meta}>{idea.meta}</Text>
+            <Text style={styles.title}>{idea.title}</Text>
+            <Text style={styles.body}>{idea.body}</Text>
+
+            <View style={styles.suggestedBlock}>
+              <View style={styles.suggestedRow}>
+                <Ionicons name="sparkles" size={14} color={colors.accent.primary} />
+                <Text style={styles.suggestedLabel}>{t('ideas.modalSuggestedLabel')}</Text>
+              </View>
+              <Text style={styles.suggestedText}>{idea.suggestedPost}</Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('ideas.generate')}
+              onPress={() => onGenerate(idea)}
+              style={({ pressed }: { pressed: boolean }) => [
+                styles.generateBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={styles.generateText}>{t('ideas.generate')}</Text>
+              <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+            </Pressable>
+          </Pressable>
+        )}
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -223,12 +358,30 @@ function IdeaCard({
   index,
   isDesktop,
   colors,
+  t,
+  onPress,
+  onThumb,
 }: {
   idea: PromoIdea;
   index: number;
   isDesktop: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
+  t: ReturnType<typeof useT>;
+  onPress?: () => void;
+  onThumb?: (action: 'thumbs_up' | 'thumbs_down') => void;
 }) {
+  // Local thumb state — clicking the active one clears it; clicking the
+  // inactive switches. Optimistic; backend records each click as a separate
+  // IdeaInteraction row, the dataset captures the trajectory.
+  const [thumbState, setThumbState] = useState<null | 'up' | 'down'>(null);
+
+  function handleThumbPress(direction: 'up' | 'down', e: GestureResponderEvent) {
+    e.stopPropagation();
+    const next = thumbState === direction ? null : direction;
+    setThumbState(next);
+    if (next === 'up') onThumb?.('thumbs_up');
+    if (next === 'down') onThumb?.('thumbs_down');
+  }
   const styles = useMemo(() => makeIdeaCardStyles(colors, isDesktop), [colors, isDesktop]);
 
   const opacity = useRef(new Animated.Value(0)).current;
@@ -281,7 +434,7 @@ function IdeaCard({
         onPressOut={() => springTo(scale, 1)}
         onHoverIn={() => Platform.OS === 'web' && timingTo(hover, 1)}
         onHoverOut={() => Platform.OS === 'web' && timingTo(hover, 0)}
-        onPress={() => {}}
+        onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`${idea.sourceLabel}: ${idea.title}`}
         style={styles.pressable}
@@ -307,9 +460,39 @@ function IdeaCard({
                 {idea.suggestedPost}
               </Text>
             </View>
-            <View style={styles.generateBtn}>
-              <Text style={styles.generateText}>Generate</Text>
-              <Ionicons name="arrow-forward" size={12} color={colors.accent.primary} />
+            <View style={styles.footerActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Thumbs up"
+                accessibilityState={{ selected: thumbState === 'up' }}
+                hitSlop={6}
+                onPress={(e) => handleThumbPress('up', e)}
+                style={styles.thumbBtn}
+              >
+                <Ionicons
+                  name={thumbState === 'up' ? 'thumbs-up' : 'thumbs-up-outline'}
+                  size={14}
+                  color={thumbState === 'up' ? colors.accent.primary : colors.text.muted}
+                />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Thumbs down"
+                accessibilityState={{ selected: thumbState === 'down' }}
+                hitSlop={6}
+                onPress={(e) => handleThumbPress('down', e)}
+                style={styles.thumbBtn}
+              >
+                <Ionicons
+                  name={thumbState === 'down' ? 'thumbs-down' : 'thumbs-down-outline'}
+                  size={14}
+                  color={thumbState === 'down' ? colors.text.error : colors.text.muted}
+                />
+              </Pressable>
+              <View style={styles.generateBtn}>
+                <Text style={styles.generateText}>{t('ideas.generate')}</Text>
+                <Ionicons name="arrow-forward" size={12} color={colors.accent.primary} />
+              </View>
             </View>
           </View>
         </Animated.View>
@@ -554,6 +737,16 @@ function makeIdeasStyles(colors: ReturnType<typeof useTheme>['colors'], isDeskto
       flexWrap: 'wrap',
       gap: isDesktop ? D.spacing.md : D.spacing.sm,
     },
+    statusText: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      paddingVertical: D.spacing.md,
+    },
+    errorText: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.error,
+      paddingVertical: D.spacing.md,
+    },
   });
 }
 
@@ -678,6 +871,128 @@ function makeIdeaCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDes
       fontWeight: D.fontWeight.bold,
       color: colors.accent.primary,
       letterSpacing: 0.4,
+    },
+    footerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    thumbBtn: {
+      width: 28,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: D.radius.pill,
+    },
+  });
+}
+
+function makeIdeaModalStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: D.spacing.lg,
+    },
+    sheet: {
+      width: '100%',
+      maxWidth: 480,
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.xl,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      padding: D.spacing.xl,
+      gap: D.spacing.md,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    sourcePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    sourceText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.secondary,
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+    },
+    closeBtn: {
+      width: 32,
+      height: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: D.radius.pill,
+    },
+    meta: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+    },
+    title: {
+      fontSize: D.fontSize.xl,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.4,
+      lineHeight: 28,
+    },
+    body: {
+      fontSize: D.fontSize.base,
+      color: colors.text.secondary,
+      lineHeight: 22,
+    },
+    suggestedBlock: {
+      backgroundColor: colors.bg.elevated,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      padding: D.spacing.md,
+      gap: 6,
+    },
+    suggestedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    suggestedLabel: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+    },
+    suggestedText: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.primary,
+      lineHeight: 22,
+    },
+    generateBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      height: 48,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.primary,
+      ...D.shadow.glow,
+    },
+    generateText: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+      color: '#FFFFFF',
+      letterSpacing: 0.3,
     },
   });
 }

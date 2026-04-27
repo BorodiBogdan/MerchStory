@@ -20,6 +20,8 @@ export interface SetupStep2Data {
   targetAudience: string;
   shopType: string;
   competitors: string;
+  city: string;
+  countryCode: string;
 }
 
 export interface SetupStep3Data {
@@ -53,6 +55,8 @@ const defaultData: SetupData = {
   targetAudience: '',
   shopType: '',
   competitors: '',
+  city: '',
+  countryCode: 'RO',
   phoneNumber: '',
   email: '',
   addresses: [''],

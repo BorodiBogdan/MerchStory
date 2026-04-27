@@ -131,6 +131,35 @@ namespace MerchStoryAPI.Migrations
                     b.ToTable("Categories");
                 });
 
+            modelBuilder.Entity("MerchStoryAPI.Models.DailyRecommendation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContextSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("GeneratedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IdeasJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "GeneratedAtUtc")
+                        .IsDescending(false, true);
+
+                    b.ToTable("DailyRecommendations");
+                });
+
             modelBuilder.Entity("MerchStoryAPI.Models.GeneratedImage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -166,6 +195,125 @@ namespace MerchStoryAPI.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("GeneratedImages");
+                });
+
+            modelBuilder.Entity("MerchStoryAPI.Models.Holiday", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LocalName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CountryCode", "Year", "Date")
+                        .IsUnique();
+
+                    b.ToTable("Holidays");
+                });
+
+            modelBuilder.Entity("MerchStoryAPI.Models.IdeaEmbedding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("DailyRecommendationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Vector>("Embedding")
+                        .IsRequired()
+                        .HasColumnType("vector(768)");
+
+                    b.Property<DateTime>("GeneratedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IdeaId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Embedding")
+                        .HasAnnotation("Npgsql:StorageParameter:ef_construction", 64)
+                        .HasAnnotation("Npgsql:StorageParameter:m", 16);
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
+
+                    b.HasIndex("UserId", "GeneratedAtUtc")
+                        .IsDescending(false, true);
+
+                    b.ToTable("IdeaEmbeddings");
+                });
+
+            modelBuilder.Entity("MerchStoryAPI.Models.IdeaInteraction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DailyRecommendationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IdeaId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Action");
+
+                    b.HasIndex("UserId", "DailyRecommendationId");
+
+                    b.ToTable("IdeaInteractions");
                 });
 
             modelBuilder.Entity("MerchStoryAPI.Models.Product", b =>
@@ -209,6 +357,63 @@ namespace MerchStoryAPI.Migrations
                     b.HasIndex("UserId", "Category");
 
                     b.ToTable("Products");
+                });
+
+            modelBuilder.Entity("MerchStoryAPI.Models.PromoPlaybookEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BusinessDomain")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Vector>("Embedding")
+                        .IsRequired()
+                        .HasColumnType("vector(768)");
+
+                    b.Property<string>("ExampleCopy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Tactics")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Theme")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TriggerType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BusinessDomain");
+
+                    b.HasIndex("Embedding")
+                        .HasAnnotation("Npgsql:StorageParameter:ef_construction", 64)
+                        .HasAnnotation("Npgsql:StorageParameter:m", 16);
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
+
+                    b.HasIndex("BusinessDomain", "Theme")
+                        .IsUnique();
+
+                    b.ToTable("PromoPlaybookEntries");
                 });
 
             modelBuilder.Entity("MerchStoryAPI.Models.ReferenceImage", b =>
@@ -308,9 +513,18 @@ namespace MerchStoryAPI.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
+                    b.Property<string>("City")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Competitors")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -331,8 +545,14 @@ namespace MerchStoryAPI.Migrations
                     b.Property<string>("InstagramHandle")
                         .HasColumnType("text");
 
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("LogoBase64")
                         .HasColumnType("text");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("OtherDomain")
                         .HasMaxLength(100)
@@ -569,7 +789,40 @@ namespace MerchStoryAPI.Migrations
                     b.Navigation("ParentCategory");
                 });
 
+            modelBuilder.Entity("MerchStoryAPI.Models.DailyRecommendation", b =>
+                {
+                    b.HasOne("MerchStoryAPI.Models.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("MerchStoryAPI.Models.GeneratedImage", b =>
+                {
+                    b.HasOne("MerchStoryAPI.Models.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MerchStoryAPI.Models.IdeaEmbedding", b =>
+                {
+                    b.HasOne("MerchStoryAPI.Models.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MerchStoryAPI.Models.IdeaInteraction", b =>
                 {
                     b.HasOne("MerchStoryAPI.Models.AppUser", "User")
                         .WithMany()

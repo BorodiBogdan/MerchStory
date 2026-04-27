@@ -128,6 +128,8 @@ export interface ShopProfilePayload {
   targetAudience?: string | null;
   shopType?: string | null;
   competitors?: string | null;
+  city?: string | null;
+  countryCode?: string | null;
   phoneNumber: string;
   email: string;
   addresses: string[];
@@ -140,6 +142,9 @@ export interface ShopProfilePayload {
 
 export interface ShopProfileResponse extends ShopProfilePayload {
   id: string;
+  countryCode: string;
+  latitude: number | null;
+  longitude: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -329,6 +334,8 @@ export interface GenerateCatalogImageParams {
   colorTheme: string;
   format: string;
   showPrices: boolean;
+  showProductNames?: boolean;
+  backgroundStyle?: 'Realistic' | 'SocialPost';
   preserveProductImages?: boolean;
   brandContextFields?: string[];
   currency?: Currency;
@@ -876,4 +883,124 @@ export async function removeBackground(imageBase64: string): Promise<RemoveBackg
   }
 
   return response.json() as Promise<RemoveBackgroundResponse>;
+}
+
+// ── Recommendations ──────────────────────────────────────────────────────────
+
+export type IdeaTone = 'weather' | 'holiday' | 'news' | 'trend';
+
+export interface IdeaItem {
+  id: string;
+  tone: IdeaTone;
+  title: string;
+  meta: string;
+  body: string;
+  suggestedPost: string;
+}
+
+// Discriminated response shape — Phase 3 introduces async job semantics.
+// Mock provider responds with "ready" inline; LLM provider responds with
+// "generating" + jobId and the frontend polls via /recommendations/jobs/{jobId}.
+export type RecommendationResponse =
+  | { status: 'ready'; id: string; generatedAtUtc: string; ideas: IdeaItem[] }
+  | { status: 'generating'; jobId: string }
+  | { status: 'failed'; error: string };
+
+interface RawRecommendationResponse {
+  status: 'ready' | 'generating' | 'failed';
+  jobId?: string | null;
+  id?: string | null;
+  generatedAtUtc?: string | null;
+  ideas?: IdeaItem[] | null;
+  error?: string | null;
+}
+
+function normalizeRecommendationResponse(raw: RawRecommendationResponse): RecommendationResponse {
+  if (raw.status === 'ready') {
+    return {
+      status: 'ready',
+      id: raw.id ?? '',
+      generatedAtUtc: raw.generatedAtUtc ?? '',
+      ideas: raw.ideas ?? [],
+    };
+  }
+  if (raw.status === 'generating') {
+    return { status: 'generating', jobId: raw.jobId ?? '' };
+  }
+  return { status: 'failed', error: raw.error ?? 'Unknown error' };
+}
+
+// Recommendation endpoints accept an optional ?lang= query param so the
+// backend can project idea text in the user's currently-active app language —
+// the frontend's useI18n() value is the source of truth. EN/RO are the only
+// supported codes; anything else falls back to AppUser.PreferredLanguage.
+function langQuery(lang?: AppLanguage): string {
+  return lang ? `?lang=${lang.toLowerCase()}` : '';
+}
+
+export async function fetchIdeas(lang?: AppLanguage): Promise<RecommendationResponse> {
+  const response = await fetchWithAuth(`${API_URL}/recommendations/today${langQuery(lang)}`, {});
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to load ideas (${response.status})`);
+  }
+  return normalizeRecommendationResponse(
+    await (response.json() as Promise<RawRecommendationResponse>)
+  );
+}
+
+// refreshIdeas always kicks off a new generation (returns "generating" + jobId).
+// No lang param needed — the follow-up pollIdeasJob carries the language.
+export async function refreshIdeas(): Promise<RecommendationResponse> {
+  const response = await fetchWithAuth(`${API_URL}/recommendations/refresh`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to refresh ideas (${response.status})`);
+  }
+  return normalizeRecommendationResponse(
+    await (response.json() as Promise<RawRecommendationResponse>)
+  );
+}
+
+export async function pollIdeasJob(
+  jobId: string,
+  lang?: AppLanguage
+): Promise<RecommendationResponse> {
+  const response = await fetchWithAuth(
+    `${API_URL}/recommendations/jobs/${jobId}${langQuery(lang)}`,
+    {}
+  );
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to poll job (${response.status})`);
+  }
+  return normalizeRecommendationResponse(
+    await (response.json() as Promise<RawRecommendationResponse>)
+  );
+}
+
+export type IdeaFeedbackAction =
+  | 'viewed'
+  | 'thumbs_up'
+  | 'thumbs_down'
+  | 'dismissed'
+  | 'generated_from';
+
+export async function submitIdeaFeedback(
+  recommendationId: string,
+  ideaId: string,
+  action: IdeaFeedbackAction
+): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/recommendations/${recommendationId}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ideaId, action }),
+  });
+  // Best-effort: log + swallow non-2xx so feedback failures don't disrupt the user flow.
+  if (!response.ok) {
+    // eslint-disable-next-line no-console
+    console.warn('Idea feedback submission failed', response.status);
+  }
 }

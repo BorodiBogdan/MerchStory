@@ -13,6 +13,8 @@ public sealed record CatalogImageRequest(
     string Currency = "USD",    // "USD" | "EUR" | "RON"
     string Language = "EN",     // "EN" | "RO"
     bool PreserveProductImages = false,
-    IReadOnlyList<ProductMarkerAssignment>? MarkerAssignments = null);
+    IReadOnlyList<ProductMarkerAssignment>? MarkerAssignments = null,
+    string BackgroundStyle = "SocialPost",  // "Realistic" | "SocialPost"
+    bool ShowProductNames = false);
 
 public sealed record ProductMarkerAssignment(string ProductName, string MarkerHex);

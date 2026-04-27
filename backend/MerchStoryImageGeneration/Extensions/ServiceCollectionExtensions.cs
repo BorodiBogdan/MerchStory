@@ -1,4 +1,5 @@
 using MerchStoryImageGeneration.Services;
+using MerchStoryImageGeneration.Services.Recommendations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -33,6 +34,36 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICatalogImageService, CatalogImageService>();
         services.AddScoped<IAnnouncementImageService, AnnouncementImageService>();
         services.AddScoped<IWallpaperImageService, WallpaperImageService>();
+
+        return services;
+    }
+
+    public static IServiceCollection AddMerchStoryRecommendations(
+        this IServiceCollection services,
+        IConfiguration? configuration = null)
+    {
+        // Default to Mock so dev/test environments don't depend on a running LLM.
+        // "Llm" routes through any OpenAI-compatible endpoint configured under
+        // Recommendations:Llm:* (LM Studio by default, but Ollama/vLLM/etc work too).
+        string providerType = configuration?["Recommendations:ProviderType"] ?? "Mock";
+
+        if (string.Equals(providerType, "Mock", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<IRecommendationProvider, MockRecommendationProvider>();
+        }
+        else if (string.Equals(providerType, "Llm", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<IRecommendationProvider, LlmRecommendationProvider>();
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Unknown Recommendations:ProviderType '{providerType}'. Supported: Mock, Llm.");
+        }
+
+        // Embedding service is always registered (Phase 5+ uses it for RAG even
+        // when ProviderType=Mock — the Mock provider just doesn't query it).
+        services.AddSingleton<IEmbeddingService, LlmEmbeddingService>();
 
         return services;
     }

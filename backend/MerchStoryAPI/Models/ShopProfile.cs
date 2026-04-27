@@ -28,6 +28,17 @@ public class ShopProfile
 
     public string? Competitors { get; set; }
 
+    // Location — used by recommendation context providers (weather, news, events).
+    // Nullable so existing rows pre-migration aren't blocked; pipeline degrades
+    // gracefully when lat/lon are missing.
+    public string? City { get; set; }
+
+    public string CountryCode { get; set; } = "RO";
+
+    public double? Latitude { get; set; }
+
+    public double? Longitude { get; set; }
+
     // Step 3 — Contact & Social
     public string PhoneNumber { get; set; } = string.Empty;
 

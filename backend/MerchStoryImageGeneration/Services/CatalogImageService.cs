@@ -5,8 +5,11 @@ namespace MerchStoryImageGeneration.Services;
 internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalogImageService
 {
     private const string SystemContext =
-        "You are a professional retail graphic designer specializing in product catalog ads. " +
-        "Always produce clean, commercial-quality imagery with clear product focus. " +
+        "You are an award-winning art director from a top creative studio (think Wieden+Kennedy, Pentagram, Mother). " +
+        "You design Instagram and Facebook ad campaigns that go viral for their VISUAL QUALITY — work that feels like " +
+        "editorial magazine spreads, premium e-commerce hero shots, and curated luxury catalogs. " +
+        "Never AI clipart, never generic stock-graphic, never busy. " +
+        "Every image you produce could be the lead post of a premium brand's social feed and stop a viewer's thumb mid-scroll. " +
         "Never add watermarks, placeholders, or lorem ipsum text.";
 
     public CatalogImageService(IImageProvider provider)
@@ -38,11 +41,124 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             cancellationToken);
     }
 
+    private static string BackgroundStyleHint(string style) =>
+        string.Equals(style, "Realistic", StringComparison.OrdinalIgnoreCase)
+            ? "Background style: a CINEMATIC EDITORIAL ENVIRONMENT — staged like a high-end product photoshoot for a premium brand campaign. " +
+              "Soft directional key light from one side, gentle ambient fill, considered staging — a curated retail moment, " +
+              "not a busy shelf or cluttered storefront. Materials feel real and tactile: matte surfaces, natural wood, raw stone, brushed metal, linen, " +
+              "warm paper — never plastic shine, never glossy reflections. Props are minimal, intentional, and tonally aligned with the brand. " +
+              "Think the moodboard of a Kinfolk shoot or an Aesop in-store window. "
+            : "Background style: EDITORIAL GRAPHIC DESIGN at the level of an Apple product page, an Aesop web banner, or a Kinfolk hero spread. " +
+              "Solid color blocks or soft tonal gradients, refined geometric accents, generous negative space, magazine-quality typography. " +
+              "No real-world environment, no shelves, no store fixtures, no physical props. " +
+              "The backdrop reads as deliberate graphic design — restrained, confident, never clipart, never decorative-for-decoration's-sake. ";
+
+    private static string CreativeDirectionBlock() =>
+        "🎨 CREATIVE DIRECTION — non-negotiable aesthetic standard for every pixel of this image:\n\n" +
+        "COMPOSITION: rule-of-thirds or intentional asymmetric balance. Generous negative space — let the design breathe. " +
+        "One clear hero / focal hierarchy; the eye should know exactly where to land first, second, third. Never cram the canvas. " +
+        "Avoid dead-center symmetry unless the composition explicitly calls for it.\n\n" +
+        "TYPOGRAPHY: editorial hierarchy — at most one confident display headline (large, weighty, refined), with smaller supporting type below it. " +
+        "Tight, deliberate kerning. Modern geometric sans-serif (Helvetica / Inter / Aktiv-Grotesk / Söhne feel) — or a refined serif " +
+        "(Canela / GT Sectra / Tiempos feel) when the brand is editorial / luxury / culinary. " +
+        "Flat typography only — no decorative outlines, no gradients on text, no drop shadows on text, no chrome / metallic effects, " +
+        "no clipart letterforms, no comic-book bubbles. Letters are crisp and confidently placed.\n\n" +
+        "LIGHTING & DEPTH: soft, directional, sculpted illumination — magazine-quality. A subtle gradient of light across the scene " +
+        "for depth. Never flat fluorescent lighting, never harsh on-camera flash look, never the over-evenly-lit AI-render look.\n\n" +
+        "COLOR DISCIPLINE: a tight palette of 3 to 5 colors maximum. Harmonious and intentional. " +
+        "Brand colors used confidently as flat color blocks, refined accents, or the dominant backdrop — not sprinkled randomly. " +
+        "Avoid the muddy AI-pastel-everywhere look, avoid rainbow chaos, avoid jarring complementary clashes.\n\n" +
+        "TEXTURE & MATERIAL: subtle grain, matte paper feel, soft fabric weave, or a delicate gradient — adds richness over flat backgrounds. " +
+        "Never plastic-glossy, never airbrushed, never the smooth-3D-render look (unless the product itself is glossy / 3D — then match the product, not the backdrop).\n\n" +
+        "MOOD: aspirational, calm, confident. The image whispers premium, it does not shout. " +
+        "Never \"salesy\", never crowded with decoration, never carnival-loud.\n\n" +
+        "🚫 ANTI-AI / ANTI-GENERIC GUARDRAILS — these are the hallmarks of forgettable AI catalog imagery. None may appear:\n" +
+        "- No random sparkles, stars, twinkles, glitters, light flares, lens flares, sun rays, or god-rays.\n" +
+        "- No generic glow effects, neon halos, or auras around objects/text.\n" +
+        "- No rainbow gradients, holographic gradients, or oversaturated sunset gradients applied randomly.\n" +
+        "- No clipart-style icons, cartoon swooshes, or doodle accents.\n" +
+        "- No cheesy ribbon banners, scroll banners, or pennant strings.\n" +
+        "- No \"SALE!\" / \"NEW!\" / \"%\" starbursts, comic-book bursts, splash badges, or explosion shapes.\n" +
+        "- No fake bokeh circles, blurred light orbs, or particle effects.\n" +
+        "- No plastic-toy surfaces, fake-3D bevels, or chrome shine on text.\n" +
+        "- No busy clutter, no \"more is more\" — restraint over decoration, every time.\n\n" +
+        "REFERENCE MOODBOARD (in order of preference, depending on brand fit): Apple product pages, Aesop web banners, Glossier social campaigns, " +
+        "Le Labo packaging, Lululemon lookbooks, IKEA print catalogs, Kinfolk magazine spreads, A24 film posters, Muji catalog photography.\n\n";
+
+    private static string FormatGuidance(string format) =>
+        format switch
+        {
+            "Square 1:1" => "Format guidance: this is the Instagram FEED primary ratio (1:1). " +
+                            "Centered or rule-of-thirds composition. Keep all critical text and product hero inside a generous safe margin (≥6% from each edge). " +
+                            "The image works equally well at thumbnail size in a grid.\n\n",
+
+            "Portrait 4:5" => "Format guidance: this is Instagram's MAXIMUM-HEIGHT feed ratio (4:5) — the highest-engagement feed format. " +
+                              "Use vertical hierarchy: a confident headline anchored in the upper third, the product hero in the middle, " +
+                              "supporting info (price, brand mark, contact) in the lower third. Take advantage of the extra vertical real estate.\n\n",
+
+            "Story 9:16" => "Format guidance: this is the Instagram/Facebook STORIES & REELS ratio (9:16). " +
+                            "Reserve the top ~14% (profile + UI overlay zone) and the bottom ~14% (CTA / sticker / swipe-up zone) of the canvas — " +
+                            "keep all critical text and the product hero inside the central ~70% safe zone. " +
+                            "Vertical, full-screen, designed to be experienced thumb-up on a phone.\n\n",
+
+            _ => string.Empty,
+        };
+
+    private static string ColorThemeGuidance(string theme)
+    {
+        if (string.Equals(theme, "Brand Colors", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Color-theme art direction (Brand Colors): lean confidently into the brand palette as the dominant compositional structure — " +
+                   "use brand colors as large flat color blocks (a backdrop panel, a typography wash, an accent third) or as refined accent details. " +
+                   "Never dilute the brand into a generic rainbow; the palette IS the brand voice.\n\n";
+        }
+
+        if (string.Equals(theme, "Vibrant", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Color-theme art direction (Vibrant): saturated, confident pop — but disciplined. Pick a 3-color palette (one dominant, one supporting, one accent), " +
+                   "intentional contrast, no chaos. Bold but composed — think a Glossier campaign, not a carnival. " +
+                   "Saturation serves hierarchy; it never replaces it.\n\n";
+        }
+
+        if (string.Equals(theme, "Monochrome", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Color-theme art direction (Monochrome): tonal layered grayscale — rich blacks, deep contrast, soft mid-grays, paper-white highlights. " +
+                   "One single tiny restrained accent of color is permissible (a small price chip, a brand logo accent), but otherwise tonal throughout. " +
+                   "Think editorial black-and-white photography or a Helmut Lang campaign.\n\n";
+        }
+
+        if (string.Equals(theme, "Dark", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Color-theme art direction (Dark): moody, cinematic, low-key lighting. Backdrop in deep navy, charcoal, espresso, oxblood, " +
+                   "or near-black. Products feel premium and lit from a single soft directional source against the darkness. " +
+                   "Typography in warm off-white or muted gold. Think a luxury whisky ad or a high-end skincare night campaign.\n\n";
+        }
+
+        if (string.Equals(theme, "Pop Art", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(theme, "Pop-Art", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Color-theme art direction (Pop Art): Lichtenstein- and Warhol-inspired — flat blocks of bold color, halftone or risograph texture, " +
+                   "decisive geometry, thick confident shapes. Limited 3-color palette per composition. Editorial, not childish. " +
+                   "Think a contemporary risograph print campaign or a museum-shop poster.\n\n";
+        }
+
+        return "Color-theme art direction (default editorial): a neutral premium palette — warm off-white or soft bone backdrop, deep ink or charcoal type, " +
+               "and one signal-color accent drawn from the brand or the product itself. Restrained, magazine-quality, confidently quiet.\n\n";
+    }
+
+    private static string FinalQualityBar() =>
+        "FINAL BAR: this image must look like the lead post of a premium brand's Instagram feed — " +
+        "visually stunning, confidently restrained, and instantly more polished than 99% of small-business social-media content. " +
+        "If a viewer scrolling through their feed wouldn't stop on this image, the design has failed.";
+
     private static string BuildPrompt(CatalogImageRequest r)
     {
         string symbol = CurrencyFormatter.SymbolFor(r.Currency);
-        var names = string.Join(", ", r.Products.Select(p =>
-            r.ShowPrices ? $"{p.Name} ({CurrencyFormatter.Format(p.Price, r.Currency)})" : p.Name));
+        string nameList = string.Join(", ", r.Products.Select(p => p.Name));
+        string namedWithPrices = string.Join(", ", r.Products.Select(p =>
+            $"{p.Name} ({CurrencyFormatter.Format(p.Price, r.Currency)})"));
+        string priceList = string.Join(", ", r.Products.Select(p =>
+            CurrencyFormatter.Format(p.Price, r.Currency)));
 
         string logoNote = !string.IsNullOrWhiteSpace(r.LogoBase64)
             ? "Brand logo: a logo image has been provided as the first inline image. " +
@@ -58,18 +174,33 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             ? "Use the provided product photos as the basis for the visuals. "
             : string.Empty;
 
+        string productsClause = (r.ShowProductNames, r.ShowPrices) switch
+        {
+            (true, true) => $"Products: {namedWithPrices}. Render each product's name as flat typography near its product. ",
+            (true, false) => $"Products: {nameList}. Render each product's name as flat typography near its product. ",
+            (false, true) => $"Products (in order): {nameList}. Show only the prices ({priceList}) — one price per product, in the same order — and do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
+            (false, false) => $"Products (in order, for context only): {nameList}. Do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
+        };
+
+        string priceClause = r.ShowPrices
+            ? $"Display prices prominently using the {r.Currency} currency (symbol: {symbol})."
+            : "Do not show prices.";
+
         return
             $"{SystemContext}\n\n" +
             LanguageInstruction.For(r.Language) +
             BrandContextBlock(r.BrandContext) +
             logoNote +
-            $"Create a professional product catalog ad image in {r.Format} format. " +
-            $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}. Products: {names}. " +
+            $"Create a stunning, scroll-stopping product catalog ad image in {r.Format} format. " +
+            $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}.\n\n" +
+            FormatGuidance(r.Format) +
+            ColorThemeGuidance(r.ColorTheme) +
+            CreativeDirectionBlock() +
+            productsClause +
             imageNote +
-            (r.ShowPrices
-                ? $"Display prices prominently using the {r.Currency} currency (symbol: {symbol})."
-                : "Do not show prices.") +
-            " Make it look like a high-quality retail advertisement.";
+            priceClause + " " +
+            BackgroundStyleHint(r.BackgroundStyle) + "\n\n" +
+            FinalQualityBar();
     }
 
     private static string BuildOutlinePrompt(CatalogImageRequest r)
@@ -135,14 +266,26 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
               "This is essential because the real reference image will be composited over your rendering afterward; any deviation in shape, position, orientation, or aspect ratio will cause a visible misalignment where the composited product stretches, crops, or falls off-center.\n\n"
             : string.Empty;
 
+        string nameSuppression = r.ShowProductNames
+            ? "PRODUCT NAME TEXT — DO render each product's name as flat, clearly readable typography near (but outside the quiet zone of) its corresponding product. " +
+              "One name per product, paired unambiguously with its product. Flat typography only — no decorative outline, frame, or stroke around the name text.\n\n"
+            : "PRODUCT NAME TEXT — DO NOT render any product name labels, captions, headings, or product-name typography in the image. " +
+              "The product silhouettes and the scene speak for themselves; no name text appears anywhere in the rendered output. " +
+              "The product names listed in the marker assignments above are STRUCTURAL only (used to associate each product with its outline color) — they are NOT to appear as visible text.\n\n";
+
         return
             $"{SystemContext}\n\n" +
             LanguageInstruction.For(r.Language) +
             BrandContextBlock(r.BrandContext) +
             logoNote +
             productRefNote +
-            $"Create a professional product catalog ad image in {r.Format} format. " +
+            nameSuppression +
+            $"Create a stunning, scroll-stopping product catalog ad image in {r.Format} format. " +
             $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}. " + priceLine + "\n\n" +
+            FormatGuidance(r.Format) +
+            ColorThemeGuidance(r.ColorTheme) +
+            CreativeDirectionBlock() +
+            BackgroundStyleHint(r.BackgroundStyle) + "\n" +
             "Render the products, scene, backdrop, props, brand elements, logo, and pricing badges naturally — " +
             "with rich ambient lighting across the scene for atmosphere.\n\n" +
             "🚫 NO DROP SHADOWS OR GROUND REFLECTIONS UNDER PRODUCTS 🚫\n" +
@@ -252,7 +395,8 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             saturatedThemeNote +
             "FINAL REMINDER: the reserved marker colors (" + reservedHexList + ") appear ONLY as product-silhouette outlines. Anywhere else they appear — text, price, background, decoration — is an error. Check your output before finalizing.\n\n" +
             "Self-check before finalizing: (1) reserved marker colors appear ONLY on product outlines; (2) the quiet zone around every outline is clean, flat scene with no typography, no badges/pills, and no decoration; (3) any price pill/chip/badge sits entirely OUTSIDE the quiet zone of every product outline.\n\n" +
-            "Make it look like a high-quality retail advertisement.";
+            FinalQualityBar() + " " +
+            "Achieve this WITHOUT violating any of the structural rules above — the outline, quiet-zone, clearance, drop-shadow, and reserved-marker-color rules ALWAYS take precedence over aesthetic ambition.";
     }
 
     private static string BrandContextBlock(MerchStoryImageGeneration.Models.BrandContext? ctx)

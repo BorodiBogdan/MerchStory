@@ -1,0 +1,275 @@
+# PromoPlaybook seed entries — Market domain.
+# Stored in English; the Strategist receives the user's GenerationLanguage
+# and writes ideas in that language regardless of the source-material language.
+# Edit freely; re-run the data-ingestion CLI to upsert.
+# Embedded fields: theme + trigger + tactics. Pick concrete trigger conditions
+# so the Strategist can match them against today's signals.
+
+- theme: "Pre-storm pantry stockup"
+  triggerType: weather
+  trigger: "Storm or heavy snow warning issued in next 24-48h"
+  tactics: |
+    Lead with shelf-stable basics: bread, milk, eggs, canned soups, water,
+    batteries (if stocked). Bundle as a 'pantry kit' with a small saving.
+    Front-load the post: people want to know you have stock, not be sold to.
+    Mention extended hours if applicable.
+  exampleCopy: "Storm coming Friday. Pantry kits ready: bread, milk, eggs, soups, water — 10% off any 5 essentials."
+
+- theme: "Heatwave hydration & cooling foods"
+  triggerType: weather
+  trigger: "Temp >30°C for 3+ consecutive days"
+  tactics: |
+    Move watermelon, ice, cold drinks, ready-to-eat salads, yogurt, ice cream
+    front of store. Push two waves: 10am (planning lunch) and 5pm (giving up
+    on cooking). Bundle 'no-cook dinner kit' — bread, cheese, salami, fruit.
+    Avoid imagery of hot food.
+  exampleCopy: "Too hot to cook? No-cook dinner kit: bread, cheese, fruit, cold drinks. Done in 5 minutes."
+
+- theme: "Cold-snap comfort cooking"
+  triggerType: weather
+  trigger: "Daytime highs below 0°C for 3+ days"
+  tactics: |
+    Soup-base ingredients, root vegetables, slow-cook cuts of meat, hot drinks,
+    hearty bread. A 'soup of the week' recipe card with all ingredients in one
+    bundle outperforms a percent-off discount. Push at 4-6pm when people are
+    deciding dinner.
+  exampleCopy: "Cold week ahead? Sunday soup kit — root veg, beef, fresh bread. One bag, one pot, four meals."
+
+- theme: "Rainy-weekend baking ingredients"
+  triggerType: weather
+  trigger: "Heavy rain forecast Saturday or Sunday"
+  tactics: |
+    Flour, butter, sugar, chocolate, yeast — bundle a 'baking weekend' set
+    with a recipe card (cookies, focaccia, banana bread). Frame as a stay-in
+    family activity, not a cleaning task.
+  exampleCopy: "Rainy weekend? Bake-at-home kit: flour, butter, eggs, chocolate. Recipe card included."
+
+- theme: "Wind-storm shelf-stable kit"
+  triggerType: weather
+  trigger: "High wind warning + possible power disruptions"
+  tactics: |
+    Canned goods, candles, batteries, bottled water, peanut butter, crackers,
+    juice. Position as practical preparedness without alarmism. Friendly tone.
+  exampleCopy: "Windy days ahead. Stock-up kit: canned goods, water, candles, batteries — ready when you are."
+
+- theme: "Christmas feast curation"
+  triggerType: holiday
+  trigger: "Christmas (Dec 25) within 7-14 days"
+  tactics: |
+    Bundle the centrepiece (turkey/ham/roast) + sides + dessert into a 'Christmas
+    table' set. Highlight last-order-by date. Free recipe-card and timing guide
+    outperform percent-off discounts. Push provenance — local supplier names matter.
+  exampleCopy: "Christmas table, sorted. Centrepiece + sides + dessert. Order by Dec 22 for fresh delivery."
+
+- theme: "Easter feast curation (Orthodox)"
+  triggerType: holiday
+  trigger: "Orthodox Easter in 5-10 days"
+  tactics: |
+    Bundle traditional ingredients — lamb, eggs (for dyeing), cozonac flour,
+    drob ingredients, sweet bread. Highlight provenance (named farm, local lamb).
+    Last-order-by Friday for Sunday cooking. Free recipe card outperforms a discount.
+  exampleCopy: "Easter is coming. Easter basket: lamb, eggs, cozonac, drob ingredients — order by Friday."
+
+- theme: "Mother's Day gift bundle"
+  triggerType: holiday
+  trigger: "Mother's Day in 3-7 days"
+  tactics: |
+    For Market: flowers + chocolate + premium tea/coffee + a fresh dessert.
+    Frame as 'last-minute thoughtful' — people forget. Free wrap and a card
+    are stronger than a discount.
+  exampleCopy: "Mother's Day this Sunday. Flowers, chocolate, fresh dessert — wrapped, ready, easy."
+
+- theme: "Father's Day grilling kit"
+  triggerType: holiday
+  trigger: "Father's Day in 3-7 days"
+  tactics: |
+    Premium meat cuts, charcoal, beer, sides, dessert. Bundle as a 'BBQ-ready'
+    kit. Push at 5-7pm Thursday-Friday — that's when planning happens.
+  exampleCopy: "Father's Day BBQ kit: ribeye, charcoal, craft beer, sides. Light the grill, the rest is done."
+
+- theme: "Mărțișor / Dragobete confectionery"
+  triggerType: holiday
+  trigger: "Mărțișor (Mar 1) or Dragobete (Feb 24) within 3 days"
+  tactics: |
+    Push small chocolate/confectionery gift bags + flowers. Pre-wrapped is
+    everything — the buyer is gifting on the way home from work. Place near
+    the checkout, push on Instagram stories morning-of.
+  exampleCopy: "Mărțișor today: chocolate + flower bundles, pre-wrapped, ready to gift."
+
+- theme: "1 Mai / national holiday grilling"
+  triggerType: holiday
+  trigger: "1 Mai (May 1) or national holiday within 3-5 days"
+  tactics: |
+    Mici, pork, sausages, pickled veg, beer, soda for the kids, mustard,
+    bread. Family-cookout positioning. Bundle 'cookout for 8' with portion
+    math done so the customer doesn't have to count.
+  exampleCopy: "1 Mai cookout — kit for 8: mici, sausages, pickles, beer, bread. Just bring the friends."
+
+- theme: "Ziua Națională RO products spotlight"
+  triggerType: holiday
+  trigger: "Ziua Națională (Dec 1) within 3-5 days"
+  tactics: |
+    Highlight Romanian-sourced products — cheese (cașcaval, telemea), wines,
+    honey, traditional sausages. Frame around tradition and quality, not
+    nationalism. Photograph the products with their producer names visible.
+  exampleCopy: "Ziua Națională — Romanian-made selection: telemea, magiun, vinul nostru. Made here, eaten here."
+
+- theme: "Black Friday grocery basics"
+  triggerType: holiday
+  trigger: "Black Friday week"
+  tactics: |
+    Most groceries are not heavy-discount items, so don't fake it. Instead push
+    a curated 'pantry restock' kit at a small honest discount + branded reusable
+    bag as a gift. Differentiates from the BF noise.
+  exampleCopy: "Skip the Black Friday chaos. Pantry restock kit + free reusable bag. 12% off, all week."
+
+- theme: "Festival or concert nearby"
+  triggerType: news
+  trigger: "Festival, concert, or event drawing 1k+ people within 5km in next 7 days"
+  tactics: |
+    Snacks, drinks, ice, sandwich kits, sunscreen if outdoor. Open earlier
+    if event is morning. Run a flash window centered on the event. Use the
+    event hashtag if any. Foot traffic from passersby is your edge.
+  exampleCopy: "{Event} this Saturday — snack & drink kit grab-and-go, opening at 9am. See you there."
+
+- theme: "Sports match party trays"
+  triggerType: news
+  trigger: "Major football/derby match within 2-3 days"
+  tactics: |
+    Party tray of charcuterie + cheese + bread + dips, beer 6-pack, snacks.
+    Single-line price for the whole tray beats listing components. Order
+    cutoff 2 hours before kickoff with pickup.
+  exampleCopy: "Match-day tray: charcuterie, cheese, bread, beer. Pickup before kickoff. One price, no math."
+
+- theme: "Marathon weekend recovery & energy"
+  triggerType: news
+  trigger: "Marathon, half-marathon, or running event within 5km on weekend"
+  tactics: |
+    Bananas, electrolyte drinks, pasta + sauce, energy bars, coffee. Stock
+    extra near the route. Push the 'carb-load Friday, recover Sunday' angle.
+    Be open earlier on race day.
+  exampleCopy: "Marathon weekend: carbs Friday, recovery Sunday. Pasta kit, electrolytes, bananas — ready."
+
+- theme: "School start / lunchbox kits"
+  triggerType: news
+  trigger: "School year starts within 7 days"
+  tactics: |
+    Sandwich bread, ham, cheese, fruit, juice boxes, snack bars. Bundle a
+    week of lunchboxes — five varieties, kids don't get bored. Visible price
+    per lunch, not per kit, so parents can compare.
+  exampleCopy: "School is back — 5-day lunchbox kit. Different sandwich each day. ~12 lei per lunch."
+
+- theme: "Transit / road disruption stockup"
+  triggerType: news
+  trigger: "Major road closure or transit disruption announced for next 2-3 days"
+  tactics: |
+    Promote home delivery or extended hours. Pantry-restock kit. Frame as
+    'we'll come to you' rather than 'stockpile now'. Calm, helpful tone.
+  exampleCopy: "Roadworks this week — home delivery on, free over 200 lei. We'll come to you."
+
+- theme: "January reset healthy foods"
+  triggerType: seasonal
+  trigger: "First two weeks of January"
+  tactics: |
+    Salads, fruit, oats, lean proteins, herbal teas. Anti-restrictive framing —
+    'add good things' beats 'cut bad things'. A 'meal-prep Sunday kit' with
+    five lunches lands well.
+  exampleCopy: "January reset — meal-prep Sunday kit. Five lunches, fresh, ready Monday. Not a diet."
+
+- theme: "Spring fresh-produce arrivals"
+  triggerType: seasonal
+  trigger: "Mid-March through May"
+  tactics: |
+    Asparagus, peas, strawberries, new potatoes, leafy greens, radishes.
+    Photo-led promotion — these things sell themselves visually. Daily
+    'just arrived' Instagram story + chalkboard out front.
+  exampleCopy: "First strawberries are in. Romanian asparagus, new potatoes, peas — fresh today, gone tomorrow."
+
+- theme: "Summer travel / picnic & road snacks"
+  triggerType: seasonal
+  trigger: "June through August, weekends and holidays"
+  tactics: |
+    Picnic tray (cheese, charcuterie, bread, fruit, chilled wine), road snacks
+    (nuts, dried fruit, jerky, water). Insulated bags as add-on. Position at
+    the entrance Friday afternoon onwards.
+  exampleCopy: "Heading out this weekend? Picnic tray ready in 30 seconds at the till. Add an insulated bag for 20 lei."
+
+- theme: "Back-to-school after-school snacks"
+  triggerType: seasonal
+  trigger: "September through October"
+  tactics: |
+    Yogurt, fruit, crackers, cheese sticks, juice boxes, healthy bars.
+    Frame as 'kids will actually eat these'. Mom-targeted Instagram angle.
+    Restock weekly.
+  exampleCopy: "After-school snack pack — kids approve, you approve. New mix every week."
+
+- theme: "Autumn preserves & soups"
+  triggerType: seasonal
+  trigger: "October through November"
+  tactics: |
+    Squash, mushrooms, root veg, comfort spices, slow-cook cuts. Push a
+    'zacusca weekend' kit — eggplant, peppers, tomatoes, jars. Pickling
+    ingredients for the more adventurous customer.
+  exampleCopy: "Autumn cooking time. Zacusca kit: aubergine, peppers, tomatoes, jars — for the long winter."
+
+- theme: "Christmas countdown advent"
+  triggerType: seasonal
+  trigger: "First three weeks of December"
+  tactics: |
+    Build anticipation, not urgency. 'Treat of the day' — small premium item
+    discounted daily. Festive bundles get progressively bigger as Dec 24 nears.
+    Wrapping paper and ribbons in stock.
+  exampleCopy: "Christmas countdown: a different treat every day until the 24th. Today: panettone, 20% off."
+
+- theme: "Weekend family-meal bundle"
+  triggerType: seasonal
+  trigger: "Friday afternoon through Saturday morning"
+  tactics: |
+    Saturday baskets are 30% larger than weekday baskets in markets. A
+    'Sunday roast' bundle (centrepiece + sides + dessert) leans into that
+    intent. Photo of the assembled meal, not the raw ingredients.
+  exampleCopy: "Sunday roast — centrepiece, sides, dessert, all in one bundle. One stop, one good lunch."
+
+- theme: "Saturday just-arrived produce highlight"
+  triggerType: seasonal
+  trigger: "Every Saturday morning"
+  tactics: |
+    A standing weekly post with what's freshest. Builds the 'go to them, not
+    the supermarket' habit. Always include the producer name when you have it.
+    Chalkboard out front with 5 items.
+  exampleCopy: "Today at the market: tomatoes from Cluj, sourdough from the bakery next door, peaches just in. See you?"
+
+- theme: "Recipe-card cross-sell"
+  triggerType: seasonal
+  trigger: "Always-on, especially Friday & Sunday"
+  tactics: |
+    Print a free recipe card weekly. List every ingredient available in
+    the store. People come in for one thing and leave with all five.
+    Rotate the cuisine each week.
+  exampleCopy: "This week's recipe: Greek moussaka. All 9 ingredients on aisle 3. Card free at the till."
+
+- theme: "End-of-day fresh-produce flash"
+  triggerType: seasonal
+  trigger: "Daily, 1-2 hours before close"
+  tactics: |
+    30-50% off ripe-now produce. Small Instagram story. Cuts waste and builds
+    a loyal price-conscious base. Don't position as 'old' — say 'ripe now'.
+  exampleCopy: "Last hour: 40% off everything 'ripe today'. Tonight's dinner is downstairs."
+
+- theme: "Premium imported specialty push"
+  triggerType: seasonal
+  trigger: "Always-on for shops with imported / specialty stock"
+  tactics: |
+    'Try-it-this-week' single-product feature. Italian truffle salt, Spanish
+    chorizo, French cheese — short story behind the producer. Photo with
+    a serving suggestion. Small quantities to test interest.
+  exampleCopy: "This week's imported find: 24-month-aged manchego from a co-op in La Mancha. Try a slice at the counter."
+
+- theme: "Loyalty card + pantry restock"
+  triggerType: seasonal
+  trigger: "Always-on, push monthly"
+  tactics: |
+    A simple stamped card — buy 9 baskets, 10th is 10% off. Frame as
+    'we know you, we appreciate you'. Avoid app-based programs that
+    add friction for older shoppers.
+  exampleCopy: "Loyalty card now at the till — 10th basket on us. No app, no QR. Just a stamp, like the old days."
