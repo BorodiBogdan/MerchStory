@@ -548,10 +548,13 @@ const en = {
   'studio.themeVibrantLabel': 'Vibrant',
   'studio.themeMonoLabel': 'Monochrome',
   'studio.themeDarkLabel': 'Dark',
+  'studio.formatPosterLabel': 'Poster — Recommended',
   'studio.formatSquareLabel': 'Square (1:1)',
   'studio.formatPortraitLabel': 'Portrait (4:5)',
   'studio.formatStoryLabel': 'Story (9:16)',
   'studio.formatVerticalLabel': 'Vertical',
+  'studio.formatPosterHint':
+    'Best for printing — scales cleanly to A3, A4, A5 and A6 without distortion.',
   // Announcement post type labels
   'studio.post.announcement': 'Announcement',
   'studio.post.jobPost': 'Job Post',
@@ -571,6 +574,8 @@ const en = {
   'studio.tone.playful': 'Playful',
   // Wallpaper modal
   'studio.wallpaperModal.subtitle': 'Configure and generate an AI background',
+  'studio.wallpaperModal.posterAspect': 'Poster',
+  'studio.wallpaperModal.posterRatioHint': 'Print',
   'studio.wallpaperModal.verticalAspect': 'Vertical',
   'studio.wallpaperModal.squareAspect': 'Square',
   'studio.wallpaperModal.portraitAspect': 'Portrait',
@@ -635,6 +640,7 @@ const en = {
   'studio.themeMono': 'Monochrome',
   'studio.themeDark': 'Dark',
   'studio.format': 'Format',
+  'studio.formatPoster': 'Poster',
   'studio.formatSquare': 'Square 1:1',
   'studio.formatPortrait': 'Portrait 4:5',
   'studio.formatStory': 'Story 9:16',

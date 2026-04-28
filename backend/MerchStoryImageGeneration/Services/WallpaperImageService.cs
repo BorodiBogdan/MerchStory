@@ -30,7 +30,10 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
 
         // --- STRUCTURAL FORMAT ---
         sb.AppendLine($"\n### CANVAS FORMAT:");
-        sb.AppendLine($"- Intended Aspect Ratio: {r.Format} (Structure your composition to fit this layout).");
+        var aspectDescription = string.Equals(r.Format, "Poster", StringComparison.OrdinalIgnoreCase)
+            ? "A4 (1:√2 ≈ 1:1.414, vertical print poster)"
+            : r.Format;
+        sb.AppendLine($"- Intended Aspect Ratio: {aspectDescription} (Structure your composition to fit this layout).");
 
         var bc = r.BrandContext;
         bool hasImages = r.InlineImages != null && r.InlineImages.Any();

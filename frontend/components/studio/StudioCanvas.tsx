@@ -658,6 +658,7 @@ function getColorOptions(tr: TranslateFn) {
 }
 function getFormatOptions(tr: TranslateFn) {
   return [
+    { value: 'Poster', label: tr('studio.formatPosterLabel') },
     { value: 'Square', label: tr('studio.formatSquareLabel') },
     { value: 'Portrait', label: tr('studio.formatPortraitLabel') },
     { value: 'Story', label: tr('studio.formatStoryLabel') },
@@ -2176,6 +2177,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
               selected={catalogFormat}
               onSelect={setCatalogFormat}
             />
+            {catalogFormat === 'Poster' && (
+              <Text style={styles.toggleHelper}>{t('studio.formatPosterHint')}</Text>
+            )}
             <BrandContextSection
               items={contextItems}
               selected={catalogContextFields}
@@ -2227,6 +2231,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             selected={annoFormat}
             onSelect={setAnnoFormat}
           />
+          {annoFormat === 'Poster' && (
+            <Text style={styles.toggleHelper}>{t('studio.formatPosterHint')}</Text>
+          )}
           <BrandContextSection
             items={contextItems}
             selected={annoContextFields}
@@ -2899,9 +2906,26 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                   <View style={styles.wallpaperGenFormatRow}>
                     {(
                       [
-                        { value: '9:16', label: t('studio.wallpaperModal.verticalAspect') },
-                        { value: '1:1', label: t('studio.wallpaperModal.squareAspect') },
-                        { value: '4:5', label: t('studio.wallpaperModal.portraitAspect') },
+                        {
+                          value: 'Poster',
+                          label: t('studio.wallpaperModal.posterAspect'),
+                          ratio: t('studio.wallpaperModal.posterRatioHint'),
+                        },
+                        {
+                          value: '9:16',
+                          label: t('studio.wallpaperModal.verticalAspect'),
+                          ratio: '9:16',
+                        },
+                        {
+                          value: '1:1',
+                          label: t('studio.wallpaperModal.squareAspect'),
+                          ratio: '1:1',
+                        },
+                        {
+                          value: '4:5',
+                          label: t('studio.wallpaperModal.portraitAspect'),
+                          ratio: '4:5',
+                        },
                       ] as const
                     ).map((opt) => (
                       <Pressable
@@ -2929,11 +2953,14 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                               styles.wallpaperGenFormatPillTextActive,
                           ]}
                         >
-                          {opt.value}
+                          {opt.ratio}
                         </Text>
                       </Pressable>
                     ))}
                   </View>
+                  {wallpaperGenFormat === 'Poster' && (
+                    <Text style={styles.toggleHelper}>{t('studio.formatPosterHint')}</Text>
+                  )}
 
                   <Text style={styles.wallpaperGenSectionLabel}>Style prompt (optional)</Text>
                   <TextInput
@@ -3052,11 +3079,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         styles.wallpaperGenResultImage,
                         {
                           aspectRatio:
-                            wallpaperGenFormat === '1:1'
-                              ? 1
-                              : wallpaperGenFormat === '4:5'
-                                ? 4 / 5
-                                : 9 / 16,
+                            wallpaperGenFormat === 'Poster'
+                              ? 1 / Math.SQRT2
+                              : wallpaperGenFormat === '1:1'
+                                ? 1
+                                : wallpaperGenFormat === '4:5'
+                                  ? 4 / 5
+                                  : 9 / 16,
                         },
                       ]}
                       resizeMode="contain"
@@ -3472,6 +3501,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                       onSelect={setCatalogFormat}
                       accessibilityLabel={t('studio.opt.format')}
                     />
+                    {catalogFormat === 'Poster' && (
+                      <Text style={styles.toggleHelper}>{t('studio.formatPosterHint')}</Text>
+                    )}
                   </View>
 
                   {contextItems.length > 0 && (
@@ -4018,6 +4050,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                   onSelect={setAnnoFormat}
                   accessibilityLabel={t('studio.opt.format')}
                 />
+                {annoFormat === 'Poster' && (
+                  <Text style={styles.toggleHelper}>{t('studio.formatPosterHint')}</Text>
+                )}
               </View>
 
               {contextItems.length > 0 && (
@@ -4150,9 +4185,26 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                 <View style={styles.wallpaperGenFormatRow}>
                   {(
                     [
-                      { value: '9:16', label: t('studio.wallpaperModal.verticalAspect') },
-                      { value: '1:1', label: t('studio.wallpaperModal.squareAspect') },
-                      { value: '16:9', label: t('wallpapers.modal.formatLandscape') },
+                      {
+                        value: 'Poster',
+                        label: t('studio.wallpaperModal.posterAspect'),
+                        ratio: t('studio.wallpaperModal.posterRatioHint'),
+                      },
+                      {
+                        value: '9:16',
+                        label: t('studio.wallpaperModal.verticalAspect'),
+                        ratio: '9:16',
+                      },
+                      {
+                        value: '1:1',
+                        label: t('studio.wallpaperModal.squareAspect'),
+                        ratio: '1:1',
+                      },
+                      {
+                        value: '16:9',
+                        label: t('wallpapers.modal.formatLandscape'),
+                        ratio: '16:9',
+                      },
                     ] as const
                   ).map((opt) => (
                     <Pressable
@@ -4180,11 +4232,14 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                             styles.wallpaperGenFormatPillTextActive,
                         ]}
                       >
-                        {opt.value}
+                        {opt.ratio}
                       </Text>
                     </Pressable>
                   ))}
                 </View>
+                {wallpaperGenFormat === 'Poster' && (
+                  <Text style={styles.toggleHelper}>{t('studio.formatPosterHint')}</Text>
+                )}
 
                 {/* Prompt */}
                 <Text style={styles.wallpaperGenSectionLabel}>Style prompt (optional)</Text>
@@ -4306,11 +4361,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                       styles.wallpaperGenResultImage,
                       {
                         aspectRatio:
-                          wallpaperGenFormat === '1:1'
-                            ? 1
-                            : wallpaperGenFormat === '4:5'
-                              ? 4 / 5
-                              : 9 / 16,
+                          wallpaperGenFormat === 'Poster'
+                            ? 1 / Math.SQRT2
+                            : wallpaperGenFormat === '1:1'
+                              ? 1
+                              : wallpaperGenFormat === '16:9'
+                                ? 16 / 9
+                                : 9 / 16,
                       },
                     ]}
                     resizeMode="contain"

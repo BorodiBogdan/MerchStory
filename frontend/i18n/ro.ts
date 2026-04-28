@@ -556,10 +556,13 @@ const ro: Dictionary = {
   'studio.themeVibrantLabel': 'Vibrant',
   'studio.themeMonoLabel': 'Monocrom',
   'studio.themeDarkLabel': 'Întunecat',
+  'studio.formatPosterLabel': 'Poster — Recomandat',
   'studio.formatSquareLabel': 'Pătrat (1:1)',
   'studio.formatPortraitLabel': 'Portret (4:5)',
   'studio.formatStoryLabel': 'Story (9:16)',
   'studio.formatVerticalLabel': 'Vertical',
+  'studio.formatPosterHint':
+    'Ideal pentru tipărire — se scalează curat la A3, A4, A5 și A6, fără distorsiuni.',
   // Announcement post types
   'studio.post.announcement': 'Anunț',
   'studio.post.jobPost': 'Anunț angajare',
@@ -579,6 +582,8 @@ const ro: Dictionary = {
   'studio.tone.playful': 'Jucăuș',
   // Wallpaper modal
   'studio.wallpaperModal.subtitle': 'Configurează și generează un fundal AI',
+  'studio.wallpaperModal.posterAspect': 'Poster',
+  'studio.wallpaperModal.posterRatioHint': 'Tipar',
   'studio.wallpaperModal.verticalAspect': 'Vertical',
   'studio.wallpaperModal.squareAspect': 'Pătrat',
   'studio.wallpaperModal.portraitAspect': 'Portret',
@@ -643,6 +648,7 @@ const ro: Dictionary = {
   'studio.themeMono': 'Monocrom',
   'studio.themeDark': 'Întunecat',
   'studio.format': 'Format',
+  'studio.formatPoster': 'Poster',
   'studio.formatSquare': 'Pătrat 1:1',
   'studio.formatPortrait': 'Portret 4:5',
   'studio.formatStory': 'Story 9:16',

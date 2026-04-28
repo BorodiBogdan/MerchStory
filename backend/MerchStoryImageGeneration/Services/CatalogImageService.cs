@@ -88,6 +88,9 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
     private static string FormatGuidance(string format) =>
         format switch
         {
+            "Poster" => "Format guidance: render this in A4 poster format (1:√2 ≈ 1:1.414, vertical). " +
+                            "Do not add any extra text beyond what was explicitly stated in the request — no taglines, no decorative copy, no filler.\n\n",
+
             "Square 1:1" => "Format guidance: this is the Instagram FEED primary ratio (1:1). " +
                             "Centered or rule-of-thirds composition. Keep all critical text and product hero inside a generous safe margin (≥6% from each edge). " +
                             "The image works equally well at thumbnail size in a grid.\n\n",
