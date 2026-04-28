@@ -55,7 +55,7 @@ export function PaperPreview({
         />
         <View style={[styles.paper, { width: previewW, height: previewH }]}>
           {dataUri ? (
-            <Image source={{ uri: dataUri }} style={styles.image} resizeMode="cover" />
+            <Image source={{ uri: dataUri }} style={styles.image} resizeMode="stretch" />
           ) : (
             <View style={styles.placeholder} />
           )}

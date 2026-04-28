@@ -31,7 +31,7 @@ public sealed class PdfRenderer
             {
                 page.Size(pageSize);
                 page.Margin(0);
-                page.Background().Image(imageBytes).FitArea();
+                page.Background().Image(imageBytes).FitUnproportionally();
 
                 if (qrPng is not null)
                 {
