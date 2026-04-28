@@ -51,6 +51,26 @@ const PAPER_SIZE_OPTIONS: { value: PaperSize; label: string }[] = [
 
 const PRINT_COST = 1;
 
+// Pixel dimensions (short × long edge) needed for 300 DPI print quality.
+// Mirrors backend RequiredPixels300Dpi in PrintRoutes.cs.
+const REQUIRED_PIXELS_300DPI: Record<PaperSize, [number, number]> = {
+  A6: [1240, 1748],
+  A5: [1748, 2480],
+  A4: [2480, 3508],
+  A3: [3508, 4961],
+};
+
+function hasEnoughResolution(
+  dims: { width: number; height: number } | null,
+  paperSize: PaperSize
+): boolean {
+  if (!dims) return false;
+  const [needShort, needLong] = REQUIRED_PIXELS_300DPI[paperSize];
+  const shortEdge = Math.min(dims.width, dims.height);
+  const longEdge = Math.max(dims.width, dims.height);
+  return shortEdge >= needShort && longEdge >= needLong;
+}
+
 export default function PrintScreen() {
   const { colors } = useTheme();
   const { coinBalance } = useAuth();
@@ -73,9 +93,13 @@ export default function PrintScreen() {
   const [qrTargetUrl, setQrTargetUrl] = useState('');
   const [rendering, setRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [renderNotice, setRenderNotice] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [imageDims, setImageDims] = useState<{ width: number; height: number } | null>(null);
 
-  const insufficientCoins = coinBalance < PRINT_COST;
+  const isPrintReady = hasEnoughResolution(imageDims, paperSize);
+  const estimatedCost = isPrintReady ? 0 : PRINT_COST;
+  const insufficientCoins = coinBalance < estimatedCost;
   const showQrBadge = includeQr && qrTargetUrl.trim().length > 0;
   const previewCaption = paperSize;
 
@@ -99,6 +123,7 @@ export default function PrintScreen() {
   useEffect(() => {
     if (!selectedItem) {
       setPreviewImage(null);
+      setImageDims(null);
       return;
     }
     let cancelled = false;
@@ -114,6 +139,27 @@ export default function PrintScreen() {
     };
   }, [selectedItem]);
 
+  useEffect(() => {
+    if (!previewImage) {
+      setImageDims(null);
+      return;
+    }
+    let cancelled = false;
+    const uri = `data:${previewImage.mimeType};base64,${previewImage.base64}`;
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (!cancelled) setImageDims({ width, height });
+      },
+      () => {
+        if (!cancelled) setImageDims(null);
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [previewImage]);
+
   async function handleRender() {
     if (!selectedItem) return;
     if (Platform.OS !== 'web') {
@@ -121,6 +167,7 @@ export default function PrintScreen() {
     }
     setRendering(true);
     setRenderError(null);
+    setRenderNotice(null);
     try {
       const trimmedUrl = qrTargetUrl.trim();
       const job = await renderPrint({
@@ -136,6 +183,11 @@ export default function PrintScreen() {
       }
 
       await deliverPdf(ready.pdfBase64, selectedItem.name, paperSize);
+      setRenderNotice(
+        job.upscaled
+          ? `${t('print.notice.upscaled')} ${PRINT_COST} ${t('print.coinsLabel')}.`
+          : t('print.notice.printReady')
+      );
     } catch (err) {
       setRenderError(err instanceof Error ? err.message : t('print.error.generic'));
     } finally {
@@ -149,7 +201,7 @@ export default function PrintScreen() {
     : !selectedItem
       ? t('print.button.pickFirst')
       : insufficientCoins
-        ? `${t('print.button.needCoinsPrefix')} ${PRINT_COST} ${t('print.coinsLabel')}`
+        ? `${t('print.button.needCoinsPrefix')} ${estimatedCost} ${t('print.coinsLabel')}`
         : t('print.button.generate');
 
   const configColumn = (
@@ -187,7 +239,8 @@ export default function PrintScreen() {
       />
 
       <CostInfo
-        cost={PRINT_COST}
+        cost={estimatedCost}
+        isFree={isPrintReady}
         insufficientCoins={insufficientCoins}
         onTopUp={() => router.push('/(tabs)/wallet')}
       />
@@ -219,6 +272,15 @@ export default function PrintScreen() {
           <Ionicons name="alert-circle-outline" size={18} color={colors.text.error} />
           <Text style={styles.errorText} numberOfLines={3}>
             {renderError}
+          </Text>
+        </View>
+      )}
+
+      {renderNotice && (
+        <View style={styles.noticeBanner}>
+          <Ionicons name="checkmark-circle-outline" size={18} color={colors.accent.primary} />
+          <Text style={styles.noticeText} numberOfLines={3}>
+            {renderNotice}
           </Text>
         </View>
       )}
@@ -654,10 +716,12 @@ function AssetPickerModal({
 // ─── Cost info block ─────────────────────────────────────────────────────
 function CostInfo({
   cost,
+  isFree,
   insufficientCoins,
   onTopUp,
 }: {
   cost: number;
+  isFree: boolean;
   insufficientCoins: boolean;
   onTopUp: () => void;
 }) {
@@ -671,15 +735,23 @@ function CostInfo({
   return (
     <View style={styles.card}>
       <View style={styles.iconTile}>
-        <Ionicons name="sparkles" size={18} color={colors.accent.primary} />
+        <Ionicons
+          name={isFree ? 'checkmark-circle' : 'sparkles'}
+          size={18}
+          color={colors.accent.primary}
+        />
       </View>
       <View style={styles.body}>
-        <View style={styles.costRow}>
-          <Text style={styles.costPrefix}>{t('print.cost.label')}</Text>
-          <CoinIcon size={14} />
-          <Text style={styles.costNumber}>{cost}</Text>
-          <Text style={styles.costSuffix}>{t('print.coinsLabel')}</Text>
-        </View>
+        {isFree ? (
+          <Text style={styles.helper}>{t('print.cost.free')}</Text>
+        ) : (
+          <View style={styles.costRow}>
+            <Text style={styles.costPrefix}>{t('print.cost.label')}</Text>
+            <CoinIcon size={14} />
+            <Text style={styles.costNumber}>{cost}</Text>
+            <Text style={styles.costSuffix}>{t('print.coinsLabel')}</Text>
+          </View>
+        )}
         {insufficientCoins && (
           <View style={styles.warningRow}>
             <Text style={styles.warningText}>{t('print.cost.notEnoughCoins')}</Text>
@@ -963,6 +1035,25 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       flex: 1,
       fontSize: D.fontSize.sm,
       color: colors.text.error,
+      lineHeight: 19,
+    },
+    noticeBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      padding: D.spacing.md,
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.focus,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.accent.primary,
+      marginTop: D.spacing.lg,
+    },
+    noticeText: {
+      flex: 1,
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
       lineHeight: 19,
     },
     renderButton: {

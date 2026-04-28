@@ -4,12 +4,22 @@ using MerchStoryAPI.Models;
 using MerchStoryAPI.Wallet;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
+using SixLabors.ImageSharp;
 
 namespace MerchStoryAPI.Print;
 
 public static class PrintRoutes
 {
     private const int PrintCost = 1;
+
+    // Pixel dimensions (short × long edge) needed for 300 DPI print quality.
+    private static readonly Dictionary<string, (int Short, int Long)> RequiredPixels300Dpi = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["A6"] = (1240, 1748),
+        ["A5"] = (1748, 2480),
+        ["A4"] = (2480, 3508),
+        ["A3"] = (3508, 4961),
+    };
 
     private static readonly HashSet<string> AllowedPaperSizes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -54,17 +64,25 @@ public static class PrintRoutes
                 return Results.NotFound(new { detail = "Generated image not found." });
             }
 
-            DeductResult deduction = await wallet.TryDeductAsync(
-                userId,
-                PrintCost,
-                $"Print {paperSize}",
-                null,
-                ct);
-            if (!deduction.Succeeded)
+            byte[] imageBytes = Convert.FromBase64String(source.ImageBase64);
+            int upscaleFactor = RequiredScale(imageBytes, paperSize);
+            bool needsUpscale = upscaleFactor > 1;
+
+            DeductResult? deduction = null;
+            if (needsUpscale)
             {
-                return Results.Json(
-                    new { detail = deduction.Error ?? "Insufficient coins." },
-                    statusCode: StatusCodes.Status402PaymentRequired);
+                deduction = await wallet.TryDeductAsync(
+                    userId,
+                    PrintCost,
+                    $"Print {paperSize}",
+                    null,
+                    ct);
+                if (!deduction.Succeeded)
+                {
+                    return Results.Json(
+                        new { detail = deduction.Error ?? "Insufficient coins." },
+                        statusCode: StatusCodes.Status402PaymentRequired);
+                }
             }
 
             PrintLink? printLink = null;
@@ -76,7 +94,10 @@ public static class PrintRoutes
                 }
                 catch (ArgumentException ex)
                 {
-                    await wallet.GrantAsync(userId, PrintCost, "Refund: invalid QR URL", ct);
+                    if (deduction is not null)
+                    {
+                        await wallet.GrantAsync(userId, PrintCost, "Refund: invalid QR URL", ct);
+                    }
 
                     return Results.BadRequest(new { detail = ex.Message });
                 }
@@ -99,10 +120,10 @@ public static class PrintRoutes
 
             try
             {
-                byte[] imageBytes = Convert.FromBase64String(source.ImageBase64);
-
-                int scale = paperSize == "A3" ? 4 : 2;
-                imageBytes = await upscaler.UpscaleAsync(imageBytes, scale, ct);
+                if (needsUpscale)
+                {
+                    imageBytes = await upscaler.UpscaleAsync(imageBytes, upscaleFactor, ct);
+                }
 
                 string? qrSlugUrl = null;
                 if (printLink is not null)
@@ -133,7 +154,10 @@ public static class PrintRoutes
                 job.CompletedAt = DateTime.UtcNow;
                 await db.SaveChangesAsync(ct);
 
-                await wallet.GrantAsync(userId, PrintCost, "Refund: print render failed", ct);
+                if (deduction is not null)
+                {
+                    await wallet.GrantAsync(userId, PrintCost, "Refund: print render failed", ct);
+                }
 
                 return Results.Problem("Failed to render print.", statusCode: StatusCodes.Status500InternalServerError);
             }
@@ -142,7 +166,8 @@ public static class PrintRoutes
                 job.Id,
                 job.Status,
                 printLink?.Slug,
-                deduction.NewBalance));
+                deduction?.NewBalance,
+                needsUpscale));
         });
 
         authed.MapGet("/{id:guid}", async (
@@ -195,6 +220,44 @@ public static class PrintRoutes
     private static string? GetUserId(ClaimsPrincipal principal) =>
         principal.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+    // Returns the smallest available Real-ESRGAN scale (1, 2, or 4) needed to
+    // hit ~300 DPI on both edges for the chosen paper size. 1 means the source
+    // is already print-ready and no upscale (or coin charge) is required.
+    private static int RequiredScale(byte[] imageBytes, string paperSize)
+    {
+        if (!RequiredPixels300Dpi.TryGetValue(paperSize, out (int Short, int Long) needed))
+        {
+            return 2;
+        }
+
+        try
+        {
+            ImageInfo info = Image.Identify(imageBytes);
+            int shortEdge = Math.Min(info.Width, info.Height);
+            int longEdge = Math.Max(info.Width, info.Height);
+
+            double needed_ = Math.Max(
+                (double)needed.Short / Math.Max(shortEdge, 1),
+                (double)needed.Long / Math.Max(longEdge, 1));
+
+            if (needed_ <= 1.0)
+            {
+                return 1;
+            }
+
+            if (needed_ <= 2.0)
+            {
+                return 2;
+            }
+
+            return 4;
+        }
+        catch
+        {
+            return 2;
+        }
+    }
 }
 
 internal sealed record RenderPrintRequest(
@@ -206,7 +269,8 @@ internal sealed record RenderPrintResponse(
     Guid JobId,
     string Status,
     string? QrSlug,
-    int? NewBalance);
+    int? NewBalance,
+    bool Upscaled);
 
 internal sealed record PrintJobResponse(
     Guid Id,

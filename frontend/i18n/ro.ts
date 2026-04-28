@@ -191,8 +191,12 @@ const ro: Dictionary = {
   'print.section.sizeEyebrow': 'Format',
   'print.section.sizeTitle': 'Mărimea hârtiei',
   'print.cost.label': 'Costă',
+  'print.cost.free': 'Gratuit — imaginea ta are deja rezoluție pentru tipărire',
   'print.cost.notEnoughCoins': 'Nu ai destule monede.',
   'print.cost.topUp': 'Reîncarcă portofelul',
+  'print.notice.printReady':
+    'Imaginea ta avea deja rezoluție pentru tipărire — nu s-au scăzut monede.',
+  'print.notice.upscaled': 'Imaginea a fost mărită pentru calitate de tipărire. S-a perceput',
   'print.coinsLabel': 'monede',
   'print.section.qrEyebrow': 'Promovare',
   'print.section.qrTitle': 'Cod QR cu urmărire',

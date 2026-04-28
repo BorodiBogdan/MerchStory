@@ -1098,6 +1098,7 @@ export interface RenderPrintResponse {
   status: PrintJobStatus;
   qrSlug: string | null;
   newBalance: number | null;
+  upscaled: boolean;
 }
 
 export interface PrintJobDetails {
