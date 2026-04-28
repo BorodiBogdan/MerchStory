@@ -39,6 +39,7 @@ import {
   type PrintJobDetails,
   renderPrint,
 } from '@/utils/api';
+import * as galleryCache from '@/utils/galleryCache';
 
 const DESKTOP_BREAKPOINT = 900;
 
@@ -73,7 +74,7 @@ function hasEnoughResolution(
 
 export default function PrintScreen() {
   const { colors } = useTheme();
-  const { coinBalance } = useAuth();
+  const { coinBalance, setCoinBalance } = useAuth();
   const t = useT();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -92,6 +93,7 @@ export default function PrintScreen() {
   const [includeQr, setIncludeQr] = useState(false);
   const [qrTargetUrl, setQrTargetUrl] = useState('');
   const [rendering, setRendering] = useState(false);
+  const [progressStep, setProgressStep] = useState(0);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [renderNotice, setRenderNotice] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -183,6 +185,10 @@ export default function PrintScreen() {
       }
 
       await deliverPdf(ready.pdfBase64, selectedItem.name, paperSize);
+      galleryCache.invalidate('Pdf');
+      if (typeof job.newBalance === 'number') {
+        void setCoinBalance(job.newBalance);
+      }
       setRenderNotice(
         job.upscaled
           ? `${t('print.notice.upscaled')} ${PRINT_COST} ${t('print.coinsLabel')}.`
@@ -194,6 +200,23 @@ export default function PrintScreen() {
       setRendering(false);
     }
   }
+
+  useEffect(() => {
+    if (!rendering) {
+      setProgressStep(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setProgressStep((s) => (s + 1) % 3);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [rendering]);
+
+  const progressMessage = [
+    t('print.progress.step1'),
+    t('print.progress.step2'),
+    t('print.progress.step3'),
+  ][progressStep];
 
   const renderDisabled = !selectedItem || rendering || insufficientCoins;
   const renderLabel = rendering
@@ -289,7 +312,7 @@ export default function PrintScreen() {
         onPress={handleRender}
         disabled={renderDisabled}
         accessibilityRole="button"
-        accessibilityLabel={renderLabel}
+        accessibilityLabel={rendering ? progressMessage : renderLabel}
         accessibilityState={{ disabled: renderDisabled, busy: rendering }}
         style={({ pressed }) => [
           styles.renderButton,
@@ -298,7 +321,10 @@ export default function PrintScreen() {
         ]}
       >
         {rendering ? (
-          <ActivityIndicator color="#FFFFFF" />
+          <>
+            <ActivityIndicator color="#FFFFFF" />
+            <Text style={styles.renderButtonText}>{progressMessage}</Text>
+          </>
         ) : (
           <>
             <Ionicons name="print" size={18} color="#FFFFFF" />
@@ -306,6 +332,11 @@ export default function PrintScreen() {
           </>
         )}
       </Pressable>
+      {rendering && (
+        <Text style={styles.progressHint} numberOfLines={2}>
+          {t('print.progress.takeAWhile')}
+        </Text>
+      )}
     </View>
   );
 
@@ -1083,6 +1114,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       fontSize: D.fontSize.base,
       fontWeight: D.fontWeight.semibold,
       letterSpacing: 0.3,
+    },
+    progressHint: {
+      marginTop: D.spacing.sm,
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      textAlign: 'center',
+      fontStyle: 'italic',
     },
   });
 }

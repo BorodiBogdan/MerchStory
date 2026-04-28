@@ -499,12 +499,16 @@ export async function generateCatalogOnWallpaper(
   return response.json() as Promise<GenerateImageResponse>;
 }
 
+export type GalleryAssetType = 'Photo' | 'Video' | 'Pdf';
+
 export interface GalleryItem {
   id: string;
   mimeType: string;
   createdAt: string;
   name: string;
   generationType: GenerationType | null;
+  assetType: GalleryAssetType;
+  paperSize: string | null;
 }
 
 export interface GalleryImageBytes {
@@ -514,6 +518,7 @@ export interface GalleryImageBytes {
 
 export interface GalleryFilters {
   types?: GenerationType[];
+  assetType?: GalleryAssetType;
   from?: string;
   to?: string;
   search?: string;
@@ -590,6 +595,7 @@ export async function fetchGallery(filters: GalleryFilters = {}): Promise<Paged<
   if (filters.types && filters.types.length > 0) {
     params.set('type', filters.types.join(','));
   }
+  if (filters.assetType) params.set('assetType', filters.assetType);
   if (filters.from) params.set('from', filters.from);
   if (filters.to) params.set('to', filters.to);
   if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());

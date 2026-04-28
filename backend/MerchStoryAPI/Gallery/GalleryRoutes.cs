@@ -68,13 +68,16 @@ public static class GalleryRoutes
                     created.MimeType,
                     created.CreatedAt,
                     created.Name,
-                    created.GenerationType));
+                    created.GenerationType,
+                    created.AssetType,
+                    created.PaperSize));
         });
 
         group.MapGet("/", async (
             ClaimsPrincipal principal,
             AppDbContext db,
             string? type,
+            string? assetType,
             DateTime? from,
             DateTime? to,
             string? search,
@@ -88,6 +91,17 @@ public static class GalleryRoutes
             }
 
             IQueryable<GeneratedImage> q = db.GeneratedImages.Where(g => g.UserId == userId);
+
+            string resolvedAssetType = string.IsNullOrWhiteSpace(assetType) ? "Photo" : assetType.Trim();
+            if (resolvedAssetType == "Photo")
+            {
+                // Treat legacy rows with empty/null AssetType as photos.
+                q = q.Where(g => g.AssetType != "Pdf" && g.AssetType != "Video");
+            }
+            else if (resolvedAssetType is "Video" or "Pdf")
+            {
+                q = q.Where(g => g.AssetType == resolvedAssetType);
+            }
 
             if (!string.IsNullOrWhiteSpace(type))
             {
@@ -134,7 +148,9 @@ public static class GalleryRoutes
                     g.MimeType,
                     g.CreatedAt,
                     g.Name,
-                    g.GenerationType))
+                    g.GenerationType,
+                    g.AssetType,
+                    g.PaperSize))
                 .ToListAsync();
 
             return Results.Ok(new PagedResponse<GalleryItemMetadata>(items, total, resolvedPage, resolvedPageSize));
@@ -212,7 +228,9 @@ public static class GalleryRoutes
                 image.MimeType,
                 image.CreatedAt,
                 image.Name,
-                image.GenerationType));
+                image.GenerationType,
+                image.AssetType,
+                image.PaperSize));
         });
 
         group.MapDelete("/{id:guid}", async (
@@ -251,7 +269,9 @@ internal sealed record GalleryItemMetadata(
     string MimeType,
     DateTime CreatedAt,
     string Name,
-    string? GenerationType);
+    string? GenerationType,
+    string AssetType,
+    string? PaperSize);
 
 internal sealed record GalleryImageBytes(string ImageBase64, string MimeType);
 

@@ -140,9 +140,43 @@ public static class PrintRoutes
                     qrSlugUrl,
                     FooterText: null));
 
-                job.PdfBase64 = Convert.ToBase64String(pdf);
+                string pdfBase64 = Convert.ToBase64String(pdf);
+                job.PdfBase64 = pdfBase64;
                 job.Status = "ready";
                 job.CompletedAt = DateTime.UtcNow;
+
+                string baseName = string.IsNullOrWhiteSpace(source.Name) ? "Print" : source.Name;
+                string pdfName = $"{baseName} ({paperSize})";
+                if (pdfName.Length > 80)
+                {
+                    pdfName = pdfName[..80];
+                }
+
+                string candidate = pdfName;
+                int suffix = 2;
+                while (await db.GeneratedImages.AnyAsync(
+                    g => g.UserId == userId && g.Name.ToLower() == candidate.ToLower(), ct))
+                {
+                    string tag = $" ({suffix})";
+                    int max = 80 - tag.Length;
+                    string trimmed = pdfName.Length > max ? pdfName[..max] : pdfName;
+                    candidate = trimmed + tag;
+                    suffix++;
+                }
+
+                db.GeneratedImages.Add(new GeneratedImage
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    ImageBase64 = pdfBase64,
+                    MimeType = "application/pdf",
+                    CreatedAt = DateTime.UtcNow,
+                    GenerationType = source.GenerationType,
+                    Name = candidate,
+                    AssetType = "Pdf",
+                    PaperSize = paperSize,
+                });
+
                 await db.SaveChangesAsync(ct);
             }
             catch (Exception ex)
