@@ -18,9 +18,10 @@ import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
-import { getWallet, type WalletTransaction } from '@/utils/api';
+import { getWallet, getWalletTransactions, type WalletTransaction } from '@/utils/api';
 
 const isWeb = Platform.OS === 'web';
+const PAGE_SIZE = 10;
 
 export default function WalletScreen() {
   const { colors } = useTheme();
@@ -31,20 +32,68 @@ export default function WalletScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [transactions, setTransactions] = useState<WalletTransaction[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasMore = transactions != null && transactions.length < total;
 
   const load = useCallback(async () => {
     try {
       setError(null);
-      const summary = await getWallet();
-      setTransactions(summary.recentTransactions);
+      const [summary, firstPage] = await Promise.all([
+        getWallet(),
+        getWalletTransactions(0, PAGE_SIZE),
+      ]);
+      setTransactions(firstPage.items);
+      setTotal(firstPage.total);
+      setPage(1);
       await setCoinBalance(summary.balance);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load wallet');
     }
   }, [setCoinBalance]);
+
+  const goToPage = useCallback(
+    async (next: number) => {
+      const target = Math.min(Math.max(1, next), totalPages);
+      if (target === page) return;
+      setLoadingMore(true);
+      try {
+        const result = await getWalletTransactions((target - 1) * PAGE_SIZE, PAGE_SIZE);
+        setTransactions(result.items);
+        setTotal(result.total);
+        setPage(target);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to load transactions');
+      } finally {
+        setLoadingMore(false);
+      }
+    },
+    [page, totalPages]
+  );
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !transactions) return;
+    setLoadingMore(true);
+    try {
+      const next = await getWalletTransactions(transactions.length, PAGE_SIZE);
+      setTransactions((prev) => {
+        const base = prev ?? [];
+        const seen = new Set(base.map((t) => t.id));
+        return [...base, ...next.items.filter((t) => !seen.has(t.id))];
+      });
+      setTotal(next.total);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load transactions');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [hasMore, loadingMore, transactions]);
 
   useEffect(() => {
     setLoading(true);
@@ -122,17 +171,101 @@ export default function WalletScreen() {
             <ActivityIndicator color={colors.accent.primary} />
           </View>
         ) : transactions && transactions.length > 0 ? (
-          <View style={styles.txnList}>
-            {transactions.map((txn) => (
-              <TransactionRow key={txn.id} txn={txn} />
-            ))}
-          </View>
+          <>
+            <View style={styles.txnList}>
+              {transactions.map((txn) => (
+                <TransactionRow key={txn.id} txn={txn} />
+              ))}
+            </View>
+            {isWeb && totalPages > 1 ? (
+              <View style={styles.pager}>
+                <Pressable
+                  onPress={() => goToPage(page - 1)}
+                  disabled={loadingMore || page <= 1}
+                  style={({ pressed }) => [
+                    styles.pagerArrow,
+                    (page <= 1 || loadingMore) && styles.pagerDisabled,
+                    pressed && styles.pagerPressed,
+                  ]}
+                  accessibilityLabel="Previous page"
+                >
+                  <Ionicons name="chevron-back" size={16} color={colors.text.primary} />
+                </Pressable>
+                {getPageNumbers(page, totalPages).map((p, i) =>
+                  p === '…' ? (
+                    <Text key={`ellipsis-${i}`} style={styles.pagerEllipsis}>
+                      …
+                    </Text>
+                  ) : (
+                    <Pressable
+                      key={p}
+                      onPress={() => goToPage(p)}
+                      disabled={loadingMore || p === page}
+                      style={({ pressed }) => [
+                        styles.pagerNum,
+                        p === page && styles.pagerNumActive,
+                        pressed && styles.pagerPressed,
+                      ]}
+                    >
+                      <Text style={[styles.pagerNumText, p === page && styles.pagerNumTextActive]}>
+                        {p}
+                      </Text>
+                    </Pressable>
+                  )
+                )}
+                <Pressable
+                  onPress={() => goToPage(page + 1)}
+                  disabled={loadingMore || page >= totalPages}
+                  style={({ pressed }) => [
+                    styles.pagerArrow,
+                    (page >= totalPages || loadingMore) && styles.pagerDisabled,
+                    pressed && styles.pagerPressed,
+                  ]}
+                  accessibilityLabel="Next page"
+                >
+                  <Ionicons name="chevron-forward" size={16} color={colors.text.primary} />
+                </Pressable>
+                {loadingMore ? (
+                  <ActivityIndicator color={colors.accent.primary} style={styles.pagerSpinner} />
+                ) : null}
+              </View>
+            ) : !isWeb && hasMore ? (
+              <Pressable
+                onPress={loadMore}
+                disabled={loadingMore}
+                style={({ pressed }) => [
+                  styles.loadMoreButton,
+                  (pressed || loadingMore) && styles.loadMoreButtonPressed,
+                ]}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator color={colors.accent.primary} />
+                ) : (
+                  <Text style={styles.loadMoreText}>{t('wallet.transactions.loadMore')}</Text>
+                )}
+              </Pressable>
+            ) : null}
+          </>
         ) : (
           <Text style={styles.emptyText}>{t('wallet.transactions.empty')}</Text>
         )}
       </View>
     </ScrollView>
   );
+}
+
+function getPageNumbers(current: number, total: number): (number | '…')[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const pages: (number | '…')[] = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  if (start > 2) pages.push('…');
+  for (let p = start; p <= end; p++) pages.push(p);
+  if (end < total - 1) pages.push('…');
+  pages.push(total);
+  return pages;
 }
 
 function CostRow({
@@ -373,6 +506,81 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.destructive,
       textAlign: 'center',
       paddingVertical: D.spacing.md,
+    },
+    loadMoreButton: {
+      marginTop: D.spacing.sm,
+      paddingVertical: D.spacing.sm + 2,
+      paddingHorizontal: D.spacing.md,
+      borderRadius: D.radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.elevated,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    loadMoreButtonPressed: {
+      opacity: 0.6,
+    },
+    loadMoreText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.accent.primary,
+    },
+    pager: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: D.spacing.sm,
+    },
+    pagerArrow: {
+      minWidth: 32,
+      height: 32,
+      paddingHorizontal: 8,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.elevated,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    pagerNum: {
+      minWidth: 32,
+      height: 32,
+      paddingHorizontal: 8,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.elevated,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    pagerNumActive: {
+      backgroundColor: colors.accent.primary,
+      borderColor: colors.accent.primary,
+    },
+    pagerNumText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+    },
+    pagerNumTextActive: {
+      color: colors.bg.base,
+    },
+    pagerEllipsis: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      paddingHorizontal: 4,
+    },
+    pagerDisabled: {
+      opacity: 0.4,
+    },
+    pagerPressed: {
+      opacity: 0.7,
+    },
+    pagerSpinner: {
+      marginLeft: D.spacing.xs,
     },
   });
 }

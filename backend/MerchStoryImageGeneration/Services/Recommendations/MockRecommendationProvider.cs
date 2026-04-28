@@ -19,21 +19,27 @@ public class MockRecommendationProvider : IRecommendationProvider
             Title: "Spring-cleaning searches peaking",
             Meta: "Google Trends · +62% this week",
             Body: "Home organizers, cleaning kits and storage solutions are seeing their biggest national lift of the year.",
-            SuggestedPost: "Spring refresh bundle"),
+            SuggestedPost: "Spring refresh bundle",
+            Type: "promotion",
+            ImagePrompt: "Stack of organized storage bins and cleaning supplies on a sunlit shelf, soft pastel tones, small label text: 'Spring refresh bundle'."),
         new(
             Id: "weeknight-dinner",
             Tone: "trend",
             Title: "Weeknight quick-dinner queries surging",
             Meta: "Search trend · weekday evenings",
             Body: "Customers are looking for 20-minute meal ideas. Bundle pantry staples + a recipe card to win the dinner-rush window.",
-            SuggestedPost: "20-minute dinner kit"),
+            SuggestedPost: "20-minute dinner kit",
+            Type: "promotion",
+            ImagePrompt: "Pantry staples and a printed recipe card laid flat on a wooden kitchen counter, evening warm lighting, small text: '20-minute dinner kit'."),
         new(
             Id: "weekend-bundle",
             Tone: "trend",
             Title: "Weekend family-meal moment",
             Meta: "Sat–Sun · peak basket size",
             Body: "Saturday baskets are 30% larger than weekday ones for markets. A 'Sunday roast' bundle (centrepiece + sides + dessert) leans into that intent.",
-            SuggestedPost: "Sunday roast bundle"),
+            SuggestedPost: "Sunday roast bundle",
+            Type: "announcement",
+            ImagePrompt: "Family-style Sunday roast spread on a rustic table, soft daylight through a window, no slogan, small caption: 'Sunday roast'."),
     ];
 
     public Task<RecommendationResult> GenerateAsync(RecommendationContext context, CancellationToken ct)
@@ -83,14 +89,30 @@ public class MockRecommendationProvider : IRecommendationProvider
                 _ => "Ambient signal",
             };
 
+        string type = tone switch
+        {
+            "weather" or "holiday" => "promotion",
+            _ => "announcement",
+        };
+
         return new IdeaDto(
             Id: $"signal-{tone}-{index}",
             Tone: tone,
             Title: signal.Title,
             Meta: meta,
             Body: signal.Summary,
-            SuggestedPost: BuildSuggestedPost(signal, tone));
+            SuggestedPost: BuildSuggestedPost(signal, tone),
+            Type: type,
+            ImagePrompt: BuildImagePrompt(signal, tone));
     }
+
+    private static string BuildImagePrompt(ContextSignal signal, string tone) => tone switch
+    {
+        "weather" => $"Shop scene tied to the current weather: {signal.Title}. Natural light, plain composition, no slogan.",
+        "holiday" => $"Subtle holiday-themed shop arrangement for {signal.Title}. Warm lighting, no marketing copy on the image.",
+        "news" => $"Neutral local-moment scene reflecting: {signal.Title}. Documentary feel, no promotional text.",
+        _ => $"Clean product shot illustrating the trend: {signal.Title}. Soft daylight, simple background.",
+    };
 
     private static string NormalizeTone(string source) => source switch
     {

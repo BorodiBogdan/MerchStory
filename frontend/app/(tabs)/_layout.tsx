@@ -251,6 +251,24 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="admin"
+          options={{
+            tabBarItemStyle: { display: 'none' },
+          }}
+        />
+        <Tabs.Screen
+          name="admin-grant-coins"
+          options={{
+            tabBarItemStyle: { display: 'none' },
+          }}
+        />
+        <Tabs.Screen
+          name="add-products-professional"
+          options={{
+            tabBarItemStyle: { display: 'none' },
+          }}
+        />
+        <Tabs.Screen
           name="profile"
           options={
             useTopNav

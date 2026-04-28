@@ -820,6 +820,7 @@ const ro: Dictionary = {
   'wallet.transactions.title': 'Activitate',
   'wallet.transactions.empty': 'Nicio tranzacție încă.',
   'wallet.transactions.loading': 'Se încarcă…',
+  'wallet.transactions.loadMore': 'Încarcă mai multe',
   'wallet.refreshA11y': 'Reîmprospătează portofelul',
 
   'wallet.choice.title': 'Unde mergem?',

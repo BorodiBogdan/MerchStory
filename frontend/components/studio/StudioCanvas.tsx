@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -1860,8 +1860,17 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   }
 
   // ── Announcements state ──────────────────────────────────────────────────────
-  const [postType, setPostType] = useState<PostType>('Announcement');
-  const [content, setContent] = useState('');
+  // When navigated from the home tab's "Ideas for you" Generate button, the
+  // route carries `brief` (AI-generated image prompt) and `postType` so the
+  // user lands on the right form pre-filled. Applied once per mount so later
+  // edits aren't clobbered.
+  const routeParams = useLocalSearchParams<{ brief?: string; postType?: string }>();
+  const [postType, setPostType] = useState<PostType>(
+    routeParams.postType === 'Promotion' ? 'Promotion' : 'Announcement'
+  );
+  const [content, setContent] = useState(
+    typeof routeParams.brief === 'string' ? routeParams.brief : ''
+  );
   const [tone, setTone] = useState('Professional');
   const [annoFormat, setAnnoFormat] = useState('Square');
   const [annoGenerating, setAnnoGenerating] = useState(false);
@@ -1869,6 +1878,27 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [annoError, setAnnoError] = useState<string | null>(null);
   const [annoKept, setAnnoKept] = useState(false);
   const [promotionSelected, setPromotionSelected] = useState<Set<string>>(new Set());
+
+  // Re-apply route params when the user navigates from the home tab a second
+  // time with a different idea. The state initializers above handle the first
+  // mount; this effect handles subsequent navigations that re-render the same
+  // mounted screen with new params. We track the last-applied brief so manual
+  // edits to `content` aren't overwritten by stale param values.
+  const lastAppliedBriefRef = useRef<string | undefined>(
+    typeof routeParams.brief === 'string' ? routeParams.brief : undefined
+  );
+  useEffect(() => {
+    if (mode !== 'announcements') return;
+    const incomingBrief = typeof routeParams.brief === 'string' ? routeParams.brief : undefined;
+    if (incomingBrief === lastAppliedBriefRef.current) return;
+    if (incomingBrief && incomingBrief.length > 0) {
+      setContent(incomingBrief);
+    }
+    if (routeParams.postType === 'Promotion' || routeParams.postType === 'Announcement') {
+      setPostType(routeParams.postType);
+    }
+    lastAppliedBriefRef.current = incomingBrief;
+  }, [mode, routeParams.brief, routeParams.postType]);
 
   // Job Post sub-form state
   const [jobTitle, setJobTitle] = useState('');
