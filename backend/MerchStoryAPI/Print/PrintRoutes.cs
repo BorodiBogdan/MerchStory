@@ -128,17 +128,39 @@ public static class PrintRoutes
                 string? qrSlugUrl = null;
                 if (printLink is not null)
                 {
+                    // The /p/{slug} redirect only resolves on a real host. Without a
+                    // configured public base URL the slug becomes a bare path that
+                    // scanners read as opaque text, so fall back to the raw target
+                    // URL so the QR is always scannable.
                     string publicBase = config["Print:PublicBaseUrl"] ?? string.Empty;
                     qrSlugUrl = string.IsNullOrWhiteSpace(publicBase)
-                        ? $"/p/{printLink.Slug}"
+                        ? printLink.TargetUrl
                         : $"{publicBase.TrimEnd('/')}/p/{printLink.Slug}";
                 }
+
+                double qrX = Math.Clamp(req.QrX ?? 1.0, 0.0, 1.0);
+                double qrY = Math.Clamp(req.QrY ?? 1.0, 0.0, 1.0);
+
+                // Fractions of the page short edge so the QR holds the same
+                // on-paper proportion across A6..A3. Calibrated to match the
+                // previous absolute pt sizes on A4 (S 64/595, M 80/595, L 112/595).
+                double qrSizeFraction = (req.QrSize ?? "M").ToUpperInvariant() switch
+                {
+                    "S" => 0.108,
+                    "L" => 0.188,
+                    _ => 0.134,
+                };
+                bool qrTransparent = string.Equals(req.QrBackground, "transparent", StringComparison.OrdinalIgnoreCase);
 
                 byte[] pdf = renderer.Render(imageBytes, new PdfRenderOptions(
                     paperSize,
                     orientation,
                     qrSlugUrl,
-                    FooterText: null));
+                    FooterText: null,
+                    QrX: qrX,
+                    QrY: qrY,
+                    QrSizeFraction: qrSizeFraction,
+                    QrTransparent: qrTransparent));
 
                 string pdfBase64 = Convert.ToBase64String(pdf);
                 job.PdfBase64 = pdfBase64;
@@ -297,7 +319,11 @@ public static class PrintRoutes
 internal sealed record RenderPrintRequest(
     Guid GeneratedImageId,
     string PaperSize,
-    string? QrTargetUrl);
+    string? QrTargetUrl,
+    double? QrX = null,
+    double? QrY = null,
+    string? QrSize = null,
+    string? QrBackground = null);
 
 internal sealed record RenderPrintResponse(
     Guid JobId,

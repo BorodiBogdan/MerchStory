@@ -65,9 +65,13 @@ public static class WalletRoutes
             int s = Math.Max(0, skip ?? 0);
             int t = Math.Clamp(take ?? 50, 1, 200);
 
-            var page = await db.CoinTransactions
+            IQueryable<CoinTransaction> query = db.CoinTransactions
                 .AsNoTracking()
-                .Where(x => x.UserId == userId)
+                .Where(x => x.UserId == userId);
+
+            int total = await query.CountAsync(ct);
+
+            var page = await query
                 .OrderByDescending(x => x.CreatedAt)
                 .Skip(s)
                 .Take(t)
@@ -80,7 +84,7 @@ public static class WalletRoutes
                     x.CreatedAt))
                 .ToListAsync(ct);
 
-            return Results.Ok(page);
+            return Results.Ok(new WalletTransactionPageDto(page, total));
         });
 
         group.MapPost("/grant", async (

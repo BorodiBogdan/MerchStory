@@ -226,6 +226,7 @@ public static class RecommendationsRoutes
                 Meta = t.Meta,
                 Body = t.Body,
                 SuggestedPost = t.SuggestedPost,
+                ImagePrompt = string.IsNullOrWhiteSpace(t.ImagePrompt) ? idea.ImagePrompt : t.ImagePrompt,
                 Translations = null,
             };
         }

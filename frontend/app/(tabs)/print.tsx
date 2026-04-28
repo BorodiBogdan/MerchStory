@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   type DimensionValue,
@@ -31,12 +31,13 @@ import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 import {
-  fetchGallery,
   fetchGalleryImage,
   type GalleryItem,
   getPrintJob,
   type PaperSize,
   type PrintJobDetails,
+  type QrBackground,
+  type QrSize,
   renderPrint,
 } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
@@ -48,6 +49,17 @@ const PAPER_SIZE_OPTIONS: { value: PaperSize; label: string }[] = [
   { value: 'A5', label: 'A5' },
   { value: 'A4', label: 'A4' },
   { value: 'A3', label: 'A3' },
+];
+
+const QR_SIZE_OPTIONS: { value: QrSize; label: string }[] = [
+  { value: 'S', label: 'Small' },
+  { value: 'M', label: 'Medium' },
+  { value: 'L', label: 'Large' },
+];
+
+const QR_BG_OPTIONS: { value: QrBackground; label: string }[] = [
+  { value: 'white', label: 'White' },
+  { value: 'transparent', label: 'Transparent' },
 ];
 
 const PRINT_COST = 1;
@@ -83,8 +95,20 @@ export default function PrintScreen() {
 
   const styles = useMemo(() => makeStyles(colors, isDesktop), [colors, isDesktop]);
 
-  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
-  const [galleryLoading, setGalleryLoading] = useState(false);
+  const cache = galleryCache.useGalleryCache();
+  // Defensive filter: if Gallery currently has the cache pinned to Pdf/Video,
+  // useFocusEffect below will reload to Photo, but during that fetch we don't
+  // want to flash non-photo items in the picker.
+  const galleryItems = useMemo(
+    () => cache.items.filter((i) => i.assetType === 'Photo'),
+    [cache.items]
+  );
+  const galleryLoading = cache.loading && galleryItems.length === 0;
+  const galleryError = cache.error;
+  const canLoadMore =
+    (cache.filters.assetType ?? 'Photo') === 'Photo' &&
+    cache.items.length < cache.total &&
+    cache.initialized;
   const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
   const [previewImage, setPreviewImage] = useState<{ base64: string; mimeType: string } | null>(
     null
@@ -92,6 +116,10 @@ export default function PrintScreen() {
   const [paperSize, setPaperSize] = useState<PaperSize>('A4');
   const [includeQr, setIncludeQr] = useState(false);
   const [qrTargetUrl, setQrTargetUrl] = useState('');
+  const [qrX, setQrX] = useState(1);
+  const [qrY, setQrY] = useState(1);
+  const [qrSize, setQrSize] = useState<QrSize>('M');
+  const [qrBackground, setQrBackground] = useState<QrBackground>('white');
   const [rendering, setRendering] = useState(false);
   const [progressStep, setProgressStep] = useState(0);
   const [renderError, setRenderError] = useState<string | null>(null);
@@ -105,22 +133,11 @@ export default function PrintScreen() {
   const showQrBadge = includeQr && qrTargetUrl.trim().length > 0;
   const previewCaption = paperSize;
 
-  useEffect(() => {
-    let cancelled = false;
-    setGalleryLoading(true);
-    fetchGallery({ pageSize: 100 })
-      .then((res) => {
-        if (cancelled) return;
-        setGalleryItems(res.items);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setGalleryLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void galleryCache.ensureLoaded({ assetType: 'Photo' });
+    }, [])
+  );
 
   useEffect(() => {
     if (!selectedItem) {
@@ -172,10 +189,15 @@ export default function PrintScreen() {
     setRenderNotice(null);
     try {
       const trimmedUrl = qrTargetUrl.trim();
+      const sendQr = includeQr && trimmedUrl.length > 0;
       const job = await renderPrint({
         generatedImageId: selectedItem.id,
         paperSize,
-        qrTargetUrl: includeQr && trimmedUrl.length > 0 ? trimmedUrl : undefined,
+        qrTargetUrl: sendQr ? trimmedUrl : undefined,
+        qrX: sendQr ? qrX : undefined,
+        qrY: sendQr ? qrY : undefined,
+        qrSize: sendQr ? qrSize : undefined,
+        qrBackground: sendQr ? qrBackground : undefined,
       });
 
       const ready = await waitForJob(job.jobId);
@@ -287,6 +309,21 @@ export default function PrintScreen() {
             autoCapitalize="none"
             accessibilityLabel={t('print.qr.urlLabel')}
           />
+          <View style={styles.qrSizeWrap}>
+            <ChipSelector
+              options={QR_SIZE_OPTIONS}
+              selected={qrSize}
+              onSelect={(v) => setQrSize(v as QrSize)}
+              accessibilityLabel="QR size"
+            />
+            <ChipSelector
+              options={QR_BG_OPTIONS}
+              selected={qrBackground}
+              onSelect={(v) => setQrBackground(v as QrBackground)}
+              accessibilityLabel="QR background"
+            />
+            <Text style={styles.qrDragHint}>Drag the QR on the preview to reposition it.</Text>
+          </View>
         </View>
       )}
 
@@ -356,6 +393,15 @@ export default function PrintScreen() {
           paperSize={paperSize}
           orientation="portrait"
           showQrBadge={showQrBadge}
+          qrTargetUrl={qrTargetUrl.trim() || null}
+          qrX={qrX}
+          qrY={qrY}
+          qrSize={qrSize}
+          qrBackground={qrBackground}
+          onQrPositionChange={(x, y) => {
+            setQrX(x);
+            setQrY(y);
+          }}
           maxWidth={isDesktop ? 320 : 300}
           caption={previewCaption}
         />
@@ -407,6 +453,12 @@ export default function PrintScreen() {
         visible={pickerOpen}
         items={galleryItems}
         selectedId={selectedItem?.id ?? null}
+        loading={galleryLoading}
+        loadingMore={cache.loadingMore}
+        canLoadMore={canLoadMore}
+        error={galleryError}
+        onLoadMore={() => void galleryCache.loadMore()}
+        onRetry={() => void galleryCache.refresh()}
         onClose={() => setPickerOpen(false)}
         onSelect={(item) => {
           if (Platform.OS !== 'web') {
@@ -562,12 +614,24 @@ function AssetPickerModal({
   visible,
   items,
   selectedId,
+  loading,
+  loadingMore,
+  canLoadMore,
+  error,
+  onLoadMore,
+  onRetry,
   onClose,
   onSelect,
 }: {
   visible: boolean;
   items: GalleryItem[];
   selectedId: string | null;
+  loading: boolean;
+  loadingMore: boolean;
+  canLoadMore: boolean;
+  error: string | null;
+  onLoadMore: () => void;
+  onRetry: () => void;
   onClose: () => void;
   onSelect: (item: GalleryItem) => void;
 }) {
@@ -660,7 +724,28 @@ function AssetPickerModal({
   const body = (
     <>
       {searchBar}
-      {filtered.length === 0 ? (
+      {loading && items.length === 0 ? (
+        <View style={styles.emptyWrap}>
+          <ActivityIndicator color={colors.accent.primary} />
+        </View>
+      ) : error && items.length === 0 ? (
+        <View style={styles.emptyWrap}>
+          <Ionicons name="cloud-offline-outline" size={32} color={colors.text.muted} />
+          <Text style={styles.emptyText}>{error}</Text>
+          <Pressable
+            onPress={onRetry}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.tryAgain')}
+            style={({ pressed }: { pressed: boolean }) => [
+              styles.retryBtn,
+              pressed && { opacity: 0.8 },
+            ]}
+          >
+            <Ionicons name="refresh" size={14} color={colors.accent.primary} />
+            <Text style={styles.retryText}>{t('common.tryAgain')}</Text>
+          </Pressable>
+        </View>
+      ) : filtered.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Ionicons name="images-outline" size={32} color={colors.text.muted} />
           <Text style={styles.emptyText}>
@@ -675,6 +760,18 @@ function AssetPickerModal({
           key={cols}
           contentContainerStyle={{ padding, gap }}
           columnWrapperStyle={{ gap }}
+          // Only auto-paginate when the user isn't filtering — search runs against
+          // already-loaded items, so loading more doesn't help narrow searches and
+          // would just burn requests.
+          onEndReached={!isFiltered && canLoadMore ? onLoadMore : undefined}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footerLoading}>
+                <ActivityIndicator color={colors.accent.primary} />
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => {
             const isSel = selectedId === item.id;
             return (
@@ -1048,6 +1145,15 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
     },
     qrInputWrap: {
       marginTop: D.spacing.sm,
+    },
+    qrSizeWrap: {
+      marginTop: D.spacing.sm,
+      gap: 4,
+    },
+    qrDragHint: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      paddingHorizontal: 2,
     },
     errorBanner: {
       flexDirection: 'row',
@@ -1436,6 +1542,28 @@ function makePickerStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.xs,
       fontWeight: D.fontWeight.medium,
       color: colors.text.secondary,
+    },
+    footerLoading: {
+      paddingVertical: D.spacing.md,
+      alignItems: 'center',
+    },
+    retryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: D.spacing.sm,
+      paddingHorizontal: D.spacing.md,
+      paddingVertical: 8,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.accent.primary,
+    },
+    retryText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 0.3,
     },
   });
 }

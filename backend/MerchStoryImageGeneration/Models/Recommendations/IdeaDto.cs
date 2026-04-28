@@ -19,10 +19,13 @@ public record IdeaDto(
     string Meta,
     string Body,
     string SuggestedPost,
+    string Type = "announcement",
+    string ImagePrompt = "",
     Dictionary<string, IdeaTranslation>? Translations = null);
 
 public record IdeaTranslation(
     string Title,
     string Meta,
     string Body,
-    string SuggestedPost);
+    string SuggestedPost,
+    string ImagePrompt = "");

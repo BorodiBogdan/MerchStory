@@ -204,6 +204,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
             string? meta = StringFromProp(el, "meta");
             string? body = StringFromProp(el, "body");
             string? suggestedPost = StringFromProp(el, "suggestedPost") ?? StringFromProp(el, "suggested_post");
+            string? imagePrompt = StringFromProp(el, "imagePrompt") ?? StringFromProp(el, "image_prompt");
 
             // Need at least the title — the rest can fall back individually
             // through the projection if we wanted, but for now require all 4
@@ -217,7 +218,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
                 return null;
             }
 
-            return new IdeaTranslation(title!, meta!, body!, suggestedPost!);
+            return new IdeaTranslation(title!, meta!, body!, suggestedPost!, imagePrompt ?? string.Empty);
         }
         finally
         {
@@ -240,12 +241,14 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("meta: " + idea.Meta);
         sb.AppendLine("body: " + idea.Body);
         sb.AppendLine("suggestedPost: " + idea.SuggestedPost);
+        sb.AppendLine("imagePrompt: " + idea.ImagePrompt);
         sb.AppendLine();
         sb.AppendLine("== HOW TO TRANSLATE ==");
         sb.AppendLine("- Preserve brand names, product names, place names — don't translate them.");
         sb.AppendLine("- Preserve numbers, dates, percentages exactly.");
         sb.AppendLine("- Keep the casual tone — short sentences, everyday words.");
         sb.AppendLine("- Translate suggestedPost as something a real shop owner would actually type — not a slogan.");
+        sb.AppendLine("- Translate imagePrompt as a plain visual description in " + targetLangName + ". Keep any quoted on-image text in " + targetLangName + " too.");
         sb.AppendLine();
         sb.AppendLine("AVOID Romanian marketing-speak (these scream AI):");
         sb.AppendLine("  'descoperă', 'bucură-te', 'experiență unică', 'exclusiv', 'premium', 'autentic',");
@@ -257,7 +260,8 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("  \"title\": \"<" + targetLangName + " translation of title>\",");
         sb.AppendLine("  \"meta\": \"<" + targetLangName + " translation of meta>\",");
         sb.AppendLine("  \"body\": \"<" + targetLangName + " translation of body>\",");
-        sb.AppendLine("  \"suggestedPost\": \"<" + targetLangName + " translation of suggestedPost>\"");
+        sb.AppendLine("  \"suggestedPost\": \"<" + targetLangName + " translation of suggestedPost>\",");
+        sb.AppendLine("  \"imagePrompt\": \"<" + targetLangName + " translation of imagePrompt>\"");
         sb.AppendLine("}");
         return sb.ToString();
     }
@@ -424,8 +428,12 @@ public class LlmRecommendationProvider : IRecommendationProvider
             string suggestedPost = StringFromProp(el, "suggestedPost")
                 ?? StringFromProp(el, "suggested_post")
                 ?? string.Empty;
+            string type = NormalizeType(StringFromProp(el, "type"));
+            string imagePrompt = StringFromProp(el, "imagePrompt")
+                ?? StringFromProp(el, "image_prompt")
+                ?? string.Empty;
 
-            return new IdeaDto(id, tone, title, meta, body, suggestedPost);
+            return new IdeaDto(id, tone, title, meta, body, suggestedPost, type, imagePrompt);
         }
         finally
         {
@@ -515,6 +523,21 @@ public class LlmRecommendationProvider : IRecommendationProvider
         };
     }
 
+    private static string NormalizeType(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "announcement";
+        }
+
+        string lower = raw.Trim().ToLowerInvariant();
+        return lower switch
+        {
+            "promotion" or "promo" => "promotion",
+            _ => "announcement",
+        };
+    }
+
     private static string Truncate(string s, int max)
         => s.Length <= max ? s : s[..max] + "…";
 
@@ -574,39 +597,25 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine();
         AppendPreviousIdeas(sb, ctx);
         sb.AppendLine("== HOW TO WRITE ==");
-        sb.AppendLine("Plain, simple, human. Like a neighbor texting their friends, not a brand running an ad.");
-        sb.AppendLine();
-        sb.AppendLine("DO:");
-        sb.AppendLine("- Use everyday words. Short sentences. Specific items the shop actually sells.");
-        sb.AppendLine("- Sound like a person, not a campaign. Casual is fine.");
-        sb.AppendLine("- The suggestedPost should read like something a shop owner would type into Facebook in 30 seconds — not a slogan.");
-        sb.AppendLine();
-        sb.AppendLine("AVOID (these scream 'AI wrote this'):");
-        sb.AppendLine("- Marketing-speak: 'unlock', 'elevate', 'discover', 'experience', 'curated', 'crafted', 'unleash', 'embrace'");
-        sb.AppendLine("- Hype words: 'amazing', 'incredible', 'ultimate', 'the best', 'must-have', 'game-changer'");
-        sb.AppendLine("- Buzzword sandwiches: 'authentic flavors', 'premium quality', 'unforgettable moments'");
-        sb.AppendLine("- Calls-to-action templates: 'don't miss out', 'limited time only', 'act now'");
-        sb.AppendLine("- Title-case everywhere; sentence case is fine");
-        sb.AppendLine("- Emojis (the shop owner can add their own)");
-        sb.AppendLine();
-        sb.AppendLine("Examples of the tone we want:");
-        sb.AppendLine("  GOOD: \"Cold rain Saturday — Sunday-soup kit, three ingredients\"");
-        sb.AppendLine("  BAD:  \"Embrace the rainy weekend with our curated comfort food experience\"");
-        sb.AppendLine("  GOOD: \"It's hot — these watermelons leave the room in 30 minutes\"");
-        sb.AppendLine("  BAD:  \"Beat the heat with our premium watermelon selection\"");
+        sb.AppendLine("Plain, human, like a neighbor texting friends. Short sentences, specific items, no marketing-speak.");
+        sb.AppendLine("Avoid: 'unlock', 'elevate', 'discover', 'curated', 'premium', 'authentic', 'don't miss out', emojis, title-case.");
+        sb.AppendLine("GOOD: \"Cold rain Saturday — Sunday-soup kit, three ingredients\"");
+        sb.AppendLine("BAD:  \"Embrace the rainy weekend with our curated comfort food experience\"");
         sb.AppendLine();
         sb.AppendLine("== OUTPUT ==");
         sb.AppendLine("Return ONLY a JSON object, no prose, no code fences:");
         sb.AppendLine("{");
         sb.AppendLine("  \"id\": \"short-kebab-case-id\",");
         sb.AppendLine($"  \"tone\": \"{angle.Tone}\",");
-        sb.AppendLine("  \"title\": \"4-8 words, plain language, no hype\",");
-        sb.AppendLine("  \"meta\": \"short factual context — a date, a number, what's happening (e.g. 'Sâmbătă · 8°C', 'Paștele · în 5 zile')\",");
-        sb.AppendLine("  \"body\": \"1-2 sentences explaining the idea simply, like you'd say it out loud to the shop owner\",");
-        sb.AppendLine("  \"suggestedPost\": \"5-9 words a real shop owner would type. Not a slogan. Not branded. Just human.\"");
+        sb.AppendLine("  \"title\": \"4-8 words, plain language\",");
+        sb.AppendLine("  \"meta\": \"short factual context (a date, a number)\",");
+        sb.AppendLine("  \"body\": \"1-2 sentences explaining the idea\",");
+        sb.AppendLine("  \"suggestedPost\": \"5-9 words a real shop owner would type. Not a slogan.\",");
+        sb.AppendLine("  \"type\": \"promotion\" if there's a concrete discount/sale/bundle, else \"announcement\",");
+        sb.AppendLine("  \"imagePrompt\": \"1-2 sentences: subject, optional on-image text, mood. Visual description, not a slogan.\"");
         sb.AppendLine("}");
         sb.AppendLine();
-        sb.AppendLine("Write title / meta / body / suggestedPost in English. A separate translator handles other languages.");
+        sb.AppendLine("Write title / meta / body / suggestedPost / imagePrompt in English. A separate translator handles other languages.");
         return sb.ToString();
     }
 

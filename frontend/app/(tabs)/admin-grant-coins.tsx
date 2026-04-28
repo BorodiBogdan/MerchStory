@@ -83,7 +83,7 @@ export default function AdminGrantCoinsScreen() {
         <Text style={styles.deniedBody}>{t('admin.adminOnly.body')}</Text>
         <Pressable
           style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
-          onPress={() => router.back()}
+          onPress={() => router.replace('/admin')}
         >
           <Text style={styles.backButtonText}>{t('admin.adminOnly.back')}</Text>
         </Pressable>
@@ -146,7 +146,7 @@ export default function AdminGrantCoinsScreen() {
       >
         <View style={styles.headerRow}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => router.replace('/admin')}
             style={styles.iconButton}
             accessibilityLabel="Back"
           >

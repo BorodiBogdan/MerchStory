@@ -806,6 +806,7 @@ const en = {
   'wallet.transactions.title': 'Activity',
   'wallet.transactions.empty': 'No transactions yet.',
   'wallet.transactions.loading': 'Loading…',
+  'wallet.transactions.loadMore': 'Load more',
   'wallet.refreshA11y': 'Refresh wallet',
 
   'wallet.choice.title': 'Where to?',
