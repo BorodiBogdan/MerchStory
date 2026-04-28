@@ -49,7 +49,7 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
         "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
         BrandContextBlock(r.BrandContext) +
         LogoBlock(r.LogoBase64) +
-        $"Create a {r.Tone.ToLowerInvariant()} announcement social media graphic in {r.Format} format. " +
+        $"Create a {r.Tone.ToLowerInvariant()} announcement social media graphic in {FormatPhrase(r.Format)} format. " +
         $"Announcement content: \"{r.Content}\". " +
         "Read the content and pick the right treatment: " +
         "if it describes an event or news (opening hours, new arrival, upcoming event), " +
@@ -74,7 +74,7 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
                    "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
                    BrandContextBlock(r.BrandContext) +
                    LogoBlock(r.LogoBase64) +
-                   $"Create a {r.Tone.ToLowerInvariant()} job-posting social media graphic in {r.Format} format. " +
+                   $"Create a {r.Tone.ToLowerInvariant()} job-posting social media graphic in {FormatPhrase(r.Format)} format. " +
                    $"Job details: \"{r.Content}\". " +
                    "Design requirements: a prominent \"We're Hiring\" or \"Join Our Team\" hook as the hero headline; " +
                    "the role title clearly visible as a secondary headline; " +
@@ -141,7 +141,7 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
                "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
                BrandContextBlock(r.BrandContext) +
                LogoBlock(r.LogoBase64) +
-               $"Create a {r.Tone.ToLowerInvariant()} job-posting social media graphic in {r.Format} format.\n\n" +
+               $"Create a {r.Tone.ToLowerInvariant()} job-posting social media graphic in {FormatPhrase(r.Format)} format.\n\n" +
                jobDetailsBlock +
                requirementsBlock +
                directionBlock +
@@ -161,7 +161,7 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
                "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
                BrandContextBlock(r.BrandContext) +
                LogoBlock(r.LogoBase64) +
-               $"Create a {r.Tone.ToLowerInvariant()} promotional sale graphic in {r.Format} format. " +
+               $"Create a {r.Tone.ToLowerInvariant()} promotional sale graphic in {FormatPhrase(r.Format)} format. " +
                $"Promotion details: \"{r.Content}\". " +
                "Design requirements: the discount or offer (e.g. \"20% OFF\") must be the largest, " +
                "most eye-catching element on the graphic — treat it as the hero; " +
@@ -174,6 +174,12 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
                    : "no product photos provided — use bold typography, graphic shapes, and brand colours as the visual focus; ") +
                "overall feel: exciting, urgent, impossible to scroll past.";
     }
+
+    // ── Format phrase ─────────────────────────────────────────────────────────────
+    private static string FormatPhrase(string format) =>
+        string.Equals(format, "Poster", StringComparison.OrdinalIgnoreCase)
+            ? "Poster A4 (1:√2 ≈ 1:1.414, vertical print). Do not add any extra text beyond what was explicitly stated in the request — no taglines, no decorative copy, no filler"
+            : format;
 
     // ── Logo block ────────────────────────────────────────────────────────────────
     private static string LogoBlock(string? logoBase64) =>
