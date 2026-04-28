@@ -59,7 +59,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 function toApiFilters(f: GalleryFilterState, assetType: GalleryAssetType) {
   return {
     assetType,
-    types: f.types,
+    types: assetType === 'Pdf' ? [] : f.types,
     search: f.search,
     from: DATE_RE.test(f.from) ? f.from : undefined,
     to: DATE_RE.test(f.to) ? f.to : undefined,
@@ -694,6 +694,7 @@ export default function GalleryScreen() {
                   onChange={handleFiltersChange}
                   layout="vertical"
                   resultCount={loading ? undefined : total}
+                  showTypeFilter={assetType !== 'Pdf'}
                 />
               </View>
               <View style={styles.sidebarContent}>{photosContent()}</View>
@@ -705,6 +706,7 @@ export default function GalleryScreen() {
                   value={filters}
                   onChange={handleFiltersChange}
                   resultCount={loading ? undefined : total}
+                  showTypeFilter={assetType !== 'Pdf'}
                 />
               </View>
               {photosContent()}

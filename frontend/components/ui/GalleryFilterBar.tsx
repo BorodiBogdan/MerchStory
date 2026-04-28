@@ -33,6 +33,7 @@ interface GalleryFilterBarProps {
   onChange: (next: GalleryFilterState) => void;
   layout?: 'auto' | 'compact' | 'vertical';
   resultCount?: number;
+  showTypeFilter?: boolean;
 }
 
 const DESKTOP_BREAKPOINT = 900;
@@ -42,6 +43,7 @@ export function GalleryFilterBar({
   onChange,
   layout = 'auto',
   resultCount,
+  showTypeFilter = true,
 }: GalleryFilterBarProps) {
   const { colors } = useTheme();
   const t = useT();
@@ -242,10 +244,12 @@ export function GalleryFilterBar({
           {searchField}
         </View>
 
-        <View style={styles.verticalSection}>
-          <Text style={styles.verticalLabel}>{t('galleryFilters.type')}</Text>
-          {typeList}
-        </View>
+        {showTypeFilter && (
+          <View style={styles.verticalSection}>
+            <Text style={styles.verticalLabel}>{t('galleryFilters.type')}</Text>
+            {typeList}
+          </View>
+        )}
 
         <View style={styles.verticalSection}>
           <Text style={styles.verticalLabel}>{t('galleryFilters.generated')}</Text>
@@ -280,7 +284,7 @@ export function GalleryFilterBar({
             </Pressable>
           )}
         </View>
-        <View style={styles.desktopChipsRow}>{typeList}</View>
+        {showTypeFilter && <View style={styles.desktopChipsRow}>{typeList}</View>}
         {typeof resultCount === 'number' && (
           <Text style={styles.resultCount}>
             {resultCount}{' '}
@@ -317,7 +321,7 @@ export function GalleryFilterBar({
       </View>
       {expanded && (
         <View style={styles.mobileExpanded}>
-          {typeList}
+          {showTypeFilter && typeList}
           {dateRange}
           {hasActiveFilters && (
             <Pressable
