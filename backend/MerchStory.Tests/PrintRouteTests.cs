@@ -61,8 +61,6 @@ public class PrintRouteTests : IDisposable
                     ["Jwt:MobileRefreshTokenExpiryDays"] = "30",
                     ["Jwt:WebRefreshTokenExpiryDays"] = "1",
                     ["Google:ApiKey"] = "test-key",
-                    ["Print:PremiumCost:A4"] = "5",
-                    ["Print:PremiumCost:A3"] = "10",
                 });
             });
 
@@ -98,7 +96,7 @@ public class PrintRouteTests : IDisposable
     }
 
     [Fact]
-    public async Task Render_StandardA4_ProducesPdfWithoutCharge()
+    public async Task Render_A4_ProducesPdfAndDebitsOneCoin()
     {
         (string token, string userId) = await this.RegisterAndGetTokenAsync("standard@test.com", coins: 10);
         Guid imageId = await this.SeedGeneratedImageAsync(userId);
@@ -107,8 +105,6 @@ public class PrintRouteTests : IDisposable
         {
             generatedImageId = imageId,
             paperSize = "A4",
-            orientation = "portrait",
-            qualityTier = "standard",
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -117,9 +113,8 @@ public class PrintRouteTests : IDisposable
         Assert.Equal("ready", doc.RootElement.GetProperty("status").GetString());
         Guid jobId = doc.RootElement.GetProperty("jobId").GetGuid();
 
-        // Standard tier never debits — newBalance is null, balance unchanged.
-        Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("newBalance").ValueKind);
-        Assert.Equal(10, await this.GetCoinBalanceAsync(userId));
+        Assert.Equal(9, doc.RootElement.GetProperty("newBalance").GetInt32());
+        Assert.Equal(9, await this.GetCoinBalanceAsync(userId));
 
         PrintJob? job = await this.GetJobAsync(jobId);
         Assert.NotNull(job);
@@ -128,7 +123,7 @@ public class PrintRouteTests : IDisposable
     }
 
     [Fact]
-    public async Task Render_PremiumA3_DebitsCoinsAndUpscales()
+    public async Task Render_A3_DebitsOneCoinAndUpscales()
     {
         (string token, string userId) = await this.RegisterAndGetTokenAsync("premium@test.com", coins: 50);
         Guid imageId = await this.SeedGeneratedImageAsync(userId);
@@ -137,33 +132,30 @@ public class PrintRouteTests : IDisposable
         {
             generatedImageId = imageId,
             paperSize = "A3",
-            orientation = "portrait",
-            qualityTier = "premium",
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         using JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("ready", doc.RootElement.GetProperty("status").GetString());
-        Assert.Equal(40, doc.RootElement.GetProperty("newBalance").GetInt32());
-        Assert.Equal(40, await this.GetCoinBalanceAsync(userId));
+        Assert.Equal(49, doc.RootElement.GetProperty("newBalance").GetInt32());
+        Assert.Equal(49, await this.GetCoinBalanceAsync(userId));
     }
 
     [Fact]
-    public async Task Render_PremiumWithoutEnoughCoins_Returns402()
+    public async Task Render_WithoutEnoughCoins_Returns402()
     {
-        (string token, string userId) = await this.RegisterAndGetTokenAsync("broke@test.com", coins: 2);
+        (string token, string userId) = await this.RegisterAndGetTokenAsync("broke@test.com", coins: 0);
         Guid imageId = await this.SeedGeneratedImageAsync(userId);
 
         HttpResponseMessage response = await this.SendRenderAsync(token, new
         {
             generatedImageId = imageId,
             paperSize = "A4",
-            qualityTier = "premium",
         });
 
         Assert.Equal(HttpStatusCode.PaymentRequired, response.StatusCode);
-        Assert.Equal(2, await this.GetCoinBalanceAsync(userId));
+        Assert.Equal(0, await this.GetCoinBalanceAsync(userId));
     }
 
     [Fact]

@@ -37,8 +37,6 @@ import {
   getPrintJob,
   type PaperSize,
   type PrintJobDetails,
-  type PrintOrientation,
-  type PrintQualityTier,
   renderPrint,
 } from '@/utils/api';
 
@@ -51,12 +49,7 @@ const PAPER_SIZE_OPTIONS: { value: PaperSize; label: string }[] = [
   { value: 'A3', label: 'A3' },
 ];
 
-const PREMIUM_COST: Record<PaperSize, number> = {
-  A6: 5,
-  A5: 5,
-  A4: 5,
-  A3: 10,
-};
+const PRINT_COST = 1;
 
 export default function PrintScreen() {
   const { colors } = useTheme();
@@ -76,35 +69,15 @@ export default function PrintScreen() {
     null
   );
   const [paperSize, setPaperSize] = useState<PaperSize>('A4');
-  const [orientation, setOrientation] = useState<PrintOrientation>('portrait');
-  const [qualityTier, setQualityTier] = useState<PrintQualityTier>('standard');
   const [includeQr, setIncludeQr] = useState(false);
   const [qrTargetUrl, setQrTargetUrl] = useState('');
   const [rendering, setRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const orientationOptions = useMemo(
-    () => [
-      { value: 'portrait', label: t('print.orientation.portrait') },
-      { value: 'landscape', label: t('print.orientation.landscape') },
-    ],
-    [t]
-  );
-  const qualityOptions = useMemo(
-    () => [
-      { value: 'standard', label: t('print.quality.standard') },
-      { value: 'premium', label: t('print.quality.premium') },
-    ],
-    [t]
-  );
-
-  const premiumCost = PREMIUM_COST[paperSize];
-  const insufficientCoins = qualityTier === 'premium' && coinBalance < premiumCost;
+  const insufficientCoins = coinBalance < PRINT_COST;
   const showQrBadge = includeQr && qrTargetUrl.trim().length > 0;
-  const previewCaption = `${paperSize} · ${
-    orientation === 'portrait' ? t('print.orientation.portrait') : t('print.orientation.landscape')
-  }`;
+  const previewCaption = paperSize;
 
   useEffect(() => {
     let cancelled = false;
@@ -153,8 +126,6 @@ export default function PrintScreen() {
       const job = await renderPrint({
         generatedImageId: selectedItem.id,
         paperSize,
-        orientation,
-        qualityTier,
         qrTargetUrl: includeQr && trimmedUrl.length > 0 ? trimmedUrl : undefined,
       });
 
@@ -178,7 +149,7 @@ export default function PrintScreen() {
     : !selectedItem
       ? t('print.button.pickFirst')
       : insufficientCoins
-        ? `${t('print.button.needCoinsPrefix')} ${premiumCost} ${t('print.coinsLabel')}`
+        ? `${t('print.button.needCoinsPrefix')} ${PRINT_COST} ${t('print.coinsLabel')}`
         : t('print.button.generate');
 
   const configColumn = (
@@ -215,36 +186,8 @@ export default function PrintScreen() {
         accessibilityLabel={t('print.section.sizeTitle')}
       />
 
-      <View style={styles.sectionGap} />
-      <View style={styles.pairRow}>
-        <View style={styles.pairCell}>
-          <SectionHeader
-            eyebrow={t('print.section.orientationEyebrow')}
-            title={t('print.section.orientationTitle')}
-          />
-          <ChipSelector
-            options={orientationOptions}
-            selected={orientation}
-            onSelect={(v) => setOrientation(v as PrintOrientation)}
-            accessibilityLabel={t('print.section.orientationTitle')}
-          />
-        </View>
-        <View style={styles.pairCell}>
-          <SectionHeader
-            eyebrow={t('print.section.qualityEyebrow')}
-            title={t('print.section.qualityTitle')}
-          />
-          <ChipSelector
-            options={qualityOptions}
-            selected={qualityTier}
-            onSelect={(v) => setQualityTier(v as PrintQualityTier)}
-            accessibilityLabel={t('print.section.qualityTitle')}
-          />
-        </View>
-      </View>
-      <QualityInfo
-        qualityTier={qualityTier}
-        premiumCost={premiumCost}
+      <CostInfo
+        cost={PRINT_COST}
         insufficientCoins={insufficientCoins}
         onTopUp={() => router.push('/(tabs)/wallet')}
       />
@@ -318,27 +261,13 @@ export default function PrintScreen() {
           imageBase64={previewImage?.base64 ?? null}
           imageMimeType={previewImage?.mimeType ?? null}
           paperSize={paperSize}
-          orientation={orientation}
+          orientation="portrait"
           showQrBadge={showQrBadge}
           maxWidth={isDesktop ? 320 : 300}
           caption={previewCaption}
         />
         <View style={styles.summaryRow}>
           <SummaryChip icon="resize-outline" label={paperSize} />
-          <SummaryChip
-            icon={orientation === 'portrait' ? 'phone-portrait-outline' : 'phone-landscape-outline'}
-            label={
-              orientation === 'portrait'
-                ? t('print.orientation.portrait')
-                : t('print.orientation.landscape')
-            }
-          />
-          <SummaryChip
-            icon={qualityTier === 'premium' ? 'sparkles-outline' : 'flash-off-outline'}
-            label={
-              qualityTier === 'premium' ? t('print.quality.premium') : t('print.quality.standard')
-            }
-          />
           <SummaryChip
             icon="qr-code-outline"
             label={showQrBadge ? t('print.preview.qrOn') : t('print.preview.qrOff')}
@@ -722,57 +651,45 @@ function AssetPickerModal({
   );
 }
 
-// ─── Quality info block ──────────────────────────────────────────────────
-function QualityInfo({
-  qualityTier,
-  premiumCost,
+// ─── Cost info block ─────────────────────────────────────────────────────
+function CostInfo({
+  cost,
   insufficientCoins,
   onTopUp,
 }: {
-  qualityTier: PrintQualityTier;
-  premiumCost: number;
+  cost: number;
   insufficientCoins: boolean;
   onTopUp: () => void;
 }) {
   const { colors } = useTheme();
   const t = useT();
   const styles = useMemo(
-    () => makeQualityStyles(colors, insufficientCoins),
+    () => makeCostStyles(colors, insufficientCoins),
     [colors, insufficientCoins]
   );
-  const isPremium = qualityTier === 'premium';
 
   return (
     <View style={styles.card}>
       <View style={styles.iconTile}>
-        <Ionicons
-          name={isPremium ? 'sparkles' : 'flash-off-outline'}
-          size={18}
-          color={colors.accent.primary}
-        />
+        <Ionicons name="sparkles" size={18} color={colors.accent.primary} />
       </View>
       <View style={styles.body}>
-        <Text style={styles.helper}>
-          {isPremium ? t('print.quality.premiumHelper') : t('print.quality.standardHelper')}
-        </Text>
-        {isPremium && (
-          <View style={styles.costRow}>
-            <Text style={styles.costPrefix}>{t('print.quality.costsLabel')}</Text>
-            <CoinIcon size={14} />
-            <Text style={styles.costNumber}>{premiumCost}</Text>
-            <Text style={styles.costSuffix}>{t('print.coinsLabel')}</Text>
-          </View>
-        )}
+        <View style={styles.costRow}>
+          <Text style={styles.costPrefix}>{t('print.cost.label')}</Text>
+          <CoinIcon size={14} />
+          <Text style={styles.costNumber}>{cost}</Text>
+          <Text style={styles.costSuffix}>{t('print.coinsLabel')}</Text>
+        </View>
         {insufficientCoins && (
           <View style={styles.warningRow}>
-            <Text style={styles.warningText}>{t('print.quality.notEnoughCoins')}</Text>
+            <Text style={styles.warningText}>{t('print.cost.notEnoughCoins')}</Text>
             <Pressable
               onPress={onTopUp}
               accessibilityRole="link"
-              accessibilityLabel={t('print.quality.topUp')}
+              accessibilityLabel={t('print.cost.topUp')}
               hitSlop={6}
             >
-              <Text style={styles.topUpText}>{t('print.quality.topUp')}</Text>
+              <Text style={styles.topUpText}>{t('print.cost.topUp')}</Text>
             </Pressable>
           </View>
         )}
@@ -1015,16 +932,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
     },
     sectionGap: {
       height: D.spacing.lg,
-    },
-    pairRow: {
-      flexDirection: isDesktop ? 'row' : 'column',
-      gap: D.spacing.lg,
-      alignItems: 'flex-start',
-    },
-    pairCell: {
-      flex: isDesktop ? 1 : undefined,
-      width: isDesktop ? undefined : '100%',
-      minWidth: 0,
     },
     assetRow: {
       gap: D.spacing.sm,
@@ -1404,7 +1311,7 @@ function makePickerStyles(colors: ReturnType<typeof useTheme>['colors']) {
   });
 }
 
-function makeQualityStyles(colors: ReturnType<typeof useTheme>['colors'], insufficient: boolean) {
+function makeCostStyles(colors: ReturnType<typeof useTheme>['colors'], insufficient: boolean) {
   return StyleSheet.create({
     card: {
       flexDirection: 'row',

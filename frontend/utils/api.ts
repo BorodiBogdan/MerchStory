@@ -1085,14 +1085,11 @@ export async function grantCoins(
 // ── Print Shop ───────────────────────────────────────────────────────────────
 export type PaperSize = 'A6' | 'A5' | 'A4' | 'A3';
 export type PrintOrientation = 'portrait' | 'landscape';
-export type PrintQualityTier = 'standard' | 'premium';
 export type PrintJobStatus = 'pending' | 'rendering' | 'ready' | 'failed';
 
 export interface RenderPrintRequest {
   generatedImageId: string;
   paperSize: PaperSize;
-  orientation?: PrintOrientation;
-  qualityTier?: PrintQualityTier;
   qrTargetUrl?: string;
 }
 

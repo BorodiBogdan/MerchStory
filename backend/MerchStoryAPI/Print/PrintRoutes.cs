@@ -9,19 +9,11 @@ namespace MerchStoryAPI.Print;
 
 public static class PrintRoutes
 {
+    private const int PrintCost = 1;
+
     private static readonly HashSet<string> AllowedPaperSizes = new(StringComparer.OrdinalIgnoreCase)
     {
         "A6", "A5", "A4", "A3",
-    };
-
-    private static readonly HashSet<string> AllowedOrientations = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "portrait", "landscape",
-    };
-
-    private static readonly HashSet<string> AllowedQualityTiers = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "standard", "premium",
     };
 
     public static void MapPrintEndpoints(this WebApplication app)
@@ -52,17 +44,8 @@ public static class PrintRoutes
                 return Results.BadRequest(new { detail = "Unsupported paper size. Use A6, A5, A4, or A3." });
             }
 
-            string orientation = (req.Orientation ?? "portrait").ToLowerInvariant();
-            if (!AllowedOrientations.Contains(orientation))
-            {
-                return Results.BadRequest(new { detail = "Orientation must be 'portrait' or 'landscape'." });
-            }
-
-            string qualityTier = (req.QualityTier ?? "standard").ToLowerInvariant();
-            if (!AllowedQualityTiers.Contains(qualityTier))
-            {
-                return Results.BadRequest(new { detail = "Quality tier must be 'standard' or 'premium'." });
-            }
+            const string orientation = "portrait";
+            const string qualityTier = "premium";
 
             GeneratedImage? source = await db.GeneratedImages
                 .SingleOrDefaultAsync(g => g.Id == req.GeneratedImageId && g.UserId == userId, ct);
@@ -71,23 +54,17 @@ public static class PrintRoutes
                 return Results.NotFound(new { detail = "Generated image not found." });
             }
 
-            int premiumCost = config.GetValue("Print:PremiumCost:" + paperSize, 5);
-
-            DeductResult? deduction = null;
-            if (qualityTier == "premium")
+            DeductResult deduction = await wallet.TryDeductAsync(
+                userId,
+                PrintCost,
+                $"Print {paperSize}",
+                null,
+                ct);
+            if (!deduction.Succeeded)
             {
-                deduction = await wallet.TryDeductAsync(
-                    userId,
-                    premiumCost,
-                    $"Premium print {paperSize}",
-                    null,
-                    ct);
-                if (!deduction.Succeeded)
-                {
-                    return Results.Json(
-                        new { detail = deduction.Error ?? "Insufficient coins." },
-                        statusCode: StatusCodes.Status402PaymentRequired);
-                }
+                return Results.Json(
+                    new { detail = deduction.Error ?? "Insufficient coins." },
+                    statusCode: StatusCodes.Status402PaymentRequired);
             }
 
             PrintLink? printLink = null;
@@ -99,10 +76,7 @@ public static class PrintRoutes
                 }
                 catch (ArgumentException ex)
                 {
-                    if (deduction?.Succeeded == true)
-                    {
-                        await wallet.GrantAsync(userId, premiumCost, "Refund: invalid QR URL", ct);
-                    }
+                    await wallet.GrantAsync(userId, PrintCost, "Refund: invalid QR URL", ct);
 
                     return Results.BadRequest(new { detail = ex.Message });
                 }
@@ -127,11 +101,8 @@ public static class PrintRoutes
             {
                 byte[] imageBytes = Convert.FromBase64String(source.ImageBase64);
 
-                if (qualityTier == "premium")
-                {
-                    int scale = paperSize == "A3" ? 4 : 2;
-                    imageBytes = await upscaler.UpscaleAsync(imageBytes, scale, ct);
-                }
+                int scale = paperSize == "A3" ? 4 : 2;
+                imageBytes = await upscaler.UpscaleAsync(imageBytes, scale, ct);
 
                 string? qrSlugUrl = null;
                 if (printLink is not null)
@@ -162,10 +133,7 @@ public static class PrintRoutes
                 job.CompletedAt = DateTime.UtcNow;
                 await db.SaveChangesAsync(ct);
 
-                if (deduction?.Succeeded == true)
-                {
-                    await wallet.GrantAsync(userId, premiumCost, "Refund: print render failed", ct);
-                }
+                await wallet.GrantAsync(userId, PrintCost, "Refund: print render failed", ct);
 
                 return Results.Problem("Failed to render print.", statusCode: StatusCodes.Status500InternalServerError);
             }
@@ -174,7 +142,7 @@ public static class PrintRoutes
                 job.Id,
                 job.Status,
                 printLink?.Slug,
-                deduction?.NewBalance));
+                deduction.NewBalance));
         });
 
         authed.MapGet("/{id:guid}", async (
@@ -232,8 +200,6 @@ public static class PrintRoutes
 internal sealed record RenderPrintRequest(
     Guid GeneratedImageId,
     string PaperSize,
-    string? Orientation,
-    string? QualityTier,
     string? QrTargetUrl);
 
 internal sealed record RenderPrintResponse(
