@@ -80,6 +80,8 @@ type PromoIdea = {
   meta: string;
   body: string;
   suggestedPost: string;
+  type: 'announcement' | 'promotion';
+  imagePrompt: string;
 };
 
 const TONE_ICON: Record<IdeaTone, React.ComponentProps<typeof Ionicons>['name']> = {
@@ -176,6 +178,8 @@ function IdeasForYouSection({
         meta: it.meta,
         body: it.body,
         suggestedPost: it.suggestedPost,
+        type: it.type,
+        imagePrompt: it.imagePrompt,
       })),
     [rawIdeas, t]
   );
@@ -205,7 +209,10 @@ function IdeasForYouSection({
     setSelectedIdea(null);
     router.push({
       pathname: '/(tabs)/studio/announcements',
-      params: { brief: idea.suggestedPost },
+      params: {
+        brief: idea.imagePrompt || idea.suggestedPost,
+        postType: idea.type === 'promotion' ? 'Promotion' : 'Announcement',
+      },
     });
   }
 

@@ -866,6 +866,7 @@ export async function removeBackground(imageBase64: string): Promise<RemoveBackg
 // ── Recommendations ──────────────────────────────────────────────────────────
 
 export type IdeaTone = 'weather' | 'holiday' | 'news' | 'trend';
+export type IdeaType = 'announcement' | 'promotion';
 
 export interface IdeaItem {
   id: string;
@@ -874,6 +875,8 @@ export interface IdeaItem {
   meta: string;
   body: string;
   suggestedPost: string;
+  type: IdeaType;
+  imagePrompt: string;
 }
 
 // Discriminated response shape — Phase 3 introduces async job semantics.
@@ -884,13 +887,38 @@ export type RecommendationResponse =
   | { status: 'generating'; jobId: string }
   | { status: 'failed'; error: string };
 
+interface RawIdeaItem {
+  id: string;
+  tone: IdeaTone;
+  title: string;
+  meta: string;
+  body: string;
+  suggestedPost: string;
+  type?: IdeaType | string | null;
+  imagePrompt?: string | null;
+}
+
 interface RawRecommendationResponse {
   status: 'ready' | 'generating' | 'failed';
   jobId?: string | null;
   id?: string | null;
   generatedAtUtc?: string | null;
-  ideas?: IdeaItem[] | null;
+  ideas?: RawIdeaItem[] | null;
   error?: string | null;
+}
+
+function normalizeIdea(raw: RawIdeaItem): IdeaItem {
+  const type: IdeaType = raw.type === 'promotion' ? 'promotion' : 'announcement';
+  return {
+    id: raw.id,
+    tone: raw.tone,
+    title: raw.title,
+    meta: raw.meta,
+    body: raw.body,
+    suggestedPost: raw.suggestedPost,
+    type,
+    imagePrompt: raw.imagePrompt ?? '',
+  };
 }
 
 function normalizeRecommendationResponse(raw: RawRecommendationResponse): RecommendationResponse {
@@ -899,7 +927,7 @@ function normalizeRecommendationResponse(raw: RawRecommendationResponse): Recomm
       status: 'ready',
       id: raw.id ?? '',
       generatedAtUtc: raw.generatedAtUtc ?? '',
-      ideas: raw.ideas ?? [],
+      ideas: (raw.ideas ?? []).map(normalizeIdea),
     };
   }
   if (raw.status === 'generating') {
