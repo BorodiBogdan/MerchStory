@@ -37,6 +37,10 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
     public DbSet<CoinTransaction> CoinTransactions => this.Set<CoinTransaction>();
 
+    public DbSet<PrintJob> PrintJobs => this.Set<PrintJob>();
+
+    public DbSet<PrintLink> PrintLinks => this.Set<PrintLink>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -312,6 +316,43 @@ public class AppDbContext : IdentityDbContext<AppUser>
                   .WithMany()
                   .HasForeignKey(t => t.RelatedGeneratedImageId)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<PrintJob>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+
+            entity.Property(p => p.PdfBase64).HasColumnType("text");
+
+            entity.HasIndex(p => new { p.UserId, p.CreatedAt })
+                  .IsDescending(false, true);
+
+            entity.HasOne(p => p.User)
+                  .WithMany()
+                  .HasForeignKey(p => p.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.SourceGeneratedImage)
+                  .WithMany()
+                  .HasForeignKey(p => p.SourceGeneratedImageId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.PrintLink)
+                  .WithMany()
+                  .HasForeignKey(p => p.PrintLinkId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<PrintLink>(entity =>
+        {
+            entity.HasKey(l => l.Id);
+
+            entity.HasIndex(l => l.Slug).IsUnique();
+
+            entity.HasOne(l => l.OwnerUser)
+                  .WithMany()
+                  .HasForeignKey(l => l.OwnerUserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

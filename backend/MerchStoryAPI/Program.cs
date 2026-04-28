@@ -6,6 +6,7 @@ using MerchStoryAPI.Gallery;
 using MerchStoryAPI.Geocoding;
 using MerchStoryAPI.ImageGeneration;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Print;
 using MerchStoryAPI.Products;
 using MerchStoryAPI.Recommendations;
 using MerchStoryAPI.ReferenceImages;
@@ -119,6 +120,13 @@ builder.Services.AddScoped<IdeaEmbeddingService>();
 
 builder.Services.AddScoped<WalletService>();
 
+// Print Shop: PDF export of generated assets sized for paper. Lanczos upscaler is the
+// v1 baseline; replace with a Real-ESRGAN-backed IUpscaler implementation when the
+// ncnn-vulkan binary is bundled into the deploy image.
+builder.Services.AddSingleton<PdfRenderer>();
+builder.Services.AddSingleton<IUpscaler, LanczosUpscaler>();
+builder.Services.AddScoped<QrLinkService>();
+
 var app = builder.Build();
 
 using (IServiceScope scope = app.Services.CreateScope())
@@ -154,6 +162,7 @@ app.MapImageGenerationEndpoints();
 app.MapReferenceImageEndpoints();
 app.MapRecommendationsEndpoints();
 app.MapWalletEndpoints();
+app.MapPrintEndpoints();
 
 app.Run();
 

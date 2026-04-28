@@ -164,6 +164,7 @@ const ro: Dictionary = {
   'tabs.gallery': 'Galerie',
   'tabs.products': 'Produse',
   'tabs.analytics': 'Analiză',
+  'tabs.print': 'Tipărire',
   'tabs.home': 'Acasă MerchStory',
   'tabs.profile': 'Profil',
 

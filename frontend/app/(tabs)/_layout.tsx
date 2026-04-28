@@ -76,6 +76,14 @@ export default function TabLayout() {
         isActive: pathname.startsWith('/analytics'),
         onPress: () => router.navigate('/(tabs)/analytics'),
       },
+      {
+        key: 'print',
+        label: t('tabs.print'),
+        icon: 'print',
+        iconOutline: 'print-outline',
+        isActive: pathname.startsWith('/print'),
+        onPress: () => router.navigate('/(tabs)/print'),
+      },
     ],
     [pathname, t, router]
   );
@@ -251,6 +259,15 @@ export default function TabLayout() {
                 size={22}
                 color={color}
               />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="print"
+          options={{
+            tabBarLabel: t('tabs.print'),
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'print' : 'print-outline'} size={22} color={color} />
             ),
           }}
         />

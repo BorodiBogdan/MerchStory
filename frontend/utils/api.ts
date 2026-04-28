@@ -1081,3 +1081,59 @@ export async function grantCoins(
   }
   return response.json() as Promise<GrantCoinsResponse>;
 }
+
+// ── Print Shop ───────────────────────────────────────────────────────────────
+export type PaperSize = 'A6' | 'A5' | 'A4' | 'A3';
+export type PrintOrientation = 'portrait' | 'landscape';
+export type PrintQualityTier = 'standard' | 'premium';
+export type PrintJobStatus = 'pending' | 'rendering' | 'ready' | 'failed';
+
+export interface RenderPrintRequest {
+  generatedImageId: string;
+  paperSize: PaperSize;
+  orientation?: PrintOrientation;
+  qualityTier?: PrintQualityTier;
+  qrTargetUrl?: string;
+}
+
+export interface RenderPrintResponse {
+  jobId: string;
+  status: PrintJobStatus;
+  qrSlug: string | null;
+  newBalance: number | null;
+}
+
+export interface PrintJobDetails {
+  id: string;
+  status: PrintJobStatus;
+  paperSize: string;
+  orientation: string;
+  qualityTier: string;
+  pdfBase64: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export async function renderPrint(req: RenderPrintRequest): Promise<RenderPrintResponse> {
+  const response = await fetchWithAuth(`${API_URL}/print/render`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as { detail?: string }).detail ?? `Print render failed (${response.status})`
+    );
+  }
+  return response.json() as Promise<RenderPrintResponse>;
+}
+
+export async function getPrintJob(jobId: string): Promise<PrintJobDetails> {
+  const response = await fetchWithAuth(`${API_URL}/print/${jobId}`, { method: 'GET' });
+  if (!response.ok) {
+    throw new Error(`Failed to load print job (${response.status})`);
+  }
+  return response.json() as Promise<PrintJobDetails>;
+}

@@ -160,6 +160,7 @@ const en = {
   'tabs.gallery': 'Gallery',
   'tabs.products': 'Products',
   'tabs.analytics': 'Analytics',
+  'tabs.print': 'Print',
   'tabs.home': 'MerchStory home',
   'tabs.profile': 'Profile',
 

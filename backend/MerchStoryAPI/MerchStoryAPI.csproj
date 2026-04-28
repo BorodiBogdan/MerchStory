@@ -34,6 +34,8 @@
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
     <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.4" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.22.2" />
+    <PackageReference Include="QuestPDF" Version="2024.12.3" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
 
   <ItemGroup>
