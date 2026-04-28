@@ -20,4 +20,10 @@ public class GeneratedImage
 
     [MaxLength(80)]
     public string Name { get; set; } = string.Empty;
+
+    [MaxLength(16)]
+    public string AssetType { get; set; } = "Photo";
+
+    [MaxLength(10)]
+    public string? PaperSize { get; set; }
 }

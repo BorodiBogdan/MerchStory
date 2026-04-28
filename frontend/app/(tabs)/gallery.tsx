@@ -5,7 +5,6 @@ import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated as RNAnimated,
   FlatList,
   Modal,
   Platform,
@@ -32,7 +31,13 @@ import { D } from '@/constants/design';
 import { GENERATION_TYPE_I18N_KEYS } from '@/constants/generationTypes';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
-import { deleteGalleryItem, type GalleryItem, updateGalleryItemName } from '@/utils/api';
+import {
+  deleteGalleryItem,
+  fetchGalleryImage,
+  type GalleryAssetType,
+  type GalleryItem,
+  updateGalleryItemName,
+} from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
 import * as galleryImageCache from '@/utils/galleryImageCache';
 
@@ -51,10 +56,9 @@ const EMPTY_FILTERS: GalleryFilterState = { search: '', types: [], from: '', to:
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-type GalleryTab = 'photos' | 'videos';
-
-function toApiFilters(f: GalleryFilterState) {
+function toApiFilters(f: GalleryFilterState, assetType: GalleryAssetType) {
   return {
+    assetType,
     types: f.types,
     search: f.search,
     from: DATE_RE.test(f.from) ? f.from : undefined,
@@ -73,8 +77,8 @@ export default function GalleryScreen() {
   const cache = galleryCache.useGalleryCache();
   const { items, total, page, pageSize, loading, loadingMore, error } = cache;
 
-  const [activeTab, setActiveTab] = useState<GalleryTab>('photos');
-  const slideAnim = useMemo(() => new RNAnimated.Value(0), []);
+  const [assetType, setAssetType] = useState<GalleryAssetType>('Photo');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [lightboxItem, setLightboxItem] = useState<GalleryItem | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<GalleryItem | null>(null);
@@ -103,28 +107,31 @@ export default function GalleryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (activeTab === 'photos') {
-        void galleryCache.ensureLoaded(toApiFilters(filters));
+      if (assetType !== 'Video') {
+        void galleryCache.ensureLoaded(toApiFilters(filters, assetType));
       }
-    }, [activeTab, filters])
+    }, [assetType, filters])
   );
+
+  useEffect(() => {
+    if (assetType !== 'Video') {
+      void galleryCache.setFiltersAndReload(toApiFilters(filters, assetType));
+    }
+  }, [assetType, filters]);
 
   function handleFiltersChange(next: GalleryFilterState) {
     setFilters(next);
-    if (activeTab === 'photos') {
-      void galleryCache.setFiltersAndReload(toApiFilters(next));
+    if (assetType !== 'Video') {
+      void galleryCache.setFiltersAndReload(toApiFilters(next, assetType));
     }
   }
 
-  function switchTab(tab: GalleryTab) {
-    setActiveTab(tab);
-    RNAnimated.timing(slideAnim, {
-      toValue: tab === 'photos' ? 0 : 1,
-      duration: D.duration.normal,
-      useNativeDriver: false,
-    }).start();
-    if (tab === 'photos') {
-      void galleryCache.ensureLoaded(toApiFilters(filters));
+  function selectAssetType(next: GalleryAssetType) {
+    setDropdownOpen(false);
+    if (next === assetType) return;
+    setAssetType(next);
+    if (next !== 'Video') {
+      void galleryCache.setFiltersAndReload(toApiFilters(filters, next));
     }
   }
 
@@ -162,6 +169,51 @@ export default function GalleryScreen() {
     galleryCache.upsertItem(updated);
     if (lightboxItem?.id === updated.id) setLightboxItem(updated);
     setEditingItem(null);
+  }
+
+  async function handlePdfAction(item: GalleryItem, mode: 'view' | 'download') {
+    try {
+      const bytes = await fetchGalleryImage(item.id);
+      const base64 = bytes.imageBase64;
+      const safeName =
+        (item.name || 'document').replace(/[^a-z0-9_\-. ]+/gi, '_').trim() || 'document';
+      const fileName = `${safeName}.pdf`;
+
+      if (isWeb) {
+        const byteChars = atob(base64);
+        const byteArr = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+        const blob = new Blob([byteArr], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        if (mode === 'view') {
+          window.open(url, '_blank', 'noopener,noreferrer');
+          setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        } else {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1_000);
+        }
+        return;
+      }
+
+      const dir = FileSystem.cacheDirectory;
+      if (!dir) return;
+      const filePath = `${dir}${fileName}`;
+      await FileSystem.writeAsStringAsync(filePath, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(filePath, {
+          mimeType: 'application/pdf',
+          dialogTitle: item.name || 'PDF',
+          UTI: 'com.adobe.pdf',
+        });
+      }
+    } catch {
+      // network failure or share dismissed — no-op
+    }
   }
 
   async function handleDownload() {
@@ -202,6 +254,69 @@ export default function GalleryScreen() {
       // image failed to load or user dismissed the share sheet — no-op
     }
   }
+
+  const renderPdf = ({ item }: { item: GalleryItem }) => (
+    <View
+      style={[styles.photoCard, styles.pdfCard, { width: cardWidth }]}
+      accessibilityLabel={`PDF ${item.name || 'document'}`}
+    >
+      <View style={[styles.pdfPreview, { height: cardWidth }]}>
+        <Ionicons name="document-text" size={64} color={colors.accent.primary} />
+        {item.paperSize && (
+          <View style={styles.pdfPaperBadge}>
+            <Text style={styles.pdfPaperBadgeText}>
+              {t('gallery.paperLabel')} {item.paperSize}
+            </Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.photoMeta}>
+        <Text style={styles.photoName} numberOfLines={1}>
+          {item.name || t('gallery.untitled')}
+        </Text>
+        <View style={styles.photoMetaRow}>
+          <Ionicons name="calendar-outline" size={11} color={colors.text.muted} />
+          <Text style={styles.photoDate}>{formatDate(item.createdAt)}</Text>
+        </View>
+        <View style={styles.pdfActionsRow}>
+          <Pressable
+            style={({ pressed }) => [styles.pdfActionButton, pressed && { opacity: 0.8 }]}
+            onPress={() => void handlePdfAction(item, 'view')}
+            accessibilityRole="button"
+            accessibilityLabel={t('gallery.actions.view')}
+          >
+            <Ionicons name="eye-outline" size={14} color={colors.text.primary} />
+            <Text style={styles.pdfActionText}>{t('gallery.actions.view')}</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.pdfActionButton, pressed && { opacity: 0.8 }]}
+            onPress={() => void handlePdfAction(item, 'download')}
+            accessibilityRole="button"
+            accessibilityLabel={t('gallery.actions.download')}
+          >
+            <Ionicons
+              name={isWeb ? 'download-outline' : 'share-outline'}
+              size={14}
+              color={colors.text.primary}
+            />
+            <Text style={styles.pdfActionText}>{t('gallery.actions.download')}</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.pdfActionButton,
+              styles.pdfActionDanger,
+              pressed && { opacity: 0.8 },
+            ]}
+            onPress={() => setConfirmDeleteId(item.id)}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.delete')}
+          >
+            <Ionicons name="trash-outline" size={14} color={colors.destructive} />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
 
   const renderPhoto = ({ item }: { item: GalleryItem }) => (
     <Pressable
@@ -393,8 +508,8 @@ export default function GalleryScreen() {
         data={items}
         keyExtractor={(item) => item.id}
         numColumns={numColumns}
-        key={numColumns}
-        renderItem={renderPhoto}
+        key={`${assetType}-${numColumns}`}
+        renderItem={assetType === 'Pdf' ? renderPdf : renderPhoto}
         contentContainerStyle={[
           styles.grid,
           isWeb && !useSidebar && { paddingHorizontal: hPadding },
@@ -407,11 +522,6 @@ export default function GalleryScreen() {
       />
     );
   };
-
-  const segmentIndicatorLeft = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['1%', '51%'],
-  });
 
   // Page entrance: hero fades/slides in, grid follows with a small delay
   const heroOpacity = useSharedValue(0);
@@ -434,7 +544,27 @@ export default function GalleryScreen() {
     transform: [{ translateY: gridTranslate.value }],
   }));
 
-  const photosCount = activeTab === 'photos' ? total : 0;
+  const dropdownOptions: {
+    value: GalleryAssetType;
+    labelKey: 'gallery.photosTab' | 'gallery.videosTab' | 'gallery.pdfsTab';
+    icon: keyof typeof Ionicons.glyphMap;
+    soon: boolean;
+  }[] = [
+    { value: 'Photo', labelKey: 'gallery.photosTab', icon: 'images-outline', soon: false },
+    { value: 'Video', labelKey: 'gallery.videosTab', icon: 'videocam-outline', soon: true },
+    { value: 'Pdf', labelKey: 'gallery.pdfsTab', icon: 'document-text-outline', soon: false },
+  ];
+  const activeOption = dropdownOptions.find((o) => o.value === assetType) ?? dropdownOptions[0];
+
+  const itemCount = assetType === 'Video' ? 0 : total;
+  const countNoun =
+    assetType === 'Pdf'
+      ? itemCount === 1
+        ? t('gallery.pdfCountOne')
+        : t('gallery.pdfCountOther')
+      : itemCount === 1
+        ? 'image'
+        : 'images';
 
   return (
     <View style={styles.root}>
@@ -447,22 +577,22 @@ export default function GalleryScreen() {
           <View style={styles.headerTextBlock}>
             <View style={styles.eyebrowRow}>
               <View style={styles.eyebrowDot} />
-              <Text style={styles.eyebrow}>Gallery</Text>
+              <Text style={styles.eyebrow}>{t('gallery.eyebrow')}</Text>
             </View>
             <Text style={styles.pageTitle}>{t('gallery.pageTitle')}</Text>
             <View style={styles.subtitleRow}>
-              {activeTab === 'photos' ? (
-                <View style={styles.countChip}>
-                  <Ionicons name="images-outline" size={12} color={colors.accent.primary} />
-                  <Text style={styles.countChipText}>
-                    {photosCount} {photosCount === 1 ? 'image' : 'images'}
-                  </Text>
-                </View>
-              ) : (
+              {assetType === 'Video' ? (
                 <View style={[styles.countChip, styles.countChipAlt]}>
                   <Ionicons name="time-outline" size={12} color={colors.accent.secondary} />
                   <Text style={[styles.countChipText, { color: colors.accent.secondary }]}>
                     Soon
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.countChip}>
+                  <Ionicons name={activeOption.icon} size={12} color={colors.accent.primary} />
+                  <Text style={styles.countChipText}>
+                    {itemCount} {countNoun}
                   </Text>
                 </View>
               )}
@@ -470,51 +600,91 @@ export default function GalleryScreen() {
             </View>
           </View>
 
-          {/* Photos / Videos segmented switcher — lives in the header */}
-          <View style={styles.segmentTrack}>
-            <RNAnimated.View style={[styles.segmentIndicator, { left: segmentIndicatorLeft }]} />
+          {/* Storage type dropdown */}
+          <View style={styles.dropdownAnchor}>
             <Pressable
-              style={styles.segmentButton}
-              onPress={() => switchTab('photos')}
+              style={({ pressed }) => [styles.dropdownTrigger, pressed && { opacity: 0.85 }]}
+              onPress={() => setDropdownOpen((v) => !v)}
               accessibilityRole="button"
-              accessibilityLabel="Photos tab"
+              accessibilityLabel={t('gallery.storageDropdownLabel')}
             >
               <Ionicons
-                name={activeTab === 'photos' ? 'images' : 'images-outline'}
-                size={15}
-                color={activeTab === 'photos' ? '#fff' : colors.text.secondary}
-                style={{ marginRight: 6 }}
+                name={activeOption.icon}
+                size={16}
+                color={colors.accent.primary}
+                style={{ marginRight: 8 }}
               />
-              <Text
-                style={[styles.segmentLabel, activeTab === 'photos' && styles.segmentLabelActive]}
-              >
-                {t('gallery.photosTab')}
+              <Text style={styles.dropdownTriggerLabel} numberOfLines={1}>
+                {t(activeOption.labelKey)}
               </Text>
-            </Pressable>
-            <Pressable
-              style={styles.segmentButton}
-              onPress={() => switchTab('videos')}
-              accessibilityRole="button"
-              accessibilityLabel="Videos tab"
-            >
               <Ionicons
-                name={activeTab === 'videos' ? 'videocam' : 'videocam-outline'}
-                size={15}
-                color={activeTab === 'videos' ? '#fff' : colors.text.secondary}
-                style={{ marginRight: 6 }}
+                name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={colors.text.secondary}
+                style={{ marginLeft: 8 }}
               />
-              <Text
-                style={[styles.segmentLabel, activeTab === 'videos' && styles.segmentLabelActive]}
-              >
-                {t('gallery.videosTab')}
-              </Text>
-              {activeTab !== 'videos' && <View style={styles.segmentSoonDot} />}
             </Pressable>
+            {dropdownOpen && (
+              <View style={styles.dropdownPopover}>
+                {dropdownOptions.map((opt) => {
+                  const active = opt.value === assetType;
+                  return (
+                    <Pressable
+                      key={opt.value}
+                      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+                        styles.dropdownOption,
+                        active && styles.dropdownOptionActive,
+                        hovered && styles.dropdownOptionHovered,
+                        pressed && { opacity: 0.85 },
+                      ]}
+                      onPress={() => selectAssetType(opt.value)}
+                    >
+                      <Ionicons
+                        name={opt.icon}
+                        size={16}
+                        color={active ? colors.accent.primary : colors.text.secondary}
+                      />
+                      <Text
+                        style={[
+                          styles.dropdownOptionLabel,
+                          active && styles.dropdownOptionLabelActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {t(opt.labelKey)}
+                      </Text>
+                      {opt.soon && (
+                        <View style={styles.dropdownSoonBadge}>
+                          <Text style={styles.dropdownSoonBadgeText}>
+                            {t('gallery.videoBadge')}
+                          </Text>
+                        </View>
+                      )}
+                      {active && (
+                        <Ionicons
+                          name="checkmark"
+                          size={14}
+                          color={colors.accent.primary}
+                          style={{ marginLeft: 'auto' }}
+                        />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </Animated.View>
+        {dropdownOpen && (
+          <Pressable
+            style={styles.dropdownBackdrop}
+            onPress={() => setDropdownOpen(false)}
+            accessibilityElementsHidden
+          />
+        )}
 
         <Animated.View style={gridAnimStyle}>
-          {activeTab === 'videos' ? (
+          {assetType === 'Video' ? (
             videosContent
           ) : useSidebar ? (
             <View style={styles.sidebarLayout}>
@@ -732,6 +902,8 @@ function makeStyles(
       paddingTop: D.spacing.xl,
       paddingBottom: D.spacing.lg,
       gap: D.spacing.md,
+      position: 'relative',
+      zIndex: 50,
     },
     headerTextBlock: {
       flex: 1,
@@ -795,53 +967,141 @@ function makeStyles(
       color: colors.text.muted,
     },
 
-    // ── Segmented switcher ───────────────────────────────────────────────
-    segmentTrack: {
-      flexDirection: 'row',
-      backgroundColor: colors.bg.surface,
-      borderRadius: D.radius.pill,
-      padding: 4,
+    // ── Storage type dropdown ────────────────────────────────────────────
+    dropdownAnchor: {
       position: 'relative',
-      height: 42,
-      width: 260,
-      borderWidth: 1,
-      borderColor: colors.border.subtle,
-      ...D.shadow.sm,
+      zIndex: 60,
+      alignSelf: 'flex-start',
     },
-    segmentIndicator: {
-      position: 'absolute',
-      top: 4,
-      width: '48%',
-      height: 32,
-      borderRadius: D.radius.pill,
-      backgroundColor: colors.accent.primary,
-      borderWidth: 1,
-      borderColor: colors.accent.secondary,
-      ...D.shadow.glow,
-    },
-    segmentButton: {
-      flex: 1,
+    dropdownTrigger: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1,
+      paddingVertical: 8,
+      paddingHorizontal: D.spacing.md,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      backgroundColor: colors.bg.surface,
+      alignSelf: 'flex-start',
+      ...D.shadow.sm,
     },
-    segmentLabel: {
+    dropdownTriggerLabel: {
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.semibold,
-      color: colors.text.secondary,
+      color: colors.text.primary,
       letterSpacing: 0.2,
+      flexShrink: 1,
     },
-    segmentLabelActive: {
-      color: '#fff',
+    dropdownBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 40,
+    },
+    dropdownPopover: {
+      position: 'absolute',
+      top: '100%',
+      right: 0,
+      marginTop: 6,
+      width: 240,
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      paddingVertical: 4,
+      overflow: 'hidden',
+      zIndex: 60,
+      ...D.shadow.modal,
+    },
+    dropdownOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 8,
+      paddingHorizontal: D.spacing.md,
+      width: '100%',
+    },
+    dropdownOptionHovered: {
+      backgroundColor: colors.bg.elevated,
+    },
+    dropdownOptionActive: {
+      backgroundColor: colors.accent.dim,
+    },
+    dropdownOptionLabel: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+    },
+    dropdownOptionLabelActive: {
+      color: colors.accent.primary,
+    },
+    dropdownSoonBadge: {
+      marginLeft: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    dropdownSoonBadgeText: {
+      fontSize: 9,
       fontWeight: D.fontWeight.bold,
+      color: colors.accent.secondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
     },
-    segmentSoonDot: {
-      marginLeft: 5,
-      width: 6,
-      height: 6,
-      borderRadius: 6,
-      backgroundColor: colors.accent.secondary,
+
+    // ── PDF card ─────────────────────────────────────────────────────────
+    pdfCard: {
+      backgroundColor: colors.bg.surface,
+    },
+    pdfPreview: {
+      backgroundColor: colors.bg.elevated,
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative',
+    },
+    pdfPaperBadge: {
+      position: 'absolute',
+      bottom: D.spacing.sm,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: D.radius.pill,
+      backgroundColor: 'rgba(0,0,0,0.72)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.18)',
+    },
+    pdfPaperBadgeText: {
+      fontSize: 10,
+      fontWeight: D.fontWeight.bold,
+      color: '#fff',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+    },
+    pdfActionsRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginTop: 8,
+      flexWrap: 'wrap',
+    },
+    pdfActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.elevated,
+    },
+    pdfActionDanger: {
+      backgroundColor: 'rgba(239,68,68,0.1)',
+      borderColor: 'rgba(239,68,68,0.32)',
+    },
+    pdfActionText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
     },
 
     // ── Filter bar / sidebar ─────────────────────────────────────────────

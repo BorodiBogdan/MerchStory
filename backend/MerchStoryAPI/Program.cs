@@ -1,16 +1,15 @@
 using System.Text;
 using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
-using MerchStoryAPI.Facebook;
 using MerchStoryAPI.Gallery;
 using MerchStoryAPI.Geocoding;
 using MerchStoryAPI.ImageGeneration;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Print;
 using MerchStoryAPI.Products;
 using MerchStoryAPI.Recommendations;
 using MerchStoryAPI.ReferenceImages;
 using MerchStoryAPI.Shop;
-using MerchStoryAPI.Social;
 using MerchStoryAPI.Wallet;
 using MerchStoryImageGeneration.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -87,7 +86,6 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminOnly", policy => policy.RequireClaim("is_admin", "true"));
 });
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
-builder.Services.AddScoped<FacebookSocialPostSyncService>();
 builder.Services.AddMerchStoryImageGeneration(builder.Configuration);
 builder.Services.AddMerchStoryRecommendations(builder.Configuration);
 builder.Services.AddSingleton<IClipEmbeddingService, ClipEmbeddingService>();
@@ -119,6 +117,14 @@ builder.Services.AddScoped<IdeaEmbeddingService>();
 
 builder.Services.AddScoped<WalletService>();
 
+// Print Shop: PDF export of generated assets sized for paper. Premium tier
+// runs through the Real-ESRGAN ONNX upscaler; if the model isn't loaded the
+// service throws UpscalerUnavailableException and the route handler surfaces
+// it as a render failure (and refunds the coin charge).
+builder.Services.AddSingleton<PdfRenderer>();
+builder.Services.AddSingleton<IUpscaler, RealEsrganUpscaler>();
+builder.Services.AddScoped<QrLinkService>();
+
 var app = builder.Build();
 
 using (IServiceScope scope = app.Services.CreateScope())
@@ -148,12 +154,11 @@ app.MapAuthEndpoints();
 app.MapShopEndpoints();
 app.MapGalleryEndpoints();
 app.MapProductEndpoints();
-app.MapFacebookEndpoints();
-app.MapSocialEndpoints();
 app.MapImageGenerationEndpoints();
 app.MapReferenceImageEndpoints();
 app.MapRecommendationsEndpoints();
 app.MapWalletEndpoints();
+app.MapPrintEndpoints();
 
 app.Run();
 

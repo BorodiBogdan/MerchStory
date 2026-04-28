@@ -39,6 +39,7 @@ function notify() {
 
 function filtersKey(f: GalleryFilters): string {
   return JSON.stringify({
+    assetType: f.assetType ?? 'Photo',
     types: [...(f.types ?? [])].sort(),
     from: f.from ?? '',
     to: f.to ?? '',
@@ -182,5 +183,14 @@ export function removeItem(id: string): void {
 
 export function resetCache(): void {
   state = INITIAL;
+  notify();
+}
+
+export function invalidate(assetType?: GalleryItem['assetType']): void {
+  // If we're invalidating a specific asset type and the cache is currently
+  // loaded for a different type, leave it alone — it'll re-fetch on switch
+  // because filtersKey already changed when the user switches dropdowns.
+  if (assetType && (state.filters.assetType ?? 'Photo') !== assetType) return;
+  state = { ...state, initialized: false, pages: {} };
   notify();
 }

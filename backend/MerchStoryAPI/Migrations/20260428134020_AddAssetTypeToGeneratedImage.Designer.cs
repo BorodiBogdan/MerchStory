@@ -3,6 +3,7 @@ using System;
 using MerchStoryAPI.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace MerchStoryAPI.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260428134020_AddAssetTypeToGeneratedImage")]
+    partial class AddAssetTypeToGeneratedImage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -45,6 +48,15 @@ namespace MerchStoryAPI.Migrations
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("FacebookAccessToken")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("FacebookLastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FacebookUserId")
+                        .HasColumnType("text");
 
                     b.Property<bool>("HasSetLanguagePreference")
                         .HasColumnType("boolean");
@@ -730,6 +742,61 @@ namespace MerchStoryAPI.Migrations
                     b.ToTable("ShopProfiles");
                 });
 
+            modelBuilder.Entity("MerchStoryAPI.Models.SocialPost", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Caption")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CommentsCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CommentsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalAccountId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("LikesCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("PlatformPostId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SourceUrl")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Platform", "ExternalAccountId");
+
+                    b.HasIndex("UserId", "Platform", "ExternalAccountId", "PlatformPostId")
+                        .IsUnique();
+
+                    b.ToTable("SocialPosts");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -1008,6 +1075,17 @@ namespace MerchStoryAPI.Migrations
                     b.HasOne("MerchStoryAPI.Models.AppUser", "User")
                         .WithOne("ShopProfile")
                         .HasForeignKey("MerchStoryAPI.Models.ShopProfile", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MerchStoryAPI.Models.SocialPost", b =>
+                {
+                    b.HasOne("MerchStoryAPI.Models.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

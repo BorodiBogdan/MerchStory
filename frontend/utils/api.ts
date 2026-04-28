@@ -197,68 +197,6 @@ export async function updateAppLanguage(language: AppLanguage): Promise<{ langua
   return response.json() as Promise<{ language: AppLanguage }>;
 }
 
-export interface SocialStatus {
-  facebookConnected: boolean;
-  facebookLastSyncedAt?: string | null;
-}
-
-export async function getSocialStatus(): Promise<SocialStatus> {
-  const response = await fetchWithAuth(`${API_URL}/social/status`, {});
-  if (!response.ok) throw new Error(`Failed to load social status (${response.status})`);
-  return response.json() as Promise<SocialStatus>;
-}
-
-export async function disconnectSocial(provider: 'facebook'): Promise<void> {
-  const response = await fetchWithAuth(`${API_URL}/social/disconnect?provider=${provider}`, {
-    method: 'POST',
-  });
-  if (!response.ok) throw new Error(`Failed to disconnect ${provider} (${response.status})`);
-}
-
-export async function getFacebookConnectUrl(): Promise<string> {
-  const response = await fetchWithAuth(`${API_URL}/facebook/connect-url`, {});
-  if (!response.ok) throw new Error('Could not get Facebook connect URL.');
-  const data = (await response.json()) as { url: string };
-  return data.url;
-}
-
-export interface FacebookMediaItem {
-  id: string;
-  source: string | null;
-  name: string | null;
-  likesCount: number;
-}
-
-export async function fetchFacebookMedia(): Promise<FacebookMediaItem[]> {
-  const response = await fetchWithAuth(`${API_URL}/facebook/media`, {});
-  if (!response.ok) throw new Error(`Failed to fetch Facebook photos (${response.status})`);
-  return response.json() as Promise<FacebookMediaItem[]>;
-}
-
-export interface FacebookCommentItem {
-  id: string;
-  message: string;
-  fromName: string | null;
-}
-
-export interface FacebookPhotoDetails {
-  likesCount: number;
-  commentsCount: number;
-  comments: FacebookCommentItem[];
-}
-
-export async function fetchFacebookPhotoDetails(photoId: string): Promise<FacebookPhotoDetails> {
-  const response = await fetchWithAuth(`${API_URL}/facebook/photo/${photoId}`, {});
-  if (!response.ok) throw new Error(`Failed to fetch photo details (${response.status})`);
-  return response.json() as Promise<FacebookPhotoDetails>;
-}
-
-export async function syncSocialPosts(platform: 'facebook'): Promise<{ synced: number }> {
-  const response = await fetchWithAuth(`${API_URL}/social/sync/${platform}`, { method: 'POST' });
-  if (!response.ok) throw new Error(`Sync failed (${response.status})`);
-  return response.json() as Promise<{ synced: number }>;
-}
-
 export async function login(email: string, password: string): Promise<AuthResponse> {
   const response = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
@@ -499,12 +437,16 @@ export async function generateCatalogOnWallpaper(
   return response.json() as Promise<GenerateImageResponse>;
 }
 
+export type GalleryAssetType = 'Photo' | 'Video' | 'Pdf';
+
 export interface GalleryItem {
   id: string;
   mimeType: string;
   createdAt: string;
   name: string;
   generationType: GenerationType | null;
+  assetType: GalleryAssetType;
+  paperSize: string | null;
 }
 
 export interface GalleryImageBytes {
@@ -514,6 +456,7 @@ export interface GalleryImageBytes {
 
 export interface GalleryFilters {
   types?: GenerationType[];
+  assetType?: GalleryAssetType;
   from?: string;
   to?: string;
   search?: string;
@@ -590,6 +533,7 @@ export async function fetchGallery(filters: GalleryFilters = {}): Promise<Paged<
   if (filters.types && filters.types.length > 0) {
     params.set('type', filters.types.join(','));
   }
+  if (filters.assetType) params.set('assetType', filters.assetType);
   if (filters.from) params.set('from', filters.from);
   if (filters.to) params.set('to', filters.to);
   if (filters.search && filters.search.trim()) params.set('search', filters.search.trim());
@@ -1080,4 +1024,58 @@ export async function grantCoins(
     );
   }
   return response.json() as Promise<GrantCoinsResponse>;
+}
+
+// ── Print Shop ───────────────────────────────────────────────────────────────
+export type PaperSize = 'A6' | 'A5' | 'A4' | 'A3';
+export type PrintOrientation = 'portrait' | 'landscape';
+export type PrintJobStatus = 'pending' | 'rendering' | 'ready' | 'failed';
+
+export interface RenderPrintRequest {
+  generatedImageId: string;
+  paperSize: PaperSize;
+  qrTargetUrl?: string;
+}
+
+export interface RenderPrintResponse {
+  jobId: string;
+  status: PrintJobStatus;
+  qrSlug: string | null;
+  newBalance: number | null;
+  upscaled: boolean;
+}
+
+export interface PrintJobDetails {
+  id: string;
+  status: PrintJobStatus;
+  paperSize: string;
+  orientation: string;
+  qualityTier: string;
+  pdfBase64: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export async function renderPrint(req: RenderPrintRequest): Promise<RenderPrintResponse> {
+  const response = await fetchWithAuth(`${API_URL}/print/render`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as { detail?: string }).detail ?? `Print render failed (${response.status})`
+    );
+  }
+  return response.json() as Promise<RenderPrintResponse>;
+}
+
+export async function getPrintJob(jobId: string): Promise<PrintJobDetails> {
+  const response = await fetchWithAuth(`${API_URL}/print/${jobId}`, { method: 'GET' });
+  if (!response.ok) {
+    throw new Error(`Failed to load print job (${response.status})`);
+  }
+  return response.json() as Promise<PrintJobDetails>;
 }
