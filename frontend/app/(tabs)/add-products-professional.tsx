@@ -92,7 +92,7 @@ export default function AddProductsProfessionalScreen() {
         <Text style={styles.deniedBody}>{t('addProfessional.adminOnly.body')}</Text>
         <Pressable
           style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
-          onPress={() => router.back()}
+          onPress={() => router.replace('/admin')}
         >
           <Text style={styles.backButtonText}>{t('addProfessional.adminOnly.back')}</Text>
         </Pressable>
@@ -203,7 +203,7 @@ export default function AddProductsProfessionalScreen() {
       >
         <View style={styles.headerRow}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => router.replace('/admin')}
             style={styles.iconButton}
             accessibilityLabel={t('addProfessional.a11y.back')}
           >
