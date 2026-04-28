@@ -1,5 +1,7 @@
+import QrCreator from 'qrcode';
 import { useMemo } from 'react';
 import { Image, Platform, StyleSheet, Text, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
@@ -12,12 +14,41 @@ const PAPER_RATIOS: Record<PaperSize, { w: number; h: number }> = {
   A3: { w: 297, h: 420 },
 };
 
+// Paper dimensions in PDF points, mirroring QuestPDF's PageSizes used by the
+// backend renderer. Lets us scale the preview QR badge so it occupies the
+// same fraction of the page as the real QR does in the generated PDF.
+const PAPER_WIDTH_PT: Record<PaperSize, number> = {
+  A6: 298,
+  A5: 420,
+  A4: 595,
+  A3: 842,
+};
+const PAPER_HEIGHT_PT: Record<PaperSize, number> = {
+  A6: 420,
+  A5: 595,
+  A4: 842,
+  A3: 1191,
+};
+
+// Match PdfRenderer.cs: 80pt QR image with 6pt internal padding (white card)
+// and 8pt margin from the page edge. The QRCoder PNG embedded in that 80pt
+// image bakes a 4-module quiet zone INSIDE the image, so the matrix itself
+// only fills 80 * N/(N+8) of the image. We mirror that here via the
+// react-native-qrcode-svg `quietZone` prop so the preview matrix occupies
+// the same fraction of the white card as it does in the rendered PDF.
+const PDF_QR_IMAGE_PT = 80;
+const PDF_QR_CARD_PT = PDF_QR_IMAGE_PT + 6 * 2;
+const PDF_QR_INNER_PADDING_PT = 6;
+const PDF_QR_EDGE_MARGIN_PT = 8;
+const PDF_QR_QUIET_MODULES = 4;
+
 interface PaperPreviewProps {
   imageBase64: string | null;
   imageMimeType: string | null;
   paperSize: PaperSize;
   orientation: PrintOrientation;
   showQrBadge: boolean;
+  qrTargetUrl: string | null;
   maxWidth: number;
   caption?: string;
 }
@@ -28,6 +59,7 @@ export function PaperPreview({
   paperSize,
   orientation,
   showQrBadge,
+  qrTargetUrl,
   maxWidth,
   caption,
 }: PaperPreviewProps) {
@@ -46,6 +78,28 @@ export function PaperPreview({
   const dataUri =
     imageBase64 && imageMimeType ? `data:${imageMimeType};base64,${imageBase64}` : null;
 
+  const pageWidthPt = isLandscape ? PAPER_HEIGHT_PT[paperSize] : PAPER_WIDTH_PT[paperSize];
+  const ptToPx = previewW / pageWidthPt;
+  const cardSize = PDF_QR_CARD_PT * ptToPx;
+  const innerPadding = PDF_QR_INNER_PADDING_PT * ptToPx;
+  const edgeOffset = PDF_QR_EDGE_MARGIN_PT * ptToPx;
+  const qrImageSize = Math.max(1, PDF_QR_IMAGE_PT * ptToPx);
+
+  const renderQr = !!(showQrBadge && qrTargetUrl && qrTargetUrl.length > 0);
+
+  // Match the 4-module quiet zone QRCoder bakes into the PDF's QR PNG. The
+  // module count depends on URL length + ECL; if generation fails we fall
+  // back to a no-quiet-zone render rather than crashing the preview.
+  const qrQuietZone = useMemo(() => {
+    if (!renderQr || !qrTargetUrl) return 0;
+    try {
+      const moduleCount = QrCreator.create(qrTargetUrl, { errorCorrectionLevel: 'Q' }).modules.size;
+      return (PDF_QR_QUIET_MODULES * qrImageSize) / (moduleCount + PDF_QR_QUIET_MODULES * 2);
+    } catch {
+      return 0;
+    }
+  }, [renderQr, qrTargetUrl, qrImageSize]);
+
   return (
     <View style={styles.wrapper}>
       <View style={[styles.stage, { width: previewW + 48, height: previewH + 48 }]}>
@@ -59,12 +113,27 @@ export function PaperPreview({
           ) : (
             <View style={styles.placeholder} />
           )}
-          {showQrBadge && (
-            <View style={styles.qrBadge}>
-              <View style={styles.qrCorner} />
-              <View style={[styles.qrCorner, styles.qrCornerTR]} />
-              <View style={[styles.qrCorner, styles.qrCornerBL]} />
-              <View style={styles.qrCenter} />
+          {renderQr && (
+            <View
+              style={[
+                styles.qrCard,
+                {
+                  right: edgeOffset,
+                  bottom: edgeOffset,
+                  width: cardSize,
+                  height: cardSize,
+                  padding: innerPadding,
+                },
+              ]}
+            >
+              <QRCode
+                value={qrTargetUrl}
+                size={qrImageSize}
+                quietZone={qrQuietZone}
+                ecl="Q"
+                color="#000000"
+                backgroundColor="#FFFFFF"
+              />
             </View>
           )}
         </View>
@@ -112,44 +181,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flex: 1,
       backgroundColor: colors.bg.input,
     },
-    qrBadge: {
+    qrCard: {
       position: 'absolute',
-      right: 8,
-      bottom: 8,
-      width: 40,
-      height: 40,
       backgroundColor: '#FFFFFF',
-      borderWidth: 1,
-      borderColor: 'rgba(0,0,0,0.2)',
-      borderRadius: 4,
-      padding: 4,
-    },
-    qrCorner: {
-      position: 'absolute',
-      top: 4,
-      left: 4,
-      width: 9,
-      height: 9,
-      borderWidth: 2,
-      borderColor: '#0B0E14',
-      borderRadius: 1,
-    },
-    qrCornerTR: {
-      left: undefined,
-      right: 4,
-    },
-    qrCornerBL: {
-      top: undefined,
-      bottom: 4,
-    },
-    qrCenter: {
-      position: 'absolute',
-      right: 5,
-      bottom: 5,
-      width: 6,
-      height: 6,
-      backgroundColor: '#0B0E14',
-      borderRadius: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     caption: {
       marginTop: D.spacing.md,

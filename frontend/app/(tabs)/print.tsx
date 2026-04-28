@@ -356,6 +356,7 @@ export default function PrintScreen() {
           paperSize={paperSize}
           orientation="portrait"
           showQrBadge={showQrBadge}
+          qrTargetUrl={qrTargetUrl.trim() || null}
           maxWidth={isDesktop ? 320 : 300}
           caption={previewCaption}
         />
