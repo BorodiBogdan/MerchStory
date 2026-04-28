@@ -10,6 +10,8 @@ public record WalletTransactionDto(
 
 public record WalletSummaryDto(int Balance, IReadOnlyList<WalletTransactionDto> RecentTransactions);
 
+public record WalletTransactionPageDto(IReadOnlyList<WalletTransactionDto> Items, int Total);
+
 public record GrantCoinsRequest(string UserEmail, int Amount, string? Note);
 
 public record GrantCoinsResponse(string UserId, string UserEmail, int Balance, WalletTransactionDto Transaction);

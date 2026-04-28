@@ -115,6 +115,11 @@ export interface WalletSummary {
   recentTransactions: WalletTransaction[];
 }
 
+export interface WalletTransactionPage {
+  items: WalletTransaction[];
+  total: number;
+}
+
 export interface AdminUserLookup {
   id: string;
   email: string;
@@ -986,14 +991,14 @@ export async function getWallet(): Promise<WalletSummary> {
   return response.json() as Promise<WalletSummary>;
 }
 
-export async function getWalletTransactions(skip = 0, take = 50): Promise<WalletTransaction[]> {
+export async function getWalletTransactions(skip = 0, take = 50): Promise<WalletTransactionPage> {
   const response = await fetchWithAuth(`${API_URL}/wallet/transactions?skip=${skip}&take=${take}`, {
     method: 'GET',
   });
   if (!response.ok) {
     throw new Error(`Failed to load transactions (${response.status})`);
   }
-  return response.json() as Promise<WalletTransaction[]>;
+  return response.json() as Promise<WalletTransactionPage>;
 }
 
 export async function lookupAdminUsers(query: string): Promise<AdminUserLookup[]> {
