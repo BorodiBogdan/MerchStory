@@ -163,7 +163,6 @@ const ro: Dictionary = {
   'tabs.studio': 'Studio',
   'tabs.gallery': 'Stocare',
   'tabs.products': 'Produse',
-  'tabs.analytics': 'Analiză',
   'tabs.print': 'Tipărire',
   'tabs.home': 'Acasă MerchStory',
   'tabs.profile': 'Profil',
@@ -317,26 +316,6 @@ const ro: Dictionary = {
   'wallpapers.deleteConfirm.title': 'Ștergi fundalul?',
   'wallpapers.deleteConfirm.body': 'Acest fundal va fi eliminat definitiv.',
 
-  // ── Analytics screen ─────────────────────────────────────────────────────
-  'analytics.pageTitle': 'Analiză',
-  'analytics.pageSubtitle': 'Postările tale de social media',
-  'analytics.cachedNote': 'Afișează date salvate local — reconectează-te pentru actualizare.',
-  'analytics.refresh': 'Reîmprospătează postările',
-  'analytics.tabFacebook': 'Facebook',
-  'analytics.tabInstagram': 'Instagram',
-  'analytics.instagramBadge': 'În construcție',
-  'analytics.fbNotConnectedTitle': 'Facebook neconectat',
-  'analytics.fbNotConnectedBody':
-    'Conectează-ți contul de Facebook din profil pentru a-ți vedea postările aici',
-  'analytics.goToProfile': 'Mergi la profil',
-  'analytics.igNotConnectedTitle': 'Instagram neconectat',
-  'analytics.igNotConnectedBody':
-    'Conectează-ți contul de Instagram din profil pentru a-ți vedea postările aici',
-  'analytics.noPhotos': 'Nu ai fotografii pe Facebook încă',
-  'analytics.comments': 'Comentarii',
-  'analytics.noComments': 'Niciun comentariu încă',
-  'analytics.likesSuffix': 'aprecieri',
-
   // ── Profile screen ───────────────────────────────────────────────────────
   'profile.notFound': 'Profilul nu a fost găsit',
   'profile.edit': 'Editează',
@@ -346,7 +325,6 @@ const ro: Dictionary = {
   'profile.sectionBusiness': 'Profil de afacere',
   'profile.sectionContact': 'Contact și social',
   'profile.sectionLocation': 'Locație',
-  'profile.sectionConnected': 'Conturi conectate',
   'profile.companyLogo': 'Logo firmă',
   'profile.changeLogo': 'Schimbă logoul',
   'profile.fieldBrandName': 'Numele brandului',
@@ -367,11 +345,6 @@ const ro: Dictionary = {
   'profile.fieldAppLanguage': 'Limba aplicației',
   'profile.fieldGenerationLanguage': 'Limba conținutului generat',
   'profile.fieldDefaultCurrency': 'Monedă implicită',
-  'profile.connected': '✓ Conectat',
-  'profile.disconnect': 'Deconectează',
-  'profile.connect': 'Conectează',
-  'profile.connecting': 'Se deschide…',
-  'profile.connectError': 'A eșuat — reîncearcă',
   'profile.addColor': 'Adaugă culoare',
   'profile.addAddress': 'Adaugă adresă',
 

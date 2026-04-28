@@ -159,7 +159,6 @@ const en = {
   'tabs.studio': 'Studio',
   'tabs.gallery': 'Storage',
   'tabs.products': 'Products',
-  'tabs.analytics': 'Analytics',
   'tabs.print': 'Print',
   'tabs.home': 'MerchStory home',
   'tabs.profile': 'Profile',
@@ -309,26 +308,6 @@ const en = {
   'wallpapers.deleteConfirm.title': 'Delete wallpaper?',
   'wallpapers.deleteConfirm.body': 'This wallpaper will be permanently removed.',
 
-  // ── Analytics screen ─────────────────────────────────────────────────────
-  'analytics.pageTitle': 'Analytics',
-  'analytics.pageSubtitle': 'Your social media posts',
-  'analytics.cachedNote': 'Showing cached data — reconnect to refresh.',
-  'analytics.refresh': 'Refresh posts',
-  'analytics.tabFacebook': 'Facebook',
-  'analytics.tabInstagram': 'Instagram',
-  'analytics.instagramBadge': 'Under Construction',
-  'analytics.fbNotConnectedTitle': 'Facebook not connected',
-  'analytics.fbNotConnectedBody':
-    'Connect your Facebook account in your profile to see your posts here',
-  'analytics.goToProfile': 'Go to Profile',
-  'analytics.igNotConnectedTitle': 'Instagram not connected',
-  'analytics.igNotConnectedBody':
-    'Connect your Instagram account in your profile to see your posts here',
-  'analytics.noPhotos': 'No Facebook photos yet',
-  'analytics.comments': 'Comments',
-  'analytics.noComments': 'No comments yet',
-  'analytics.likesSuffix': 'likes',
-
   // ── Profile screen ───────────────────────────────────────────────────────
   'profile.notFound': 'Profile not found',
   'profile.edit': 'Edit',
@@ -338,7 +317,6 @@ const en = {
   'profile.sectionBusiness': 'Business DNA',
   'profile.sectionContact': 'Contact & Social',
   'profile.sectionLocation': 'Location',
-  'profile.sectionConnected': 'Connected Accounts',
   'profile.companyLogo': 'Company Logo',
   'profile.changeLogo': 'Change logo',
   'profile.fieldBrandName': 'Brand Name',
@@ -359,11 +337,6 @@ const en = {
   'profile.fieldAppLanguage': 'App language',
   'profile.fieldGenerationLanguage': 'Language of generated content',
   'profile.fieldDefaultCurrency': 'Default currency',
-  'profile.connected': '✓ Connected',
-  'profile.disconnect': 'Disconnect',
-  'profile.connect': 'Connect',
-  'profile.connecting': 'Opening…',
-  'profile.connectError': 'Failed — retry',
   'profile.addColor': 'Add color',
   'profile.addAddress': 'Add address',
 

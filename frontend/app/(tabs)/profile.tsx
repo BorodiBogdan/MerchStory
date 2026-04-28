@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect, useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -36,9 +35,6 @@ import {
   type AppLanguage,
   BrandColor,
   type Currency,
-  disconnectSocial,
-  getFacebookConnectUrl,
-  getSocialStatus,
   ShopProfileResponse,
   updateAppLanguage,
   updateShopProfile,
@@ -212,7 +208,6 @@ export default function ProfileScreen() {
   const [colorPickerModal, setColorPickerModal] = useState<{ index: number; hex: string } | null>(
     null
   );
-  const [socialStatus, setSocialStatus] = useState<{ facebook?: string }>({});
   const [isLogoutVisible, setIsLogoutVisible] = useState(false);
 
   // Entrance animation
@@ -247,42 +242,8 @@ export default function ProfileScreen() {
   }));
 
   useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    function handleMessage(event: MessageEvent) {
-      const data = event.data as { type?: string; url?: string };
-      if (data?.type !== 'social-callback' || !data.url) return;
-      if (data.url.includes('status=linked')) {
-        if (data.url.includes('provider=facebook'))
-          setSocialStatus((s) => ({ ...s, facebook: 'connected' }));
-      } else {
-        if (data.url.includes('provider=facebook'))
-          setSocialStatus((s) => ({ ...s, facebook: 'error' }));
-      }
-    }
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
-
-  useEffect(() => {
     setIsLoading(isProfileLoading);
   }, [isProfileLoading]);
-
-  useFocusEffect(
-    useCallback(() => {
-      void loadSocialStatus();
-    }, [])
-  );
-
-  async function loadSocialStatus() {
-    try {
-      const social = await getSocialStatus();
-      setSocialStatus({
-        facebook: social.facebookConnected ? 'connected' : undefined,
-      });
-    } catch {
-      // non-fatal
-    }
-  }
 
   async function retryLoadProfile() {
     setLoadError(null);
@@ -350,41 +311,6 @@ export default function ProfileScreen() {
     setDraft((prev) =>
       prev ? { ...prev, addresses: prev.addresses.filter((_, i) => i !== index) } : prev
     );
-  }
-
-  async function connectFacebook() {
-    try {
-      setSocialStatus((s) => ({ ...s, facebook: 'connecting' }));
-      const url = await getFacebookConnectUrl();
-      if (Platform.OS === 'web') {
-        window.open(url, '_blank', 'width=600,height=700');
-      } else {
-        const callbackBase = process.env.EXPO_PUBLIC_FRONTEND_URL ?? 'http://localhost:8081';
-        const result = await WebBrowser.openAuthSessionAsync(
-          url,
-          `${callbackBase}/social-callback`
-        );
-        if (result.type === 'success' && result.url.includes('status=linked')) {
-          setSocialStatus((s) => ({ ...s, facebook: 'connected' }));
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } else if (result.type === 'dismiss') {
-          setSocialStatus((s) => ({ ...s, facebook: undefined }));
-        } else {
-          setSocialStatus((s) => ({ ...s, facebook: 'error' }));
-        }
-      }
-    } catch {
-      setSocialStatus((s) => ({ ...s, facebook: 'error' }));
-    }
-  }
-
-  async function handleDisconnect(provider: 'facebook') {
-    try {
-      await disconnectSocial(provider);
-      setSocialStatus((s) => ({ ...s, [provider]: undefined }));
-    } catch {
-      // silent — status stays as-is
-    }
   }
 
   async function pickLogo() {
@@ -1019,70 +945,6 @@ export default function ProfileScreen() {
     </Section>
   );
 
-  const connectedAccountsSection = !isEditing ? (
-    <Section icon="link-outline" title={t('profile.sectionConnected')}>
-      <View style={styles.socialConnectRow}>
-        <View style={styles.socialConnectLeft}>
-          <View style={[styles.socialIconCircle, { backgroundColor: '#1877F215' }]}>
-            <Ionicons name="logo-facebook" size={22} color="#1877F2" />
-          </View>
-          <View>
-            <Text style={styles.socialConnectLabel}>Facebook</Text>
-            <Text style={styles.socialConnectSubtle}>
-              {socialStatus.facebook === 'connected'
-                ? t('profile.connected')
-                : 'Publish posts to your page'}
-            </Text>
-          </View>
-        </View>
-        {socialStatus.facebook === 'connected' ? (
-          <Pressable
-            onPress={() => void handleDisconnect('facebook')}
-            style={({ pressed }) => [styles.disconnectBtn, pressed && { opacity: 0.7 }]}
-            accessibilityRole="button"
-            accessibilityLabel={t('profile.disconnect')}
-          >
-            <Text style={styles.disconnectBtnText}>{t('profile.disconnect')}</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={connectFacebook}
-            disabled={socialStatus.facebook === 'connecting'}
-            style={({ pressed }) => [
-              styles.connectBtn,
-              pressed && { opacity: 0.85 },
-              socialStatus.facebook === 'connecting' && { opacity: 0.6 },
-            ]}
-            accessibilityRole="button"
-          >
-            <Text style={styles.connectBtnText}>
-              {socialStatus.facebook === 'connecting'
-                ? t('profile.connecting')
-                : socialStatus.facebook === 'error'
-                  ? t('profile.connectError')
-                  : t('profile.connect')}
-            </Text>
-          </Pressable>
-        )}
-      </View>
-
-      <View style={[styles.socialConnectRow, styles.infoRowLast]}>
-        <View style={styles.socialConnectLeft}>
-          <View style={[styles.socialIconCircle, { backgroundColor: '#E4405F15' }]}>
-            <Ionicons name="logo-instagram" size={22} color="#E4405F" />
-          </View>
-          <View>
-            <Text style={styles.socialConnectLabel}>Instagram</Text>
-            <Text style={styles.socialConnectSubtle}>Coming soon</Text>
-          </View>
-        </View>
-        <View style={styles.comingSoonPill}>
-          <Text style={styles.comingSoonText}>In progress</Text>
-        </View>
-      </View>
-    </Section>
-  ) : null;
-
   return (
     <>
       <ScrollView
@@ -1217,8 +1079,6 @@ export default function ProfileScreen() {
                 {contactSection}
               </>
             )}
-
-            {connectedAccountsSection}
 
             {/* ── Save bar (edit mode only) ── */}
             {isEditing && (
@@ -1947,79 +1807,6 @@ function makeStyles(
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.semibold,
       color: '#fff',
-    },
-
-    // ── Connected accounts ───────────────────────────────────────────────
-    socialConnectRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: D.spacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border.subtle,
-      gap: D.spacing.sm,
-    },
-    socialConnectLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: D.spacing.md,
-      flex: 1,
-      minWidth: 0,
-    },
-    socialIconCircle: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    socialConnectLabel: {
-      fontSize: D.fontSize.base,
-      color: colors.text.primary,
-      fontWeight: D.fontWeight.semibold,
-    },
-    socialConnectSubtle: {
-      fontSize: D.fontSize.xs,
-      color: colors.text.muted,
-      marginTop: 2,
-    },
-    connectBtn: {
-      paddingHorizontal: D.spacing.md,
-      paddingVertical: 8,
-      borderRadius: D.radius.pill,
-      backgroundColor: colors.accent.primary,
-    },
-    connectBtnText: {
-      fontSize: D.fontSize.xs,
-      fontWeight: D.fontWeight.semibold,
-      color: '#FFFFFF',
-      letterSpacing: 0.3,
-    },
-    disconnectBtn: {
-      paddingVertical: 6,
-      paddingHorizontal: D.spacing.md,
-      borderRadius: D.radius.pill,
-      borderWidth: 1,
-      borderColor: colors.border.error,
-      backgroundColor: `${colors.destructive}12`,
-    },
-    disconnectBtnText: {
-      fontSize: D.fontSize.xs,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.text.error,
-    },
-    comingSoonPill: {
-      paddingHorizontal: D.spacing.sm,
-      paddingVertical: 4,
-      borderRadius: D.radius.pill,
-      backgroundColor: colors.bg.elevated,
-      borderWidth: 1,
-      borderColor: colors.border.subtle,
-    },
-    comingSoonText: {
-      fontSize: D.fontSize.xs,
-      color: colors.text.muted,
-      fontWeight: D.fontWeight.medium,
     },
 
     // ── Sign out ─────────────────────────────────────────────────────────

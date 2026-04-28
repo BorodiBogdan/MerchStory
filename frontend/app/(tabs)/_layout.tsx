@@ -69,14 +69,6 @@ export default function TabLayout() {
         onPress: () => router.navigate('/(tabs)/products'),
       },
       {
-        key: 'analytics',
-        label: t('tabs.analytics'),
-        icon: 'bar-chart',
-        iconOutline: 'bar-chart-outline',
-        isActive: pathname.startsWith('/analytics'),
-        onPress: () => router.navigate('/(tabs)/analytics'),
-      },
-      {
         key: 'print',
         label: t('tabs.print'),
         icon: 'print',
@@ -246,19 +238,6 @@ export default function TabLayout() {
             tabBarLabel: t('tabs.products'),
             tabBarIcon: ({ color, focused }) => (
               <Ionicons name={focused ? 'pricetag' : 'pricetag-outline'} size={22} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="analytics"
-          options={{
-            tabBarLabel: t('tabs.analytics'),
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'bar-chart' : 'bar-chart-outline'}
-                size={22}
-                color={color}
-              />
             ),
           }}
         />
