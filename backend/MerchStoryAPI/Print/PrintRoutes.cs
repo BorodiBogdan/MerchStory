@@ -128,9 +128,13 @@ public static class PrintRoutes
                 string? qrSlugUrl = null;
                 if (printLink is not null)
                 {
+                    // The /p/{slug} redirect only resolves on a real host. Without a
+                    // configured public base URL the slug becomes a bare path that
+                    // scanners read as opaque text, so fall back to the raw target
+                    // URL so the QR is always scannable.
                     string publicBase = config["Print:PublicBaseUrl"] ?? string.Empty;
                     qrSlugUrl = string.IsNullOrWhiteSpace(publicBase)
-                        ? $"/p/{printLink.Slug}"
+                        ? printLink.TargetUrl
                         : $"{publicBase.TrimEnd('/')}/p/{printLink.Slug}";
                 }
 
