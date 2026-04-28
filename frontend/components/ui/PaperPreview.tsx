@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
@@ -19,6 +19,7 @@ interface PaperPreviewProps {
   orientation: PrintOrientation;
   showQrBadge: boolean;
   maxWidth: number;
+  caption?: string;
 }
 
 export function PaperPreview({
@@ -28,6 +29,7 @@ export function PaperPreview({
   orientation,
   showQrBadge,
   maxWidth,
+  caption,
 }: PaperPreviewProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -38,7 +40,7 @@ export function PaperPreview({
   const paperH = isLandscape ? ratio.w : ratio.h;
 
   const aspectRatio = paperW / paperH;
-  const previewW = Math.min(maxWidth, 320);
+  const previewW = Math.min(maxWidth, 360);
   const previewH = previewW / aspectRatio;
 
   const dataUri =
@@ -46,14 +48,28 @@ export function PaperPreview({
 
   return (
     <View style={styles.wrapper}>
-      <View style={[styles.paper, { width: previewW, height: previewH }]}>
-        {dataUri ? (
-          <Image source={{ uri: dataUri }} style={styles.image} resizeMode="cover" />
-        ) : (
-          <View style={styles.placeholder} />
-        )}
-        {showQrBadge && <View style={styles.qrBadge} />}
+      <View style={[styles.stage, { width: previewW + 48, height: previewH + 48 }]}>
+        <View
+          pointerEvents="none"
+          style={[styles.halo, { width: previewW + 48, height: previewH + 48 }]}
+        />
+        <View style={[styles.paper, { width: previewW, height: previewH }]}>
+          {dataUri ? (
+            <Image source={{ uri: dataUri }} style={styles.image} resizeMode="cover" />
+          ) : (
+            <View style={styles.placeholder} />
+          )}
+          {showQrBadge && (
+            <View style={styles.qrBadge}>
+              <View style={styles.qrCorner} />
+              <View style={[styles.qrCorner, styles.qrCornerTR]} />
+              <View style={[styles.qrCorner, styles.qrCornerBL]} />
+              <View style={styles.qrCenter} />
+            </View>
+          )}
+        </View>
       </View>
+      {caption && <Text style={styles.caption}>{caption}</Text>}
     </View>
   );
 }
@@ -64,13 +80,29 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       alignItems: 'center',
       paddingVertical: D.spacing.md,
     },
+    stage: {
+      position: 'relative',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    halo: {
+      position: 'absolute',
+      borderRadius: D.radius.xl,
+      backgroundColor: colors.accent.primary,
+      opacity: 0.18,
+      ...(Platform.OS === 'web' ? ({ filter: 'blur(36px)' } as object) : { ...D.shadow.glow }),
+    },
     paper: {
-      backgroundColor: colors.bg.elevated,
+      backgroundColor: '#FFFFFF',
       borderWidth: 1,
-      borderColor: colors.border.default,
+      borderColor: colors.border.subtle,
       borderRadius: D.radius.sm,
       overflow: 'hidden',
-      ...D.shadow.glow,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.35,
+      shadowRadius: 24,
+      elevation: 12,
     },
     image: {
       width: '100%',
@@ -82,14 +114,50 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     qrBadge: {
       position: 'absolute',
-      right: 6,
-      bottom: 6,
-      width: 36,
-      height: 36,
-      backgroundColor: '#ffffff',
+      right: 8,
+      bottom: 8,
+      width: 40,
+      height: 40,
+      backgroundColor: '#FFFFFF',
       borderWidth: 1,
-      borderColor: colors.border.default,
-      borderRadius: D.radius.sm,
+      borderColor: 'rgba(0,0,0,0.2)',
+      borderRadius: 4,
+      padding: 4,
+    },
+    qrCorner: {
+      position: 'absolute',
+      top: 4,
+      left: 4,
+      width: 9,
+      height: 9,
+      borderWidth: 2,
+      borderColor: '#0B0E14',
+      borderRadius: 1,
+    },
+    qrCornerTR: {
+      left: undefined,
+      right: 4,
+    },
+    qrCornerBL: {
+      top: undefined,
+      bottom: 4,
+    },
+    qrCenter: {
+      position: 'absolute',
+      right: 5,
+      bottom: 5,
+      width: 6,
+      height: 6,
+      backgroundColor: '#0B0E14',
+      borderRadius: 1,
+    },
+    caption: {
+      marginTop: D.spacing.md,
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.muted,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
     },
   });
 }

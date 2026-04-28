@@ -1,11 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  type DimensionValue,
   FlatList,
   Image,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -13,15 +17,19 @@ import {
   Switch,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
+import { CoinIcon } from '@/components/ui/CoinIcon';
+import { FloatingInput } from '@/components/ui/FloatingInput';
 import { PaperPreview } from '@/components/ui/PaperPreview';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
+import { useT } from '@/i18n';
 import {
   fetchGallery,
   fetchGalleryImage,
@@ -34,21 +42,13 @@ import {
   renderPrint,
 } from '@/utils/api';
 
-const PAPER_SIZE_OPTIONS = [
+const DESKTOP_BREAKPOINT = 900;
+
+const PAPER_SIZE_OPTIONS: { value: PaperSize; label: string }[] = [
   { value: 'A6', label: 'A6' },
   { value: 'A5', label: 'A5' },
   { value: 'A4', label: 'A4' },
   { value: 'A3', label: 'A3' },
-];
-
-const ORIENTATION_OPTIONS = [
-  { value: 'portrait', label: 'Portrait' },
-  { value: 'landscape', label: 'Landscape' },
-];
-
-const QUALITY_OPTIONS = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'premium', label: 'Premium' },
 ];
 
 const PREMIUM_COST: Record<PaperSize, number> = {
@@ -61,8 +61,13 @@ const PREMIUM_COST: Record<PaperSize, number> = {
 export default function PrintScreen() {
   const { colors } = useTheme();
   const { coinBalance } = useAuth();
+  const t = useT();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= DESKTOP_BREAKPOINT;
+
+  const styles = useMemo(() => makeStyles(colors, isDesktop), [colors, isDesktop]);
 
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
@@ -77,14 +82,34 @@ export default function PrintScreen() {
   const [qrTargetUrl, setQrTargetUrl] = useState('');
   const [rendering, setRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const orientationOptions = useMemo(
+    () => [
+      { value: 'portrait', label: t('print.orientation.portrait') },
+      { value: 'landscape', label: t('print.orientation.landscape') },
+    ],
+    [t]
+  );
+  const qualityOptions = useMemo(
+    () => [
+      { value: 'standard', label: t('print.quality.standard') },
+      { value: 'premium', label: t('print.quality.premium') },
+    ],
+    [t]
+  );
 
   const premiumCost = PREMIUM_COST[paperSize];
   const insufficientCoins = qualityTier === 'premium' && coinBalance < premiumCost;
+  const showQrBadge = includeQr && qrTargetUrl.trim().length > 0;
+  const previewCaption = `${paperSize} · ${
+    orientation === 'portrait' ? t('print.orientation.portrait') : t('print.orientation.landscape')
+  }`;
 
   useEffect(() => {
     let cancelled = false;
     setGalleryLoading(true);
-    fetchGallery({ pageSize: 30 })
+    fetchGallery({ pageSize: 100 })
       .then((res) => {
         if (cancelled) return;
         setGalleryItems(res.items);
@@ -118,6 +143,9 @@ export default function PrintScreen() {
 
   async function handleRender() {
     if (!selectedItem) return;
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
     setRendering(true);
     setRenderError(null);
     try {
@@ -132,148 +160,697 @@ export default function PrintScreen() {
 
       const ready = await waitForJob(job.jobId);
       if (ready.status !== 'ready' || !ready.pdfBase64) {
-        setRenderError(ready.errorMessage ?? 'Render failed.');
+        setRenderError(ready.errorMessage ?? t('print.error.generic'));
         return;
       }
 
       await deliverPdf(ready.pdfBase64, selectedItem.name, paperSize);
     } catch (err) {
-      setRenderError(err instanceof Error ? err.message : 'Render failed.');
+      setRenderError(err instanceof Error ? err.message : t('print.error.generic'));
     } finally {
       setRendering(false);
     }
   }
 
-  return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + D.spacing.xl }]}
-    >
-      <Text style={styles.title}>Print Shop</Text>
-      <Text style={styles.subtitle}>Export any generated asset as a paper-sized PDF</Text>
+  const renderDisabled = !selectedItem || rendering || insufficientCoins;
+  const renderLabel = rendering
+    ? t('print.button.rendering')
+    : !selectedItem
+      ? t('print.button.pickFirst')
+      : insufficientCoins
+        ? `${t('print.button.needCoinsPrefix')} ${premiumCost} ${t('print.coinsLabel')}`
+        : t('print.button.generate');
 
-      <Section title="1. Pick an asset">
-        {galleryLoading ? (
+  const configColumn = (
+    <View style={styles.configColumn}>
+      <SectionHeader
+        eyebrow={t('print.section.assetEyebrow')}
+        title={t('print.section.assetTitle')}
+        helper={t('print.section.assetHelper')}
+      />
+      {galleryLoading ? (
+        <View style={styles.assetLoading}>
           <ActivityIndicator color={colors.accent.primary} />
-        ) : galleryItems.length === 0 ? (
-          <Text style={styles.muted}>
-            You haven&apos;t generated anything yet. Head to Studio first.
-          </Text>
-        ) : (
-          <FlatList
-            data={galleryItems}
-            horizontal
-            keyExtractor={(it) => it.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.assetRow}
-            renderItem={({ item }) => (
-              <AssetCard
-                item={item}
-                isSelected={selectedItem?.id === item.id}
-                onPress={() => setSelectedItem(item)}
-              />
-            )}
-          />
-        )}
-      </Section>
-
-      <Section title="2. Paper size">
-        <ChipSelector
-          options={PAPER_SIZE_OPTIONS}
-          selected={paperSize}
-          onSelect={(v) => setPaperSize(v as PaperSize)}
-          accessibilityLabel="Paper size"
-        />
-      </Section>
-
-      <Section title="3. Orientation">
-        <ChipSelector
-          options={ORIENTATION_OPTIONS}
-          selected={orientation}
-          onSelect={(v) => setOrientation(v as PrintOrientation)}
-          accessibilityLabel="Orientation"
-        />
-      </Section>
-
-      <Section title="4. Quality">
-        <ChipSelector
-          options={QUALITY_OPTIONS}
-          selected={qualityTier}
-          onSelect={(v) => setQualityTier(v as PrintQualityTier)}
-          accessibilityLabel="Print quality"
-        />
-        {qualityTier === 'premium' ? (
-          <Text style={[styles.muted, styles.spacedTop]}>
-            Premium upscales the image for sharper prints. Costs {premiumCost} coins.
-          </Text>
-        ) : (
-          <Text style={[styles.muted, styles.spacedTop]}>
-            Standard renders the image at its native resolution. Free.
-          </Text>
-        )}
-      </Section>
-
-      <Section title="5. QR code">
-        <View style={styles.row}>
-          <Switch value={includeQr} onValueChange={setIncludeQr} />
-          <Text style={styles.rowLabel}>Add a trackable QR code to the print</Text>
         </View>
-        {includeQr && (
-          <TextInput
-            style={styles.input}
-            placeholder="https://your-shop.example"
-            placeholderTextColor={colors.text.muted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
+      ) : galleryItems.length === 0 ? (
+        <EmptyAssetsCard onOpenStudio={() => router.push('/')} />
+      ) : (
+        <SelectedAssetCard
+          item={selectedItem}
+          previewBase64={previewImage?.base64 ?? null}
+          previewMimeType={previewImage?.mimeType ?? null}
+          onOpen={() => setPickerOpen(true)}
+        />
+      )}
+
+      <View style={styles.sectionGap} />
+      <SectionHeader
+        eyebrow={t('print.section.sizeEyebrow')}
+        title={t('print.section.sizeTitle')}
+      />
+      <ChipSelector
+        options={PAPER_SIZE_OPTIONS}
+        selected={paperSize}
+        onSelect={(v) => setPaperSize(v as PaperSize)}
+        accessibilityLabel={t('print.section.sizeTitle')}
+      />
+
+      <View style={styles.sectionGap} />
+      <View style={styles.pairRow}>
+        <View style={styles.pairCell}>
+          <SectionHeader
+            eyebrow={t('print.section.orientationEyebrow')}
+            title={t('print.section.orientationTitle')}
+          />
+          <ChipSelector
+            options={orientationOptions}
+            selected={orientation}
+            onSelect={(v) => setOrientation(v as PrintOrientation)}
+            accessibilityLabel={t('print.section.orientationTitle')}
+          />
+        </View>
+        <View style={styles.pairCell}>
+          <SectionHeader
+            eyebrow={t('print.section.qualityEyebrow')}
+            title={t('print.section.qualityTitle')}
+          />
+          <ChipSelector
+            options={qualityOptions}
+            selected={qualityTier}
+            onSelect={(v) => setQualityTier(v as PrintQualityTier)}
+            accessibilityLabel={t('print.section.qualityTitle')}
+          />
+        </View>
+      </View>
+      <QualityInfo
+        qualityTier={qualityTier}
+        premiumCost={premiumCost}
+        insufficientCoins={insufficientCoins}
+        onTopUp={() => router.push('/(tabs)/wallet')}
+      />
+
+      <View style={styles.sectionGap} />
+      <SectionHeader eyebrow={t('print.section.qrEyebrow')} title={t('print.section.qrTitle')} />
+      <QrToggleCard
+        includeQr={includeQr}
+        onToggle={setIncludeQr}
+        title={t('print.qr.toggleTitle')}
+        helper={t('print.qr.toggleHelper')}
+      />
+      {includeQr && (
+        <View style={styles.qrInputWrap}>
+          <FloatingInput
+            label={t('print.qr.urlLabel')}
             value={qrTargetUrl}
             onChangeText={setQrTargetUrl}
+            leftIcon="link-outline"
+            keyboardType="url"
+            autoCapitalize="none"
+            accessibilityLabel={t('print.qr.urlLabel')}
           />
-        )}
-      </Section>
-
-      <Section title="Preview">
-        <PaperPreview
-          imageBase64={previewImage?.base64 ?? null}
-          imageMimeType={previewImage?.mimeType ?? null}
-          paperSize={paperSize}
-          orientation={orientation}
-          showQrBadge={includeQr && qrTargetUrl.trim().length > 0}
-          maxWidth={320}
-        />
-      </Section>
+        </View>
+      )}
 
       {renderError && (
-        <View style={styles.errorBox}>
-          <Ionicons name="alert-circle" size={18} color={colors.text.error} />
-          <Text style={styles.errorText}>{renderError}</Text>
+        <View style={styles.errorBanner}>
+          <Ionicons name="alert-circle-outline" size={18} color={colors.text.error} />
+          <Text style={styles.errorText} numberOfLines={3}>
+            {renderError}
+          </Text>
         </View>
       )}
 
       <Pressable
         onPress={handleRender}
-        disabled={!selectedItem || rendering || insufficientCoins}
+        disabled={renderDisabled}
+        accessibilityRole="button"
+        accessibilityLabel={renderLabel}
+        accessibilityState={{ disabled: renderDisabled, busy: rendering }}
         style={({ pressed }) => [
           styles.renderButton,
-          (!selectedItem || rendering || insufficientCoins) && styles.renderButtonDisabled,
-          pressed && styles.renderButtonPressed,
+          renderDisabled && styles.renderButtonDisabled,
+          pressed && !renderDisabled && styles.renderButtonPressed,
         ]}
       >
         {rendering ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color="#FFFFFF" />
         ) : (
           <>
-            <Ionicons name="print" size={20} color="#fff" />
-            <Text style={styles.renderButtonText}>
-              {insufficientCoins ? `Need ${premiumCost} coins` : 'Generate PDF'}
-            </Text>
+            <Ionicons name="print" size={18} color="#FFFFFF" />
+            <Text style={styles.renderButtonText}>{renderLabel}</Text>
           </>
         )}
       </Pressable>
-    </ScrollView>
+    </View>
+  );
+
+  const previewColumn = (
+    <View style={styles.previewColumn}>
+      <View style={styles.previewCard}>
+        <View style={styles.previewHeader}>
+          <View style={styles.eyebrow}>
+            <View style={styles.eyebrowDot} />
+            <Text style={styles.eyebrowText}>{t('print.preview.eyebrow')}</Text>
+          </View>
+          <Text style={styles.previewTitle}>{t('print.preview.title')}</Text>
+        </View>
+        <PaperPreview
+          imageBase64={previewImage?.base64 ?? null}
+          imageMimeType={previewImage?.mimeType ?? null}
+          paperSize={paperSize}
+          orientation={orientation}
+          showQrBadge={showQrBadge}
+          maxWidth={isDesktop ? 320 : 300}
+          caption={previewCaption}
+        />
+        <View style={styles.summaryRow}>
+          <SummaryChip icon="resize-outline" label={paperSize} />
+          <SummaryChip
+            icon={orientation === 'portrait' ? 'phone-portrait-outline' : 'phone-landscape-outline'}
+            label={
+              orientation === 'portrait'
+                ? t('print.orientation.portrait')
+                : t('print.orientation.landscape')
+            }
+          />
+          <SummaryChip
+            icon={qualityTier === 'premium' ? 'sparkles-outline' : 'flash-off-outline'}
+            label={
+              qualityTier === 'premium' ? t('print.quality.premium') : t('print.quality.standard')
+            }
+          />
+          <SummaryChip
+            icon="qr-code-outline"
+            label={showQrBadge ? t('print.preview.qrOn') : t('print.preview.qrOff')}
+            muted={!showQrBadge}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.bg.base }}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + D.spacing.xl },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.container}>
+          <View style={styles.ambientGlow} pointerEvents="none" />
+          <View style={styles.ambientGlow2} pointerEvents="none" />
+
+          <View style={styles.heroRow}>
+            <Text style={styles.heroTitle}>{t('print.title')}</Text>
+            <Text style={styles.heroSubtitle}>{t('print.subtitle')}</Text>
+          </View>
+
+          {isDesktop ? (
+            <View style={styles.twoCol}>
+              {configColumn}
+              {previewColumn}
+            </View>
+          ) : (
+            <View style={styles.oneCol}>
+              {configColumn}
+              {previewColumn}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+      <AssetPickerModal
+        visible={pickerOpen}
+        items={galleryItems}
+        selectedId={selectedItem?.id ?? null}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(item) => {
+          if (Platform.OS !== 'web') {
+            Haptics.selectionAsync().catch(() => {});
+          }
+          setSelectedItem(item);
+          setPickerOpen(false);
+        }}
+      />
+    </>
   );
 }
 
+// ─── Section header ──────────────────────────────────────────────────────
+function SectionHeader({
+  eyebrow,
+  title,
+  helper,
+}: {
+  eyebrow: string;
+  title: string;
+  helper?: string;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeSectionHeaderStyles(colors), [colors]);
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.eyebrow}>
+        <View style={styles.eyebrowDot} />
+        <Text style={styles.eyebrowText}>{eyebrow}</Text>
+      </View>
+      <Text style={styles.title}>{title}</Text>
+      {helper && <Text style={styles.helper}>{helper}</Text>}
+    </View>
+  );
+}
+
+// ─── Empty state ─────────────────────────────────────────────────────────
+function EmptyAssetsCard({ onOpenStudio }: { onOpenStudio: () => void }) {
+  const { colors } = useTheme();
+  const t = useT();
+  const styles = useMemo(() => makeEmptyStyles(colors), [colors]);
+  return (
+    <View style={styles.card}>
+      <View style={styles.iconTile}>
+        <Ionicons name="images-outline" size={26} color={colors.accent.primary} />
+      </View>
+      <View style={styles.body}>
+        <Text style={styles.title}>{t('print.empty.title')}</Text>
+        <Text style={styles.bodyText}>{t('print.empty.body')}</Text>
+      </View>
+      <Pressable
+        onPress={onOpenStudio}
+        accessibilityRole="button"
+        accessibilityLabel={t('print.empty.cta')}
+        style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
+      >
+        <Text style={styles.ctaText}>{t('print.empty.cta')}</Text>
+        <Ionicons name="arrow-forward" size={14} color={colors.accent.primary} />
+      </Pressable>
+    </View>
+  );
+}
+
+// ─── Selected-asset card (inline trigger) ────────────────────────────────
+function SelectedAssetCard({
+  item,
+  previewBase64,
+  previewMimeType,
+  onOpen,
+}: {
+  item: GalleryItem | null;
+  previewBase64: string | null;
+  previewMimeType: string | null;
+  onOpen: () => void;
+}) {
+  const { colors } = useTheme();
+  const t = useT();
+  const styles = useMemo(() => makeSelectedAssetStyles(colors, !!item), [colors, item]);
+
+  const thumbUri =
+    item && previewBase64 && previewMimeType
+      ? `data:${previewMimeType};base64,${previewBase64}`
+      : null;
+
+  return (
+    <Pressable
+      onPress={onOpen}
+      accessibilityRole="button"
+      accessibilityLabel={item ? t('print.picker.change') : t('print.picker.browse')}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+        styles.card,
+        hovered && styles.cardHovered,
+        pressed && styles.cardPressed,
+      ]}
+    >
+      <View style={styles.thumbWrap}>
+        {thumbUri ? (
+          <Image source={{ uri: thumbUri }} style={styles.thumb} resizeMode="cover" />
+        ) : (
+          <View style={styles.thumbPlaceholder}>
+            <Ionicons name="images-outline" size={28} color={colors.accent.primary} />
+          </View>
+        )}
+      </View>
+      <View style={styles.body}>
+        {item ? (
+          <>
+            <Text style={styles.eyebrow}>{t('print.picker.selectedLabel')}</Text>
+            <Text style={styles.title} numberOfLines={2}>
+              {item.name}
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.title}>{t('print.picker.browse')}</Text>
+        )}
+      </View>
+      <View style={styles.cta}>
+        <Text style={styles.ctaText}>
+          {item ? t('print.picker.change') : t('print.picker.browse')}
+        </Text>
+        <Ionicons name="arrow-forward" size={14} color={colors.accent.primary} />
+      </View>
+    </Pressable>
+  );
+}
+
+// ─── Asset thumbnail (loads its own bytes) ───────────────────────────────
+function AssetThumb({ id, style }: { id: string; style?: object }) {
+  const { colors } = useTheme();
+  const [uri, setUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchGalleryImage(id)
+      .then((res) => {
+        if (!cancelled) setUri(`data:${res.mimeType};base64,${res.imageBase64}`);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (!uri) {
+    return <View style={[{ backgroundColor: colors.bg.input }, style]} />;
+  }
+  return <Image source={{ uri }} style={style as object} resizeMode="cover" />;
+}
+
+// ─── Asset picker modal (search + grid) ──────────────────────────────────
+function AssetPickerModal({
+  visible,
+  items,
+  selectedId,
+  onClose,
+  onSelect,
+}: {
+  visible: boolean;
+  items: GalleryItem[];
+  selectedId: string | null;
+  onClose: () => void;
+  onSelect: (item: GalleryItem) => void;
+}) {
+  const { colors } = useTheme();
+  const t = useT();
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const isDesktop = screenWidth >= DESKTOP_BREAKPOINT;
+  const styles = useMemo(() => makePickerStyles(colors), [colors]);
+
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (!visible) setSearch('');
+  }, [visible]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((it) => it.name.toLowerCase().includes(q));
+  }, [items, search]);
+
+  const DIALOG_MAX = 880;
+  const dialogWidth = Math.min(screenWidth - 96, DIALOG_MAX);
+  const COLS_DESKTOP = 4;
+  const COLS_MOBILE = 2;
+  const cols = isDesktop ? COLS_DESKTOP : COLS_MOBILE;
+  const padding = D.spacing.lg;
+  const gap = D.spacing.sm;
+  const containerWidth = isDesktop ? dialogWidth : screenWidth;
+  const thumbWidth = Math.floor((containerWidth - padding * 2 - gap * (cols - 1)) / cols);
+
+  const isFiltered = search.trim().length > 0;
+  const resultLabel = `${filtered.length} ${
+    filtered.length === 1 ? t('print.picker.resultsOne') : t('print.picker.resultsOther')
+  }`;
+
+  const header = (
+    <View style={styles.header}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.title}>{t('print.picker.title')}</Text>
+        <Text style={styles.subtitle}>{t('print.picker.subtitle')}</Text>
+      </View>
+      <Pressable
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel={t('common.close')}
+        style={({ pressed }: { pressed: boolean }) => [
+          styles.closeBtn,
+          pressed && { opacity: 0.7 },
+        ]}
+      >
+        <Ionicons name="close" size={18} color={colors.text.secondary} />
+      </Pressable>
+    </View>
+  );
+
+  const searchBar = (
+    <View style={[styles.searchWrap, { paddingHorizontal: padding }]}>
+      <View style={styles.searchInputBox}>
+        <Ionicons name="search" size={16} color={colors.text.muted} />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder={t('print.picker.searchPlaceholder')}
+          placeholderTextColor={colors.text.muted}
+          style={[
+            styles.searchInput,
+            Platform.OS === 'web' ? ({ outlineWidth: 0 } as object) : null,
+          ]}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel={t('print.picker.searchPlaceholder')}
+        />
+        {search.length > 0 && (
+          <Pressable
+            onPress={() => setSearch('')}
+            accessibilityRole="button"
+            accessibilityLabel={t('print.picker.clearSearch')}
+            hitSlop={6}
+          >
+            <Ionicons name="close-circle" size={16} color={colors.text.muted} />
+          </Pressable>
+        )}
+      </View>
+      <Text style={styles.resultText}>{resultLabel}</Text>
+    </View>
+  );
+
+  const body = (
+    <>
+      {searchBar}
+      {filtered.length === 0 ? (
+        <View style={styles.emptyWrap}>
+          <Ionicons name="images-outline" size={32} color={colors.text.muted} />
+          <Text style={styles.emptyText}>
+            {isFiltered ? t('print.picker.filteredEmpty') : t('print.picker.empty')}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(it) => it.id}
+          numColumns={cols}
+          key={cols}
+          contentContainerStyle={{ padding, gap }}
+          columnWrapperStyle={{ gap }}
+          renderItem={({ item }) => {
+            const isSel = selectedId === item.id;
+            return (
+              <Pressable
+                onPress={() => onSelect(item)}
+                accessibilityRole="button"
+                accessibilityLabel={item.name}
+                accessibilityState={{ selected: isSel }}
+                style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+                  styles.gridItem,
+                  {
+                    width: thumbWidth,
+                    borderColor: isSel
+                      ? colors.accent.primary
+                      : hovered
+                        ? colors.border.focus
+                        : colors.border.subtle,
+                  },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <View style={styles.gridThumbWrap}>
+                  <AssetThumb id={item.id} style={styles.gridThumb} />
+                  {isSel && (
+                    <View style={styles.gridCheckBadge}>
+                      <Ionicons name="checkmark" size={14} color={colors.accent.primary} />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.gridNameRow}>
+                  <Text style={styles.gridName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          }}
+        />
+      )}
+    </>
+  );
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={isDesktop}
+      animationType={isDesktop ? 'fade' : 'slide'}
+      onRequestClose={onClose}
+    >
+      {isDesktop ? (
+        <Pressable style={styles.overlay} onPress={onClose}>
+          <Pressable
+            style={[styles.dialog, { width: dialogWidth, maxHeight: '90%' as DimensionValue }]}
+            onPress={() => {}}
+          >
+            {header}
+            {body}
+          </Pressable>
+        </Pressable>
+      ) : (
+        <View style={[styles.fullscreen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+          {header}
+          {body}
+        </View>
+      )}
+    </Modal>
+  );
+}
+
+// ─── Quality info block ──────────────────────────────────────────────────
+function QualityInfo({
+  qualityTier,
+  premiumCost,
+  insufficientCoins,
+  onTopUp,
+}: {
+  qualityTier: PrintQualityTier;
+  premiumCost: number;
+  insufficientCoins: boolean;
+  onTopUp: () => void;
+}) {
+  const { colors } = useTheme();
+  const t = useT();
+  const styles = useMemo(
+    () => makeQualityStyles(colors, insufficientCoins),
+    [colors, insufficientCoins]
+  );
+  const isPremium = qualityTier === 'premium';
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.iconTile}>
+        <Ionicons
+          name={isPremium ? 'sparkles' : 'flash-off-outline'}
+          size={18}
+          color={colors.accent.primary}
+        />
+      </View>
+      <View style={styles.body}>
+        <Text style={styles.helper}>
+          {isPremium ? t('print.quality.premiumHelper') : t('print.quality.standardHelper')}
+        </Text>
+        {isPremium && (
+          <View style={styles.costRow}>
+            <Text style={styles.costPrefix}>{t('print.quality.costsLabel')}</Text>
+            <CoinIcon size={14} />
+            <Text style={styles.costNumber}>{premiumCost}</Text>
+            <Text style={styles.costSuffix}>{t('print.coinsLabel')}</Text>
+          </View>
+        )}
+        {insufficientCoins && (
+          <View style={styles.warningRow}>
+            <Text style={styles.warningText}>{t('print.quality.notEnoughCoins')}</Text>
+            <Pressable
+              onPress={onTopUp}
+              accessibilityRole="link"
+              accessibilityLabel={t('print.quality.topUp')}
+              hitSlop={6}
+            >
+              <Text style={styles.topUpText}>{t('print.quality.topUp')}</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ─── QR toggle card ──────────────────────────────────────────────────────
+function QrToggleCard({
+  includeQr,
+  onToggle,
+  title,
+  helper,
+}: {
+  includeQr: boolean;
+  onToggle: (v: boolean) => void;
+  title: string;
+  helper: string;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeQrStyles(colors, includeQr), [colors, includeQr]);
+  return (
+    <Pressable
+      onPress={() => {
+        if (Platform.OS !== 'web') {
+          Haptics.selectionAsync().catch(() => {});
+        }
+        onToggle(!includeQr);
+      }}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: includeQr }}
+      accessibilityLabel={title}
+      style={styles.card}
+    >
+      <View style={styles.iconTile}>
+        <Ionicons
+          name="qr-code-outline"
+          size={20}
+          color={includeQr ? colors.accent.primary : colors.text.muted}
+        />
+      </View>
+      <View style={styles.body}>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.helper}>{helper}</Text>
+      </View>
+      <Switch
+        value={includeQr}
+        onValueChange={onToggle}
+        trackColor={{ false: colors.bg.input, true: colors.accent.dim }}
+        thumbColor={includeQr ? colors.accent.primary : colors.text.muted}
+        ios_backgroundColor={colors.bg.input}
+      />
+    </Pressable>
+  );
+}
+
+// ─── Summary chip ────────────────────────────────────────────────────────
+function SummaryChip({
+  icon,
+  label,
+  muted,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  muted?: boolean;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeSummaryStyles(colors, !!muted), [colors, muted]);
+  return (
+    <View style={styles.chip}>
+      <Ionicons name={icon} size={12} color={muted ? colors.text.muted : colors.text.secondary} />
+      <Text style={styles.text}>{label}</Text>
+    </View>
+  );
+}
+
+// ─── Job polling and PDF delivery (unchanged) ────────────────────────────
 async function waitForJob(jobId: string): Promise<PrintJobDetails> {
   const maxAttempts = 60;
   for (let i = 0; i < maxAttempts; i++) {
@@ -316,178 +893,645 @@ function slugify(input: string): string {
     .slice(0, 40);
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
-    </View>
-  );
-}
-
-function AssetCard({
-  item,
-  isSelected,
-  onPress,
-}: {
-  item: GalleryItem;
-  isSelected: boolean;
-  onPress: () => void;
-}) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [thumb, setThumb] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchGalleryImage(item.id)
-      .then((res) => {
-        if (!cancelled) setThumb(`data:${res.mimeType};base64,${res.imageBase64}`);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [item.id]);
-
-  return (
-    <Pressable onPress={onPress} style={[styles.assetCard, isSelected && styles.assetCardSelected]}>
-      {thumb ? (
-        <Image source={{ uri: thumb }} style={styles.assetThumb} resizeMode="cover" />
-      ) : (
-        <View style={styles.assetThumbPlaceholder} />
-      )}
-      <Text style={styles.assetName} numberOfLines={1}>
-        {item.name}
-      </Text>
-    </Pressable>
-  );
-}
-
-function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+// ─── Styles ──────────────────────────────────────────────────────────────
+function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
   return StyleSheet.create({
-    scroll: {
-      flex: 1,
-      backgroundColor: colors.bg.base,
+    scrollContent: {
+      flexGrow: 1,
+      alignItems: 'center',
+      paddingHorizontal: isDesktop ? D.spacing.xl : D.spacing.md,
+      paddingTop: isDesktop ? D.spacing.lg : D.spacing.md,
+      paddingBottom: isDesktop ? D.spacing.xl : D.spacing.lg,
     },
     container: {
-      padding: D.spacing.lg,
+      width: '100%',
+      maxWidth: 1120,
+      position: 'relative',
     },
-    title: {
-      fontSize: D.fontSize['2xl'],
+    ambientGlow: {
+      position: 'absolute',
+      top: -120,
+      left: -120,
+      width: 360,
+      height: 360,
+      borderRadius: 360,
+      backgroundColor: colors.accent.dim,
+      opacity: 0.45,
+      ...(Platform.OS === 'web' ? ({ filter: 'blur(72px)' } as object) : {}),
+    },
+    ambientGlow2: {
+      position: 'absolute',
+      bottom: -160,
+      right: -120,
+      width: 320,
+      height: 320,
+      borderRadius: 320,
+      backgroundColor: colors.accent.dim,
+      opacity: 0.3,
+      ...(Platform.OS === 'web' ? ({ filter: 'blur(80px)' } as object) : {}),
+    },
+    heroRow: {
+      flexDirection: isDesktop ? 'row' : 'column',
+      alignItems: isDesktop ? 'baseline' : 'flex-start',
+      gap: isDesktop ? D.spacing.md : 4,
+      paddingBottom: D.spacing.xs,
+    },
+    heroTitle: {
+      fontSize: isDesktop ? D.fontSize.xl : D.fontSize['2xl'],
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
+      letterSpacing: -0.6,
+      lineHeight: isDesktop ? 28 : 36,
     },
-    subtitle: {
-      fontSize: D.fontSize.sm,
-      color: colors.text.muted,
-      marginTop: D.spacing.xs,
-      marginBottom: D.spacing.lg,
-    },
-    section: {
-      marginBottom: D.spacing.lg,
-    },
-    sectionTitle: {
-      fontSize: D.fontSize.base,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.text.primary,
-      marginBottom: D.spacing.sm,
-    },
-    muted: {
-      fontSize: D.fontSize.sm,
-      color: colors.text.muted,
-    },
-    spacedTop: {
-      marginTop: D.spacing.sm,
-    },
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: D.spacing.sm,
-    },
-    rowLabel: {
-      flex: 1,
+    heroSubtitle: {
+      flex: isDesktop ? 1 : undefined,
       fontSize: D.fontSize.sm,
       color: colors.text.secondary,
+      lineHeight: 20,
     },
-    input: {
+    twoCol: {
+      flexDirection: 'row',
+      gap: D.spacing.xl,
+      alignItems: 'flex-start',
+      marginTop: D.spacing.md,
+    },
+    oneCol: {
+      flexDirection: 'column',
+      gap: D.spacing.lg,
       marginTop: D.spacing.sm,
-      paddingHorizontal: D.spacing.md,
-      paddingVertical: D.spacing.sm,
-      borderRadius: D.radius.md,
-      backgroundColor: colors.bg.input,
+    },
+    configColumn: {
+      flex: isDesktop ? 1 : undefined,
+      minWidth: 0,
+      width: isDesktop ? undefined : '100%',
+    },
+    previewColumn: {
+      width: isDesktop ? 400 : '100%',
+      ...(isDesktop && Platform.OS === 'web' ? ({ position: 'sticky', top: 24 } as object) : {}),
+    },
+    previewCard: {
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.xl,
       borderWidth: 1,
-      borderColor: colors.border.default,
+      borderColor: colors.border.subtle,
+      padding: isDesktop ? D.spacing.lg : D.spacing.md,
+      gap: D.spacing.md,
+    },
+    previewHeader: {
+      gap: 4,
+    },
+    eyebrow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    eyebrowDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.accent.primary,
+    },
+    eyebrowText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+    },
+    previewTitle: {
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
-      fontSize: D.fontSize.sm,
+      letterSpacing: -0.3,
+    },
+    summaryRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: D.spacing.xs,
+      marginTop: D.spacing.xs,
+    },
+    sectionGap: {
+      height: D.spacing.lg,
+    },
+    pairRow: {
+      flexDirection: isDesktop ? 'row' : 'column',
+      gap: D.spacing.lg,
+      alignItems: 'flex-start',
+    },
+    pairCell: {
+      flex: isDesktop ? 1 : undefined,
+      width: isDesktop ? undefined : '100%',
+      minWidth: 0,
     },
     assetRow: {
       gap: D.spacing.sm,
       paddingVertical: D.spacing.xs,
+      paddingHorizontal: 2,
     },
-    assetCard: {
-      width: 120,
-      borderRadius: D.radius.md,
-      borderWidth: 2,
-      borderColor: 'transparent',
-      backgroundColor: colors.bg.elevated,
-      overflow: 'hidden',
+    assetLoading: {
+      height: 168,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    assetCardSelected: {
-      borderColor: colors.accent.primary,
+    qrInputWrap: {
+      marginTop: D.spacing.sm,
     },
-    assetThumb: {
-      width: '100%',
-      aspectRatio: 1,
-    },
-    assetThumbPlaceholder: {
-      width: '100%',
-      aspectRatio: 1,
-      backgroundColor: colors.bg.input,
-    },
-    assetName: {
-      fontSize: D.fontSize.xs,
-      color: colors.text.secondary,
-      paddingHorizontal: D.spacing.sm,
-      paddingVertical: D.spacing.xs,
-    },
-    errorBox: {
+    errorBanner: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: D.spacing.sm,
       padding: D.spacing.md,
-      backgroundColor: colors.bg.input,
+      backgroundColor: colors.bg.surface,
       borderRadius: D.radius.md,
       borderWidth: 1,
       borderColor: colors.border.error,
-      marginBottom: D.spacing.md,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.text.error,
+      marginTop: D.spacing.lg,
     },
     errorText: {
       flex: 1,
       fontSize: D.fontSize.sm,
       color: colors.text.error,
+      lineHeight: 19,
     },
     renderButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: D.spacing.sm,
+      height: 52,
       backgroundColor: colors.accent.primary,
-      paddingVertical: D.spacing.md,
-      borderRadius: D.radius.pill,
+      borderRadius: D.radius.md,
+      marginTop: D.spacing.lg,
+      ...D.shadow.glow,
+      ...(Platform.OS === 'web'
+        ? ({ cursor: 'pointer', transitionDuration: '180ms' } as object)
+        : {}),
     },
     renderButtonDisabled: {
-      opacity: 0.5,
+      opacity: 0.55,
+      ...(Platform.OS === 'web' ? ({ cursor: 'not-allowed' } as object) : {}),
     },
     renderButtonPressed: {
-      opacity: 0.85,
+      opacity: 0.9,
+      transform: [{ scale: 0.98 }],
     },
     renderButtonText: {
-      color: '#fff',
+      color: '#FFFFFF',
       fontSize: D.fontSize.base,
       fontWeight: D.fontWeight.semibold,
+      letterSpacing: 0.3,
+    },
+  });
+}
+
+function makeSectionHeaderStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    wrap: {
+      marginBottom: D.spacing.sm,
+    },
+    eyebrow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 6,
+    },
+    eyebrowDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.accent.primary,
+    },
+    eyebrowText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+    },
+    title: {
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.3,
+    },
+    helper: {
+      marginTop: 2,
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      lineHeight: 19,
+    },
+  });
+}
+
+function makeEmptyStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.md,
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      padding: D.spacing.md,
+    },
+    iconTile: {
+      width: 48,
+      height: 48,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.border.focus,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    body: {
+      flex: 1,
+      gap: 2,
+    },
+    title: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+    },
+    bodyText: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
+      lineHeight: 19,
+    },
+    cta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: 6,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.accent.primary,
+    },
+    ctaText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 0.3,
+    },
+  });
+}
+
+function makeSelectedAssetStyles(colors: ReturnType<typeof useTheme>['colors'], hasItem: boolean) {
+  return StyleSheet.create({
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.md,
+      backgroundColor: colors.bg.surface,
+      borderWidth: 1,
+      borderColor: hasItem ? colors.accent.primary : colors.border.subtle,
+      borderRadius: D.radius.lg,
+      padding: D.spacing.md,
+      ...(Platform.OS === 'web'
+        ? ({ cursor: 'pointer', transitionDuration: '180ms' } as object)
+        : {}),
+    },
+    cardHovered: {
+      borderColor: colors.accent.primary,
+      backgroundColor: colors.bg.elevated,
+    },
+    cardPressed: {
+      opacity: 0.92,
+      transform: [{ scale: 0.995 }],
+    },
+    thumbWrap: {
+      width: 64,
+      height: 64,
+      borderRadius: D.radius.md,
+      overflow: 'hidden',
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    thumb: {
+      width: '100%',
+      height: '100%',
+    },
+    thumbPlaceholder: {
+      width: '100%',
+      height: '100%',
+      backgroundColor: colors.accent.dim,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    body: {
+      flex: 1,
+      gap: 2,
+      minWidth: 0,
+    },
+    eyebrow: {
+      fontSize: 10,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+    },
+    title: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+      letterSpacing: -0.2,
+    },
+    helper: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      lineHeight: 18,
+    },
+    cta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: 6,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.accent.primary,
+    },
+    ctaText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      letterSpacing: 0.3,
+    },
+  });
+}
+
+function makePickerStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: D.spacing.lg,
+    },
+    dialog: {
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      overflow: 'hidden',
+      ...D.shadow.modal,
+    },
+    fullscreen: {
+      flex: 1,
+      backgroundColor: colors.bg.surface,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: D.spacing.lg,
+      paddingVertical: D.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+      gap: D.spacing.sm,
+    },
+    title: {
+      fontSize: D.fontSize.lg,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.3,
+    },
+    subtitle: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginTop: 2,
+    },
+    closeBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: D.radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.bg.elevated,
+    },
+    searchWrap: {
+      paddingTop: D.spacing.md,
+      paddingBottom: D.spacing.sm,
+      gap: 6,
+    },
+    searchInputBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      paddingHorizontal: D.spacing.md,
+      height: 44,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.bg.input,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: D.fontSize.sm,
+      color: colors.text.primary,
+      paddingVertical: 0,
+      backgroundColor: 'transparent',
+    },
+    resultText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      paddingLeft: 4,
+    },
+    emptyWrap: {
+      alignItems: 'center',
+      paddingVertical: D.spacing['2xl'],
+      gap: D.spacing.sm,
+    },
+    emptyText: {
+      color: colors.text.muted,
+      fontSize: D.fontSize.sm,
+    },
+    gridItem: {
+      backgroundColor: colors.bg.base,
+      borderRadius: D.radius.md,
+      borderWidth: 1.5,
+      overflow: 'hidden',
+      ...(Platform.OS === 'web'
+        ? ({ cursor: 'pointer', transitionDuration: '180ms' } as object)
+        : {}),
+    },
+    gridThumbWrap: {
+      width: '100%',
+      aspectRatio: 1,
+      position: 'relative',
+    },
+    gridThumb: {
+      width: '100%',
+      height: '100%',
+    },
+    gridCheckBadge: {
+      position: 'absolute',
+      top: 6,
+      right: 6,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderWidth: 1,
+      borderColor: colors.accent.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    gridNameRow: {
+      paddingHorizontal: D.spacing.sm,
+      paddingVertical: 6,
+      backgroundColor: colors.bg.elevated,
+      borderTopWidth: 1,
+      borderTopColor: colors.border.subtle,
+    },
+    gridName: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
+    },
+  });
+}
+
+function makeQualityStyles(colors: ReturnType<typeof useTheme>['colors'], insufficient: boolean) {
+  return StyleSheet.create({
+    card: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: D.spacing.md,
+      backgroundColor: colors.bg.elevated,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: insufficient ? colors.border.error : colors.border.subtle,
+      padding: D.spacing.md,
+      marginTop: D.spacing.sm,
+    },
+    iconTile: {
+      width: 32,
+      height: 32,
+      borderRadius: D.radius.sm,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.border.focus,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    body: {
+      flex: 1,
+      gap: 6,
+    },
+    helper: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
+      lineHeight: 19,
+    },
+    costRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    costPrefix: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+    },
+    costNumber: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+    },
+    costSuffix: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.secondary,
+    },
+    warningRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+    },
+    warningText: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.error,
+    },
+    topUpText: {
+      fontSize: D.fontSize.xs,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+      textDecorationLine: 'underline',
+    },
+  });
+}
+
+function makeQrStyles(colors: ReturnType<typeof useTheme>['colors'], on: boolean) {
+  return StyleSheet.create({
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.md,
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: on ? colors.accent.primary : colors.border.subtle,
+      padding: D.spacing.md,
+      ...(Platform.OS === 'web'
+        ? ({ cursor: 'pointer', transitionDuration: '180ms' } as object)
+        : {}),
+    },
+    iconTile: {
+      width: 40,
+      height: 40,
+      borderRadius: D.radius.sm,
+      backgroundColor: on ? colors.accent.dim : colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: on ? colors.border.focus : colors.border.subtle,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    body: {
+      flex: 1,
+      gap: 2,
+    },
+    title: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+    },
+    helper: {
+      fontSize: D.fontSize.sm,
+      color: colors.text.muted,
+      lineHeight: 19,
+    },
+  });
+}
+
+function makeSummaryStyles(colors: ReturnType<typeof useTheme>['colors'], muted: boolean) {
+  return StyleSheet.create({
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      opacity: muted ? 0.6 : 1,
+    },
+    text: {
+      fontSize: 11,
+      fontWeight: D.fontWeight.bold,
+      color: muted ? colors.text.muted : colors.text.secondary,
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
     },
   });
 }
