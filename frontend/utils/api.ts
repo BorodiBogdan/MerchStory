@@ -98,6 +98,43 @@ export interface GenerateImageResponse {
   mimeType: string;
   warning?: string;
   missingProducts?: string[];
+  balance?: number | null;
+}
+
+export interface WalletTransaction {
+  id: number;
+  amount: number;
+  balanceAfter: number;
+  description: string | null;
+  relatedGeneratedImageId: string | null;
+  createdAt: string;
+}
+
+export interface WalletSummary {
+  balance: number;
+  recentTransactions: WalletTransaction[];
+}
+
+export interface AdminUserLookup {
+  id: string;
+  email: string;
+  userName: string;
+  isAdmin: boolean;
+  coinBalance: number;
+}
+
+export interface GrantCoinsResponse {
+  userId: string;
+  userEmail: string;
+  balance: number;
+  transaction: WalletTransaction;
+}
+
+export class InsufficientCoinsError extends Error {
+  constructor() {
+    super('Insufficient coins');
+    this.name = 'InsufficientCoinsError';
+  }
 }
 
 export type Currency = 'USD' | 'EUR' | 'RON';
@@ -111,6 +148,7 @@ export interface AuthResponse {
   isShopSetupComplete: boolean;
   isAdmin: boolean;
   preferredLanguage: AppLanguage;
+  coinBalance: number;
 }
 
 export interface BrandColor {
@@ -358,14 +396,10 @@ export interface GenerateAnnouncementImageParams {
   language?: AppLanguage;
 }
 
-export async function generateCatalogImage(
-  params: GenerateCatalogImageParams
-): Promise<GenerateImageResponse> {
-  const response = await fetchWithAuth(`${API_URL}/generate-image/catalog`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
+async function parseGenerationResponse(response: Response): Promise<GenerateImageResponse> {
+  if (response.status === 402) {
+    throw new InsufficientCoinsError();
+  }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -377,6 +411,17 @@ export async function generateCatalogImage(
   return response.json() as Promise<GenerateImageResponse>;
 }
 
+export async function generateCatalogImage(
+  params: GenerateCatalogImageParams
+): Promise<GenerateImageResponse> {
+  const response = await fetchWithAuth(`${API_URL}/generate-image/catalog`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  return parseGenerationResponse(response);
+}
+
 export async function generateAnnouncementImage(
   params: GenerateAnnouncementImageParams
 ): Promise<GenerateImageResponse> {
@@ -385,15 +430,7 @@ export async function generateAnnouncementImage(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      (errorData as { detail?: string }).detail ?? `Request failed with status ${response.status}`
-    );
-  }
-
-  return response.json() as Promise<GenerateImageResponse>;
+  return parseGenerationResponse(response);
 }
 
 export interface GenerateWallpaperParams {
@@ -440,15 +477,7 @@ export async function generateWallpaper(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      (errorData as { detail?: string }).detail ?? `Request failed with status ${response.status}`
-    );
-  }
-
-  return response.json() as Promise<GenerateImageResponse>;
+  return parseGenerationResponse(response);
 }
 
 export async function generateCatalogOnWallpaper(
@@ -1003,4 +1032,52 @@ export async function submitIdeaFeedback(
     // eslint-disable-next-line no-console
     console.warn('Idea feedback submission failed', response.status);
   }
+}
+
+export async function getWallet(): Promise<WalletSummary> {
+  const response = await fetchWithAuth(`${API_URL}/wallet/`, { method: 'GET' });
+  if (!response.ok) {
+    throw new Error(`Failed to load wallet (${response.status})`);
+  }
+  return response.json() as Promise<WalletSummary>;
+}
+
+export async function getWalletTransactions(skip = 0, take = 50): Promise<WalletTransaction[]> {
+  const response = await fetchWithAuth(`${API_URL}/wallet/transactions?skip=${skip}&take=${take}`, {
+    method: 'GET',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to load transactions (${response.status})`);
+  }
+  return response.json() as Promise<WalletTransaction[]>;
+}
+
+export async function lookupAdminUsers(query: string): Promise<AdminUserLookup[]> {
+  const response = await fetchWithAuth(
+    `${API_URL}/wallet/admin/users?query=${encodeURIComponent(query)}`,
+    { method: 'GET' }
+  );
+  if (!response.ok) {
+    throw new Error(`User lookup failed (${response.status})`);
+  }
+  return response.json() as Promise<AdminUserLookup[]>;
+}
+
+export async function grantCoins(
+  userEmail: string,
+  amount: number,
+  note?: string
+): Promise<GrantCoinsResponse> {
+  const response = await fetchWithAuth(`${API_URL}/wallet/grant`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userEmail, amount, note }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as { detail?: string }).detail ?? `Grant failed with status ${response.status}`
+    );
+  }
+  return response.json() as Promise<GrantCoinsResponse>;
 }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Wallet;
 using MerchStoryImageGeneration.Models;
 using MerchStoryImageGeneration.Services;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,7 @@ public static class ImageGenerationRoutes
             ClaimsPrincipal principal,
             ICatalogImageService catalogService,
             AppDbContext db,
+            WalletService wallet,
             ILogger<Program> logger) =>
         {
             if (request.Products is null || request.Products.Count == 0)
@@ -48,17 +50,31 @@ public static class ImageGenerationRoutes
             string resolvedCurrency = distinctCurrencies.Length == 1 ? distinctCurrencies[0] : "USD";
 
             string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            IResult? insufficient = await EnsureCoinsAsync(wallet, userId);
+            if (insufficient is not null)
+            {
+                return insufficient;
+            }
+
             string? logoBase64 = await FetchLogoIfRequestedAsync(db, userId, request.BrandContextFields);
             List<string>? textFields = StripLogoField(request.BrandContextFields);
             BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
 
             string resolvedLanguage = await ResolveLanguageAsync(db, userId, request.Language);
 
+            WalletDeduction deduction = new(wallet, userId, "Catalog generation");
+
             if (!request.PreserveProductImages)
             {
                 return await HandleGeneration(
                     () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext, logoBase64, resolvedCurrency, resolvedLanguage)),
-                    logger);
+                    logger,
+                    deduction);
             }
 
             // Preserve mode: all products must carry a photo.
@@ -108,7 +124,8 @@ public static class ImageGenerationRoutes
                 resolvedLanguage,
                 assignments,
                 catalogService,
-                logger);
+                logger,
+                deduction);
         })
         .WithName("GenerateCatalogImage")
         .RequireAuthorization();
@@ -118,9 +135,21 @@ public static class ImageGenerationRoutes
             ClaimsPrincipal principal,
             IWallpaperImageService wallpaperService,
             AppDbContext db,
+            WalletService wallet,
             ILogger<Program> logger) =>
         {
             string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            IResult? insufficient = await EnsureCoinsAsync(wallet, userId);
+            if (insufficient is not null)
+            {
+                return insufficient;
+            }
+
             BrandContext? brandContext = await BuildBrandContextAsync(db, userId, request.BrandContextFields);
             string? brandLogo = null;
 
@@ -134,9 +163,12 @@ public static class ImageGenerationRoutes
 
             string wallpaperLanguage = await ResolveLanguageAsync(db, userId, request.Language);
 
+            WalletDeduction deduction = new(wallet, userId, "Wallpaper generation");
+
             return await HandleGeneration(
                 () => wallpaperService.GenerateWallpaperAsync(request.ToServiceRequest(brandContext, brandLogo, wallpaperLanguage)),
-                logger);
+                logger,
+                deduction);
         })
         .WithName("GenerateWallpaper")
         .RequireAuthorization();
@@ -181,6 +213,7 @@ public static class ImageGenerationRoutes
             ClaimsPrincipal principal,
             IAnnouncementImageService announcementService,
             AppDbContext db,
+            WalletService wallet,
             ILogger<Program> logger) =>
         {
             bool isJobPost = string.Equals(request.PostType, "Job Post", StringComparison.OrdinalIgnoreCase);
@@ -210,17 +243,50 @@ public static class ImageGenerationRoutes
             }
 
             string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            IResult? insufficient = await EnsureCoinsAsync(wallet, userId);
+            if (insufficient is not null)
+            {
+                return insufficient;
+            }
+
             string? logoBase64 = await FetchLogoIfRequestedAsync(db, userId, request.BrandContextFields);
             List<string>? textFields = StripLogoField(request.BrandContextFields);
             BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
             string announcementLanguage = await ResolveLanguageAsync(db, userId, request.Language);
 
+            WalletDeduction deduction = new(wallet, userId, "Announcement generation");
+
             return await HandleGeneration(
                 () => announcementService.GenerateAnnouncementImageAsync(request.ToServiceRequest(brandContext, logoBase64, announcementLanguage)),
-                logger);
+                logger,
+                deduction);
         })
         .WithName("GenerateAnnouncementImage")
         .RequireAuthorization();
+    }
+
+    private static async Task<IResult?> EnsureCoinsAsync(WalletService wallet, string userId)
+    {
+        AppUser? user = await wallet.GetUserAsync(userId);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (user.CoinBalance < 1)
+        {
+            return Results.Problem(
+                title: "Insufficient coins",
+                detail: "You don't have enough coins to perform this action.",
+                statusCode: StatusCodes.Status402PaymentRequired);
+        }
+
+        return null;
     }
 
     private static async Task<string> ResolveLanguageAsync(AppDbContext db, string? userId, string? requestedLanguage)
@@ -362,13 +428,15 @@ public static class ImageGenerationRoutes
 
     private static async Task<IResult> HandleGeneration(
         Func<Task<ImageGenerationResult>> generate,
-        ILogger logger)
+        ILogger logger,
+        WalletDeduction? deduction = null)
     {
         try
         {
             ImageGenerationResult result = await generate();
             string base64 = Convert.ToBase64String(result.ImageData);
-            return Results.Ok(new { imageBase64 = base64, mimeType = result.MimeType });
+            int? newBalance = await ApplyDeductionAsync(deduction, logger);
+            return Results.Ok(new { imageBase64 = base64, mimeType = result.MimeType, balance = newBalance });
         }
         catch (InvalidOperationException ex)
             when (ex.Message.Contains("not configured", StringComparison.OrdinalIgnoreCase))
@@ -383,6 +451,33 @@ public static class ImageGenerationRoutes
         }
     }
 
+    private static async Task<int?> ApplyDeductionAsync(WalletDeduction? deduction, ILogger logger)
+    {
+        if (deduction is null)
+        {
+            return null;
+        }
+
+        DeductResult result = await deduction.Wallet.TryDeductAsync(
+            deduction.UserId,
+            1,
+            deduction.Description,
+            deduction.RelatedGeneratedImageId);
+
+        if (!result.Succeeded)
+        {
+            // Pre-flight passed but deduct failed (concurrent drain). The Gemini call already
+            // cost us — log and return without charging rather than discarding the image.
+            logger.LogWarning(
+                "Post-generation deduct failed for user {UserId}: {Error}",
+                deduction.UserId,
+                result.Error);
+            return null;
+        }
+
+        return result.NewBalance;
+    }
+
     private static async Task<IResult> HandlePreserveGeneration(
         CatalogImageApiRequest request,
         BrandContext? brandContext,
@@ -391,7 +486,8 @@ public static class ImageGenerationRoutes
         string resolvedLanguage,
         IReadOnlyList<ProductMarkerAssignment> assignments,
         ICatalogImageService catalogService,
-        ILogger logger)
+        ILogger logger,
+        WalletDeduction? deduction = null)
     {
         try
         {
@@ -469,12 +565,14 @@ public static class ImageGenerationRoutes
                 }
 
                 string rawBase64 = Convert.ToBase64String(rawResult.ImageData);
+                int? rawBalance = await ApplyDeductionAsync(deduction, logger);
                 return Results.Ok(new
                 {
                     imageBase64 = rawBase64,
                     mimeType = rawResult.MimeType,
                     warning = "preserve_detection_failed_returning_raw",
                     missingProducts = composite.MissingProductNames,
+                    balance = rawBalance,
                     diagnostics = composite.Diagnostics?.Select(d => new
                     {
                         d.ProductName,
@@ -497,6 +595,7 @@ public static class ImageGenerationRoutes
                 _ => null,
             };
 
+            int? newBalance = await ApplyDeductionAsync(deduction, logger);
             return Results.Ok(new
             {
                 imageBase64 = compositeBase64,
@@ -505,6 +604,7 @@ public static class ImageGenerationRoutes
                 missingProducts = composite.MissingProductNames.Count > 0
                     ? composite.MissingProductNames
                     : null,
+                balance = newBalance,
             });
         }
         catch (InvalidOperationException ex)
@@ -519,6 +619,12 @@ public static class ImageGenerationRoutes
             return Results.Problem("Image generation failed.", statusCode: 502);
         }
     }
+
+    private sealed record WalletDeduction(
+        WalletService Wallet,
+        string UserId,
+        string Description,
+        Guid? RelatedGeneratedImageId = null);
 }
 
 // ── API-layer DTOs ────────────────────────────────────────────────────────────

@@ -35,6 +35,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
     public DbSet<IdeaInteraction> IdeaInteractions => this.Set<IdeaInteraction>();
 
+    public DbSet<CoinTransaction> CoinTransactions => this.Set<CoinTransaction>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -292,6 +294,24 @@ public class AppDbContext : IdentityDbContext<AppUser>
                   .WithMany()
                   .HasForeignKey(i => i.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<CoinTransaction>(entity =>
+        {
+            entity.HasKey(t => t.Id);
+
+            entity.HasIndex(t => new { t.UserId, t.CreatedAt })
+                  .IsDescending(false, true);
+
+            entity.HasOne(t => t.User)
+                  .WithMany(u => u.CoinTransactions)
+                  .HasForeignKey(t => t.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(t => t.RelatedGeneratedImage)
+                  .WithMany()
+                  .HasForeignKey(t => t.RelatedGeneratedImageId)
+                  .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

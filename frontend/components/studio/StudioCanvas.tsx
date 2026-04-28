@@ -30,7 +30,9 @@ import ReAnimated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
+import { CoinIcon } from '@/components/ui/CoinIcon';
 import { GalleryImage } from '@/components/ui/GalleryImage';
+import { InsufficientCoinsModal } from '@/components/ui/InsufficientCoinsModal';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
 import { ProductImage } from '@/components/ui/ProductImage';
@@ -38,6 +40,7 @@ import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
 import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { D } from '@/constants/design';
 import type { GenerationType } from '@/constants/generationTypes';
+import { useAuth } from '@/context/auth';
 import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
@@ -51,6 +54,7 @@ import {
   generateCatalogOnWallpaper,
   type GenerateImageResponse,
   generateWallpaper,
+  InsufficientCoinsError,
   type PlacementZone,
   type ProductItem,
   saveToGallery,
@@ -927,14 +931,17 @@ function GenerateButton({
   disabled,
   label,
   onPress,
+  cost,
 }: {
   loading: boolean;
   disabled: boolean;
   label: string;
   onPress: () => void;
+  cost?: number | 'free';
 }) {
   const { colors } = useTheme();
   const inactive = disabled || loading;
+  const showCost = !inactive && cost !== undefined;
   return (
     <Pressable
       style={({ pressed }) =>
@@ -986,6 +993,33 @@ function GenerateButton({
           >
             {label}
           </Text>
+          {showCost && cost === 'free' && (
+            <Text
+              style={{
+                color: '#fff',
+                fontSize: D.fontSize.base,
+                fontWeight: D.fontWeight.bold,
+                letterSpacing: 0.3,
+              }}
+            >
+              · Free
+            </Text>
+          )}
+          {showCost && typeof cost === 'number' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text
+                style={{
+                  color: '#fff',
+                  fontSize: D.fontSize.base,
+                  fontWeight: D.fontWeight.bold,
+                  letterSpacing: 0.3,
+                }}
+              >
+                · {cost}
+              </Text>
+              <CoinIcon size={16} />
+            </View>
+          )}
         </>
       )}
     </Pressable>
@@ -1487,6 +1521,8 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const t = useT();
   const router = useRouter();
   const { profile: shopProfile } = useShop();
+  const { coinBalance, setCoinBalance, refreshCoinBalance } = useAuth();
+  const [insufficientVisible, setInsufficientVisible] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isDesktop = isWeb && screenWidth >= DESKTOP_BREAKPOINT;
@@ -1649,9 +1685,30 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     });
   }
 
+  function handleAfterPaidGenerate(result: GenerateImageResponse | null | undefined) {
+    if (result && typeof result.balance === 'number') {
+      setCoinBalance(result.balance);
+    } else {
+      refreshCoinBalance();
+    }
+  }
+
+  function handleGenerationError(err: unknown, set: (msg: string) => void) {
+    if (err instanceof InsufficientCoinsError) {
+      setInsufficientVisible(true);
+      set('Not enough coins.');
+      return;
+    }
+    set(err instanceof Error ? err.message : 'Something went wrong.');
+  }
+
   async function handleCatalogGenerate() {
     const chosen = products.filter((p) => selected.has(p.id));
     if (!chosen.length) return;
+    if (coinBalance < 1) {
+      setInsufficientVisible(true);
+      return;
+    }
     setCatalogGenerating(true);
     setCatalogError(null);
     setCatalogResult(null);
@@ -1666,28 +1723,32 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         }))
       );
       const catalogCurrency = chosen[0].currency;
-      setCatalogResult(
-        await generateCatalogImage({
-          products: productsWithImages,
-          layout,
-          colorTheme,
-          format: catalogFormat,
-          showPrices,
-          showProductNames: showCatalogProductNames,
-          backgroundStyle,
-          preserveProductImages,
-          brandContextFields: catalogContextFields.length > 0 ? catalogContextFields : undefined,
-          currency: catalogCurrency,
-        })
-      );
+      const result = await generateCatalogImage({
+        products: productsWithImages,
+        layout,
+        colorTheme,
+        format: catalogFormat,
+        showPrices,
+        showProductNames: showCatalogProductNames,
+        backgroundStyle,
+        preserveProductImages,
+        brandContextFields: catalogContextFields.length > 0 ? catalogContextFields : undefined,
+        currency: catalogCurrency,
+      });
+      setCatalogResult(result);
+      handleAfterPaidGenerate(result);
     } catch (err) {
-      setCatalogError(err instanceof Error ? err.message : 'Something went wrong.');
+      handleGenerationError(err, setCatalogError);
     } finally {
       setCatalogGenerating(false);
     }
   }
 
   async function handleGenerateWallpaper() {
+    if (coinBalance < 1) {
+      setInsufficientVisible(true);
+      return;
+    }
     setWallpaperGenGenerating(true);
     setWallpaperError(null);
     try {
@@ -1700,8 +1761,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
       setWallpaperGenResult(res);
       setWallpaperGenKept(false);
       setWallpaperGenModalStage('result');
+      handleAfterPaidGenerate(res);
     } catch (err) {
-      setWallpaperError(err instanceof Error ? err.message : 'Failed to generate wallpaper.');
+      handleGenerationError(err, setWallpaperError);
     } finally {
       setWallpaperGenGenerating(false);
     }
@@ -1903,6 +1965,10 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
 
   async function handleAnnoGenerate() {
     if (!annoReady) return;
+    if (coinBalance < 1) {
+      setInsufficientVisible(true);
+      return;
+    }
     setAnnoGenerating(true);
     setAnnoError(null);
     setAnnoResult(null);
@@ -1926,24 +1992,24 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             .filter((line) => line.length > 0)
         : [];
 
-      setAnnoResult(
-        await generateAnnouncementImage({
-          postType,
-          content: content.trim(),
-          tone,
-          format: annoFormat,
-          brandContextFields: annoContextFields.length > 0 ? annoContextFields : undefined,
-          productImages: promotionProductImages,
-          jobTitle: isJobPost ? jobTitle.trim() : undefined,
-          jobSchedule: isJobPost ? jobSchedule.trim() : undefined,
-          jobSalary: isJobPost && jobSalary.trim().length > 0 ? jobSalary.trim() : undefined,
-          jobImageStyle: isJobPost ? jobImageStyle : undefined,
-          jobRequirements:
-            isJobPost && jobRequirementsList.length > 0 ? jobRequirementsList : undefined,
-        })
-      );
+      const result = await generateAnnouncementImage({
+        postType,
+        content: content.trim(),
+        tone,
+        format: annoFormat,
+        brandContextFields: annoContextFields.length > 0 ? annoContextFields : undefined,
+        productImages: promotionProductImages,
+        jobTitle: isJobPost ? jobTitle.trim() : undefined,
+        jobSchedule: isJobPost ? jobSchedule.trim() : undefined,
+        jobSalary: isJobPost && jobSalary.trim().length > 0 ? jobSalary.trim() : undefined,
+        jobImageStyle: isJobPost ? jobImageStyle : undefined,
+        jobRequirements:
+          isJobPost && jobRequirementsList.length > 0 ? jobRequirementsList : undefined,
+      });
+      setAnnoResult(result);
+      handleAfterPaidGenerate(result);
     } catch (err) {
-      setAnnoError(err instanceof Error ? err.message : 'Something went wrong.');
+      handleGenerationError(err, setAnnoError);
     } finally {
       setAnnoGenerating(false);
     }
@@ -2179,6 +2245,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
               selectedCount === 0 ? t('studio.selectProductsFirst') : t('studio.generateCatalog')
             }
             onPress={handleCatalogGenerate}
+            cost={1}
           />
         ) : (
           <GenerateButton
@@ -2192,6 +2259,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                   : t('studio.placeOnWallpaper')
             }
             onPress={handleWallpaperOnGenerate}
+            cost="free"
           />
         )
       ) : activeTab === 'announcements' ? (
@@ -2200,6 +2268,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           disabled={!annoReady}
           label={t('studio.generateGraphic')}
           onPress={handleAnnoGenerate}
+          cost={1}
         />
       ) : null;
 
@@ -2956,8 +3025,11 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                       <Ionicons name="sparkles-outline" size={16} color="#fff" />
                     )}
                     <Text style={styles.wallpaperGenBtnText2}>
-                      {wallpaperGenGenerating ? t('studio.generating') : t('studio.generate')}
+                      {wallpaperGenGenerating
+                        ? t('studio.generating')
+                        : `${t('studio.generate')} · 1`}
                     </Text>
+                    {!wallpaperGenGenerating && <CoinIcon size={16} />}
                   </Pressable>
                 </ScrollView>
               ) : (
@@ -3421,6 +3493,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         : t('studio.generateCatalog')
                     }
                     onPress={handleCatalogGenerate}
+                    cost={1}
                   />
 
                   {catalogError && <Text style={styles.errorText}>{catalogError}</Text>}
@@ -3760,6 +3833,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                           : t('studio.placeOnWallpaper')
                     }
                     onPress={handleWallpaperOnGenerate}
+                    cost="free"
                   />
 
                   {wallpaperOnError && <Text style={styles.errorText}>{wallpaperOnError}</Text>}
@@ -3976,6 +4050,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                 disabled={!annoReady}
                 label={t('studio.generateGraphic')}
                 onPress={handleAnnoGenerate}
+                cost={1}
               />
 
               {annoError && <Text style={styles.errorText}>{annoError}</Text>}
@@ -4204,8 +4279,11 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     <Ionicons name="sparkles-outline" size={16} color="#fff" />
                   )}
                   <Text style={styles.wallpaperGenBtnText2}>
-                    {wallpaperGenGenerating ? t('studio.generating') : t('studio.generate')}
+                    {wallpaperGenGenerating
+                      ? t('studio.generating')
+                      : `${t('studio.generate')} · 1`}
                   </Text>
+                  {!wallpaperGenGenerating && <CoinIcon size={16} />}
                 </Pressable>
               </ScrollView>
             ) : (
@@ -4408,6 +4486,11 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         defaultName={pendingKeep?.defaultName}
         onCancel={() => setPendingKeep(null)}
         onConfirm={handleKeepConfirm}
+      />
+
+      <InsufficientCoinsModal
+        visible={insufficientVisible}
+        onDismiss={() => setInsufficientVisible(false)}
       />
     </KeyboardAvoidingView>
   );

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -32,7 +32,6 @@ import { Pagination } from '@/components/ui/Pagination';
 import { ProductFilterBar, ProductFilterState } from '@/components/ui/ProductFilterBar';
 import { ProductImage } from '@/components/ui/ProductImage';
 import { D } from '@/constants/design';
-import { useAuth } from '@/context/auth';
 import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
@@ -105,8 +104,6 @@ function SectionLabel({ icon, text, color, mutedColor }: SectionLabelProps) {
 export default function ProductsScreen() {
   const { colors } = useTheme();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const router = useRouter();
-  const { isAdmin } = useAuth();
 
   const insets = useSafeAreaInsets();
 
@@ -673,16 +670,6 @@ export default function ProductsScreen() {
           </View>
 
           <View style={styles.headerActions}>
-            {isAdmin && (
-              <Pressable
-                style={({ pressed }) => [styles.adminButton, pressed && { opacity: 0.75 }]}
-                onPress={() => router.push('/add-products-professional')}
-                accessibilityRole="button"
-                accessibilityLabel="Admin: add professional reference photo"
-              >
-                <Ionicons name="shield-checkmark-outline" size={16} color={colors.accent.primary} />
-              </Pressable>
-            )}
             <Pressable
               style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
               onPress={openAddModal}
@@ -1638,16 +1625,6 @@ function makeStyles(
     addButtonPressed: {
       opacity: 0.88,
       transform: [{ scale: 0.98 }],
-    },
-    adminButton: {
-      width: 42,
-      height: 42,
-      borderRadius: D.radius.pill,
-      borderWidth: 1,
-      borderColor: colors.accent.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.accent.dim,
     },
     addButtonText: {
       color: '#fff',
