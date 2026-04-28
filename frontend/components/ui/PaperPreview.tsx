@@ -1,11 +1,12 @@
 import QrCreator from 'qrcode';
 import { useMemo } from 'react';
-import { Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, PanResponder, Platform, StyleSheet, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
-import type { PaperSize, PrintOrientation } from '@/utils/api';
+import type { PaperSize, PrintOrientation, QrBackground, QrSize } from '@/utils/api';
 
 const PAPER_RATIOS: Record<PaperSize, { w: number; h: number }> = {
   A6: { w: 105, h: 148 },
@@ -30,16 +31,17 @@ const PAPER_HEIGHT_PT: Record<PaperSize, number> = {
   A3: 1191,
 };
 
-// Match PdfRenderer.cs: 80pt QR image with 6pt internal padding (white card)
-// and 8pt margin from the page edge. The QRCoder PNG embedded in that 80pt
-// image bakes a 4-module quiet zone INSIDE the image, so the matrix itself
-// only fills 80 * N/(N+8) of the image. We mirror that here via the
-// react-native-qrcode-svg `quietZone` prop so the preview matrix occupies
-// the same fraction of the white card as it does in the rendered PDF.
-const PDF_QR_IMAGE_PT = 80;
-const PDF_QR_CARD_PT = PDF_QR_IMAGE_PT + 6 * 2;
-const PDF_QR_INNER_PADDING_PT = 6;
-const PDF_QR_EDGE_MARGIN_PT = 8;
+// QR image size in PDF points per S/M/L token. Mirrors backend PdfRenderer.
+const QR_IMAGE_PT_BY_SIZE: Record<QrSize, number> = {
+  S: 64,
+  M: 80,
+  L: 112,
+};
+
+// QRCoder bakes a 4-module quiet zone INSIDE the rendered PNG, so the
+// matrix fills N/(N+8) of the image. Mirror that via react-native-qrcode-svg's
+// `quietZone` prop so the preview matrix occupies the same fraction of the
+// QR area as it does in the rendered PDF.
 const PDF_QR_QUIET_MODULES = 4;
 
 interface PaperPreviewProps {
@@ -49,8 +51,19 @@ interface PaperPreviewProps {
   orientation: PrintOrientation;
   showQrBadge: boolean;
   qrTargetUrl: string | null;
+  qrX: number;
+  qrY: number;
+  qrSize: QrSize;
+  qrBackground: QrBackground;
+  onQrPositionChange?: (x: number, y: number) => void;
   maxWidth: number;
   caption?: string;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
 }
 
 export function PaperPreview({
@@ -60,6 +73,11 @@ export function PaperPreview({
   orientation,
   showQrBadge,
   qrTargetUrl,
+  qrX,
+  qrY,
+  qrSize,
+  qrBackground,
+  onQrPositionChange,
   maxWidth,
   caption,
 }: PaperPreviewProps) {
@@ -78,14 +96,20 @@ export function PaperPreview({
   const dataUri =
     imageBase64 && imageMimeType ? `data:${imageMimeType};base64,${imageBase64}` : null;
 
+  const qrImagePt = QR_IMAGE_PT_BY_SIZE[qrSize];
+
   const pageWidthPt = isLandscape ? PAPER_HEIGHT_PT[paperSize] : PAPER_WIDTH_PT[paperSize];
   const ptToPx = previewW / pageWidthPt;
-  const cardSize = PDF_QR_CARD_PT * ptToPx;
-  const innerPadding = PDF_QR_INNER_PADDING_PT * ptToPx;
-  const edgeOffset = PDF_QR_EDGE_MARGIN_PT * ptToPx;
-  const qrImageSize = Math.max(1, PDF_QR_IMAGE_PT * ptToPx);
+  const cardSize = qrImagePt * ptToPx;
+  const qrImageSize = Math.max(1, cardSize);
+
+  const maxLeft = Math.max(0, previewW - cardSize);
+  const maxTop = Math.max(0, previewH - cardSize);
+  const baseLeft = clamp(qrX, 0, 1) * maxLeft;
+  const baseTop = clamp(qrY, 0, 1) * maxTop;
 
   const renderQr = !!(showQrBadge && qrTargetUrl && qrTargetUrl.length > 0);
+  const draggable = !!onQrPositionChange;
 
   // Match the 4-module quiet zone QRCoder bakes into the PDF's QR PNG. The
   // module count depends on URL length + ECL; if generation fails we fall
@@ -99,6 +123,45 @@ export function PaperPreview({
       return 0;
     }
   }, [renderQr, qrTargetUrl, qrImageSize]);
+
+  const dragX = useSharedValue(0);
+  const dragY = useSharedValue(0);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: dragX.value }, { translateY: dragY.value }],
+  }));
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => draggable,
+        onMoveShouldSetPanResponder: () => draggable,
+        onPanResponderGrant: () => {
+          dragX.value = 0;
+          dragY.value = 0;
+        },
+        onPanResponderMove: (_, g) => {
+          const nextLeft = clamp(baseLeft + g.dx, 0, maxLeft);
+          const nextTop = clamp(baseTop + g.dy, 0, maxTop);
+          dragX.value = nextLeft - baseLeft;
+          dragY.value = nextTop - baseTop;
+        },
+        onPanResponderRelease: (_, g) => {
+          const nextLeft = clamp(baseLeft + g.dx, 0, maxLeft);
+          const nextTop = clamp(baseTop + g.dy, 0, maxTop);
+          dragX.value = 0;
+          dragY.value = 0;
+          const nx = maxLeft > 0 ? nextLeft / maxLeft : 0;
+          const ny = maxTop > 0 ? nextTop / maxTop : 0;
+          onQrPositionChange?.(nx, ny);
+        },
+        onPanResponderTerminate: () => {
+          dragX.value = 0;
+          dragY.value = 0;
+        },
+      }),
+    [draggable, baseLeft, baseTop, maxLeft, maxTop, onQrPositionChange, dragX, dragY]
+  );
 
   return (
     <View style={styles.wrapper}>
@@ -114,16 +177,21 @@ export function PaperPreview({
             <View style={styles.placeholder} />
           )}
           {renderQr && (
-            <View
+            <Animated.View
+              {...(draggable ? panResponder.panHandlers : {})}
               style={[
                 styles.qrCard,
                 {
-                  right: edgeOffset,
-                  bottom: edgeOffset,
+                  left: baseLeft,
+                  top: baseTop,
                   width: cardSize,
                   height: cardSize,
-                  padding: innerPadding,
+                  backgroundColor: qrBackground === 'white' ? '#FFFFFF' : 'transparent',
+                  ...(Platform.OS === 'web' && draggable
+                    ? ({ cursor: 'grab', touchAction: 'none' } as object)
+                    : {}),
                 },
+                animStyle,
               ]}
             >
               <QRCode
@@ -132,9 +200,9 @@ export function PaperPreview({
                 quietZone={qrQuietZone}
                 ecl="Q"
                 color="#000000"
-                backgroundColor="#FFFFFF"
+                backgroundColor={qrBackground === 'white' ? '#FFFFFF' : 'transparent'}
               />
-            </View>
+            </Animated.View>
           )}
         </View>
       </View>
@@ -183,7 +251,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     qrCard: {
       position: 'absolute',
-      backgroundColor: '#FFFFFF',
+      backgroundColor: 'transparent',
       alignItems: 'center',
       justifyContent: 'center',
     },

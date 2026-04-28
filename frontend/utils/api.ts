@@ -1063,11 +1063,17 @@ export async function grantCoins(
 export type PaperSize = 'A6' | 'A5' | 'A4' | 'A3';
 export type PrintOrientation = 'portrait' | 'landscape';
 export type PrintJobStatus = 'pending' | 'rendering' | 'ready' | 'failed';
+export type QrSize = 'S' | 'M' | 'L';
+export type QrBackground = 'transparent' | 'white';
 
 export interface RenderPrintRequest {
   generatedImageId: string;
   paperSize: PaperSize;
   qrTargetUrl?: string;
+  qrX?: number;
+  qrY?: number;
+  qrSize?: QrSize;
+  qrBackground?: QrBackground;
 }
 
 export interface RenderPrintResponse {

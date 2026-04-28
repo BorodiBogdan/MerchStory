@@ -37,6 +37,8 @@ import {
   getPrintJob,
   type PaperSize,
   type PrintJobDetails,
+  type QrBackground,
+  type QrSize,
   renderPrint,
 } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
@@ -48,6 +50,17 @@ const PAPER_SIZE_OPTIONS: { value: PaperSize; label: string }[] = [
   { value: 'A5', label: 'A5' },
   { value: 'A4', label: 'A4' },
   { value: 'A3', label: 'A3' },
+];
+
+const QR_SIZE_OPTIONS: { value: QrSize; label: string }[] = [
+  { value: 'S', label: 'Small' },
+  { value: 'M', label: 'Medium' },
+  { value: 'L', label: 'Large' },
+];
+
+const QR_BG_OPTIONS: { value: QrBackground; label: string }[] = [
+  { value: 'white', label: 'White' },
+  { value: 'transparent', label: 'Transparent' },
 ];
 
 const PRINT_COST = 1;
@@ -92,6 +105,10 @@ export default function PrintScreen() {
   const [paperSize, setPaperSize] = useState<PaperSize>('A4');
   const [includeQr, setIncludeQr] = useState(false);
   const [qrTargetUrl, setQrTargetUrl] = useState('');
+  const [qrX, setQrX] = useState(1);
+  const [qrY, setQrY] = useState(1);
+  const [qrSize, setQrSize] = useState<QrSize>('M');
+  const [qrBackground, setQrBackground] = useState<QrBackground>('white');
   const [rendering, setRendering] = useState(false);
   const [progressStep, setProgressStep] = useState(0);
   const [renderError, setRenderError] = useState<string | null>(null);
@@ -172,10 +189,15 @@ export default function PrintScreen() {
     setRenderNotice(null);
     try {
       const trimmedUrl = qrTargetUrl.trim();
+      const sendQr = includeQr && trimmedUrl.length > 0;
       const job = await renderPrint({
         generatedImageId: selectedItem.id,
         paperSize,
-        qrTargetUrl: includeQr && trimmedUrl.length > 0 ? trimmedUrl : undefined,
+        qrTargetUrl: sendQr ? trimmedUrl : undefined,
+        qrX: sendQr ? qrX : undefined,
+        qrY: sendQr ? qrY : undefined,
+        qrSize: sendQr ? qrSize : undefined,
+        qrBackground: sendQr ? qrBackground : undefined,
       });
 
       const ready = await waitForJob(job.jobId);
@@ -287,6 +309,21 @@ export default function PrintScreen() {
             autoCapitalize="none"
             accessibilityLabel={t('print.qr.urlLabel')}
           />
+          <View style={styles.qrSizeWrap}>
+            <ChipSelector
+              options={QR_SIZE_OPTIONS}
+              selected={qrSize}
+              onSelect={(v) => setQrSize(v as QrSize)}
+              accessibilityLabel="QR size"
+            />
+            <ChipSelector
+              options={QR_BG_OPTIONS}
+              selected={qrBackground}
+              onSelect={(v) => setQrBackground(v as QrBackground)}
+              accessibilityLabel="QR background"
+            />
+            <Text style={styles.qrDragHint}>Drag the QR on the preview to reposition it.</Text>
+          </View>
         </View>
       )}
 
@@ -357,6 +394,14 @@ export default function PrintScreen() {
           orientation="portrait"
           showQrBadge={showQrBadge}
           qrTargetUrl={qrTargetUrl.trim() || null}
+          qrX={qrX}
+          qrY={qrY}
+          qrSize={qrSize}
+          qrBackground={qrBackground}
+          onQrPositionChange={(x, y) => {
+            setQrX(x);
+            setQrY(y);
+          }}
           maxWidth={isDesktop ? 320 : 300}
           caption={previewCaption}
         />
@@ -1049,6 +1094,15 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
     },
     qrInputWrap: {
       marginTop: D.spacing.sm,
+    },
+    qrSizeWrap: {
+      marginTop: D.spacing.sm,
+      gap: 4,
+    },
+    qrDragHint: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      paddingHorizontal: 2,
     },
     errorBanner: {
       flexDirection: 'row',

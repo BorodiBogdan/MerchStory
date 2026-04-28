@@ -134,11 +134,25 @@ public static class PrintRoutes
                         : $"{publicBase.TrimEnd('/')}/p/{printLink.Slug}";
                 }
 
+                double qrX = Math.Clamp(req.QrX ?? 1.0, 0.0, 1.0);
+                double qrY = Math.Clamp(req.QrY ?? 1.0, 0.0, 1.0);
+                int qrSizePt = (req.QrSize ?? "M").ToUpperInvariant() switch
+                {
+                    "S" => 64,
+                    "L" => 112,
+                    _ => 80,
+                };
+                bool qrTransparent = string.Equals(req.QrBackground, "transparent", StringComparison.OrdinalIgnoreCase);
+
                 byte[] pdf = renderer.Render(imageBytes, new PdfRenderOptions(
                     paperSize,
                     orientation,
                     qrSlugUrl,
-                    FooterText: null));
+                    FooterText: null,
+                    QrX: qrX,
+                    QrY: qrY,
+                    QrSizePt: qrSizePt,
+                    QrTransparent: qrTransparent));
 
                 string pdfBase64 = Convert.ToBase64String(pdf);
                 job.PdfBase64 = pdfBase64;
@@ -297,7 +311,11 @@ public static class PrintRoutes
 internal sealed record RenderPrintRequest(
     Guid GeneratedImageId,
     string PaperSize,
-    string? QrTargetUrl);
+    string? QrTargetUrl,
+    double? QrX = null,
+    double? QrY = null,
+    string? QrSize = null,
+    string? QrBackground = null);
 
 internal sealed record RenderPrintResponse(
     Guid JobId,

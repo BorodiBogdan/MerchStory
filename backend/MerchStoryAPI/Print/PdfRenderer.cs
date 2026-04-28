@@ -9,7 +9,11 @@ public sealed record PdfRenderOptions(
     string PaperSize,
     string Orientation,
     string? QrSlugUrl,
-    string? FooterText);
+    string? FooterText,
+    double QrX = 1.0,
+    double QrY = 1.0,
+    int QrSizePt = 80,
+    bool QrTransparent = false);
 
 public sealed class PdfRenderer
 {
@@ -23,7 +27,9 @@ public sealed class PdfRenderer
     public byte[] Render(byte[] imageBytes, PdfRenderOptions options)
     {
         PageSize pageSize = ResolvePageSize(options.PaperSize, options.Orientation);
-        byte[]? qrPng = options.QrSlugUrl is not null ? GenerateQrPng(options.QrSlugUrl) : null;
+        byte[]? qrPng = options.QrSlugUrl is not null
+            ? GenerateQrPng(options.QrSlugUrl, options.QrTransparent)
+            : null;
 
         return Document.Create(container =>
         {
@@ -35,18 +41,24 @@ public sealed class PdfRenderer
 
                 if (qrPng is not null)
                 {
-                    // Bottom-right QR badge floats above the image without disturbing
-                    // its full-bleed layout. White card behind the QR keeps it readable
-                    // regardless of what the underlying image looks like.
+                    // Transparent QR sits directly on the artwork — no white card.
+                    // Position is absolute via top-left padding so the user can drag
+                    // the QR anywhere on the page from the client.
+                    int qrSizePt = options.QrSizePt;
+                    float pageW = pageSize.Width;
+                    float pageH = pageSize.Height;
+                    float maxX = Math.Max(0f, pageW - qrSizePt);
+                    float maxY = Math.Max(0f, pageH - qrSizePt);
+                    float xPt = (float)Math.Clamp(options.QrX, 0.0, 1.0) * maxX;
+                    float yPt = (float)Math.Clamp(options.QrY, 0.0, 1.0) * maxY;
+
                     page.Foreground()
-                        .AlignBottom()
-                        .AlignRight()
-                        .PaddingRight(8)
-                        .PaddingBottom(8)
-                        .Background(Colors.White)
-                        .Padding(6)
-                        .Width(80)
-                        .Height(80)
+                        .AlignTop()
+                        .AlignLeft()
+                        .PaddingLeft(xPt)
+                        .PaddingTop(yPt)
+                        .Width(qrSizePt)
+                        .Height(qrSizePt)
                         .Image(qrPng);
                 }
 
@@ -82,11 +94,15 @@ public sealed class PdfRenderer
             : basis.Portrait();
     }
 
-    private static byte[] GenerateQrPng(string url)
+    private static byte[] GenerateQrPng(string url, bool transparent)
     {
         using var qrGenerator = new QRCodeGenerator();
         using QRCodeData qrData = qrGenerator.CreateQrCode(url, QRCodeGenerator.ECCLevel.Q);
         var pngQr = new PngByteQRCode(qrData);
-        return pngQr.GetGraphic(20);
+
+        // Light pixels are fully transparent in transparent mode, opaque white
+        // otherwise. Dark modules stay opaque black either way.
+        byte lightAlpha = transparent ? (byte)0 : (byte)255;
+        return pngQr.GetGraphic(20, [0, 0, 0, 255], [255, 255, 255, lightAlpha]);
     }
 }
