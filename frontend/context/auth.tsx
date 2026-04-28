@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
 const storage = {
@@ -32,6 +32,7 @@ interface AuthUser {
   userName: string;
   isShopSetupComplete: boolean;
   isAdmin: boolean;
+  coinBalance: number;
 }
 
 interface AuthState {
@@ -40,6 +41,7 @@ interface AuthState {
   userName: string | null;
   isShopSetupComplete: boolean;
   isAdmin: boolean;
+  coinBalance: number;
   isLoading: boolean;
 }
 
@@ -48,6 +50,8 @@ interface AuthContextValue extends AuthState {
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   completeShopSetup: () => Promise<void>;
+  setCoinBalance: (balance: number) => Promise<void>;
+  refreshCoinBalance: () => Promise<number | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -59,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userName: null,
     isShopSetupComplete: false,
     isAdmin: false,
+    coinBalance: 0,
     isLoading: true,
   });
 
@@ -75,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             userName: user.userName,
             isShopSetupComplete: user.isShopSetupComplete ?? false,
             isAdmin: user.isAdmin ?? false,
+            coinBalance: user.coinBalance ?? 0,
             isLoading: false,
           });
         } else {
@@ -95,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
+      coinBalance: data.coinBalance ?? 0,
     };
     await storage.setItem(TOKEN_KEY, data.token);
     await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
@@ -106,6 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
+      coinBalance: user.coinBalance,
       isLoading: false,
     });
   }
@@ -118,6 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
+      coinBalance: data.coinBalance ?? 0,
     };
     await storage.setItem(TOKEN_KEY, data.token);
     await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
@@ -129,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
+      coinBalance: user.coinBalance,
       isLoading: false,
     });
   }
@@ -152,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userName: null,
       isShopSetupComplete: false,
       isAdmin: false,
+      coinBalance: 0,
       isLoading: false,
     });
   }
@@ -165,6 +176,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, isShopSetupComplete: true }));
   }
 
+  const setCoinBalance = useCallback(async (balance: number) => {
+    const userJson = await storage.getItem(USER_KEY);
+    if (userJson) {
+      const user: AuthUser = JSON.parse(userJson);
+      const updated: AuthUser = { ...user, coinBalance: balance };
+      await storage.setItem(USER_KEY, JSON.stringify(updated));
+    }
+    setState((prev) => ({ ...prev, coinBalance: balance }));
+  }, []);
+
+  const refreshCoinBalance = useCallback(async (): Promise<number | null> => {
+    try {
+      const { getWallet } = await import('@/utils/api');
+      const wallet = await getWallet();
+      await setCoinBalance(wallet.balance);
+      return wallet.balance;
+    } catch {
+      return null;
+    }
+  }, [setCoinBalance]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -173,6 +205,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signOut,
         completeShopSetup,
+        setCoinBalance,
+        refreshCoinBalance,
       }}
     >
       {children}

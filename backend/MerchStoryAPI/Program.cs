@@ -11,6 +11,7 @@ using MerchStoryAPI.Recommendations;
 using MerchStoryAPI.ReferenceImages;
 using MerchStoryAPI.Shop;
 using MerchStoryAPI.Social;
+using MerchStoryAPI.Wallet;
 using MerchStoryImageGeneration.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -116,6 +117,8 @@ builder.Services.AddScoped<PlaybookRetriever>();
 // retrieval AND the post-generation persistence of fresh idea embeddings.
 builder.Services.AddScoped<IdeaEmbeddingService>();
 
+builder.Services.AddScoped<WalletService>();
+
 var app = builder.Build();
 
 using (IServiceScope scope = app.Services.CreateScope())
@@ -150,6 +153,7 @@ app.MapSocialEndpoints();
 app.MapImageGenerationEndpoints();
 app.MapReferenceImageEndpoints();
 app.MapRecommendationsEndpoints();
+app.MapWalletEndpoints();
 
 app.Run();
 

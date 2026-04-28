@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -31,6 +32,11 @@ public class CatalogRouteTests : IDisposable
 
     public CatalogRouteTests()
     {
+        Environment.SetEnvironmentVariable("Jwt__Key", "test-super-secret-key-that-is-long-enough-32chars");
+        Environment.SetEnvironmentVariable("Jwt__Issuer", "MerchStory");
+        Environment.SetEnvironmentVariable("Jwt__Audience", "MerchStoryApp");
+        Environment.SetEnvironmentVariable("Jwt__ExpiryMinutes", "60");
+
         this.currentResponder = (_, _) =>
             throw new InvalidOperationException("Test did not configure a responder.");
 
@@ -78,7 +84,8 @@ public class CatalogRouteTests : IDisposable
                     .BuildServiceProvider();
                 services.AddDbContext<AppDbContext>(options =>
                     options.UseInMemoryDatabase(dbName)
-                           .UseInternalServiceProvider(inMemoryProvider));
+                           .UseInternalServiceProvider(inMemoryProvider)
+                           .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
 
                 services.RemoveAll<UserManager<AppUser>>();
                 services.AddSingleton(this.userManagerMock.Object);
@@ -187,20 +194,12 @@ public class CatalogRouteTests : IDisposable
     }
 
     [Fact]
-    public async Task Preserve_ZeroRegionsTriggersFallbackAndTwoCalls()
+    public async Task Preserve_ZeroRegionsReturnsRawImageWithDiagnosticWarning()
     {
-        // First call (preserve prompt): return a PNG with no magenta outlines.
-        // Second call (fallback): return a different plain PNG.
+        // Preserve mode now returns the raw Gemini output (with a diagnostic warning)
+        // when detection finds zero regions, rather than triggering a fallback regeneration.
         byte[] emptyCanvas = TestCanvas.SolidCanvas(1080, 1080, new Rgba32(200, 200, 200, 255));
-        byte[] fallbackCanvas = TestCanvas.SolidCanvas(1080, 1080, new Rgba32(100, 100, 100, 255));
-
-        this.currentResponder = (prompt, _) =>
-        {
-            bool isPreservePrompt = prompt.Contains("RESERVED MARKER COLORS", StringComparison.Ordinal);
-            return isPreservePrompt
-                ? new ImageGenerationResult(emptyCanvas, "image/png")
-                : new ImageGenerationResult(fallbackCanvas, "image/png");
-        };
+        this.currentResponder = (_, _) => new ImageGenerationResult(emptyCanvas, "image/png");
 
         string token = await this.RegisterAndGetTokenAsync("zero@test.com");
 
@@ -219,8 +218,8 @@ public class CatalogRouteTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         string body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
-        Assert.Equal("preserve_fallback_no_regions", doc.RootElement.GetProperty("warning").GetString());
-        Assert.Equal(2, this.mockProvider.Calls.Count);
+        Assert.Equal("preserve_detection_failed_returning_raw", doc.RootElement.GetProperty("warning").GetString());
+        Assert.Single(this.mockProvider.Calls);
     }
 
     [Fact]
@@ -308,6 +307,23 @@ public class CatalogRouteTests : IDisposable
             "/auth/register",
             new { email, password = "Test1234!" });
         registerResponse.EnsureSuccessStatusCode();
+
+        // The wallet check on protected endpoints requires the AppUser to exist in the DB.
+        // UserManager is mocked, so the register call doesn't persist anything — seed the
+        // user directly with enough coins to pass EnsureCoinsAsync.
+        using (var scope = this.factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Users.Add(new AppUser
+            {
+                Id = uniqueId,
+                Email = email,
+                UserName = email,
+                CoinBalance = 100,
+            });
+            await db.SaveChangesAsync();
+        }
+
         string body = await registerResponse.Content.ReadAsStringAsync();
         using var json = JsonDocument.Parse(body);
         return json.RootElement.GetProperty("token").GetString()!;

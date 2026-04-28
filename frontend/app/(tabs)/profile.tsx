@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -151,7 +151,8 @@ function computeIsDirty(draft: DraftState | null, profile: ShopProfileResponse |
 
 export default function ProfileScreen() {
   const { colors, colorScheme, toggleTheme } = useTheme();
-  const { email: accountEmail, signOut } = useAuth();
+  const { email: accountEmail, signOut, isAdmin } = useAuth();
+  const router = useRouter();
   const { profile, setProfile, isProfileLoading, refreshProfile } = useShop();
   const { language: appLanguage, setLanguage: setAppLanguage, t } = useI18n();
   const { width: screenWidth } = useWindowDimensions();
@@ -1157,6 +1158,22 @@ export default function ProfileScreen() {
                     </Text>
                   </Pressable>
 
+                  {!isEditing && isAdmin && (
+                    <Pressable
+                      onPress={() => router.push('/admin')}
+                      style={({ pressed }) => [styles.adminButton, pressed && { opacity: 0.85 }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('admin.openButton')}
+                    >
+                      <Ionicons
+                        name="shield-checkmark-outline"
+                        size={14}
+                        color={colors.accent.primary}
+                      />
+                      <Text style={styles.adminButtonText}>{t('admin.openButton')}</Text>
+                    </Pressable>
+                  )}
+
                   {!isEditing && (
                     <Pressable
                       onPress={() => setIsLogoutVisible(true)}
@@ -2032,6 +2049,28 @@ function makeStyles(
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.semibold,
       color: colors.text.error,
+      letterSpacing: 0.3,
+    },
+
+    // ── Admin ────────────────────────────────────────────────────────────
+    adminButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingHorizontal: D.spacing.lg,
+      paddingVertical: D.spacing.sm + 2,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1.5,
+      borderColor: colors.border.focus,
+      minWidth: 160,
+      alignSelf: 'stretch',
+    },
+    adminButtonText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.accent.primary,
       letterSpacing: 0.3,
     },
   });

@@ -24,6 +24,15 @@ public class AuthEndpointTests : IDisposable
 
     public AuthEndpointTests()
     {
+        // Override JWT config via env vars so the dev key in appsettings.Development.json
+        // doesn't bleed into tests. Env vars are read by WebApplication.CreateBuilder before
+        // user code runs, so AddJwtBearer's IssuerSigningKey and JwtService both see the
+        // same test key.
+        Environment.SetEnvironmentVariable("Jwt__Key", "test-super-secret-key-that-is-long-enough-32chars");
+        Environment.SetEnvironmentVariable("Jwt__Issuer", "MerchStory");
+        Environment.SetEnvironmentVariable("Jwt__Audience", "MerchStoryApp");
+        Environment.SetEnvironmentVariable("Jwt__ExpiryMinutes", "60");
+
         var store = new Mock<IUserStore<AppUser>>();
         this.userManagerMock = new Mock<UserManager<AppUser>>(
             store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
@@ -202,6 +211,22 @@ public class AuthEndpointTests : IDisposable
         string body = await registerResponse.Content.ReadAsStringAsync();
         var json = JsonDocument.Parse(body);
         string? token = json.RootElement.GetProperty("token").GetString();
+
+        // The wallet check on protected endpoints requires the AppUser to exist in the DB.
+        // UserManager is mocked, so the register call doesn't persist anything — seed the
+        // user directly with enough coins to pass EnsureCoinsAsync.
+        using (var scope = this.factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Users.Add(new AppUser
+            {
+                Id = "gen-user-id",
+                Email = "genuser@test.com",
+                UserName = "genuser@test.com",
+                CoinBalance = 100,
+            });
+            await db.SaveChangesAsync();
+        }
 
         var request = new HttpRequestMessage(HttpMethod.Post, "/generate-image/catalog")
         {
