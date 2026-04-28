@@ -12,7 +12,11 @@ public sealed record PdfRenderOptions(
     string? FooterText,
     double QrX = 1.0,
     double QrY = 1.0,
-    int QrSizePt = 80,
+
+    // Fraction of the page's short edge (0..1). Sized off the short edge so the
+    // QR occupies the same on-paper proportion regardless of paper size or
+    // orientation — i.e. M on A6 looks the same fraction-of-page as M on A3.
+    double QrSizeFraction = 0.13,
     bool QrTransparent = false);
 
 public sealed class PdfRenderer
@@ -44,9 +48,10 @@ public sealed class PdfRenderer
                     // Transparent QR sits directly on the artwork — no white card.
                     // Position is absolute via top-left padding so the user can drag
                     // the QR anywhere on the page from the client.
-                    int qrSizePt = options.QrSizePt;
                     float pageW = pageSize.Width;
                     float pageH = pageSize.Height;
+                    float qrSizePt = (float)Math.Clamp(options.QrSizeFraction, 0.01, 1.0)
+                        * Math.Min(pageW, pageH);
                     float maxX = Math.Max(0f, pageW - qrSizePt);
                     float maxY = Math.Max(0f, pageH - qrSizePt);
                     float xPt = (float)Math.Clamp(options.QrX, 0.0, 1.0) * maxX;

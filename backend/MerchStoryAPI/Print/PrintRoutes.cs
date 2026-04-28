@@ -140,11 +140,15 @@ public static class PrintRoutes
 
                 double qrX = Math.Clamp(req.QrX ?? 1.0, 0.0, 1.0);
                 double qrY = Math.Clamp(req.QrY ?? 1.0, 0.0, 1.0);
-                int qrSizePt = (req.QrSize ?? "M").ToUpperInvariant() switch
+
+                // Fractions of the page short edge so the QR holds the same
+                // on-paper proportion across A6..A3. Calibrated to match the
+                // previous absolute pt sizes on A4 (S 64/595, M 80/595, L 112/595).
+                double qrSizeFraction = (req.QrSize ?? "M").ToUpperInvariant() switch
                 {
-                    "S" => 64,
-                    "L" => 112,
-                    _ => 80,
+                    "S" => 0.108,
+                    "L" => 0.188,
+                    _ => 0.134,
                 };
                 bool qrTransparent = string.Equals(req.QrBackground, "transparent", StringComparison.OrdinalIgnoreCase);
 
@@ -155,7 +159,7 @@ public static class PrintRoutes
                     FooterText: null,
                     QrX: qrX,
                     QrY: qrY,
-                    QrSizePt: qrSizePt,
+                    QrSizeFraction: qrSizeFraction,
                     QrTransparent: qrTransparent));
 
                 string pdfBase64 = Convert.ToBase64String(pdf);

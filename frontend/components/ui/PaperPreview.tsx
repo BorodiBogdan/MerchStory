@@ -15,27 +15,13 @@ const PAPER_RATIOS: Record<PaperSize, { w: number; h: number }> = {
   A3: { w: 297, h: 420 },
 };
 
-// Paper dimensions in PDF points, mirroring QuestPDF's PageSizes used by the
-// backend renderer. Lets us scale the preview QR badge so it occupies the
-// same fraction of the page as the real QR does in the generated PDF.
-const PAPER_WIDTH_PT: Record<PaperSize, number> = {
-  A6: 298,
-  A5: 420,
-  A4: 595,
-  A3: 842,
-};
-const PAPER_HEIGHT_PT: Record<PaperSize, number> = {
-  A6: 420,
-  A5: 595,
-  A4: 842,
-  A3: 1191,
-};
-
-// QR image size in PDF points per S/M/L token. Mirrors backend PdfRenderer.
-const QR_IMAGE_PT_BY_SIZE: Record<QrSize, number> = {
-  S: 64,
-  M: 80,
-  L: 112,
+// QR badge size as a fraction of the page short edge. Mirrors backend
+// PrintRoutes/PdfRenderer so the preview occupies the same on-paper proportion
+// as the rendered PDF — and stays constant across A6..A3.
+const QR_FRAC_BY_SIZE: Record<QrSize, number> = {
+  S: 0.108,
+  M: 0.134,
+  L: 0.188,
 };
 
 // QRCoder bakes a 4-module quiet zone INSIDE the rendered PNG, so the
@@ -96,11 +82,7 @@ export function PaperPreview({
   const dataUri =
     imageBase64 && imageMimeType ? `data:${imageMimeType};base64,${imageBase64}` : null;
 
-  const qrImagePt = QR_IMAGE_PT_BY_SIZE[qrSize];
-
-  const pageWidthPt = isLandscape ? PAPER_HEIGHT_PT[paperSize] : PAPER_WIDTH_PT[paperSize];
-  const ptToPx = previewW / pageWidthPt;
-  const cardSize = qrImagePt * ptToPx;
+  const cardSize = QR_FRAC_BY_SIZE[qrSize] * Math.min(previewW, previewH);
   const qrImageSize = Math.max(1, cardSize);
 
   const maxLeft = Math.max(0, previewW - cardSize);
