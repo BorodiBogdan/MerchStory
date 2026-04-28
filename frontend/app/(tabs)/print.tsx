@@ -852,7 +852,10 @@ function SummaryChip({
 
 // ─── Job polling and PDF delivery (unchanged) ────────────────────────────
 async function waitForJob(jobId: string): Promise<PrintJobDetails> {
-  const maxAttempts = 60;
+  // 3 min cap — Real-ESRGAN inference for A3 (4×) can take 30-60s on CPU,
+  // and Lanczos fallback is near-instant, so the higher ceiling only ever
+  // bites when the AI upscaler is actually running.
+  const maxAttempts = 180;
   for (let i = 0; i < maxAttempts; i++) {
     const job = await getPrintJob(jobId);
     if (job.status === 'ready' || job.status === 'failed') return job;

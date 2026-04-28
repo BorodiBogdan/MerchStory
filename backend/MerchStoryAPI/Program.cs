@@ -120,11 +120,12 @@ builder.Services.AddScoped<IdeaEmbeddingService>();
 
 builder.Services.AddScoped<WalletService>();
 
-// Print Shop: PDF export of generated assets sized for paper. Lanczos upscaler is the
-// v1 baseline; replace with a Real-ESRGAN-backed IUpscaler implementation when the
-// ncnn-vulkan binary is bundled into the deploy image.
+// Print Shop: PDF export of generated assets sized for paper. Premium tier
+// runs through the Real-ESRGAN ONNX upscaler; if the model isn't loaded the
+// service throws UpscalerUnavailableException and the route handler surfaces
+// it as a render failure (and refunds the coin charge).
 builder.Services.AddSingleton<PdfRenderer>();
-builder.Services.AddSingleton<IUpscaler, LanczosUpscaler>();
+builder.Services.AddSingleton<IUpscaler, RealEsrganUpscaler>();
 builder.Services.AddScoped<QrLinkService>();
 
 var app = builder.Build();
