@@ -4,3 +4,18 @@ services:
   db:
     environment:
       POSTGRES_PASSWORD: devpassword
+
+  # Local LaMa inpainting server. First request downloads the LaMa weights
+  # (~200MB) and caches them in the named volume below. Reach it from the
+  # backend at http://iopaint:8080, or from your host at http://localhost:8080.
+  iopaint:
+    build:
+      context: ./backend/iopaint
+    ports:
+      - "8080:8080"
+    volumes:
+      - iopaint_models:/root/.cache
+    restart: unless-stopped
+
+volumes:
+  iopaint_models:

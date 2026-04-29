@@ -81,6 +81,7 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient<IOPaintClient>();
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireClaim("is_admin", "true"));

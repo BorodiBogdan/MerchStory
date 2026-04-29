@@ -19,6 +19,7 @@ public static class ImageGenerationRoutes
             CatalogImageApiRequest request,
             ClaimsPrincipal principal,
             ICatalogImageService catalogService,
+            IOPaintClient inpaintClient,
             AppDbContext db,
             WalletService wallet,
             ILogger<Program> logger) =>
@@ -124,6 +125,7 @@ public static class ImageGenerationRoutes
                 resolvedLanguage,
                 assignments,
                 catalogService,
+                inpaintClient,
                 logger,
                 deduction);
         })
@@ -486,6 +488,7 @@ public static class ImageGenerationRoutes
         string resolvedLanguage,
         IReadOnlyList<ProductMarkerAssignment> assignments,
         ICatalogImageService catalogService,
+        IOPaintClient inpaintClient,
         ILogger logger,
         WalletDeduction? deduction = null)
     {
@@ -501,10 +504,11 @@ public static class ImageGenerationRoutes
             ImageGenerationResult rawResult = await catalogService.GenerateCatalogImageAsync(preserveRequest);
 
             IReadOnlyList<CatalogProductItem> products = preserveRequest.Products;
-            CompositeResult composite = ProductPlaceholderCompositor.Composite(
+            CompositeResult composite = await ProductPlaceholderCompositor.CompositeAsync(
                 rawResult.ImageData,
                 products,
-                assignments);
+                assignments,
+                inpaintClient);
 
             // Always log a composite summary + per-color detection + per-region inpaint stats.
             // This runs on every request, not only on fallback, so we can see exactly what
