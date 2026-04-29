@@ -50,7 +50,7 @@ internal static class ProductPlaceholderCompositor
     // many pixels. Captures Gemini's drop shadows (which extend past the bag
     // silhouette) so LaMa erases them too — otherwise the shadows survive
     // around the pasted products as awkward grey gradients.
-    private const int MaskDilationPx = 30;
+    private const int MaskDilationPx = 15;
 
     // Pasted products are scaled to this fraction of the median placeholder
     // bbox. Less than 1.0 leaves visual breathing room around each product so
