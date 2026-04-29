@@ -90,6 +90,13 @@ internal static class ProductPlaceholderCompositor
             }
         });
 
+        // Pass 1.5: per product, keep only the LARGEST connected component of
+        // matched pixels. Scattered false-positive matches (random scene
+        // pixels that happen to fall inside the marker's Chebyshev radius)
+        // would otherwise stretch the bbox across the whole image and pull the
+        // paste anchor away from the real outline.
+        matched = FilterToLargestComponent(matched, products.Count, height, width);
+
         // Pass 2: thicken so LaMa receives the full outline + halo as one mask region.
         int[,] thickened = Thicken(matched, height, width, OutlineInsetPx);
 
@@ -173,7 +180,7 @@ internal static class ProductPlaceholderCompositor
             }
         }
 
-        byte[] finalBytes = PasteProducts(cleaned, products, boundingBoxes, centroids, logger);
+        byte[] finalBytes = PasteProducts(cleaned, products, boundingBoxes, logger);
 
         // Recount mask pixels for the diagnostics log so it reflects the
         // actual area we asked LaMa to inpaint (outline + interior).
@@ -279,6 +286,120 @@ internal static class ProductPlaceholderCompositor
         }
 
         return mask;
+    }
+
+    // Per product, keep only the largest 4-connected component of matched
+    // pixels. Other components (typically scattered false-positive halo
+    // pixels in unrelated parts of the canvas) are reset to -1 so they don't
+    // skew bbox / centroid calculations and don't waste LaMa cycles.
+    private static int[,] FilterToLargestComponent(
+        int[,] matched, int productCount, int height, int width)
+    {
+        if (productCount == 0)
+        {
+            return matched;
+        }
+
+        int[,] componentIds = new int[height, width];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                componentIds[y, x] = -1;
+            }
+        }
+
+        var componentProductIdx = new List<int>();
+        var componentSizes = new List<int>();
+        var queue = new Queue<(int Y, int X)>();
+        ReadOnlySpan<int> dy = [-1, 1, 0, 0];
+        ReadOnlySpan<int> dx = [0, 0, -1, 1];
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int idx = matched[y, x];
+                if (idx < 0 || idx >= productCount || componentIds[y, x] >= 0)
+                {
+                    continue;
+                }
+
+                int compId = componentSizes.Count;
+                int count = 0;
+                queue.Clear();
+                queue.Enqueue((y, x));
+                componentIds[y, x] = compId;
+
+                while (queue.Count > 0)
+                {
+                    (int py, int px) = queue.Dequeue();
+                    count++;
+
+                    for (int d = 0; d < 4; d++)
+                    {
+                        int ny = py + dy[d];
+                        int nx = px + dx[d];
+                        if (ny < 0 || ny >= height || nx < 0 || nx >= width)
+                        {
+                            continue;
+                        }
+
+                        if (componentIds[ny, nx] >= 0)
+                        {
+                            continue;
+                        }
+
+                        if (matched[ny, nx] != idx)
+                        {
+                            continue;
+                        }
+
+                        componentIds[ny, nx] = compId;
+                        queue.Enqueue((ny, nx));
+                    }
+                }
+
+                componentProductIdx.Add(idx);
+                componentSizes.Add(count);
+            }
+        }
+
+        // For each product, find the component with the most pixels.
+        int[] largestPerProduct = new int[productCount];
+        int[] largestSizePerProduct = new int[productCount];
+        for (int i = 0; i < productCount; i++)
+        {
+            largestPerProduct[i] = -1;
+        }
+
+        for (int c = 0; c < componentSizes.Count; c++)
+        {
+            int productIdx = componentProductIdx[c];
+            if (componentSizes[c] > largestSizePerProduct[productIdx])
+            {
+                largestSizePerProduct[productIdx] = componentSizes[c];
+                largestPerProduct[productIdx] = c;
+            }
+        }
+
+        int[,] filtered = new int[height, width];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int idx = matched[y, x];
+                if (idx < 0 || idx >= productCount)
+                {
+                    filtered[y, x] = -1;
+                    continue;
+                }
+
+                filtered[y, x] = componentIds[y, x] == largestPerProduct[idx] ? idx : -1;
+            }
+        }
+
+        return filtered;
     }
 
     // Chebyshev dilation by `radius`: any pixel within a (2r+1)² window of a
@@ -429,29 +550,29 @@ internal static class ProductPlaceholderCompositor
 
     // Loads the LaMa-cleaned image, then for each product with both an
     // ImageBase64 payload and a non-empty bbox: trims the product PNG to its
-    // opaque content, CONTAIN-fits it into a UNIFORM target size derived from
-    // the median of all detected placeholder bboxes (so rendered products look
-    // the same size regardless of how big Gemini drew each placeholder), and
-    // pastes centred at each placeholder's CENTROID (mass-weighted, so it's
-    // robust to scattered halo pixels that would skew a bbox-centre approach).
+    // opaque content, scales it so its VISUAL AREA matches the median bbox
+    // area (so a tall bottle and a square box render at similar perceived
+    // sizes), clamps the result so it can't overflow its own placeholder
+    // bbox, and anchors at the bbox's bottom-left corner so all products
+    // sit on a common baseline (like items on a shelf).
     private static byte[] PasteProducts(
         byte[] cleanedBytes,
         IReadOnlyList<CatalogProductItem> products,
         Rectangle[] boundingBoxes,
-        (int X, int Y)[] centroids,
         ILogger? logger)
     {
         using var canvas = Image.Load<Rgba32>(cleanedBytes);
 
-        (int medianW, int medianH) = ComputeUniformPasteSize(boundingBoxes);
-        int uniformW = (int)(medianW * PasteScaleFactor);
-        int uniformH = (int)(medianH * PasteScaleFactor);
-        if (uniformW <= 0 || uniformH <= 0)
+        long medianArea = ComputeMedianBboxArea(boundingBoxes);
+        if (medianArea <= 0)
         {
             using var msEmpty = new MemoryStream();
             canvas.Save(msEmpty, new PngEncoder());
             return msEmpty.ToArray();
         }
+
+        // PasteScaleFactor is a linear factor, so square it for area math.
+        double targetArea = medianArea * PasteScaleFactor * PasteScaleFactor;
 
         for (int i = 0; i < products.Count; i++)
         {
@@ -486,29 +607,48 @@ internal static class ProductPlaceholderCompositor
                 productImg.Mutate(ctx => ctx.Crop(trim));
             }
 
-            // CONTAIN-fit the cropped product into the UNIFORM target so every
-            // pasted product comes out at a similar visual size.
-            float scale = Math.Min(
-                (float)uniformW / productImg.Width,
-                (float)uniformH / productImg.Height);
-            int targetW = Math.Max(1, (int)(productImg.Width * scale));
-            int targetH = Math.Max(1, (int)(productImg.Height * scale));
+            // Area-based scaling: scale so productW * productH ~= targetArea,
+            // independent of aspect ratio. Tall and square products end up
+            // covering similar visual area.
+            long productArea = (long)productImg.Width * productImg.Height;
+            double areaScale = Math.Sqrt(targetArea / Math.Max(1.0, productArea));
+            int targetW = Math.Max(1, (int)(productImg.Width * areaScale));
+            int targetH = Math.Max(1, (int)(productImg.Height * areaScale));
+
+            // Clamp so the pasted product never overflows its placeholder.
+            if (targetW > bbox.Width)
+            {
+                double clamp = (double)bbox.Width / targetW;
+                targetW = bbox.Width;
+                targetH = Math.Max(1, (int)(targetH * clamp));
+            }
+
+            if (targetH > bbox.Height)
+            {
+                double clamp = (double)bbox.Height / targetH;
+                targetH = bbox.Height;
+                targetW = Math.Max(1, (int)(targetW * clamp));
+            }
+
             productImg.Mutate(ctx => ctx.Resize(targetW, targetH));
 
-            int centreX = centroids[i].X;
-            int centreY = centroids[i].Y;
-            int pasteX = centreX - (targetW / 2);
-            int pasteY = centreY - (targetH / 2);
+            // Bottom-left anchor: align the product's bottom-left corner to
+            // the placeholder's bottom-left corner so products "stand" on a
+            // common baseline. Easier to scan visually than centred placement.
+            int pasteX = bbox.X;
+            int pasteY = (bbox.Y + bbox.Height) - targetH;
 
             logger?.LogInformation(
-                "  paste '{Name}' at ({PX},{PY}) size {W}x{H} (centroid=({CX},{CY}))",
+                "  paste '{Name}' at ({PX},{PY}) size {W}x{H} (bbox=({BX},{BY},{BW},{BH}))",
                 products[i].Name,
                 pasteX,
                 pasteY,
                 targetW,
                 targetH,
-                centreX,
-                centreY);
+                bbox.X,
+                bbox.Y,
+                bbox.Width,
+                bbox.Height);
 
             canvas.Mutate(ctx => ctx.DrawImage(productImg, new Point(pasteX, pasteY), 1f));
         }
@@ -516,6 +656,28 @@ internal static class ProductPlaceholderCompositor
         using var ms = new MemoryStream();
         canvas.Save(ms, new PngEncoder());
         return ms.ToArray();
+    }
+
+    // Median bbox area across detected products. Median is robust against the
+    // occasional over-detection that produces a wildly large or small bbox.
+    private static long ComputeMedianBboxArea(Rectangle[] boundingBoxes)
+    {
+        var areas = new List<long>();
+        foreach (Rectangle b in boundingBoxes)
+        {
+            if (b.Width > 0 && b.Height > 0)
+            {
+                areas.Add((long)b.Width * b.Height);
+            }
+        }
+
+        if (areas.Count == 0)
+        {
+            return 0;
+        }
+
+        areas.Sort();
+        return areas[areas.Count / 2];
     }
 
     // Mass-weighted centroid of matched pixels per product. Less sensitive to
@@ -558,32 +720,6 @@ internal static class ProductPlaceholderCompositor
         }
 
         return centroids;
-    }
-
-    // Median bbox W/H across detected products. Median (rather than mean) is
-    // robust against one outlier outline (false positive halo or Gemini drawing
-    // one placeholder way larger than the others).
-    private static (int Width, int Height) ComputeUniformPasteSize(Rectangle[] boundingBoxes)
-    {
-        var widths = new List<int>();
-        var heights = new List<int>();
-        foreach (Rectangle b in boundingBoxes)
-        {
-            if (b.Width > 0 && b.Height > 0)
-            {
-                widths.Add(b.Width);
-                heights.Add(b.Height);
-            }
-        }
-
-        if (widths.Count == 0)
-        {
-            return (0, 0);
-        }
-
-        widths.Sort();
-        heights.Sort();
-        return (widths[widths.Count / 2], heights[heights.Count / 2]);
     }
 
     // Scans the alpha channel and returns the tight bounding box of pixels
