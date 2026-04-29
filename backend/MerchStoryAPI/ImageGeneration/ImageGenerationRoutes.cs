@@ -508,7 +508,8 @@ public static class ImageGenerationRoutes
                 rawResult.ImageData,
                 products,
                 assignments,
-                inpaintClient);
+                inpaintClient,
+                logger);
 
             // Always log a composite summary + per-color detection + per-region inpaint stats.
             // This runs on every request, not only on fallback, so we can see exactly what
