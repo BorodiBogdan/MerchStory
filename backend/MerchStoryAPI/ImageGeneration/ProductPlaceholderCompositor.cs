@@ -46,6 +46,12 @@ internal static class ProductPlaceholderCompositor
     // the entire outline + halo as part of the mask.
     private const int OutlineInsetPx = 4;
 
+    // After flood-filling outline + interior, dilate the mask outward by this
+    // many pixels. Captures Gemini's drop shadows (which extend past the bag
+    // silhouette) so LaMa erases them too — otherwise the shadows survive
+    // around the pasted products as awkward grey gradients.
+    private const int MaskDilationPx = 30;
+
     // Pasted products are scaled to this fraction of the median placeholder
     // bbox. Less than 1.0 leaves visual breathing room around each product so
     // adjacent products don't touch and the chip-bag silhouettes don't fill
@@ -133,8 +139,11 @@ internal static class ProductPlaceholderCompositor
         // from the canvas border through cells where thickened == -1; every
         // pixel reached is true scene (kept). Everything else (outline cells +
         // pixels enclosed by the outline = the placeholder products themselves)
-        // is what LaMa rewrites with synthesised scene.
+        // is what LaMa rewrites with synthesised scene. Then dilate by
+        // MaskDilationPx so Gemini's drop shadows (which extend past the bag
+        // silhouette and are otherwise outside the mask) get erased too.
         bool[,] inpaintMask = BuildFullProductMask(thickened, height, width);
+        inpaintMask = DilateMask(inpaintMask, height, width, MaskDilationPx);
         byte[] maskPng = EncodeMaskPng(inpaintMask, width, height);
         byte[] cleaned = await inpaintClient.InpaintAsync(imageBytes, maskPng, cancellationToken);
 
@@ -270,6 +279,57 @@ internal static class ProductPlaceholderCompositor
         }
 
         return mask;
+    }
+
+    // Chebyshev dilation by `radius`: any pixel within a (2r+1)² window of a
+    // true pixel becomes true. Implemented as two separable 1D passes
+    // (horizontal then vertical) so total work is O(W·H·radius) rather than
+    // the O(W·H·radius²) of a naïve 2D scan. Used to grow the inpaint mask
+    // outward to cover Gemini's drop shadows.
+    private static bool[,] DilateMask(bool[,] mask, int height, int width, int radius)
+    {
+        if (radius <= 0)
+        {
+            return mask;
+        }
+
+        bool[,] horizontal = new bool[height, width];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int xMin = Math.Max(0, x - radius);
+                int xMax = Math.Min(width - 1, x + radius);
+                for (int nx = xMin; nx <= xMax; nx++)
+                {
+                    if (mask[y, nx])
+                    {
+                        horizontal[y, x] = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        bool[,] result = new bool[height, width];
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                int yMin = Math.Max(0, y - radius);
+                int yMax = Math.Min(height - 1, y + radius);
+                for (int ny = yMin; ny <= yMax; ny++)
+                {
+                    if (horizontal[ny, x])
+                    {
+                        result[y, x] = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     // Builds the PNG IOPaint expects: white where mask is true, black elsewhere.
