@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
+using MerchStoryAPI.LlmServices;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Wallet;
 using MerchStoryImageGeneration.Models;
@@ -20,6 +21,7 @@ public static class ImageGenerationRoutes
             ClaimsPrincipal principal,
             ICatalogImageService catalogService,
             IOPaintClient inpaintClient,
+            ILLMService llmService,
             AppDbContext db,
             WalletService wallet,
             ILogger<Program> logger) =>
@@ -126,6 +128,7 @@ public static class ImageGenerationRoutes
                 assignments,
                 catalogService,
                 inpaintClient,
+                llmService,
                 logger,
                 deduction);
         })
@@ -489,6 +492,7 @@ public static class ImageGenerationRoutes
         IReadOnlyList<ProductMarkerAssignment> assignments,
         ICatalogImageService catalogService,
         IOPaintClient inpaintClient,
+        ILLMService llmService,
         ILogger logger,
         WalletDeduction? deduction = null)
     {
@@ -502,14 +506,65 @@ public static class ImageGenerationRoutes
                 assignments);
 
             ImageGenerationResult rawResult = await catalogService.GenerateCatalogImageAsync(preserveRequest);
-
             IReadOnlyList<CatalogProductItem> products = preserveRequest.Products;
-            CompositeResult composite = await ProductPlaceholderCompositor.CompositeAsync(
-                rawResult.ImageData,
-                products,
-                assignments,
-                inpaintClient,
-                logger);
+
+            const int maxTrials = 3;
+            CompositeResult composite = null!;
+            for (int trial = 1; trial <= maxTrials; trial++)
+            {
+                composite = await ProductPlaceholderCompositor.CompositeAsync(
+                    rawResult.ImageData,
+                    products,
+                    assignments,
+                    inpaintClient,
+                    logger);
+
+                string judgingPrompt =
+                    "This is a product catalog where real product photos were composited into AI-generated placeholder slots. " +
+                    "Answer YES if every product looks acceptable — no major distortion or stretching, no obvious leftover coloured " +
+                    "outlines, halos, or marker bleed around products, no glaring paste seams, and products roughly fit the scene. " +
+                    "Be lenient: minor imperfections are fine, only reject clear visible problems. " +
+                    "Reply with exactly one word: YES or NO. Nothing else.";
+                string compositeForJudging = Convert.ToBase64String(composite.Image.ImageData);
+
+                bool approved;
+                try
+                {
+                    string verdict = await llmService.GenerateAsync(
+                        judgingPrompt,
+                        new[] { (string?)compositeForJudging });
+                    approved = verdict.TrimStart().StartsWith("YES", StringComparison.OrdinalIgnoreCase);
+                    logger.LogInformation(
+                        "Composite judging trial {Trial}/{Max}: approved={Approved} verdict='{Verdict}'",
+                        trial,
+                        maxTrials,
+                        approved,
+                        verdict);
+                }
+                catch (Exception ex)
+                {
+                    // The judge is a quality gate, not a hard dependency — if it fails,
+                    // accept the composite rather than discarding work the user already paid for.
+                    logger.LogWarning(
+                        ex,
+                        "Composite judging failed at trial {Trial}/{Max}; accepting composite.",
+                        trial,
+                        maxTrials);
+                    approved = true;
+                }
+
+                if (approved)
+                {
+                    break;
+                }
+
+                if (trial == maxTrials)
+                {
+                    logger.LogWarning(
+                        "Composite rejected by judge after {Max} trials; returning last composite.",
+                        maxTrials);
+                }
+            }
 
             // Always log a composite summary + per-color detection + per-region inpaint stats.
             // This runs on every request, not only on fallback, so we can see exactly what

@@ -4,6 +4,7 @@ using MerchStoryAPI.Data;
 using MerchStoryAPI.Gallery;
 using MerchStoryAPI.Geocoding;
 using MerchStoryAPI.ImageGeneration;
+using MerchStoryAPI.LlmServices;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Print;
 using MerchStoryAPI.Products;
@@ -82,6 +83,7 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<IOPaintClient>();
+builder.Services.AddHttpClient<ILLMService, ClaudeLlmService>();
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireClaim("is_admin", "true"));
