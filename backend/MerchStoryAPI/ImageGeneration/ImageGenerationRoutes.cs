@@ -4,6 +4,7 @@ using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.LlmServices;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Storage;
 using MerchStoryAPI.Wallet;
 using MerchStoryImageGeneration.Models;
 using MerchStoryImageGeneration.Services;
@@ -24,6 +25,7 @@ public static class ImageGenerationRoutes
             ILLMService llmService,
             AppDbContext db,
             WalletService wallet,
+            IBlobStorage blobs,
             ILogger<Program> logger) =>
         {
             if (request.Products is null || request.Products.Count == 0)
@@ -64,7 +66,7 @@ public static class ImageGenerationRoutes
                 return insufficient;
             }
 
-            string? logoBase64 = await FetchLogoIfRequestedAsync(db, userId, request.BrandContextFields);
+            string? logoBase64 = await FetchLogoIfRequestedAsync(db, blobs, userId, request.BrandContextFields);
             List<string>? textFields = StripLogoField(request.BrandContextFields);
             BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
 
@@ -141,6 +143,7 @@ public static class ImageGenerationRoutes
             IWallpaperImageService wallpaperService,
             AppDbContext db,
             WalletService wallet,
+            IBlobStorage blobs,
             ILogger<Program> logger) =>
         {
             string? userId = GetUserId(principal);
@@ -160,10 +163,7 @@ public static class ImageGenerationRoutes
 
             if (request.IncludeLogo)
             {
-                brandLogo = await db.ShopProfiles
-                .Where(s => s.UserId == userId)
-                .Select(s => s.LogoBase64)
-                .FirstOrDefaultAsync();
+                brandLogo = await FetchLogoBlobBase64Async(db, blobs, userId);
             }
 
             string wallpaperLanguage = await ResolveLanguageAsync(db, userId, request.Language);
@@ -219,6 +219,7 @@ public static class ImageGenerationRoutes
             IAnnouncementImageService announcementService,
             AppDbContext db,
             WalletService wallet,
+            IBlobStorage blobs,
             ILogger<Program> logger) =>
         {
             bool isJobPost = string.Equals(request.PostType, "Job Post", StringComparison.OrdinalIgnoreCase);
@@ -259,7 +260,7 @@ public static class ImageGenerationRoutes
                 return insufficient;
             }
 
-            string? logoBase64 = await FetchLogoIfRequestedAsync(db, userId, request.BrandContextFields);
+            string? logoBase64 = await FetchLogoIfRequestedAsync(db, blobs, userId, request.BrandContextFields);
             List<string>? textFields = StripLogoField(request.BrandContextFields);
             BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
             string announcementLanguage = await ResolveLanguageAsync(db, userId, request.Language);
@@ -355,6 +356,7 @@ public static class ImageGenerationRoutes
 
     private static async Task<string?> FetchLogoIfRequestedAsync(
         AppDbContext db,
+        IBlobStorage blobs,
         string? userId,
         List<string>? fields)
     {
@@ -368,10 +370,44 @@ public static class ImageGenerationRoutes
             return null;
         }
 
-        return await db.ShopProfiles
+        string? blobKey = await db.ShopProfiles
             .Where(s => s.UserId == userId)
-            .Select(s => s.LogoBase64)
+            .Select(s => s.LogoBlobKey)
             .FirstOrDefaultAsync();
+
+        if (string.IsNullOrEmpty(blobKey))
+        {
+            return null;
+        }
+
+        // The Gemini-style image-generation services accept inlined base64 strings.
+        // Download the bytes once and encode here so callers stay storage-agnostic.
+        byte[] bytes = await blobs.DownloadAsync(blobKey);
+        return Convert.ToBase64String(bytes);
+    }
+
+    private static async Task<string?> FetchLogoBlobBase64Async(
+        AppDbContext db,
+        IBlobStorage blobs,
+        string? userId)
+    {
+        if (userId is null)
+        {
+            return null;
+        }
+
+        string? blobKey = await db.ShopProfiles
+            .Where(s => s.UserId == userId)
+            .Select(s => s.LogoBlobKey)
+            .FirstOrDefaultAsync();
+
+        if (string.IsNullOrEmpty(blobKey))
+        {
+            return null;
+        }
+
+        byte[] bytes = await blobs.DownloadAsync(blobKey);
+        return Convert.ToBase64String(bytes);
     }
 
     private static async Task<BrandContext?> BuildBrandContextAsync(

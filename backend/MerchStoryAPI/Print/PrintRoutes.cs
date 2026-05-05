@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Storage;
 using MerchStoryAPI.Wallet;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -11,6 +12,7 @@ namespace MerchStoryAPI.Print;
 public static class PrintRoutes
 {
     private const int PrintCost = 1;
+    private static readonly TimeSpan PrintSasTtl = TimeSpan.FromMinutes(60);
 
     // Pixel dimensions (short × long edge) needed for 300 DPI print quality.
     private static readonly Dictionary<string, (int Short, int Long)> RequiredPixels300Dpi = new(StringComparer.OrdinalIgnoreCase)
@@ -38,6 +40,7 @@ public static class PrintRoutes
             QrLinkService qrLinks,
             PdfRenderer renderer,
             IUpscaler upscaler,
+            IBlobStorage blobs,
             IConfiguration config,
             ILogger<PrintJob> logger,
             CancellationToken ct) =>
@@ -64,7 +67,12 @@ public static class PrintRoutes
                 return Results.NotFound(new { detail = "Generated image not found." });
             }
 
-            byte[] imageBytes = Convert.FromBase64String(source.ImageBase64);
+            if (string.IsNullOrEmpty(source.ImageBlobKey))
+            {
+                return Results.NotFound(new { detail = "Source image has no stored bytes." });
+            }
+
+            byte[] imageBytes = await blobs.DownloadAsync(source.ImageBlobKey, ct);
             int upscaleFactor = RequiredScale(imageBytes, paperSize);
             bool needsUpscale = upscaleFactor > 1;
 
@@ -162,8 +170,16 @@ public static class PrintRoutes
                     QrSizeFraction: qrSizeFraction,
                     QrTransparent: qrTransparent));
 
-                string pdfBase64 = Convert.ToBase64String(pdf);
-                job.PdfBase64 = pdfBase64;
+                using MemoryStream pdfStream = new(pdf);
+                BlobRef pdfRef = await blobs.UploadAsync(
+                    "prints",
+                    userId,
+                    pdfStream,
+                    "application/pdf",
+                    ".pdf",
+                    ct);
+
+                job.PdfBlobKey = pdfRef.Key;
                 job.Status = "ready";
                 job.CompletedAt = DateTime.UtcNow;
 
@@ -186,11 +202,24 @@ public static class PrintRoutes
                     suffix++;
                 }
 
+                // Mirror the PDF into the gallery so the user can find it alongside
+                // generated images. Upload a second copy so the gallery row owns its
+                // own blob lifetime — deleting the gallery entry doesn't strand the
+                // print job's PDF.
+                using MemoryStream galleryStream = new(pdf);
+                BlobRef galleryRef = await blobs.UploadAsync(
+                    "gallery",
+                    userId,
+                    galleryStream,
+                    "application/pdf",
+                    ".pdf",
+                    ct);
+
                 db.GeneratedImages.Add(new GeneratedImage
                 {
                     Id = Guid.NewGuid(),
                     UserId = userId,
-                    ImageBase64 = pdfBase64,
+                    ImageBlobKey = galleryRef.Key,
                     MimeType = "application/pdf",
                     CreatedAt = DateTime.UtcNow,
                     GenerationType = source.GenerationType,
@@ -218,18 +247,23 @@ public static class PrintRoutes
                 return Results.Problem("Failed to render print.", statusCode: StatusCodes.Status500InternalServerError);
             }
 
+            string? renderedUrl = string.IsNullOrEmpty(job.PdfBlobKey)
+                ? null
+                : blobs.GetReadUrl(job.PdfBlobKey, PrintSasTtl).ToString();
             return Results.Ok(new RenderPrintResponse(
                 job.Id,
                 job.Status,
                 printLink?.Slug,
                 deduction?.NewBalance,
-                needsUpscale));
+                needsUpscale,
+                renderedUrl));
         });
 
         authed.MapGet("/{id:guid}", async (
             Guid id,
             ClaimsPrincipal principal,
             AppDbContext db,
+            IBlobStorage blobs,
             CancellationToken ct) =>
         {
             string? userId = GetUserId(principal);
@@ -245,13 +279,16 @@ public static class PrintRoutes
                 return Results.NotFound();
             }
 
+            string? pdfUrl = string.IsNullOrEmpty(job.PdfBlobKey)
+                ? null
+                : blobs.GetReadUrl(job.PdfBlobKey, PrintSasTtl).ToString();
             return Results.Ok(new PrintJobResponse(
                 job.Id,
                 job.Status,
                 job.PaperSize,
                 job.Orientation,
                 job.QualityTier,
-                job.PdfBase64,
+                pdfUrl,
                 job.ErrorMessage,
                 job.CreatedAt,
                 job.CompletedAt));
@@ -330,7 +367,8 @@ internal sealed record RenderPrintResponse(
     string Status,
     string? QrSlug,
     int? NewBalance,
-    bool Upscaled);
+    bool Upscaled,
+    string? PdfUrl);
 
 internal sealed record PrintJobResponse(
     Guid Id,
@@ -338,7 +376,7 @@ internal sealed record PrintJobResponse(
     string PaperSize,
     string Orientation,
     string QualityTier,
-    string? PdfBase64,
+    string? PdfUrl,
     string? ErrorMessage,
     DateTime CreatedAt,
     DateTime? CompletedAt);

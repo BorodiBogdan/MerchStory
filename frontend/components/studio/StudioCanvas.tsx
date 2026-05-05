@@ -714,7 +714,7 @@ function getToneOptions(tr: TranslateFn) {
 // ─── Brand context helpers ──────────────────────────────────────────────────────
 function deriveContextItems(profile: ShopProfileResponse, tr: TranslateFn): ContextItem[] {
   const items: ContextItem[] = [];
-  if (profile.logoBase64) items.push({ key: 'logoBase64', label: tr('studio.ctx.logo') });
+  if (profile.logoUrl) items.push({ key: 'logoBase64', label: tr('studio.ctx.logo') });
   if (profile.brandName) items.push({ key: 'brandName', label: tr('studio.ctx.brandName') });
   if (profile.slogan) items.push({ key: 'slogan', label: tr('studio.ctx.slogan') });
   if (profile.brandColors?.length > 0)
@@ -1847,8 +1847,18 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   async function pickWallpaperFromLibrary(item: GalleryItem) {
     try {
       const bytes = await fetchGalleryImage(item.id);
-      galleryImageCache.prime(item.id, bytes.imageBase64, bytes.mimeType);
-      setWallpaperBase64(bytes.imageBase64);
+      if (!bytes.imageUrl) return;
+      // The compositor needs raw base64 to inline into the catalog request,
+      // so we fetch the SAS URL and re-encode here. The cache stays URL-based.
+      const res = await fetch(bytes.imageUrl);
+      const blob = await res.blob();
+      const base64: string = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1] ?? '');
+        reader.readAsDataURL(blob);
+      });
+      galleryImageCache.prime(item.id, base64, bytes.mimeType);
+      setWallpaperBase64(base64);
       setWallpaperStage('confirmed');
       setWallpaperOnResult(null);
       setWallpaperOnError(null);

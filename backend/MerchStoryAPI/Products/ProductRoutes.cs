@@ -3,6 +3,7 @@ using MerchStoryAPI.Common;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Shop;
+using MerchStoryAPI.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 
@@ -10,6 +11,8 @@ namespace MerchStoryAPI.Products;
 
 public static class ProductRoutes
 {
+    private static readonly TimeSpan ProductSasTtl = TimeSpan.FromMinutes(15);
+
     public static void MapProductEndpoints(this WebApplication app)
     {
         RouteGroupBuilder group = app.MapGroup("/products").RequireAuthorization();
@@ -17,6 +20,7 @@ public static class ProductRoutes
         group.MapGet("/", async (
             ClaimsPrincipal principal,
             AppDbContext db,
+            IBlobStorage blobs,
             string? search,
             string? category,
             string? categories,
@@ -72,12 +76,36 @@ public static class ProductRoutes
 
             int total = await query.CountAsync();
 
-            List<ProductMetadata> products = await query
+            var rows = await query
                 .OrderByDescending(p => p.CreatedAt)
                 .Skip((resolvedPage - 1) * resolvedPageSize)
                 .Take(resolvedPageSize)
-                .Select(p => new ProductMetadata(p.Id, p.Name, p.Price, p.Currency.ToString(), p.Category, p.CreatedAt, p.UpdatedAt, "image/png"))
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Name,
+                    p.Price,
+                    p.Currency,
+                    p.Category,
+                    p.CreatedAt,
+                    p.UpdatedAt,
+                    p.ImageBlobKey,
+                    p.ImageContentType,
+                })
                 .ToListAsync();
+
+            List<ProductMetadata> products = rows
+                .Select(p => new ProductMetadata(
+                    p.Id,
+                    p.Name,
+                    p.Price,
+                    p.Currency.ToString(),
+                    p.Category,
+                    p.CreatedAt,
+                    p.UpdatedAt,
+                    p.ImageContentType ?? "image/png",
+                    string.IsNullOrEmpty(p.ImageBlobKey) ? null : blobs.GetReadUrl(p.ImageBlobKey, ProductSasTtl).ToString()))
+                .ToList();
 
             return Results.Ok(new PagedResponse<ProductMetadata>(products, total, resolvedPage, resolvedPageSize));
         });
@@ -85,7 +113,8 @@ public static class ProductRoutes
         group.MapGet("/{id:guid}/image", async (
             Guid id,
             ClaimsPrincipal principal,
-            AppDbContext db) =>
+            AppDbContext db,
+            IBlobStorage blobs) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -95,7 +124,7 @@ public static class ProductRoutes
 
             var image = await db.Products
                 .Where(p => p.Id == id && p.UserId == userId)
-                .Select(p => new { p.ImageBase64 })
+                .Select(p => new { p.ImageBlobKey, p.ImageContentType })
                 .SingleOrDefaultAsync();
 
             if (image is null)
@@ -103,7 +132,10 @@ public static class ProductRoutes
                 return Results.NotFound();
             }
 
-            return Results.Ok(new ProductImageBytes(image.ImageBase64 ?? string.Empty, "image/png"));
+            string? url = string.IsNullOrEmpty(image.ImageBlobKey)
+                ? null
+                : blobs.GetReadUrl(image.ImageBlobKey, ProductSasTtl).ToString();
+            return Results.Ok(new ProductImageBytes(url, image.ImageContentType ?? "image/png"));
         });
 
         group.MapGet("/categories", async (
@@ -129,7 +161,9 @@ public static class ProductRoutes
         group.MapPost("/", async (
             ProductRequest request,
             ClaimsPrincipal principal,
-            AppDbContext db) =>
+            AppDbContext db,
+            IBlobStorage blobs,
+            CancellationToken ct) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -157,9 +191,11 @@ public static class ProductRoutes
             }
             else
             {
-                ShopProfile? shop = await db.ShopProfiles.SingleOrDefaultAsync(s => s.UserId == userId);
+                ShopProfile? shop = await db.ShopProfiles.SingleOrDefaultAsync(s => s.UserId == userId, ct);
                 currency = shop?.Currency ?? Currency.USD;
             }
+
+            (string? blobKey, string? contentType) = await UploadInlineImageAsync(blobs, userId, request.ImageBase64, ct);
 
             DateTime now = DateTime.UtcNow;
             Product product = new()
@@ -169,25 +205,29 @@ public static class ProductRoutes
                 Name = request.Name.Trim(),
                 Price = request.Price,
                 Currency = currency,
-                ImageBase64 = request.ImageBase64,
+                ImageBlobKey = blobKey,
+                ImageContentType = contentType,
                 Category = NormalizeCategory(request.Category),
                 CreatedAt = now,
                 UpdatedAt = now,
             };
 
             db.Products.Add(product);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
 
+            string? url = blobKey is null ? null : blobs.GetReadUrl(blobKey, ProductSasTtl).ToString();
             return Results.Created(
                 $"/products/{product.Id}",
-                new ProductResponse(product.Id, product.Name, product.Price, product.Currency.ToString(), product.ImageBase64, product.Category, product.CreatedAt, product.UpdatedAt));
+                new ProductResponse(product.Id, product.Name, product.Price, product.Currency.ToString(), url, product.Category, product.CreatedAt, product.UpdatedAt));
         });
 
         group.MapPut("/{id:guid}", async (
             Guid id,
             ProductRequest request,
             ClaimsPrincipal principal,
-            AppDbContext db) =>
+            AppDbContext db,
+            IBlobStorage blobs,
+            CancellationToken ct) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -206,7 +246,7 @@ public static class ProductRoutes
             }
 
             Product? product = await db.Products
-                .SingleOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+                .SingleOrDefaultAsync(p => p.Id == id && p.UserId == userId, ct);
 
             if (product is null)
             {
@@ -225,19 +265,47 @@ public static class ProductRoutes
 
             product.Name = request.Name.Trim();
             product.Price = request.Price;
-            product.ImageBase64 = request.ImageBase64;
             product.Category = NormalizeCategory(request.Category);
             product.UpdatedAt = DateTime.UtcNow;
 
-            await db.SaveChangesAsync();
+            // The frontend sends ImageBase64 with the same data URI on every save (it
+            // re-emits the existing image when nothing changed). We can't tell "same
+            // image" from "new image" cheaply, so we treat any non-empty payload as a
+            // replacement and upload it. Old key is deleted after the row commits.
+            string? oldKey = product.ImageBlobKey;
+            if (!string.IsNullOrWhiteSpace(request.ImageBase64))
+            {
+                (string? newKey, string? newContentType) = await UploadInlineImageAsync(blobs, userId, request.ImageBase64, ct);
+                if (newKey is not null)
+                {
+                    product.ImageBlobKey = newKey;
+                    product.ImageContentType = newContentType;
+                }
+            }
+            else if (request.ImageBase64 is not null)
+            {
+                // Empty string explicitly clears the image.
+                product.ImageBlobKey = null;
+                product.ImageContentType = null;
+            }
 
-            return Results.Ok(new ProductResponse(product.Id, product.Name, product.Price, product.Currency.ToString(), product.ImageBase64, product.Category, product.CreatedAt, product.UpdatedAt));
+            await db.SaveChangesAsync(ct);
+
+            if (!string.IsNullOrEmpty(oldKey) && oldKey != product.ImageBlobKey)
+            {
+                await blobs.DeleteAsync(oldKey, ct);
+            }
+
+            string? url = product.ImageBlobKey is null ? null : blobs.GetReadUrl(product.ImageBlobKey, ProductSasTtl).ToString();
+            return Results.Ok(new ProductResponse(product.Id, product.Name, product.Price, product.Currency.ToString(), url, product.Category, product.CreatedAt, product.UpdatedAt));
         });
 
         group.MapDelete("/{id:guid}", async (
             Guid id,
             ClaimsPrincipal principal,
-            AppDbContext db) =>
+            AppDbContext db,
+            IBlobStorage blobs,
+            CancellationToken ct) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -246,15 +314,21 @@ public static class ProductRoutes
             }
 
             Product? product = await db.Products
-                .SingleOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+                .SingleOrDefaultAsync(p => p.Id == id && p.UserId == userId, ct);
 
             if (product is null)
             {
                 return Results.NotFound();
             }
 
+            string? blobKey = product.ImageBlobKey;
             db.Products.Remove(product);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
+
+            if (!string.IsNullOrEmpty(blobKey))
+            {
+                await blobs.DeleteAsync(blobKey, ct);
+            }
 
             return Results.NoContent();
         });
@@ -323,15 +397,78 @@ public static class ProductRoutes
         string trimmed = category.Trim();
         return trimmed.Length > 100 ? trimmed[..100] : trimmed;
     }
+
+    // Decodes the optional `data:...;base64,` prefix and uploads the bytes to blob.
+    // Returns (null, null) for null/empty/invalid input so callers can fall through
+    // to "no image" without special-casing exceptions.
+    private static async Task<(string? Key, string? ContentType)> UploadInlineImageAsync(
+        IBlobStorage blobs,
+        string userId,
+        string? imageBase64,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(imageBase64))
+        {
+            return (null, null);
+        }
+
+        string contentType = "image/png";
+        string payload = imageBase64;
+        const string prefix = "data:";
+        if (payload.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            int comma = payload.IndexOf(',', StringComparison.Ordinal);
+            if (comma <= prefix.Length)
+            {
+                return (null, null);
+            }
+
+            string header = payload[prefix.Length..comma];
+            int semi = header.IndexOf(';', StringComparison.Ordinal);
+            if (semi > 0)
+            {
+                contentType = header[..semi];
+            }
+
+            payload = payload[(comma + 1)..];
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(payload);
+        }
+        catch (FormatException)
+        {
+            return (null, null);
+        }
+
+        if (bytes.Length == 0)
+        {
+            return (null, null);
+        }
+
+        string ext = contentType.ToLowerInvariant() switch
+        {
+            "image/png" => ".png",
+            "image/jpeg" or "image/jpg" => ".jpg",
+            "image/webp" => ".webp",
+            _ => ".png",
+        };
+
+        using MemoryStream ms = new(bytes);
+        BlobRef uploaded = await blobs.UploadAsync("products", userId, ms, contentType, ext, ct);
+        return (uploaded.Key, uploaded.ContentType);
+    }
 }
 
 internal sealed record ProductRequest(string Name, decimal Price, string? ImageBase64, string? Category, string? Currency = null);
 
-internal sealed record ProductResponse(Guid Id, string Name, decimal Price, string Currency, string? ImageBase64, string? Category, DateTime CreatedAt, DateTime UpdatedAt);
+internal sealed record ProductResponse(Guid Id, string Name, decimal Price, string Currency, string? ImageUrl, string? Category, DateTime CreatedAt, DateTime UpdatedAt);
 
-internal sealed record ProductMetadata(Guid Id, string Name, decimal Price, string Currency, string? Category, DateTime CreatedAt, DateTime UpdatedAt, string MimeType);
+internal sealed record ProductMetadata(Guid Id, string Name, decimal Price, string Currency, string? Category, DateTime CreatedAt, DateTime UpdatedAt, string MimeType, string? ImageUrl);
 
-internal sealed record ProductImageBytes(string ImageBase64, string MimeType);
+internal sealed record ProductImageBytes(string? ImageUrl, string MimeType);
 
 internal sealed record RemoveBackgroundRequest(string ImageBase64);
 

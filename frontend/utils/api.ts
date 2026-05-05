@@ -163,6 +163,8 @@ export interface BrandColor {
 
 export interface ShopProfilePayload {
   brandName: string;
+  // Inline base64 logo on first save (before /shop/logo upload exists). The
+  // backend uploads it to blob and never persists the base64.
   logoBase64?: string | null;
   brandColors: BrandColor[];
   slogan?: string | null;
@@ -183,11 +185,14 @@ export interface ShopProfilePayload {
   generationLanguage: AppLanguage;
 }
 
-export interface ShopProfileResponse extends ShopProfilePayload {
+// `logoBase64` from the request payload is replaced with `logoUrl` on the
+// response — the backend now serves logos as short-lived SAS URLs.
+export interface ShopProfileResponse extends Omit<ShopProfilePayload, 'logoBase64'> {
   id: string;
   countryCode: string;
   latitude: number | null;
   longitude: number | null;
+  logoUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -269,8 +274,8 @@ export async function uploadShopLogo(imageUri: string, mimeType = 'image/jpeg'):
     throw new Error('Logo upload failed.');
   }
 
-  const data = (await response.json()) as { logoBase64: string };
-  return data.logoBase64;
+  const data = (await response.json()) as { logoUrl: string };
+  return data.logoUrl;
 }
 
 export async function getShopProfile(): Promise<ShopProfileResponse | null> {
@@ -455,7 +460,7 @@ export interface GalleryItem {
 }
 
 export interface GalleryImageBytes {
-  imageBase64: string;
+  imageUrl: string | null;
   mimeType: string;
 }
 
@@ -605,6 +610,8 @@ export interface ProductItem {
   createdAt: string;
   updatedAt: string;
   mimeType: string;
+  // Short-lived SAS URL for the product image. Null if the product has no image.
+  imageUrl: string | null;
 }
 
 export interface ProductDetail {
@@ -612,14 +619,14 @@ export interface ProductDetail {
   name: string;
   price: number;
   currency: Currency;
-  imageBase64: string | null;
+  imageUrl: string | null;
   category: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface ProductImageBytes {
-  imageBase64: string;
+  imageUrl: string | null;
   mimeType: string;
 }
 
@@ -764,7 +771,7 @@ export interface ReferenceImage {
   id: string;
   name: string;
   categoryPath: string | null;
-  imageBase64: string;
+  imageUrl: string | null;
   similarity: number;
 }
 
@@ -1082,6 +1089,7 @@ export interface RenderPrintResponse {
   qrSlug: string | null;
   newBalance: number | null;
   upscaled: boolean;
+  pdfUrl: string | null;
 }
 
 export interface PrintJobDetails {
@@ -1090,7 +1098,7 @@ export interface PrintJobDetails {
   paperSize: string;
   orientation: string;
   qualityTier: string;
-  pdfBase64: string | null;
+  pdfUrl: string | null;
   errorMessage: string | null;
   createdAt: string;
   completedAt: string | null;

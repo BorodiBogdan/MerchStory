@@ -174,26 +174,21 @@ export default function GalleryScreen() {
   async function handlePdfAction(item: GalleryItem, mode: 'view' | 'download') {
     try {
       const bytes = await fetchGalleryImage(item.id);
-      const base64 = bytes.imageBase64;
+      if (!bytes.imageUrl) return;
       const safeName =
         (item.name || 'document').replace(/[^a-z0-9_\-. ]+/gi, '_').trim() || 'document';
       const fileName = `${safeName}.pdf`;
 
       if (isWeb) {
-        const byteChars = atob(base64);
-        const byteArr = new Uint8Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
-        const blob = new Blob([byteArr], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
         if (mode === 'view') {
-          window.open(url, '_blank', 'noopener,noreferrer');
-          setTimeout(() => URL.revokeObjectURL(url), 60_000);
+          window.open(bytes.imageUrl, '_blank', 'noopener,noreferrer');
         } else {
           const a = document.createElement('a');
-          a.href = url;
+          a.href = bytes.imageUrl;
           a.download = fileName;
+          a.target = '_blank';
+          a.rel = 'noopener';
           a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1_000);
         }
         return;
       }
@@ -201,11 +196,9 @@ export default function GalleryScreen() {
       const dir = FileSystem.cacheDirectory;
       if (!dir) return;
       const filePath = `${dir}${fileName}`;
-      await FileSystem.writeAsStringAsync(filePath, base64, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      const downloaded = await FileSystem.downloadAsync(bytes.imageUrl, filePath);
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(filePath, {
+        await Sharing.shareAsync(downloaded.uri, {
           mimeType: 'application/pdf',
           dialogTitle: item.name || 'PDF',
           UTI: 'com.adobe.pdf',

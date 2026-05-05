@@ -65,7 +65,10 @@ async function fetchWithSlot(id: string): Promise<Entry> {
   await acquireSlot();
   try {
     const res = await fetchGalleryImage(id);
-    const entry: Entry = { uri: toDataUri(res.imageBase64, res.mimeType) };
+    if (!res.imageUrl) {
+      throw new Error('Image not available.');
+    }
+    const entry: Entry = { uri: res.imageUrl };
     store(id, entry);
     errors.delete(id);
     notify();

@@ -110,9 +110,7 @@ export default function PrintScreen() {
     cache.items.length < cache.total &&
     cache.initialized;
   const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
-  const [previewImage, setPreviewImage] = useState<{ base64: string; mimeType: string } | null>(
-    null
-  );
+  const [previewImage, setPreviewImage] = useState<{ uri: string; mimeType: string } | null>(null);
   const [paperSize, setPaperSize] = useState<PaperSize>('A4');
   const [includeQr, setIncludeQr] = useState(false);
   const [qrTargetUrl, setQrTargetUrl] = useState('');
@@ -148,8 +146,8 @@ export default function PrintScreen() {
     let cancelled = false;
     fetchGalleryImage(selectedItem.id)
       .then((res) => {
-        if (!cancelled) {
-          setPreviewImage({ base64: res.imageBase64, mimeType: res.mimeType });
+        if (!cancelled && res.imageUrl) {
+          setPreviewImage({ uri: res.imageUrl, mimeType: res.mimeType });
         }
       })
       .catch(() => {});
@@ -164,7 +162,7 @@ export default function PrintScreen() {
       return;
     }
     let cancelled = false;
-    const uri = `data:${previewImage.mimeType};base64,${previewImage.base64}`;
+    const uri = previewImage.uri;
     Image.getSize(
       uri,
       (width, height) => {
@@ -201,12 +199,12 @@ export default function PrintScreen() {
       });
 
       const ready = await waitForJob(job.jobId);
-      if (ready.status !== 'ready' || !ready.pdfBase64) {
+      if (ready.status !== 'ready' || !ready.pdfUrl) {
         setRenderError(ready.errorMessage ?? t('print.error.generic'));
         return;
       }
 
-      await deliverPdf(ready.pdfBase64, selectedItem.name, paperSize);
+      await deliverPdf(ready.pdfUrl, selectedItem.name, paperSize);
       galleryCache.invalidate('Pdf');
       if (typeof job.newBalance === 'number') {
         void setCoinBalance(job.newBalance);
@@ -265,7 +263,7 @@ export default function PrintScreen() {
       ) : (
         <SelectedAssetCard
           item={selectedItem}
-          previewBase64={previewImage?.base64 ?? null}
+          previewUri={previewImage?.uri ?? null}
           previewMimeType={previewImage?.mimeType ?? null}
           onOpen={() => setPickerOpen(true)}
         />
@@ -388,8 +386,7 @@ export default function PrintScreen() {
           <Text style={styles.previewTitle}>{t('print.preview.title')}</Text>
         </View>
         <PaperPreview
-          imageBase64={previewImage?.base64 ?? null}
-          imageMimeType={previewImage?.mimeType ?? null}
+          imageUri={previewImage?.uri ?? null}
           paperSize={paperSize}
           orientation="portrait"
           showQrBadge={showQrBadge}
@@ -526,12 +523,12 @@ function EmptyAssetsCard({ onOpenStudio }: { onOpenStudio: () => void }) {
 // ─── Selected-asset card (inline trigger) ────────────────────────────────
 function SelectedAssetCard({
   item,
-  previewBase64,
+  previewUri,
   previewMimeType,
   onOpen,
 }: {
   item: GalleryItem | null;
-  previewBase64: string | null;
+  previewUri: string | null;
   previewMimeType: string | null;
   onOpen: () => void;
 }) {
@@ -539,10 +536,8 @@ function SelectedAssetCard({
   const t = useT();
   const styles = useMemo(() => makeSelectedAssetStyles(colors, !!item), [colors, item]);
 
-  const thumbUri =
-    item && previewBase64 && previewMimeType
-      ? `data:${previewMimeType};base64,${previewBase64}`
-      : null;
+  const thumbUri = item && previewUri ? previewUri : null;
+  void previewMimeType;
 
   return (
     <Pressable
@@ -595,7 +590,7 @@ function AssetThumb({ id, style }: { id: string; style?: object }) {
     let cancelled = false;
     fetchGalleryImage(id)
       .then((res) => {
-        if (!cancelled) setUri(`data:${res.mimeType};base64,${res.imageBase64}`);
+        if (!cancelled && res.imageUrl) setUri(res.imageUrl);
       })
       .catch(() => {});
     return () => {
@@ -981,27 +976,25 @@ async function waitForJob(jobId: string): Promise<PrintJobDetails> {
   throw new Error('Render timed out.');
 }
 
-async function deliverPdf(base64: string, baseName: string, paperSize: string) {
+async function deliverPdf(pdfUrl: string, baseName: string, paperSize: string) {
   const filename = `${slugify(baseName) || 'print'}-${paperSize}.pdf`;
   if (Platform.OS === 'web') {
-    const byteChars = atob(base64);
-    const bytes = new Uint8Array(byteChars.length);
-    for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
-    const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
+    // Browsers handle the SAS URL directly — no need to fetch+blob locally.
     const a = document.createElement('a');
-    a.href = url;
+    a.href = pdfUrl;
     a.download = filename;
+    a.target = '_blank';
+    a.rel = 'noopener';
     a.click();
-    URL.revokeObjectURL(url);
     return;
   }
   const targetUri = `${FileSystem.cacheDirectory}${filename}`;
-  await FileSystem.writeAsStringAsync(targetUri, base64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  const downloaded = await FileSystem.downloadAsync(pdfUrl, targetUri);
   if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(targetUri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
+    await Sharing.shareAsync(downloaded.uri, {
+      mimeType: 'application/pdf',
+      UTI: 'com.adobe.pdf',
+    });
   }
 }
 

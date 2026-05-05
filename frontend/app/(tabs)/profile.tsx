@@ -173,7 +173,10 @@ export default function ProfileScreen() {
     try {
       const updated = await updateShopProfile({
         brandName: profile.brandName,
-        logoBase64: profile.logoBase64 ?? null,
+        // Logo is stored separately on blob; null means "leave the existing
+        // LogoBlobKey untouched" — the backend only replaces it when this is
+        // a fresh data URI / base64 string from a new upload.
+        logoBase64: null,
         brandColors: profile.brandColors,
         slogan: profile.slogan ?? null,
         businessDomain: profile.businessDomain,
@@ -335,10 +338,10 @@ export default function ProfileScreen() {
     setIsSaving(true);
     setSaveError(null);
     try {
-      let logoBase64 = profile.logoBase64 ?? null;
-      if (draft.newLogoUri) {
-        logoBase64 = draft.newLogoUri;
-      }
+      // Only send a new logo payload when the user picked one — null leaves
+      // the existing blob in place. The newLogoUri is a data URI built from
+      // the picker; the backend uploads it to blob storage.
+      const logoBase64 = draft.newLogoUri ?? null;
       const cleanAddresses = draft.addresses.filter((a) => a.trim().length > 0);
       const updated = await updateShopProfile({
         brandName: draft.brandName.trim(),
@@ -376,7 +379,7 @@ export default function ProfileScreen() {
 
   const logoSource = (() => {
     if (draft?.newLogoUri) return { uri: draft.newLogoUri };
-    if (profile?.logoBase64) return { uri: profile.logoBase64 };
+    if (profile?.logoUrl) return { uri: profile.logoUrl };
     return null;
   })();
 
