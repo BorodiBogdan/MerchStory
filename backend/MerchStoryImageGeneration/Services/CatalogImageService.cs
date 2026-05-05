@@ -277,7 +277,49 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
               "The product names listed in the marker assignments above are STRUCTURAL only (used to associate each product with its outline color) — they are NOT to appear as visible text.\n\n";
 
         return
-            $"{SystemContext}\n\n" +
+            $"IMPORTANT!!!!!: " +
+            "🚫 ZERO BOUNDING BOXES: MATCHING PRODUCT OUTLINE ONLY 🚫\n" +
+            "The outline MUST be ONE continuous closed curve that traces the product's EXACT organic contour—following" +
+            "IT SHOULD BE EXACTLY THE PRODUCT SIZE AND STICKED TO IT, NO SPACE BETWEEN THE OUTLINE AND THE PRODUCT" +
+            "every curve, handle, cap, neck, and physical feature. UNDER NO CIRCUMSTANCES are you to draw a bounding box, " +
+            "square, rectangle, or any rectilinear frame around the product. Do NOT encapsulate the product inside any shape. " +
+            "Do NOT draw BOTH a silhouette and a frame. Just the exact shape of the product itself—that is all! " +
+            "Absolutely NO encapsulating outer boxes are allowed, especially not ones using the assigned outline color. " +
+            "If the product is a bottle, the outline is shaped exactly like the bottle. Nothing else.\n\n" +
+            "🚫 OUTLINES ARE EXCLUSIVE TO PRODUCTS — NOWHERE ELSE 🚫\n" +
+            "These exact silhouette outlines are the ONLY borders, strokes, rings, or edge-traces permitted anywhere " +
+            "in the entire generated image. Everything else must be rendered FLAT. You must strictly avoid adding decorative " +
+            "outlines of any kind to the following:\n" +
+            "- Price labels & currency: Typography must be flat (no text outline/stroke/glow). Prices may sit on a filled pill/tag, but that background shape must be a flat fill with NO decorative border/ring, and it MUST NOT use the outline's reserved marker color.\n" +
+            "- Text (Names, Headlines, CTAs, Contact info): Flat typography only. No text strokes, no surrounding frames.\n" +
+            "- Logos & Brand marks: Reproduce as-is with NO added frames or boxes.\n" +
+            "- Layout & UI: NO visible grid cells, panel edges, section dividers, or overall canvas borders.\n\n" +
+            "If your design instinct is to stroke a price badge with a border, or frame a headline—DO NOT. " +
+            "A filled chip behind a price is fine; an outline around it is forbidden. Outlines belong to products ONLY.\n\n" +
+            "⚙️ EXACT TECHNICAL SPECS FOR THE SILHOUETTE ⚙️\n" +
+            "Each outline must be a crisp, solid, flat, uniformly-colored line EXACTLY 4 pixels thick. " +
+            "NO gradients, NO glows, NO drop shadows, NO soft edges, NO luminosity effects, NO neon halos, NO fades. " +
+            "Just a plain solid line of the exact assigned hex color along its entire length. " +
+            "The line must hug the product edge tightly and form a fully closed " +
+            "loop with zero gaps. Outlines must NOT overlap each other, text, or logos. Do NOT add any blending modes " +
+            "or color grading to it. Treat it as a flat, dead-simple printed line stamped directly onto the scene.\n" +
+            "🟩 MANDATORY QUIET ZONE (80PX SAFETY BUFFER) 🟩\n" +
+            "Immediately surrounding every product outline, you MUST maintain a 'QUIET ZONE': a strip of " +
+            "clean, uniform scene background. This zone must be at least 80 pixels wide on all sides of the " +
+            "outline. This area is strictly reserved for the scene background—no text, no prices, and no " +
+            "decorative elements.\n\n" +
+            "⚠️ TECHNICAL REQUIREMENT: PRICE & UI PLACEMENT\n" +
+            "Keep all prices, badges, and labels in the vicinity of the product for context, but ensure they " +
+            "begin strictly OUTSIDE the 80px quiet zone. This 80px gap is a mandatory safety margin; any " +
+            "element placed closer than 80px risks being partially deleted or causing visual artifacts " +
+            "during the final composition.\n\n" +
+            "WHEN I SAY 80PX I MEAN THE DISTANCE, WE SHOULD HAVE A VISIBLE DISTANCE, DO NOT RENDER TEXT THAT SAYS 40PX, OR RULERS OR ANYTHING RELATED TO THAT" +
+            "💡 WHY THE 80PX DISTANCE IS CRITICAL:\n" +
+            "After generation, the system automatically removes the product outline plus a 40px perimeter " +
+            "around it. We use an 80px quiet zone to ensure that prices and essential text are never " +
+            "accidentally clipped. If a price badge sits inside this zone, the 'eraser' will catch it, " +
+            "resulting in broken text or messy colored rings around the final product.\n\n" +
+            "{SystemContext}\n\n" +
             LanguageInstruction.For(r.Language) +
             BrandContextBlock(r.BrandContext) +
             logoNote +
@@ -300,52 +342,10 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             "the rule applies only to the product-ground contact zone.\n\n" +
             "Draw one tight silhouette outline around each product, using the assigned colors below (one unique color per product):\n" +
             productBlock + "\n\n" +
-            "🚫 THE OUTLINE IS A SILHOUETTE, NOT A RECTANGLE OR BOUNDING BOX 🚫\n" +
-            "The outline is ONE continuous closed curve that traces the product's actual contour — following every curve, " +
-            "handle, cap, neck, corner, and non-rectangular feature of the product. It is NEVER a rectangle, square, box frame, " +
-            "panel border, bounding rectangle, or any rectilinear shape around the product. Do NOT draw BOTH a silhouette " +
-            "outline AND a rectangle/frame around the product — draw ONLY the silhouette. There must be exactly ONE outline " +
-            "per product, and that outline must be the silhouette contour — no second rectangular frame, no outer box, no panel border, nothing else.\n\n" +
-            "🚫 OUTLINES EXIST ONLY ON PRODUCTS — NOWHERE ELSE IN THE ENTIRE IMAGE 🚫\n" +
-            "The silhouette outlines described above are the ONLY outlines, borders, frames, strokes, rings, or edge-traces " +
-            "that appear anywhere in the entire generated image. Everything else is rendered FLAT, with NO decorative outline " +
-            "of any kind. Specifically, the following elements must have absolutely NO outline, border, frame, stroke, edge-trace, " +
-            "ring, shadow-line, glow-line, or any other decorative edge treatment:\n" +
-            "- Price labels, price numbers, currency symbols — the typography itself is flat (no text outline, text stroke, or glow). Prices MAY sit on a filled pill, chip, tag-shape, or colored panel, but that shape itself is a flat fill with NO decorative outline/border/ring/stroke, and must NOT use any reserved marker color (see reserved-color rule below).\n" +
-            "- Product name labels, captions, descriptions — flat typography only\n" +
-            "- Headline text, title text, slogan text, brand name text, call-to-action text — flat typography only, no text outline, no text stroke, no surrounding frame\n" +
-            "- Contact information (phone, email, address) — flat typography only\n" +
-            "- Logo area, brand mark — reproduced as-is, no added frame\n" +
-            "- Decorative elements, dividers, separator lines, icons, bullet points — none of these may carry an outline\n" +
-            "- The overall image canvas — no outer border/frame around the whole composition\n" +
-            "- Grid cells, product zones, or layout sections — no visible cell borders, grid lines, panel edges, or section dividers\n\n" +
-            "If your usual design instinct is to stroke a price badge with a contrasting border, or to frame a headline with a " +
-            "decorative line — DO NOT. A filled pill/chip behind a price is fine; a decorative outline around it is not. " +
-            "Outlines belong to products, and to products only.\n\n" +
-            "Each outline is a crisp, **solid, flat, uniformly-colored line exactly 4 pixels thick** — no gradient, no glow, " +
-            "no shadow, no soft edge, no luminosity effect, no neon halo, no fade. Just a plain solid line of the exact " +
-            "assigned hex color, edge-to-edge. The line must be the SAME pixel color along its entire length. " +
-            "The outline hugs the product edge tightly (within 1–2 pixels of the product's real silhouette). " +
-            "The outline must be a fully closed loop (no gaps) that traces the complete product silhouette. " +
-            "Outlines must NOT overlap each other and must NOT overlap any text, logo, or brand element. " +
-            "Do NOT add any effect to the outline — no drop shadow, no bloom, no outer glow, no inner shadow, " +
-            "no color grading, no blending mode. Treat it as a flat printed line on top of the scene.\n\n" +
-            "🟩 QUIET ZONE AROUND EACH OUTLINE 🟩\n" +
-            "Immediately surrounding each product outline there must be a QUIET ZONE — a strip of clean, uniform, " +
-            "low-contrast scene background at least 40 pixels wide (or roughly one price line-height, whichever is " +
-            "larger) on every side of the outline. The quiet zone is flat: a single soft scene tone, no text, no " +
-            "typography, no price numbers, no logos, no icons, no stars, no sparkles, no dots, no chips, no tags, " +
-            "no badges, no pills, no decorative shapes, no secondary products, no patterns, no gradients, no " +
-            "saturated accent colors, no darkened patches. The zone is as quiet as a passport-photo background. " +
-            "Every character, label, badge, decorative element, and prop must begin OUTSIDE this quiet zone.\n\n" +
-            "Why: after generation, each outline is erased by sampling the pixel immediately outside it and painting " +
-            "that color over the outline. If a letter, number, badge, or accent shape sits inside the quiet zone, " +
-            "the eraser will copy THAT pixel instead of clean background, stamping a visible fragment of text or " +
-            "color in a ring around the product. Keep the quiet zone boring — quiet zone = clean erase.\n\n" +
-            "PURPOSE: Each outlined region marks where a REAL photographic product image will be pasted AFTER this generation. " +
-            "The final image will replace whatever is inside the outline with the user's actual product photo. " +
-            "So anything you place on top of or crossing into an outlined region will be DESTROYED by the paste — or worse, " +
-            "it will be partially visible and look broken. Treat the outlined regions as RESERVED 'do-not-touch' zones.\n\n" +
+            "🛑 RESERVED 'DO-NOT-TOUCH' ZONES:\n" +
+            "Treat the outlined product regions AND their immediate 80px surroundings as strictly reserved. " +
+            "Anything placed inside or overlapping this 80px footprint will be DESTROYED or corrupted " +
+            "during the final paste-in process. To keep the erase clean, keep the quiet zone boring.\n" +
             "🚫 ABSOLUTE RULE — NOTHING APPEARS ON, OVER, OR CROSSING ANY PRODUCT 🚫\n" +
             "Each product appears COMPLETELY PLAIN — as if cut out of its reference photo and pasted onto the scene, untouched. " +
             "NOTHING — of ANY kind, with ZERO exceptions — is drawn on top of, in front of, overlapping, touching, crossing, " +
