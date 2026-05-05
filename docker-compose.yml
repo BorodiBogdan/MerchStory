@@ -22,6 +22,7 @@ services:
       - Google__ApiKey=${GOOGLE_API_KEY}
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=merchstory;Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}
       - Jwt__Key=${JWT_SECRET_KEY}
+      - IOPaint__BaseUrl=http://iopaint:8080
     depends_on:
       - db
     restart: unless-stopped
