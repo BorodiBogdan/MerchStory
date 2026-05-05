@@ -10,7 +10,9 @@ public class GeneratedImage
 
     public AppUser User { get; set; } = null!;
 
-    public string ImageBase64 { get; set; } = string.Empty;
+    public string? ImageBase64 { get; set; }
+
+    public string? ImageBlobKey { get; set; }
 
     public string MimeType { get; set; } = string.Empty;
 

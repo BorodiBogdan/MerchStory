@@ -75,6 +75,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
             entity.Property(s => s.BrandName).HasMaxLength(100).IsRequired();
             entity.Property(s => s.LogoBase64).HasColumnType("text");
+            entity.Property(s => s.LogoBlobKey).HasMaxLength(300);
+            entity.Property(s => s.LogoContentType).HasMaxLength(50);
             entity.Property(s => s.BrandColorsJson).HasColumnType("text").IsRequired();
             entity.Property(s => s.Slogan).HasMaxLength(200);
             entity.Property(s => s.BusinessDomain).HasMaxLength(30).IsRequired();
@@ -97,7 +99,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
         {
             entity.HasKey(g => g.Id);
 
-            entity.Property(g => g.ImageBase64).HasColumnType("text").IsRequired();
+            entity.Property(g => g.ImageBase64).HasColumnType("text");
+            entity.Property(g => g.ImageBlobKey).HasMaxLength(300);
             entity.Property(g => g.MimeType).HasMaxLength(50).IsRequired();
 
             entity.HasIndex(g => g.UserId);
@@ -115,6 +118,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
             entity.Property(p => p.Name).HasMaxLength(200).IsRequired();
             entity.Property(p => p.Price).HasColumnType("numeric(18,2)").IsRequired();
             entity.Property(p => p.ImageBase64).HasColumnType("text");
+            entity.Property(p => p.ImageBlobKey).HasMaxLength(300);
+            entity.Property(p => p.ImageContentType).HasMaxLength(50);
             entity.Property(p => p.Category).HasMaxLength(100);
 
             entity.HasIndex(p => p.UserId);
@@ -130,7 +135,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
         {
             entity.HasKey(r => r.Id);
             entity.Property(r => r.Name).HasMaxLength(200).IsRequired();
-            entity.Property(r => r.ImageBase64).HasColumnType("text").IsRequired();
+            entity.Property(r => r.ImageBase64).HasColumnType("text");
+            entity.Property(r => r.ImageBlobKey).HasMaxLength(300);
 
             entity.HasOne(r => r.Category)
                   .WithMany()
@@ -300,6 +306,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
             entity.HasKey(p => p.Id);
 
             entity.Property(p => p.PdfBase64).HasColumnType("text");
+            entity.Property(p => p.PdfBlobKey).HasMaxLength(300);
 
             entity.HasIndex(p => new { p.UserId, p.CreatedAt })
                   .IsDescending(false, true);

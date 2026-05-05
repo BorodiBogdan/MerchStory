@@ -1,4 +1,5 @@
 using System.Text;
+using Azure.Storage.Blobs;
 using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Gallery;
@@ -11,6 +12,7 @@ using MerchStoryAPI.Products;
 using MerchStoryAPI.Recommendations;
 using MerchStoryAPI.ReferenceImages;
 using MerchStoryAPI.Shop;
+using MerchStoryAPI.Storage;
 using MerchStoryAPI.Wallet;
 using MerchStoryImageGeneration.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -89,6 +91,14 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminOnly", policy => policy.RequireClaim("is_admin", "true"));
 });
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
+
+// Blob storage. A single Azure container holds all user images and PDFs;
+// connection string is shared with the existing model-download flow. Tests
+// substitute an in-memory IBlobStorage that keeps bytes in a dictionary.
+builder.Services.Configure<BlobStorageOptions>(builder.Configuration.GetSection("Storage"));
+builder.Services.AddSingleton(_ => new BlobServiceClient(builder.Configuration["Azure:BlobConnectionString"]));
+builder.Services.AddSingleton<IBlobStorage, AzureBlobStorage>();
+
 builder.Services.AddMerchStoryImageGeneration(builder.Configuration);
 builder.Services.AddMerchStoryRecommendations(builder.Configuration);
 builder.Services.AddSingleton<IClipEmbeddingService, ClipEmbeddingService>();
