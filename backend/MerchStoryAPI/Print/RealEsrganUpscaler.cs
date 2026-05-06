@@ -30,10 +30,14 @@ public sealed class RealEsrganUpscaler : IUpscaler, IDisposable
     private readonly InferenceSession? x4Session;
     private readonly SemaphoreSlim semaphore = new(2, 2);
 
-    public RealEsrganUpscaler(IConfiguration configuration, ILogger<RealEsrganUpscaler> logger)
+    public RealEsrganUpscaler(
+        IConfiguration configuration,
+        BlobServiceClient blobServiceClient,
+        ILogger<RealEsrganUpscaler> logger)
     {
         this.x2Session = TryLoadSession(
             configuration,
+            blobServiceClient,
             "RealEsrgan:ModelPathX2",
             "RealEsrgan:ModelBlobContainerX2",
             "RealEsrgan:ModelBlobNameX2",
@@ -41,6 +45,7 @@ public sealed class RealEsrganUpscaler : IUpscaler, IDisposable
             logger);
         this.x4Session = TryLoadSession(
             configuration,
+            blobServiceClient,
             "RealEsrgan:ModelPathX4",
             "RealEsrgan:ModelBlobContainerX4",
             "RealEsrgan:ModelBlobNameX4",
@@ -221,6 +226,7 @@ public sealed class RealEsrganUpscaler : IUpscaler, IDisposable
 
     private static InferenceSession? TryLoadSession(
         IConfiguration config,
+        BlobServiceClient blobServiceClient,
         string pathKey,
         string blobContainerKey,
         string blobNameKey,
@@ -239,7 +245,7 @@ public sealed class RealEsrganUpscaler : IUpscaler, IDisposable
         try
         {
             if (!File.Exists(modelPath)
-                && !TryDownloadModel(config, modelPath, blobContainerKey, blobNameKey, label, logger))
+                && !TryDownloadModel(config, blobServiceClient, modelPath, blobContainerKey, blobNameKey, label, logger))
             {
                 return null;
             }
@@ -267,24 +273,25 @@ public sealed class RealEsrganUpscaler : IUpscaler, IDisposable
 
     private static bool TryDownloadModel(
         IConfiguration configuration,
+        BlobServiceClient blobServiceClient,
         string modelPath,
         string blobContainerKey,
         string blobNameKey,
         string label,
         ILogger logger)
     {
-        string? blobConnection = configuration["Azure:BlobConnectionString"];
         string? container = configuration[blobContainerKey];
         string? blobName = configuration[blobNameKey];
 
-        if (string.IsNullOrEmpty(blobConnection)
-            || string.IsNullOrEmpty(container)
-            || string.IsNullOrEmpty(blobName))
+        if (string.IsNullOrEmpty(container) || string.IsNullOrEmpty(blobName))
         {
             logger.LogWarning(
-                "Real-ESRGAN {Label} model not found at '{ModelPath}' and blob download is not configured.",
+                "Real-ESRGAN {Label} model not found at '{ModelPath}' and blob download is not configured " +
+                "(set {ContainerKey} and {BlobNameKey}).",
                 label,
-                modelPath);
+                modelPath,
+                blobContainerKey,
+                blobNameKey);
             return false;
         }
 
@@ -297,7 +304,7 @@ public sealed class RealEsrganUpscaler : IUpscaler, IDisposable
                 blobName,
                 modelPath);
             Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
-            var blobClient = new BlobClient(blobConnection, container, blobName);
+            BlobClient blobClient = blobServiceClient.GetBlobContainerClient(container).GetBlobClient(blobName);
             blobClient.DownloadTo(modelPath);
             logger.LogInformation(
                 "Real-ESRGAN {Label} model downloaded ({Size} bytes)",

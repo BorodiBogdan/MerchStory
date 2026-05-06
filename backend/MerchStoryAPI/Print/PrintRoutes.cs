@@ -257,7 +257,7 @@ public static class PrintRoutes
                 deduction?.NewBalance,
                 needsUpscale,
                 renderedUrl));
-        });
+        }).RequireRateLimiting("generation-per-user");
 
         authed.MapGet("/{id:guid}", async (
             Guid id,

@@ -20,7 +20,10 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
     private readonly InferenceSession? session;
     private readonly ILogger<ClipEmbeddingService> logger;
 
-    public ClipEmbeddingService(IConfiguration configuration, ILogger<ClipEmbeddingService> logger)
+    public ClipEmbeddingService(
+        IConfiguration configuration,
+        BlobServiceClient blobServiceClient,
+        ILogger<ClipEmbeddingService> logger)
     {
         this.logger = logger;
 
@@ -33,7 +36,7 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
 
         try
         {
-            if (!File.Exists(modelPath) && !TryDownloadModel(configuration, modelPath, logger))
+            if (!File.Exists(modelPath) && !TryDownloadModel(configuration, blobServiceClient, modelPath, logger))
             {
                 return;
             }
@@ -76,17 +79,20 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
 
     public void Dispose() => this.session?.Dispose();
 
-    private static bool TryDownloadModel(IConfiguration configuration, string modelPath, ILogger logger)
+    private static bool TryDownloadModel(
+        IConfiguration configuration,
+        BlobServiceClient blobServiceClient,
+        string modelPath,
+        ILogger logger)
     {
-        string? blobConnection = configuration["Azure:BlobConnectionString"];
         string? container = configuration["Clip:ModelBlobContainer"];
         string? blobName = configuration["Clip:ModelBlobName"];
 
-        if (string.IsNullOrEmpty(blobConnection) || string.IsNullOrEmpty(container) || string.IsNullOrEmpty(blobName))
+        if (string.IsNullOrEmpty(container) || string.IsNullOrEmpty(blobName))
         {
             logger.LogWarning(
                 "CLIP model not found at '{ModelPath}' and blob download is not configured " +
-                "(set Azure:BlobConnectionString, Clip:ModelBlobContainer, Clip:ModelBlobName). " +
+                "(set Clip:ModelBlobContainer and Clip:ModelBlobName). " +
                 "Image-search features will be unavailable.",
                 modelPath);
             return false;
@@ -96,7 +102,7 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
         {
             logger.LogInformation("Downloading CLIP model from blob {Container}/{Blob} to {Path}", container, blobName, modelPath);
             Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
-            var blobClient = new BlobClient(blobConnection, container, blobName);
+            BlobClient blobClient = blobServiceClient.GetBlobContainerClient(container).GetBlobClient(blobName);
             blobClient.DownloadTo(modelPath);
             logger.LogInformation("CLIP model downloaded ({Size} bytes)", new FileInfo(modelPath).Length);
             return true;

@@ -9,23 +9,31 @@ namespace MerchStoryAPI.Storage;
 //
 // Keys are stored relative to the container (e.g. "products/{userId}/{guid}.png")
 // rather than as absolute URLs, so the container/account can be swapped via
-// configuration alone. SAS URLs are minted on demand using the account key
-// from the connection string — works against both real Azure and Azurite.
+// configuration alone. SAS URLs are minted on demand and follow one of two paths:
+//   - Account-key SAS when CanGenerateSasUri == true (Azurite, legacy connection
+//     string). The BlobClient signs locally with the account key.
+//   - User Delegation SAS when CanGenerateSasUri == false (Managed Identity).
+//     A cached UserDelegationKey from UserDelegationKeyProvider does the signing.
 public sealed class AzureBlobStorage : IBlobStorage
 {
+    private readonly BlobServiceClient serviceClient;
     private readonly BlobContainerClient container;
     private readonly BlobStorageOptions options;
     private readonly ILogger<AzureBlobStorage> logger;
     private readonly Lazy<Task> initialize;
+    private readonly UserDelegationKeyProvider? userDelegationKeyProvider;
 
     public AzureBlobStorage(
         BlobServiceClient serviceClient,
         IOptions<BlobStorageOptions> options,
-        ILogger<AzureBlobStorage> logger)
+        ILogger<AzureBlobStorage> logger,
+        UserDelegationKeyProvider? userDelegationKeyProvider = null)
     {
+        this.serviceClient = serviceClient;
         this.options = options.Value;
         this.logger = logger;
         this.container = serviceClient.GetBlobContainerClient(this.options.ContainerName);
+        this.userDelegationKeyProvider = userDelegationKeyProvider;
         this.initialize = new Lazy<Task>(this.EnsureContainerAsync);
     }
 
@@ -89,23 +97,42 @@ public sealed class AzureBlobStorage : IBlobStorage
     public Uri GetReadUrl(string key, TimeSpan validFor)
     {
         BlobClient client = this.container.GetBlobClient(key);
-        if (!client.CanGenerateSasUri)
-        {
-            // Connection-string-based BlobServiceClient signs SAS with the account key.
-            // If the client can't generate SAS it means we got a SAS-token-only connection
-            // string or token credential — return the bare URL and rely on container ACLs.
-            return client.Uri;
-        }
-
         TimeSpan ttl = this.ResolveTtl(key, validFor);
         BlobSasBuilder sas = new(BlobSasPermissions.Read, DateTimeOffset.UtcNow.Add(ttl))
         {
             BlobContainerName = this.container.Name,
             BlobName = key,
             Resource = "b",
+            StartsOn = DateTimeOffset.UtcNow.AddMinutes(-5), // allow for clock skew
+            Protocol = SasProtocol.Https,
         };
-        sas.StartsOn = DateTimeOffset.UtcNow.AddMinutes(-5); // allow for clock skew
-        return client.GenerateSasUri(sas);
+
+        if (client.CanGenerateSasUri)
+        {
+            // Account-key path: connection-string clients sign SAS locally.
+            return client.GenerateSasUri(sas);
+        }
+
+        if (this.userDelegationKeyProvider is null)
+        {
+            // Managed-identity client without a delegation provider — caller forgot
+            // to register UserDelegationKeyProvider. Fall back to bare URL so reads
+            // still work if the container has public access (they don't, in prod).
+            this.logger.LogWarning(
+                "BlobServiceClient cannot mint SAS and no UserDelegationKeyProvider " +
+                "is registered; returning bare blob URL for {Key}.",
+                key);
+            return client.Uri;
+        }
+
+        // User Delegation SAS path: managed-identity client. Uses a cached delegation
+        // key valid for ~6 days so we don't pay GetUserDelegationKey latency per request.
+        UserDelegationKey delegationKey = this.userDelegationKeyProvider.GetKey();
+        BlobUriBuilder builder = new(client.Uri)
+        {
+            Sas = sas.ToSasQueryParameters(delegationKey, this.serviceClient.AccountName),
+        };
+        return builder.ToUri();
     }
 
     private static string Sanitize(string input)
@@ -176,6 +203,21 @@ public sealed class AzureBlobStorage : IBlobStorage
                 ex,
                 "Could not ensure blob container {Container} exists; uploads may fail.",
                 this.container.Name);
+        }
+
+        if (this.userDelegationKeyProvider is not null)
+        {
+            try
+            {
+                // Warm the delegation-key cache so the first user request doesn't pay
+                // GetUserDelegationKey latency (~100-300ms) on top of the actual blob op.
+                await this.userDelegationKeyProvider.RefreshAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // A failed warm-up isn't fatal; the next GetReadUrl call will retry.
+                this.logger.LogWarning(ex, "Failed to warm up user delegation key cache.");
+            }
         }
     }
 }

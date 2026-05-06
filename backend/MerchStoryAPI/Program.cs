@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using System.Text;
-using Azure.Storage.Blobs;
+using System.Threading.RateLimiting;
+using Azure.Identity;
 using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Gallery;
@@ -21,6 +23,16 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Layer Azure Key Vault on top of the standard configuration providers when a vault
+// URI is configured. In Azure the Container App's system-assigned managed identity
+// authenticates; locally devs use az login (DefaultAzureCredential picks it up). When
+// KeyVault:Uri is empty (e.g. local dev with user-secrets) this is a no-op.
+string? keyVaultUri = builder.Configuration["KeyVault:Uri"];
+if (!string.IsNullOrEmpty(keyVaultUri))
+{
+    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
+}
 
 // Allow large multipart uploads (admin zip-import endpoint can receive up to ~500MB).
 builder.WebHost.ConfigureKestrel(options =>
@@ -90,13 +102,47 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireClaim("is_admin", "true"));
 });
+
+// Per-user rate limit for paid AI endpoints. Partition by JWT subject so one user
+// can't drain Gemini quota with a fan-out attack from a single token. The IP
+// fallback only matters for misconfigured/anonymous routes — every generation
+// route requires auth, so userId is the real partition key.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("generation-per-user", httpContext =>
+    {
+        string partitionKey = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? httpContext.User.FindFirstValue("sub")
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromSeconds(10),
+            QueueLimit = 0,
+        });
+    });
+});
+
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
-// Blob storage. A single Azure container holds all user images and PDFs;
-// connection string is shared with the existing model-download flow. Tests
-// substitute an in-memory IBlobStorage that keeps bytes in a dictionary.
+// Blob storage. A single Azure container holds all user images and PDFs.
+// BlobServiceClientFactory branches on configuration: connection string for
+// Azurite/legacy, DefaultAzureCredential for Managed Identity. The
+// UserDelegationKeyProvider is only needed in the MI path (it's what mints
+// SAS tokens when there's no account key); when Azure:BlobServiceUri is unset
+// we don't register it and AzureBlobStorage falls back to account-key SAS.
+// Tests substitute an in-memory IBlobStorage that keeps bytes in a dictionary.
 builder.Services.Configure<BlobStorageOptions>(builder.Configuration.GetSection("Storage"));
-builder.Services.AddSingleton(_ => new BlobServiceClient(builder.Configuration["Azure:BlobConnectionString"]));
+builder.Services.AddSingleton(_ => BlobServiceClientFactory.Create(builder.Configuration));
+if (!string.IsNullOrEmpty(builder.Configuration["Azure:BlobServiceUri"]))
+{
+    builder.Services.AddSingleton<UserDelegationKeyProvider>();
+}
+
 builder.Services.AddSingleton<IBlobStorage, AzureBlobStorage>();
 
 builder.Services.AddMerchStoryImageGeneration(builder.Configuration);
@@ -162,6 +208,7 @@ if (!app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapAuthEndpoints();
 app.MapShopEndpoints();

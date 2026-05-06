@@ -1,4 +1,3 @@
-using Azure.Storage.Blobs;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Storage;
@@ -7,6 +6,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+
+// NOTE: Run this tool against the dev cloud account (merchstorystoragedev). The factory
+// uses Azure:BlobServiceUri + DefaultAzureCredential, so you need to be `az login`-ed and
+// have "Storage Blob Data Contributor" on the dev account. Azurite is supported as an
+// opt-in fallback (set Azure:BlobConnectionString=UseDevelopmentStorage=true) but not the
+// default — the rest of the team works against the dev cloud account.
 
 // One-off backfill: read each row's *Base64 column, upload the bytes to blob,
 // write the new key onto the row's *BlobKey column. Idempotent — rows that
@@ -59,7 +64,7 @@ services.AddDbContext<AppDbContext>(opts =>
     opts.UseNpgsql(config.GetConnectionString("DefaultConnection"), o => o.UseVector()));
 
 services.Configure<BlobStorageOptions>(config.GetSection("Storage"));
-services.AddSingleton(_ => new BlobServiceClient(config["Azure:BlobConnectionString"]));
+services.AddSingleton(_ => BlobServiceClientFactory.Create(config));
 services.AddSingleton<IBlobStorage, AzureBlobStorage>();
 
 await using ServiceProvider sp = services.BuildServiceProvider();
