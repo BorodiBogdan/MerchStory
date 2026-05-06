@@ -23,21 +23,24 @@ public static class BlobServiceClientFactory
 {
     public static BlobServiceClient Create(IConfiguration config)
     {
+        // Azure:BlobServiceUri wins when set — explicit Managed Identity opt-in. This
+        // matters because Azure:BlobConnectionString may still be present in Key Vault
+        // post-cutover; we don't want a leftover KV secret to silently override MI.
+        string? uri = config["Azure:BlobServiceUri"];
+        if (!string.IsNullOrEmpty(uri))
+        {
+            return new BlobServiceClient(new Uri(uri), new DefaultAzureCredential());
+        }
+
+        // Connection-string fallback: Azurite for offline work, or pre-cutover rollback.
         string? connStr = config["Azure:BlobConnectionString"];
         if (!string.IsNullOrEmpty(connStr))
         {
             return new BlobServiceClient(connStr);
         }
 
-        string? uri = config["Azure:BlobServiceUri"];
-        if (string.IsNullOrEmpty(uri))
-        {
-            throw new InvalidOperationException(
-                "Azure blob storage is not configured. Set either Azure:BlobConnectionString " +
-                "(for Azurite or legacy account-key access) or Azure:BlobServiceUri (for " +
-                "Managed Identity / DefaultAzureCredential access).");
-        }
-
-        return new BlobServiceClient(new Uri(uri), new DefaultAzureCredential());
+        throw new InvalidOperationException(
+            "Azure blob storage is not configured. Set Azure:BlobServiceUri (Managed Identity, " +
+            "preferred) or Azure:BlobConnectionString (Azurite or rollback fallback).");
     }
 }

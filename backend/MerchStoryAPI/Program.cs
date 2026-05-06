@@ -24,14 +24,34 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Layer Azure Key Vault on top of the standard configuration providers when a vault
-// URI is configured. In Azure the Container App's system-assigned managed identity
-// authenticates; locally devs use az login (DefaultAzureCredential picks it up). When
-// KeyVault:Uri is empty (e.g. local dev with user-secrets) this is a no-op.
+// Layer Azure Key Vault into the configuration chain. In Azure the Container App's
+// system-assigned managed identity authenticates; locally devs use az login (picked
+// up by DefaultAzureCredential). When KeyVault:Uri is empty this is a no-op.
+//
+// AddAzureKeyVault appends KV to the END of the source list, which would make KV
+// override appsettings.Development.json and env vars — exactly the opposite of what
+// we want. KV should provide production-grade defaults; local dev files and env
+// vars must win when present. So we re-layer the higher-priority sources after KV.
 string? keyVaultUri = builder.Configuration["KeyVault:Uri"];
 if (!string.IsNullOrEmpty(keyVaultUri))
 {
     builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
+
+    // Re-add the dev-specific JSON file, user-secrets, and env vars on top of KV so
+    // they override KV values. Without this, e.g. ConnectionStrings:DefaultConnection
+    // in appsettings.Development.json would be silently shadowed by the prod value
+    // in KV.
+    builder.Configuration.AddJsonFile(
+        $"appsettings.{builder.Environment.EnvironmentName}.json",
+        optional: true,
+        reloadOnChange: true);
+
+    if (builder.Environment.IsDevelopment())
+    {
+        builder.Configuration.AddUserSecrets<Program>(optional: true);
+    }
+
+    builder.Configuration.AddEnvironmentVariables();
 }
 
 // Allow large multipart uploads (admin zip-import endpoint can receive up to ~500MB).
