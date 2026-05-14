@@ -1,4 +1,7 @@
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
+using Azure.Identity;
 using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Gallery;
@@ -11,6 +14,7 @@ using MerchStoryAPI.Products;
 using MerchStoryAPI.Recommendations;
 using MerchStoryAPI.ReferenceImages;
 using MerchStoryAPI.Shop;
+using MerchStoryAPI.Storage;
 using MerchStoryAPI.Wallet;
 using MerchStoryImageGeneration.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -19,6 +23,36 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Layer Azure Key Vault into the configuration chain. In Azure the Container App's
+// system-assigned managed identity authenticates; locally devs use az login (picked
+// up by DefaultAzureCredential). When KeyVault:Uri is empty this is a no-op.
+//
+// AddAzureKeyVault appends KV to the END of the source list, which would make KV
+// override appsettings.Development.json and env vars — exactly the opposite of what
+// we want. KV should provide production-grade defaults; local dev files and env
+// vars must win when present. So we re-layer the higher-priority sources after KV.
+string? keyVaultUri = builder.Configuration["KeyVault:Uri"];
+if (!string.IsNullOrEmpty(keyVaultUri))
+{
+    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
+
+    // Re-add the dev-specific JSON file, user-secrets, and env vars on top of KV so
+    // they override KV values. Without this, e.g. ConnectionStrings:DefaultConnection
+    // in appsettings.Development.json would be silently shadowed by the prod value
+    // in KV.
+    builder.Configuration.AddJsonFile(
+        $"appsettings.{builder.Environment.EnvironmentName}.json",
+        optional: true,
+        reloadOnChange: true);
+
+    if (builder.Environment.IsDevelopment())
+    {
+        builder.Configuration.AddUserSecrets<Program>(optional: true);
+    }
+
+    builder.Configuration.AddEnvironmentVariables();
+}
 
 // Allow large multipart uploads (admin zip-import endpoint can receive up to ~500MB).
 builder.WebHost.ConfigureKestrel(options =>
@@ -88,7 +122,49 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireClaim("is_admin", "true"));
 });
+
+// Per-user rate limit for paid AI endpoints. Partition by JWT subject so one user
+// can't drain Gemini quota with a fan-out attack from a single token. The IP
+// fallback only matters for misconfigured/anonymous routes — every generation
+// route requires auth, so userId is the real partition key.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("generation-per-user", httpContext =>
+    {
+        string partitionKey = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? httpContext.User.FindFirstValue("sub")
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "anonymous";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromSeconds(10),
+            QueueLimit = 0,
+        });
+    });
+});
+
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
+
+// Blob storage. A single Azure container holds all user images and PDFs.
+// BlobServiceClientFactory branches on configuration: connection string for
+// Azurite/legacy, DefaultAzureCredential for Managed Identity. The
+// UserDelegationKeyProvider is only needed in the MI path (it's what mints
+// SAS tokens when there's no account key); when Azure:BlobServiceUri is unset
+// we don't register it and AzureBlobStorage falls back to account-key SAS.
+// Tests substitute an in-memory IBlobStorage that keeps bytes in a dictionary.
+builder.Services.Configure<BlobStorageOptions>(builder.Configuration.GetSection("Storage"));
+builder.Services.AddSingleton(_ => BlobServiceClientFactory.Create(builder.Configuration));
+if (!string.IsNullOrEmpty(builder.Configuration["Azure:BlobServiceUri"]))
+{
+    builder.Services.AddSingleton<UserDelegationKeyProvider>();
+}
+
+builder.Services.AddSingleton<IBlobStorage, AzureBlobStorage>();
+
 builder.Services.AddMerchStoryImageGeneration(builder.Configuration);
 builder.Services.AddMerchStoryRecommendations(builder.Configuration);
 builder.Services.AddSingleton<IClipEmbeddingService, ClipEmbeddingService>();
@@ -152,6 +228,7 @@ if (!app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapAuthEndpoints();
 app.MapShopEndpoints();

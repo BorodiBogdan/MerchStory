@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using MerchStory.Tests.Fakes;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -25,6 +27,7 @@ public class PrintRouteTests : IDisposable
     private readonly Mock<SignInManager<AppUser>> signInManagerMock;
     private readonly WebApplicationFactory<Program> factory;
     private readonly HttpClient client;
+    private readonly InMemoryBlobStorage blobs = new();
 
     public PrintRouteTests()
     {
@@ -82,6 +85,9 @@ public class PrintRouteTests : IDisposable
 
                 services.RemoveAll<SignInManager<AppUser>>();
                 services.AddSingleton(this.signInManagerMock.Object);
+
+                services.RemoveAll<IBlobStorage>();
+                services.AddSingleton<IBlobStorage>(this.blobs);
             });
         });
 
@@ -119,7 +125,8 @@ public class PrintRouteTests : IDisposable
         PrintJob? job = await this.GetJobAsync(jobId);
         Assert.NotNull(job);
         Assert.Equal("ready", job!.Status);
-        Assert.False(string.IsNullOrEmpty(job.PdfBase64));
+        Assert.False(string.IsNullOrEmpty(job.PdfBlobKey));
+        Assert.True(this.blobs.Blobs.ContainsKey(job.PdfBlobKey!));
     }
 
     [Fact]
@@ -270,11 +277,15 @@ public class PrintRouteTests : IDisposable
             png = ms.ToArray();
         }
 
+        Guid imageId = Guid.NewGuid();
+        string blobKey = $"gallery/{userId}/{imageId:N}.png";
+        this.blobs.Seed(blobKey, png, "image/png");
+
         var generated = new GeneratedImage
         {
-            Id = Guid.NewGuid(),
+            Id = imageId,
             UserId = userId,
-            ImageBase64 = Convert.ToBase64String(png),
+            ImageBlobKey = blobKey,
             MimeType = "image/png",
             CreatedAt = DateTime.UtcNow,
             GenerationType = "catalog",

@@ -17,5 +17,18 @@ services:
       - iopaint_models:/root/.cache
     restart: unless-stopped
 
+  # Azure Blob Storage emulator. Backend uses the well-known dev connection
+  # string when Azure:BlobConnectionString is set to "UseDevelopmentStorage=true",
+  # otherwise the real cloud account is used.
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    command: "azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck"
+    ports:
+      - "10000:10000"
+    volumes:
+      - azurite_data:/data
+    restart: unless-stopped
+
 volumes:
   iopaint_models:
+  azurite_data:

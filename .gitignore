@@ -38,3 +38,20 @@ build/
 # Expo
 *.orig.*
 web-build/
+
+# LaTeX
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.gz
+*.lof
+*.log
+*.lot
+*.pdf
+*.run.xml
+*.tex
+*.toc
+*.bib

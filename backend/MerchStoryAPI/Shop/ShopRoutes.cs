@@ -4,6 +4,7 @@ using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Geocoding;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 
@@ -13,6 +14,7 @@ public static class ShopRoutes
 {
     private static readonly string[] ValidDomains = ["Market", "Food", "Retail", "Fashion", "Other"];
     private static readonly string[] ValidShopTypes = ["Luxury", "MidRange", "Budget"];
+    private static readonly TimeSpan LogoSasTtl = TimeSpan.FromMinutes(15);
 
     public static void MapShopEndpoints(this WebApplication app)
     {
@@ -20,7 +22,8 @@ public static class ShopRoutes
 
         group.MapGet("/profile", async (
             ClaimsPrincipal principal,
-            AppDbContext db) =>
+            AppDbContext db,
+            IBlobStorage blobs) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -34,7 +37,7 @@ public static class ShopRoutes
                 return Results.NotFound();
             }
 
-            return Results.Ok(MapToResponse(profile));
+            return Results.Ok(MapToResponse(profile, blobs));
         });
 
         group.MapPost("/profile", async (
@@ -42,6 +45,7 @@ public static class ShopRoutes
             ClaimsPrincipal principal,
             AppDbContext db,
             IGeocodingService geocoding,
+            IBlobStorage blobs,
             ILogger<Program> logger,
             CancellationToken ct) =>
         {
@@ -160,6 +164,15 @@ public static class ShopRoutes
 
             DateTime now = DateTime.UtcNow;
 
+            // The shop-setup form may inline a base64 logo into this JSON request
+            // (legacy path) or the user may have already uploaded via /shop/logo
+            // (in which case LogoBase64 here is null and we don't touch the existing key).
+            (string? newLogoKey, string? newLogoContentType) = await UploadInlineLogoAsync(
+                blobs,
+                userId,
+                request.LogoBase64,
+                ct);
+
             if (existing is null)
             {
                 ShopProfile profile = new()
@@ -167,7 +180,8 @@ public static class ShopRoutes
                     Id = Guid.NewGuid(),
                     UserId = userId,
                     BrandName = request.BrandName.Trim(),
-                    LogoBase64 = request.LogoBase64,
+                    LogoBlobKey = newLogoKey,
+                    LogoContentType = newLogoContentType,
                     BrandColorsJson = JsonSerializer.Serialize(request.BrandColors),
                     Slogan = request.Slogan?.Trim(),
                     BusinessDomain = request.BusinessDomain,
@@ -193,11 +207,21 @@ public static class ShopRoutes
 
                 db.ShopProfiles.Add(profile);
                 await db.SaveChangesAsync(ct);
-                return Results.Created("/shop/profile", MapToResponse(profile));
+                return Results.Created("/shop/profile", MapToResponse(profile, blobs));
             }
 
             existing.BrandName = request.BrandName.Trim();
-            existing.LogoBase64 = request.LogoBase64;
+            if (newLogoKey is not null)
+            {
+                if (!string.IsNullOrEmpty(existing.LogoBlobKey))
+                {
+                    await blobs.DeleteAsync(existing.LogoBlobKey, ct);
+                }
+
+                existing.LogoBlobKey = newLogoKey;
+                existing.LogoContentType = newLogoContentType;
+            }
+
             existing.BrandColorsJson = JsonSerializer.Serialize(request.BrandColors);
             existing.Slogan = request.Slogan?.Trim();
             existing.BusinessDomain = request.BusinessDomain;
@@ -220,14 +244,16 @@ public static class ShopRoutes
             existing.UpdatedAt = now;
 
             await db.SaveChangesAsync(ct);
-            return Results.Ok(MapToResponse(existing));
+            return Results.Ok(MapToResponse(existing, blobs));
         });
 
         group.MapPost("/logo", async (
             HttpRequest httpRequest,
             ClaimsPrincipal principal,
             AppDbContext db,
-            ILogger<Program> logger) =>
+            IBlobStorage blobs,
+            ILogger<Program> logger,
+            CancellationToken ct) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -240,28 +266,36 @@ public static class ShopRoutes
                 return Results.BadRequest("Multipart form required.");
             }
 
-            IFormCollection form = await httpRequest.ReadFormAsync();
+            IFormCollection form = await httpRequest.ReadFormAsync(ct);
             IFormFile? file = form.Files.GetFile("logo");
             if (file is null || file.Length == 0)
             {
                 return Results.BadRequest("No file provided.");
             }
 
-            using MemoryStream ms = new();
-            await file.CopyToAsync(ms);
-            string base64 = Convert.ToBase64String(ms.ToArray());
-            string mimeType = file.ContentType is { Length: > 0 } ct ? ct : "image/jpeg";
-            string dataUri = $"data:{mimeType};base64,{base64}";
+            string mimeType = file.ContentType is { Length: > 0 } cType ? cType : "image/jpeg";
+            string ext = ExtensionForContentType(mimeType);
 
-            ShopProfile? profile = await db.ShopProfiles.SingleOrDefaultAsync(s => s.UserId == userId);
+            await using Stream stream = file.OpenReadStream();
+            BlobRef uploaded = await blobs.UploadAsync("logos", userId, stream, mimeType, ext, ct);
+
+            ShopProfile? profile = await db.ShopProfiles.SingleOrDefaultAsync(s => s.UserId == userId, ct);
+            string? oldKey = profile?.LogoBlobKey;
             if (profile is not null)
             {
-                profile.LogoBase64 = dataUri;
+                profile.LogoBlobKey = uploaded.Key;
+                profile.LogoContentType = uploaded.ContentType;
                 profile.UpdatedAt = DateTime.UtcNow;
-                await db.SaveChangesAsync();
+                await db.SaveChangesAsync(ct);
             }
 
-            return Results.Ok(new { logoBase64 = dataUri });
+            if (!string.IsNullOrEmpty(oldKey))
+            {
+                await blobs.DeleteAsync(oldKey, ct);
+            }
+
+            string url = blobs.GetReadUrl(uploaded.Key, LogoSasTtl).ToString();
+            return Results.Ok(new { logoUrl = url });
         });
     }
 
@@ -289,15 +323,7 @@ public static class ShopRoutes
             && Enum.IsDefined(language);
     }
 
-    private static string? GetUserId(ClaimsPrincipal principal) =>
-        principal.FindFirstValue(ClaimTypes.NameIdentifier)
-        ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
-
-    private static bool IsValidHex(string color) =>
-        color.Length == 7 && color[0] == '#' &&
-        color[1..].All(c => char.IsAsciiHexDigit(c));
-
-    private static ShopProfileResponse MapToResponse(ShopProfile p)
+    internal static ShopProfileResponse MapToResponse(ShopProfile p, IBlobStorage blobs)
     {
         string[] addresses = string.IsNullOrEmpty(p.Addresses)
             ? []
@@ -307,10 +333,14 @@ public static class ShopRoutes
             ? []
             : JsonSerializer.Deserialize<BrandColorDto[]>(p.BrandColorsJson) ?? [];
 
+        string? logoUrl = string.IsNullOrEmpty(p.LogoBlobKey)
+            ? null
+            : blobs.GetReadUrl(p.LogoBlobKey, LogoSasTtl).ToString();
+
         return new(
             p.Id,
             p.BrandName,
-            p.LogoBase64,
+            logoUrl,
             brandColors,
             p.Slogan,
             p.BusinessDomain,
@@ -333,4 +363,83 @@ public static class ShopRoutes
             p.CreatedAt,
             p.UpdatedAt);
     }
+
+    // Inline JSON-body logo (used by the shop-setup form). Strips the optional
+    // "data:image/...;base64," prefix, uploads the bytes to blob, returns the
+    // (key, contentType) pair so the caller can persist them on the model.
+    private static async Task<(string? Key, string? ContentType)> UploadInlineLogoAsync(
+        IBlobStorage blobs,
+        string userId,
+        string? logoBase64,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(logoBase64))
+        {
+            return (null, null);
+        }
+
+        string contentType = "image/png";
+        string payload = logoBase64;
+        const string prefix = "data:";
+        if (payload.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            int comma = payload.IndexOf(',', StringComparison.Ordinal);
+            if (comma <= prefix.Length)
+            {
+                return (null, null);
+            }
+
+            string header = payload[prefix.Length..comma];
+            int semi = header.IndexOf(';', StringComparison.Ordinal);
+            if (semi > 0)
+            {
+                contentType = header[..semi];
+            }
+
+            payload = payload[(comma + 1)..];
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(payload);
+        }
+        catch (FormatException)
+        {
+            return (null, null);
+        }
+
+        if (bytes.Length == 0)
+        {
+            return (null, null);
+        }
+
+        using MemoryStream ms = new(bytes);
+        BlobRef uploaded = await blobs.UploadAsync(
+            "logos",
+            userId,
+            ms,
+            contentType,
+            ExtensionForContentType(contentType),
+            ct);
+        return (uploaded.Key, uploaded.ContentType);
+    }
+
+    private static string ExtensionForContentType(string contentType) =>
+        contentType.ToLowerInvariant() switch
+        {
+            "image/png" => ".png",
+            "image/jpeg" or "image/jpg" => ".jpg",
+            "image/webp" => ".webp",
+            "image/gif" => ".gif",
+            _ => ".png",
+        };
+
+    private static string? GetUserId(ClaimsPrincipal principal) =>
+        principal.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+    private static bool IsValidHex(string color) =>
+        color.Length == 7 && color[0] == '#' &&
+        color[1..].All(c => char.IsAsciiHexDigit(c));
 }

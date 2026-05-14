@@ -36,7 +36,7 @@ public record ShopProfileRequest(
 public record ShopProfileResponse(
     Guid Id,
     string BrandName,
-    string? LogoBase64,
+    string? LogoUrl,
     IReadOnlyList<BrandColorDto> BrandColors,
     string? Slogan,
     string BusinessDomain,

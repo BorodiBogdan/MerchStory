@@ -2,6 +2,7 @@ using System.Security.Claims;
 using MerchStoryAPI.Common;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 
@@ -9,6 +10,8 @@ namespace MerchStoryAPI.Gallery;
 
 public static class GalleryRoutes
 {
+    private static readonly TimeSpan GallerySasTtl = TimeSpan.FromMinutes(15);
+
     public static void MapGalleryEndpoints(this WebApplication app)
     {
         RouteGroupBuilder group = app.MapGroup("/gallery").RequireAuthorization();
@@ -16,7 +19,9 @@ public static class GalleryRoutes
         group.MapPost("/save", async (
             SaveImageRequest req,
             ClaimsPrincipal principal,
-            AppDbContext db) =>
+            AppDbContext db,
+            IBlobStorage blobs,
+            CancellationToken ct) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -42,24 +47,38 @@ public static class GalleryRoutes
             }
 
             bool nameTaken = await db.GeneratedImages
-                .AnyAsync(g => g.UserId == userId && g.Name.ToLower() == name.ToLower());
+                .AnyAsync(g => g.UserId == userId && g.Name.ToLower() == name.ToLower(), ct);
             if (nameTaken)
             {
                 return Results.Conflict(new { detail = "You already have an image with that name." });
             }
 
+            byte[] bytes;
+            try
+            {
+                bytes = DecodeBase64(req.ImageBase64);
+            }
+            catch (FormatException)
+            {
+                return Results.BadRequest(new { detail = "Invalid base64 image payload." });
+            }
+
+            string ext = ExtensionForContentType(req.MimeType);
+            using MemoryStream ms = new(bytes);
+            BlobRef uploaded = await blobs.UploadAsync("gallery", userId, ms, req.MimeType, ext, ct);
+
             GeneratedImage created = new()
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
-                ImageBase64 = req.ImageBase64,
+                ImageBlobKey = uploaded.Key,
                 MimeType = req.MimeType,
                 CreatedAt = DateTime.UtcNow,
                 GenerationType = req.GenerationType,
                 Name = name,
             };
             db.GeneratedImages.Add(created);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
 
             return Results.Created(
                 $"/gallery/{created.Id}",
@@ -159,7 +178,8 @@ public static class GalleryRoutes
         group.MapGet("/{id:guid}/image", async (
             Guid id,
             ClaimsPrincipal principal,
-            AppDbContext db) =>
+            AppDbContext db,
+            IBlobStorage blobs) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -169,7 +189,7 @@ public static class GalleryRoutes
 
             var image = await db.GeneratedImages
                 .Where(g => g.Id == id && g.UserId == userId)
-                .Select(g => new { g.ImageBase64, g.MimeType })
+                .Select(g => new { g.ImageBlobKey, g.MimeType })
                 .SingleOrDefaultAsync();
 
             if (image is null)
@@ -177,7 +197,10 @@ public static class GalleryRoutes
                 return Results.NotFound();
             }
 
-            return Results.Ok(new GalleryImageBytes(image.ImageBase64, image.MimeType));
+            string? url = string.IsNullOrEmpty(image.ImageBlobKey)
+                ? null
+                : blobs.GetReadUrl(image.ImageBlobKey, GallerySasTtl).ToString();
+            return Results.Ok(new GalleryImageBytes(url, image.MimeType));
         });
 
         group.MapPatch("/{id:guid}", async (
@@ -236,7 +259,9 @@ public static class GalleryRoutes
         group.MapDelete("/{id:guid}", async (
             Guid id,
             ClaimsPrincipal principal,
-            AppDbContext db) =>
+            AppDbContext db,
+            IBlobStorage blobs,
+            CancellationToken ct) =>
         {
             string? userId = GetUserId(principal);
             if (userId is null)
@@ -245,15 +270,21 @@ public static class GalleryRoutes
             }
 
             GeneratedImage? image = await db.GeneratedImages
-                .SingleOrDefaultAsync(g => g.Id == id && g.UserId == userId);
+                .SingleOrDefaultAsync(g => g.Id == id && g.UserId == userId, ct);
 
             if (image is null)
             {
                 return Results.NotFound();
             }
 
+            string? blobKey = image.ImageBlobKey;
             db.GeneratedImages.Remove(image);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
+
+            if (!string.IsNullOrEmpty(blobKey))
+            {
+                await blobs.DeleteAsync(blobKey, ct);
+            }
 
             return Results.NoContent();
         });
@@ -262,6 +293,29 @@ public static class GalleryRoutes
     private static string? GetUserId(ClaimsPrincipal principal) =>
         principal.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+    private static byte[] DecodeBase64(string raw)
+    {
+        const string prefix = "data:";
+        if (raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            int comma = raw.IndexOf(',', StringComparison.Ordinal);
+            return Convert.FromBase64String(raw[(comma + 1)..]);
+        }
+
+        return Convert.FromBase64String(raw);
+    }
+
+    private static string ExtensionForContentType(string contentType) =>
+        contentType.ToLowerInvariant() switch
+        {
+            "image/png" => ".png",
+            "image/jpeg" or "image/jpg" => ".jpg",
+            "image/webp" => ".webp",
+            "image/gif" => ".gif",
+            "application/pdf" => ".pdf",
+            _ => ".bin",
+        };
 }
 
 internal sealed record GalleryItemMetadata(
@@ -273,7 +327,7 @@ internal sealed record GalleryItemMetadata(
     string AssetType,
     string? PaperSize);
 
-internal sealed record GalleryImageBytes(string ImageBase64, string MimeType);
+internal sealed record GalleryImageBytes(string? ImageUrl, string MimeType);
 
 internal sealed record SaveImageRequest(
     string ImageBase64,

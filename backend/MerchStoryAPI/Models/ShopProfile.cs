@@ -13,6 +13,10 @@ public class ShopProfile
 
     public string? LogoBase64 { get; set; }
 
+    public string? LogoBlobKey { get; set; }
+
+    public string? LogoContentType { get; set; }
+
     public string BrandColorsJson { get; set; } = "[]";
 
     public string? Slogan { get; set; }

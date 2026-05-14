@@ -65,7 +65,10 @@ async function fetchWithSlot(id: string): Promise<Entry> {
   await acquireSlot();
   try {
     const res = await fetchProductImage(id);
-    const entry: Entry = { uri: toDataUri(res.imageBase64, res.mimeType) };
+    if (!res.imageUrl) {
+      throw new Error('Image not available.');
+    }
+    const entry: Entry = { uri: res.imageUrl };
     store(id, entry);
     errors.delete(id);
     notify();
@@ -81,6 +84,19 @@ async function fetchWithSlot(id: string): Promise<Entry> {
 
 export function prime(id: string, imageBase64: string, mimeType: string): void {
   const uri = toDataUri(imageBase64, mimeType);
+  const existing = entries.get(id);
+  if (existing && existing.uri === uri) {
+    touch(id);
+    return;
+  }
+  store(id, { uri });
+  errors.delete(id);
+  notify();
+}
+
+// Variant for callers that already have a remote URL (e.g. SAS URL from a
+// /products POST/PUT response) — skips the base64 round-trip.
+export function primeUrl(id: string, uri: string): void {
   const existing = entries.get(id);
   if (existing && existing.uri === uri) {
     touch(id);
