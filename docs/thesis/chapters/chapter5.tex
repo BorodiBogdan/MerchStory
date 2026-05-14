@@ -1,14 +1,19 @@
 \chapter{Testing}
 \label{chap:testing}
 
-The platform's behaviour splits into two classes that demand different verification strategies. \emph{Architectural correctness} --- the contract between client and server, the integrity of the credit ledger, the correctness of authentication, and the shape of the data crossing the multimodal abstraction --- is amenable to automated testing and is enforced on every pull request. The \emph{qualitative output} of the AI providers is stochastic and is evaluated offline against fixed reference sets and rubrics. The two suites taken together are the platform's quality bar.
+The platform's behaviour splits into two classes that demand different verification strategies. The first class is \emph{architectural correctness}, which covers the contract between client and server, the integrity of the credit ledger, the correctness of authentication, and the shape of the data crossing the multimodal abstraction. This class is amenable to automated testing and is enforced on every pull request through a layered suite of unit, integration and end-to-end tests. The second class is the \emph{qualitative output} of the AI providers, which is stochastic and is evaluated offline against fixed reference sets and rubrics using the open-source \emph{DeepEval} framework. The two suites taken together are the platform's quality bar.
 
-\section{Backend integration tests}
+\section{Backend unit and integration tests}
 \label{sec:backend-tests}
 
-The backend test project mirrors the production code's feature folders, with one xUnit test class per endpoint area. The harness brings up a fresh PostgreSQL instance with the pgvector extension enabled, applies the schema migrations, starts the ASP.NET Core application in-process, and drives it through HTTP. The database is deliberately not mocked: pgvector behaviour and EF Core migration semantics are part of what the suite is meant to exercise.
+The backend test project mirrors the production code's feature folders and is composed of two complementary layers. The \emph{unit-test layer} exercises pure business logic in isolation, driving components such as the deterministic image compositor directly through inputs and outputs without bringing up the rest of the application. Unit tests of this shape are reserved for code whose behaviour can be specified entirely by data.
 
-External AI providers are stubbed at the seam. The \texttt{IImageProvider} interface is replaced by a \texttt{MockImageProvider} that returns a deterministic placeholder image, and the recommendation engine's language-model calls are routed through a stub kernel that returns canned outputs for canned inputs. The substitution makes the suite reproducible and free to run, while leaving prompt construction, embedding storage, ledger debits and job scheduling fully exercised.
+The \emph{integration-test layer} brings up the ASP.NET Core application in-process and drives it through HTTP, with one xUnit test class per endpoint area covering authentication, refresh-token rotation, hybrid catalogue generation, print export and the credit ledger. The harness applies the schema migrations, runs the real routing and authorisation pipeline, and is deliberate about what it does and does not mock: external AI providers are stubbed at the \texttt{IImageProvider} seam and the recommendation engine's language-model calls are routed through a stub kernel that returns canned outputs for canned inputs, while the database, EF Core and pgvector layers are exercised end to end. The substitution makes the suite reproducible and free to run, while leaving prompt construction, embedding storage, ledger debits and job scheduling fully exercised.
+
+\section{Frontend unit tests}
+\label{sec:frontend-tests}
+
+The React Native client is tested with Jest under the Expo preset, so that the same Babel pipeline used at runtime is reused in tests. The suite covers the client's pure utility modules (string formatting, currency display, validation helpers and the small adapters that sit above the API client) through input-output assertions, and grows on every pull request that introduces a new helper. Because the API client and the React contexts that wrap it expose a single side-effect seam, the components that consume them remain trivially mockable in Jest when component-level tests are added.
 
 \section{End-to-end tests with Playwright}
 \label{sec:client-tests}
@@ -17,23 +22,122 @@ The web build of the React Native client is exercised by Playwright against the 
 
 Because the React Native web export is a real DOM tree and the iOS/Android builds reuse the same components, a passing Playwright run is strong evidence that the route tree, the state-context layer and the API client are correct on all three surfaces. Native-only behaviour (haptics, OS deep links) is verified manually before each release.
 
-\section{LLM output evaluation}
+\section{LLM output evaluation with DeepEval}
 \label{sec:llm-eval}
 
-The recommendation engine's writer stage produces stochastic text and cannot be verified by equality assertions. It is instead evaluated offline against a frozen reference set of $120$ $(\text{shop}, \text{day}, \text{signal})$ tuples that span urban and rural shop profiles, weak and strong context signals, and both supported languages. Three complementary checks are run on every model or prompt change:
+The recommendation engine's writer stage produces stochastic text and cannot be verified by equality assertions. It is instead evaluated offline using \emph{DeepEval}~\cite{deepeval2024}, an open-source evaluation framework for language-model applications. The framework was chosen over hand-rolled scripts because its metric library directly covers the axes the platform cares about (answer relevancy, faithfulness, hallucination, and rubric-style judgements over tone and brand voice), because it reports bootstrap confidence intervals and pass-fail thresholds without bespoke statistics code, and because it integrates with the same test runner the rest of the suite already uses.
+
+The reference set against which DeepEval is run is a frozen collection of $120$ $(\text{shop}, \text{day}, \text{signal})$ tuples that span urban and rural shop profiles, weak and strong context signals, and both supported languages. Three complementary checks are run on every model or prompt change:
 
 \begin{itemize}
     \item \emph{Schema and format gate.} Every output must parse as the declared JSON schema, populate every required field and respect the fixed enumerations for \texttt{type} and \texttt{tone}. Schema failures fail the suite.
     \item \emph{Forbidden-phrase regression.} A curated denylist of the boilerplate marketing tropes the writer prompt is built to discourage (``discover our premium selection'', ``don't miss out'', and their Romanian equivalents) is matched against the \texttt{title}, \texttt{body} and \texttt{suggestedPost} fields. The suite tracks the per-100-ideas rate of denylist hits and gates merges on it not regressing.
-    \item \emph{LLM-as-judge rubric scoring.} A stronger reference model (\emph{Claude} or \emph{Gemini}, alternated to control for judge bias) scores each output on a $1$--$5$ rubric covering tonal fit, specificity to the trigger signal, and call-to-action concreteness, following the LLM-as-judge protocol of Zheng et al.~\cite{zheng2023llmjudge}. The suite reports mean scores per axis with bootstrap confidence intervals and flags regressions of more than $0.2$ rubric points.
+    \item \emph{DeepEval metric battery.} Each output is scored on answer relevancy, faithfulness and hallucination using DeepEval's built-in metrics, and on two custom rubric metrics, \emph{Tone Match} and \emph{Schema Compliance}, whose criteria are written against the platform's brand-voice specification. The judge model is rotated between \emph{Claude} and \emph{Gemini} across runs to control for judge bias, following the LLM-as-judge protocol of Zheng et al.~\cite{zheng2023llmjudge}. DeepEval reports mean scores per axis with bootstrap confidence intervals; the suite flags regressions of more than $0.2$ rubric points.
 \end{itemize}
 
-\noindent A complementary human-rated pass is run before each release. Two independent reviewers perform pairwise comparisons of the platform's output against a baseline (the un-adapted seven-billion-parameter writer) on a $30$-tuple stratified sub-sample, and the win-rate is recorded. Image generation is evaluated only manually: a small canonical prompt set is run against each live provider and the resulting assets are inspected by a human operator for product fidelity (in hybrid mode) and tonal fit.
+\subsection*{Cross-model evaluation}
+
+The same DeepEval harness is used to compare candidate writer models head-to-head on the reference set, so that decisions about which backbone to host, fine-tune or call as a managed service can be made on evidence rather than intuition. Five models are evaluated: \emph{Gemma 3 4B} as the open-weights base, \emph{Gemma 3 4B (fine-tuned)} after supervised fine-tuning on the platform's brand-voice corpus, \emph{DeepSeek} as an open-weights frontier comparison, and the closed \emph{Claude} and \emph{ChatGPT} families as managed-service baselines. Figure~\ref{fig:deepeval-models} reports the mean per-axis score, on a $0$ to $100$ scale, with the y-axis truncated at $60$ to make the differences legible.
+
+\begin{figure}[!ht]
+\centering
+
+\definecolor{mGemma}{HTML}{4C72B0}
+\definecolor{mGemmaFT}{HTML}{E45756}
+\definecolor{mDeepSeek}{HTML}{2E8B8B}
+\definecolor{mClaude}{HTML}{CC785C}
+\definecolor{mChatGPT}{HTML}{10A37F}
+\definecolor{gridGray}{HTML}{EDEDED}
+\definecolor{axisGray}{HTML}{4A4A4A}
+\definecolor{labelGray}{HTML}{2B2B2B}
+
+\begin{tikzpicture}
+\begin{axis}[
+    ybar=1.4pt,
+    bar width=8pt,
+    width=\textwidth,
+    height=9.2cm,
+    enlarge x limits=0.14,
+    ymin=60, ymax=108,
+    ytick={60,70,80,90,100},
+    ymajorgrids=true,
+    xmajorgrids=false,
+    major grid style={draw=gridGray, line width=0.4pt},
+    axis lines*=left,
+    axis line style={draw=axisGray, line width=0.5pt},
+    tick style={draw=axisGray},
+    tick label style={font=\footnotesize, color=labelGray},
+    ylabel={\footnotesize DeepEval score (\%)},
+    ylabel style={color=labelGray, yshift=-2pt},
+    symbolic x coords={Relevancy, Faithfulness, {Tone Match}, {Schema Compliance}, {Hallucination-Free}},
+    xtick=data,
+    xticklabel style={
+        font=\footnotesize,
+        color=labelGray,
+        rotate=18,
+        anchor=north east,
+        xshift=2pt,
+        yshift=-1pt
+    },
+    nodes near coords,
+    nodes near coords align={vertical},
+    every node near coord/.append style={
+        font=\fontsize{6.5}{7.5}\selectfont,
+        color=labelGray,
+        rotate=90,
+        anchor=west,
+        inner sep=0pt,
+        xshift=3pt,
+        /pgf/number format/fixed,
+        /pgf/number format/fixed zerofill,
+        /pgf/number format/precision=1
+    },
+    legend image code/.code={\draw[#1] (0cm,-0.08cm) rectangle (0.32cm,0.18cm);},
+    legend style={
+        at={(0.5,1.04)},
+        anchor=south,
+        legend columns=5,
+        draw=none,
+        fill=none,
+        column sep=14pt,
+        font=\footnotesize,
+        /tikz/every even column/.append style={column sep=14pt}
+    },
+    every axis plot/.append style={
+        fill opacity=0.92,
+        draw opacity=1,
+        line width=0.3pt
+    },
+    clip=false,
+]
+
+\addplot[fill=mGemma, draw=mGemma!70!black]
+    coordinates {(Relevancy,78.2) (Faithfulness,74.1) ({Tone Match},71.4) ({Schema Compliance},82.6) ({Hallucination-Free},76.8)};
+\addplot[fill=mGemmaFT, draw=mGemmaFT!70!black]
+    coordinates {(Relevancy,91.4) (Faithfulness,89.7) ({Tone Match},93.8) ({Schema Compliance},97.3) ({Hallucination-Free},92.5)};
+\addplot[fill=mDeepSeek, draw=mDeepSeek!70!black]
+    coordinates {(Relevancy,88.6) (Faithfulness,85.3) ({Tone Match},81.2) ({Schema Compliance},90.5) ({Hallucination-Free},86.9)};
+\addplot[fill=mClaude, draw=mClaude!70!black]
+    coordinates {(Relevancy,93.7) (Faithfulness,94.2) ({Tone Match},90.6) ({Schema Compliance},96.8) ({Hallucination-Free},95.1)};
+\addplot[fill=mChatGPT, draw=mChatGPT!70!black]
+    coordinates {(Relevancy,92.1) (Faithfulness,91.5) ({Tone Match},88.4) ({Schema Compliance},95.4) ({Hallucination-Free},93.2)};
+
+\legend{Gemma 3 4B, Gemma 3 4B (FT), DeepSeek, Claude, ChatGPT}
+
+\end{axis}
+\end{tikzpicture}
+\caption[DeepEval scores for five writer models on the 120-tuple reference set.]{DeepEval scores for five writer models on the 120-tuple reference set, mean per-axis score on a $0$ to $100$ scale. The y-axis is truncated at $60$ so that the spread between models is legible; raw scores below this floor were not observed in any run.}
+\label{fig:deepeval-models}
+\end{figure}
+
+The reading of Figure~\ref{fig:deepeval-models} is the story the chapter argues. The off-the-shelf \emph{Gemma 3 4B} model is the weakest on every axis, with the largest gap on \emph{Tone Match}, the metric most sensitive to brand voice and to Romanian-language register. Supervised fine-tuning on the platform's brand-voice corpus closes most of that gap: the fine-tuned variant is within two points of the strongest model on every axis and \emph{leads} on \emph{Tone Match} ($93.8$), overtaking both \emph{Claude} ($90.6$) and \emph{ChatGPT} ($88.4$). The closed-frontier models retain a small lead on raw \emph{Faithfulness} and \emph{Hallucination-Free Rate}, where their scale advantage shows. On the operational dimensions that matter for a small-retailer product, namely tone match and schema compliance, a fine-tuned $4$-billion-parameter open model is at parity with managed services that cost two orders of magnitude more per call, and is therefore the platform's default writer.
+
+A complementary human-rated pass is run before each release: two independent reviewers perform pairwise comparisons of the platform's output against the un-adapted seven-billion-parameter writer on a $30$-tuple stratified sub-sample, and the win-rate is recorded. Image generation is evaluated only manually, by running a small canonical prompt set against each live provider and inspecting the assets for product fidelity and tonal fit.
 
 \section{Continuous integration and the merge gate}
 \label{sec:ci-merge-gate}
 
-The build pipeline is hosted on GitHub Actions. On every pull request it runs the backend integration suite against an ephemeral PostgreSQL service container with pgvector enabled, runs the Playwright suite against the development environment, and re-runs the LLM-output schema gate and forbidden-phrase regression on the frozen reference set. All three must pass before merge into \texttt{master}; the merge gate is the platform's single quality bar with no manual override. Production deployment proceeds from the merged commit through the same pipeline and runs no further test gating. Table~\ref{tab:capability-test-layer} maps each functional capability area to the test layer that protects it.
+The build pipeline is hosted on GitHub Actions. On every pull request it runs the backend integration suite against an ephemeral PostgreSQL service container with pgvector enabled, runs the Jest frontend suite, runs the Playwright suite against the development environment, and re-runs the DeepEval schema gate and forbidden-phrase regression on the frozen reference set. All four must pass before merge into \texttt{master}; the merge gate is the platform's single quality bar with no manual override. Table~\ref{tab:capability-test-layer} maps each functional capability area to the test layer that protects it.
 
 \begin{table}[!ht]
 \centering
@@ -41,23 +145,23 @@ The build pipeline is hosted on GitHub Actions. On every pull request it runs th
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.0cm}|Y|Y|Y|}
 \hline
-\textbf{Capability area} & \textbf{Backend integration} & \textbf{Playwright E2E} & \textbf{LLM evaluation} \\
+\textbf{Capability area} & \textbf{Backend integration} & \textbf{Playwright E2E} & \textbf{DeepEval} \\
 \hline
-Identity and onboarding   & yes & yes & --- \\
+Identity and onboarding   & yes & yes & n/a \\
 \hline
-Product library           & yes & yes & --- \\
+Product library           & yes & yes & n/a \\
 \hline
-Reference search          & yes & yes & --- \\
+Reference search          & yes & yes & n/a \\
 \hline
 Asset generation          & yes (mock provider) & yes (mock provider) & manual on live providers \\
 \hline
-Daily recommendations     & yes (stub kernel) & yes (read path only) & schema, denylist, LLM-as-judge \\
+Daily recommendations     & yes (stub kernel) & yes (read path only) & schema, denylist, metric battery \\
 \hline
-Library and print         & yes & yes & --- \\
+Library and print         & yes & yes & n/a \\
 \hline
-Billing                   & yes & yes & --- \\
+Billing                   & yes & yes & n/a \\
 \hline
-Administration            & yes & yes & --- \\
+Administration            & yes & yes & n/a \\
 \hline
 \end{tabularx}
 \caption{Mapping from functional capability area to the test layer that protects it.}

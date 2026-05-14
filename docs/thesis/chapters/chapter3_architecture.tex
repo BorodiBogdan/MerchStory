@@ -859,7 +859,7 @@ Azure was chosen because it gives the platform a managed, well-supported and tru
 The application server runs on Azure Container Apps, a managed container runtime built on Kubernetes that provides per-replica scale-out without the operational burden of managing a cluster directly. The choice was made over Azure App Service on two grounds. First, the platform packages its server as a container image already. Second, Container Apps integrates more cleanly with Azure API Management and with the private virtual network in which the data plane lives. A single long-running background service, the refresh-token cleaner, runs as an \texttt{IHostedService} inside the same Container Apps revision as the API. Recommendation generations are started by request handlers as fire-and-forget tasks tracked by an in-memory job registry, so a separate worker tier is not justified at the platform's data volumes.
 
 \paragraph{Hosting the web client.}
-The web build of the client runs as its own Azure Container App (\texttt{merchstory-web}), pulling its image from the same registry as the API. The mobile builds for iOS and Android are distributed through their respective application stores and are not deployed to Azure. The web client and the mobile clients consume exactly the same API surface, and nothing on the server is conditional on the client kind.
+The web build of the client runs as its own Azure Container App (\texttt{merchstory-web}), pulling its image from the same registry as the API. The mobile builds for iOS and Android are distributed through their respective application stores and are not deployed to Azure.
 
 \paragraph{Database.}
 The relational store, including its pgvector extension, runs on Azure Database for PostgreSQL Flexible Server. The flexible-server tier is preferred over the older single-server tier because it supports custom extensions including pgvector, allows VNet-integrated private networking, and provides point-in-time restore over a configurable retention window. Backups are taken automatically, and long-running migrations are executed during deployment before the new container revision becomes ready.
@@ -868,25 +868,25 @@ The relational store, including its pgvector extension, runs on Azure Database f
 Binary assets live in Azure Blob Storage as described in Section~\ref{subsec:object-storage}. The deployment adds a private endpoint inside the VNet, so the storage account is invisible from the public Internet.
 
 \paragraph{Edge and gateway.}
-The platform's public surface is the Container Apps Environment's built-in ingress. Azure provides TLS termination, edge load balancing and platform-level DDoS protection at the network edge for free, so no separate API gateway sits in front of the Container App. Per-tenant rate limiting is enforced inside the application server itself, using the .NET built-in rate-limiter middleware partitioned per authenticated user, with tighter limits on the asset-generation endpoints than on the read-only ones so that a misbehaving tenant cannot exhaust the platform's AI budget for the others.
+The platform's public surface is the Container Apps Environment's built-in ingress. Azure provides TLS termination, edge load balancing and platform-level DDoS protection at the network edge for free, so no separate API gateway sits in front of the Container App. Per-tenant rate limiting is enforced inside the application server using the .NET built-in rate-limiter middleware, with tighter limits on the asset-generation endpoints so that a misbehaving tenant cannot exhaust the platform's AI budget for the others.
 
 \paragraph{Identity and access admission.}
-Retailers authenticate against the application server itself, which issues a JWT access token and a refresh token on login and rotates them on every refresh. The retailer-facing API does not sit behind any cloud gateway. Operator access to the development environment and to the cloud secrets is gated separately by Microsoft Entra ID, with the operator's identity matched against an allow-list before any administrative resource becomes reachable. The two channels share no credentials, so the retailer session protocol stays independent of the operator admission flow.
+Retailers authenticate against the application server itself, which issues a JWT access token and a refresh token on login and rotates them on every refresh. The retailer-facing API does not sit behind any cloud gateway. Operator access to the development environment and to the cloud secrets is gated separately by Microsoft Entra ID, with the operator's identity matched against an allow-list before any administrative resource becomes reachable.
 
 \paragraph{Secrets.}
 Every credential consumed by the platform, including the AI provider keys, the background-removal API key and the database connection string, is stored in Azure Key Vault and read at start-up by the Container Apps revision through a system-assigned managed identity. Credentials never appear in container images, in environment files committed to source control or in deployment manifests.
 
 \paragraph{Observability and analytics.}
-Application Insights collects distributed traces, structured logs and live metrics from every component. Each request is tagged with a tenant identifier and a correlation identifier that is propagated through every external HTTP call, so that the entire trajectory of a recommendation run or of an image generation can be reconstructed from a single trace. A small set of Log Analytics dashboards aggregates operational metrics such as ideas generated per day, image-generation latency percentiles per provider, AI-provider error rate and credit-debit volume per tenant, and is consulted manually rather than feeding any automatic decision.
+Application Insights collects distributed traces, structured logs and live metrics from every component. Each request is tagged with a tenant identifier and a correlation identifier that is propagated through every external HTTP call, so that the entire trajectory of a recommendation run or of an image generation can be reconstructed from a single trace. A small set of Log Analytics dashboards aggregates operational metrics and is consulted manually rather than feeding any automatic decision.
 
 \paragraph{Service-to-service identity.}
-All authentication between the application server and the other Azure services it consumes (Key Vault, Blob Storage, the database, Application Insights) uses Azure managed identities rather than shared secrets. This removes an entire class of credential-leak risk and simplifies key rotation, which becomes the responsibility of Azure rather than of the platform.
+All authentication between the application server and the other Azure services it consumes (Key Vault, Blob Storage, the database, Application Insights) uses Azure managed identities rather than shared secrets, so key rotation becomes the responsibility of Azure rather than of the platform.
 
 \paragraph{Continuous integration and deployment.}
 The platform's build and deploy pipeline is hosted on GitHub Actions. A push to a feature branch triggers the test suites described in Section~\ref{sec:testing-strategy}; merging into \texttt{master} triggers the build of a new container image, its push to the platform's container registry, and the rollout of a new revision on Container Apps. The web client follows an analogous flow, with the build artefact uploaded to the static-site account on success.
 
 \paragraph{Network shape.}
-The VNet topology is conservative. The database, the blob storage account and Key Vault are reachable only through private endpoints inside the VNet, with their public network access disabled at the resource level. The Container Apps Environment sits in the same VNet and exposes only its built-in HTTPS ingress to the Internet. External AI providers are reached over the public Internet from the Container App, with their credentials read from Key Vault at start-up.
+The VNet topology is conservative. The database, the blob storage account and Key Vault are reachable only through private endpoints inside the VNet, with their public network access disabled at the resource level. The Container Apps Environment sits in the same VNet and exposes only its built-in HTTPS ingress to the Internet.
 
 Table~\ref{tab:nfr-azure} maps each non-functional requirement onto the Azure service that fulfils it.
 
@@ -915,7 +915,7 @@ Cost backpressure & In-app rate limiter and credit ledger. \\
 \hline
 Graceful degradation & Per-integration retries and circuit breakers in the application. \\
 \hline
-Closed admission (operator) & Microsoft Entra ID allow-list. \\
+Closed admission & Microsoft Entra ID allow-list. \\
 \hline
 Tenant isolation & Per-tenant queries and SAS-scoped blob URLs. \\
 \hline
