@@ -28,6 +28,8 @@ public class PrintJob
 
     public string? PdfBase64 { get; set; }
 
+    public string? PdfBlobKey { get; set; }
+
     public Guid? PrintLinkId { get; set; }
 
     public PrintLink? PrintLink { get; set; }

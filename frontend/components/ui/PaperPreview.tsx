@@ -31,8 +31,7 @@ const QR_FRAC_BY_SIZE: Record<QrSize, number> = {
 const PDF_QR_QUIET_MODULES = 4;
 
 interface PaperPreviewProps {
-  imageBase64: string | null;
-  imageMimeType: string | null;
+  imageUri: string | null;
   paperSize: PaperSize;
   orientation: PrintOrientation;
   showQrBadge: boolean;
@@ -53,8 +52,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export function PaperPreview({
-  imageBase64,
-  imageMimeType,
+  imageUri,
   paperSize,
   orientation,
   showQrBadge,
@@ -79,8 +77,9 @@ export function PaperPreview({
   const previewW = Math.min(maxWidth, 360);
   const previewH = previewW / aspectRatio;
 
-  const dataUri =
-    imageBase64 && imageMimeType ? `data:${imageMimeType};base64,${imageBase64}` : null;
+  // Image source can now be either a data URI (for fresh generations passed in
+  // by the caller as base64) or a SAS URL pointing at blob storage.
+  const dataUri = imageUri ?? null;
 
   const cardSize = QR_FRAC_BY_SIZE[qrSize] * Math.min(previewW, previewH);
   const qrImageSize = Math.max(1, cardSize);

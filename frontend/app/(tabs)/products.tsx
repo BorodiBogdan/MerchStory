@@ -62,6 +62,7 @@ function toMetadata(detail: ProductDetail): ProductItem {
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt,
     mimeType: 'image/png',
+    imageUrl: detail.imageUrl,
   };
 }
 
@@ -344,9 +345,18 @@ export default function ProductsScreen() {
     }
   }
 
-  function selectReferenceImage(ref: ReferenceImage) {
-    setDraftImageUri(`data:image/png;base64,${ref.imageBase64}`);
-    setDraftImageBase64(ref.imageBase64);
+  async function selectReferenceImage(ref: ReferenceImage) {
+    if (!ref.imageUrl) return;
+    setDraftImageUri(ref.imageUrl);
+    // Reference search now returns blob URLs. We need base64 to send the bytes
+    // back as a product image — fetch+encode lazily, only when the user actually
+    // picks a reference (search result selection is rare).
+    try {
+      const base64 = await uriToBase64(ref.imageUrl);
+      setDraftImageBase64(base64);
+    } catch {
+      setDraftImageBase64(null);
+    }
     setShowSimilarModal(false);
     setShowPreview(false);
   }
@@ -398,16 +408,16 @@ export default function ProductsScreen() {
       };
       if (editingProduct) {
         const updated = await updateProduct(editingProduct.id, payload);
-        if (updated.imageBase64) {
-          productImageCache.prime(updated.id, updated.imageBase64, 'image/png');
+        if (updated.imageUrl) {
+          productImageCache.primeUrl(updated.id, updated.imageUrl);
         } else {
           productImageCache.evict(updated.id);
         }
         productsCache.upsertItem(toMetadata(updated));
       } else {
         const created = await createProduct(payload);
-        if (created.imageBase64) {
-          productImageCache.prime(created.id, created.imageBase64, 'image/png');
+        if (created.imageUrl) {
+          productImageCache.primeUrl(created.id, created.imageUrl);
         }
         productsCache.addItem(toMetadata(created));
       }
@@ -851,9 +861,7 @@ export default function ProductsScreen() {
                                   <View style={styles.similarCardInner}>
                                     <View style={styles.similarImageWrap}>
                                       <Image
-                                        source={{
-                                          uri: `data:image/png;base64,${item.imageBase64}`,
-                                        }}
+                                        source={{ uri: item.imageUrl ?? undefined }}
                                         style={styles.similarImage}
                                         resizeMode="contain"
                                       />

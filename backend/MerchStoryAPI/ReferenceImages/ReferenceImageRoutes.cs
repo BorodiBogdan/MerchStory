@@ -2,6 +2,7 @@ using System.IO.Compression;
 using MerchStoryAPI.Categories;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Storage;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Pgvector;
@@ -11,6 +12,8 @@ namespace MerchStoryAPI.ReferenceImages;
 
 public static class ReferenceImageRoutes
 {
+    private static readonly TimeSpan ReferenceSasTtl = TimeSpan.FromMinutes(15);
+
     public static void MapReferenceImageEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/reference-images");
@@ -20,7 +23,9 @@ public static class ReferenceImageRoutes
             AddReferenceImageRequest request,
             AppDbContext db,
             IClipEmbeddingService clipService,
-            ILogger<Program> logger) =>
+            IBlobStorage blobs,
+            ILogger<Program> logger,
+            CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
@@ -54,18 +59,29 @@ public static class ReferenceImageRoutes
 
             Guid? categoryId = await CategoryResolver.ResolveOrCreateAsync(db, request.CategoryPath);
 
+            string contentType = SniffImageContentType(imageBytes);
+            string ext = ExtensionForContentType(contentType);
+            using MemoryStream uploadStream = new(imageBytes);
+            BlobRef uploaded = await blobs.UploadAsync(
+                "references",
+                categoryId?.ToString("N") ?? "uncategorized",
+                uploadStream,
+                contentType,
+                ext,
+                ct);
+
             var referenceImage = new ReferenceImage
             {
                 Id = Guid.NewGuid(),
                 Name = request.Name.Trim(),
                 CategoryId = categoryId,
-                ImageBase64 = request.ImageBase64,
+                ImageBlobKey = uploaded.Key,
                 Embedding = embedding,
                 CreatedAt = DateTime.UtcNow,
             };
 
             db.ReferenceImages.Add(referenceImage);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
 
             string? categoryPath = await LoadCategoryPathAsync(db, categoryId);
 
@@ -81,7 +97,9 @@ public static class ReferenceImageRoutes
             HttpRequest httpRequest,
             AppDbContext db,
             IClipEmbeddingService clipService,
-            ILogger<Program> logger) =>
+            IBlobStorage blobs,
+            ILogger<Program> logger,
+            CancellationToken ct) =>
         {
             if (!httpRequest.HasFormContentType)
             {
@@ -158,20 +176,35 @@ public static class ReferenceImageRoutes
                     using var ms = new MemoryStream();
                     await using (Stream entryStream = entry.Open())
                     {
-                        await entryStream.CopyToAsync(ms);
+                        await entryStream.CopyToAsync(ms, ct);
                     }
 
                     byte[] bytes = ms.ToArray();
-                    string base64 = Convert.ToBase64String(bytes);
 
                     Vector embedding = clipService.Embed(bytes);
+
+                    string entryContentType = ext switch
+                    {
+                        ".png" => "image/png",
+                        ".webp" => "image/webp",
+                        _ => "image/jpeg",
+                    };
+
+                    using MemoryStream uploadMs = new(bytes);
+                    BlobRef uploaded = await blobs.UploadAsync(
+                        "references",
+                        categoryId?.ToString("N") ?? "uncategorized",
+                        uploadMs,
+                        entryContentType,
+                        ext,
+                        ct);
 
                     db.ReferenceImages.Add(new ReferenceImage
                     {
                         Id = Guid.NewGuid(),
                         Name = name,
                         CategoryId = categoryId,
-                        ImageBase64 = base64,
+                        ImageBlobKey = uploaded.Key,
                         Embedding = embedding,
                         CreatedAt = DateTime.UtcNow,
                     });
@@ -247,6 +280,7 @@ public static class ReferenceImageRoutes
             SearchRequest request,
             AppDbContext db,
             IClipEmbeddingService clipService,
+            IBlobStorage blobs,
             ILogger<Program> logger) =>
         {
             if (string.IsNullOrWhiteSpace(request.ImageBase64))
@@ -287,7 +321,7 @@ public static class ReferenceImageRoutes
                     r.Id,
                     r.Name,
                     r.Category,
-                    r.ImageBase64,
+                    r.ImageBlobKey,
                     Similarity = 1.0 - (double)r.Embedding.CosineDistance(queryEmbedding),
                 })
                 .ToListAsync();
@@ -297,7 +331,7 @@ public static class ReferenceImageRoutes
                     m.Id,
                     m.Name,
                     CategoryResolver.BuildPath(m.Category),
-                    m.ImageBase64,
+                    string.IsNullOrEmpty(m.ImageBlobKey) ? null : blobs.GetReadUrl(m.ImageBlobKey, ReferenceSasTtl).ToString(),
                     m.Similarity))
                 .ToList();
 
@@ -360,13 +394,46 @@ public static class ReferenceImageRoutes
 
         return Convert.FromBase64String(raw);
     }
+
+    private static string SniffImageContentType(byte[] bytes)
+    {
+        if (bytes.Length >= 8
+            && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+        {
+            return "image/png";
+        }
+
+        if (bytes.Length >= 3
+            && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+        {
+            return "image/jpeg";
+        }
+
+        if (bytes.Length >= 12
+            && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46
+            && bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50)
+        {
+            return "image/webp";
+        }
+
+        return "image/jpeg";
+    }
+
+    private static string ExtensionForContentType(string contentType) =>
+        contentType.ToLowerInvariant() switch
+        {
+            "image/png" => ".png",
+            "image/jpeg" or "image/jpg" => ".jpg",
+            "image/webp" => ".webp",
+            _ => ".png",
+        };
 }
 
 internal sealed record AddReferenceImageRequest(string Name, string? CategoryPath, string ImageBase64);
 
 internal sealed record SearchRequest(string ImageBase64, int? TopK);
 
-internal sealed record SearchResult(Guid Id, string Name, string CategoryPath, string ImageBase64, double Similarity);
+internal sealed record SearchResult(Guid Id, string Name, string CategoryPath, string? ImageUrl, double Similarity);
 
 internal sealed record CategoryNode(string Name, List<CategoryNode> Children);
 

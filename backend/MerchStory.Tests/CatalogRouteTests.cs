@@ -4,6 +4,7 @@ using System.Text.Json;
 using MerchStory.Tests.Fakes;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Storage;
 using MerchStoryImageGeneration.Models;
 using MerchStoryImageGeneration.Services;
 using Microsoft.AspNetCore.Http;
@@ -95,6 +96,9 @@ public class CatalogRouteTests : IDisposable
 
                 services.RemoveAll<IImageProvider>();
                 services.AddSingleton<IImageProvider>(this.mockProvider);
+
+                services.RemoveAll<IBlobStorage>();
+                services.AddSingleton<IBlobStorage, InMemoryBlobStorage>();
             });
         });
 

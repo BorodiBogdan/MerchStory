@@ -16,6 +16,10 @@ public class Product
 
     public string? ImageBase64 { get; set; }
 
+    public string? ImageBlobKey { get; set; }
+
+    public string? ImageContentType { get; set; }
+
     public string? Category { get; set; }
 
     public DateTime CreatedAt { get; set; }
