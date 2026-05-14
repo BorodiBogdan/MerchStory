@@ -1,0 +1,609 @@
+\chapter{AI Pipeline Design and Implementation}
+\label{chap:contributions}
+
+Chapter~\ref{chap:architecture} treated the recommendation engine and the hybrid catalogue mode as services with a fixed contract. This chapter looks inside both. A shorter section at the end describes the print pipeline that supports them.
+
+The same idea runs through all three. The gap between what an off-the-shelf generative model produces and what a small retailer is willing to publish is rarely closed by a bigger model. It is closed by the protocol that sits around the model. The recommendation engine grounds the language model in retrieved context and a multi-stage prompt chain. The hybrid catalogue pipeline restricts what the image model is allowed to render and lets a deterministic compositor enforce that restriction. The print pipeline tiles a small super-resolution model under fixed paper sizes.
+
+\section{The Daily Recommendation Engine}
+\label{sec:recommendation-engine}
+
+\subsection{Problem statement}
+\label{subsec:rec-problem}
+
+Small retailers know their products and their customers, but they rarely have time to plan a daily marketing schedule. Out-of-the-box language models, asked to suggest a promotion for today, default to season-blind, vendor-shaped boilerplate: ``discover our premium selection'', ``don't miss out on our exclusive offer''. The output is grammatical but useless. The recommendation engine's job is to produce, every day, a small ranked set of fresh marketing themes that are grounded in (a) the day's external context, (b) a curated promotional playbook of patterns that have worked in retail, and (c) the shop's own profile, while not repeating what the shop has already seen in the recent past.
+
+The engine's output is not a final asset, but it is more than just copy. Each suggestion is a structured record that carries a title, body copy, a suggested social-media caption, an asset \emph{category} (\emph{announcement} or \emph{promotion}) and an \texttt{imagePrompt} written specifically for the image-generation pipeline of Section~\ref{sec:hybrid-catalogue}. Tapping ``generate'' on an idea hands the retailer to the asset-creation screen with the prompt and category already filled in, so that the path from a daily idea to a published asset is a single further confirmation. The engine is therefore the entry point of the platform's full creation flow, not a side feature. Figure~\ref{fig:rec-handoff} sketches that flow.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize},
+    card/.style={draw, rounded corners=2pt, minimum width=34mm, minimum height=20mm, align=center, fill=gray!8},
+    screen/.style={draw, rounded corners=2pt, minimum width=30mm, minimum height=14mm, align=center, fill=yellow!12},
+    pipe/.style={draw, rounded corners=2pt, minimum width=30mm, minimum height=14mm, align=center, fill=blue!8},
+    asset/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=12mm, align=center, fill=gray!10},
+    arr/.style={-{Latex[length=1.6mm]}, thick}
+]
+
+\node[card] (idea) at (0, 0) {%
+    \textbf{Daily idea}\\[2pt]
+    \scriptsize title, body, suggestedPost,\\
+    \scriptsize category, imagePrompt
+};
+\node[font=\tiny\itshape] at (0, -1.7) {(recommendation engine)};
+
+\node[screen] (screen) at (5.0, 0) {Asset-creation\\screen\\\scriptsize prompt and category\\\scriptsize pre-filled};
+
+\node[pipe] (pipe) at (10.0, 0) {Generation\\pipeline\\\scriptsize (catalogue or\\\scriptsize announcement)};
+
+\node[asset] (out) at (14.0, 0) {Final asset\\in gallery};
+
+\draw[arr] (idea) -- node[above, font=\tiny]{\itshape tap ``generate''} (screen);
+\draw[arr] (screen) -- node[above, font=\tiny]{\itshape confirm} (pipe);
+\draw[arr] (pipe) -- (out);
+
+\end{tikzpicture}%
+}
+\caption{Handoff from a daily idea to a published asset.}
+\label{fig:rec-handoff}
+\end{figure}
+
+\subsection{Pipeline overview}
+\label{subsec:rec-pipeline}
+
+The engine has three parts that meet at inference time. An offline indexing path turns a curated corpus into the embeddings used at retrieval time. An offline fine-tuning path adapts a base writer model to the platform's voice. An online inference path stitches context signals, the shop profile and retrieved playbook entries into a prompt for the fine-tuned writer. Figure~\ref{fig:rec-pipeline} shows the arrangement at a glance.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize},
+    box/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=10mm, align=center, fill=gray!8},
+    proc/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=8mm, align=center, fill=gray!12},
+    train/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=8mm, align=center, fill=blue!8},
+    rag/.style={draw, rounded corners=2pt, minimum width=30mm, minimum height=7mm, align=center, fill=yellow!15},
+    store/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum width=22mm, minimum height=12mm, align=center, fill=gray!5},
+    person/.style={draw, circle, minimum size=8mm, fill=gray!5, align=center, font=\tiny},
+    arr/.style={-{Latex[length=1.6mm]}, thick},
+    fb/.style={-{Latex[length=1.6mm]}, dashed, thick, gray!75}
+]
+
+% --- Top: corpus
+\node[box] (data) at (0, 5.4) {Curated retail\\marketing corpus};
+
+% --- Left branch: indexing
+\node[proc]  (split) at (-4.5, 3.6) {split, chunk, embed};
+\node[store] (vec)   at (-4.5, 1.6) {pgvector\\(playbook +\\past ideas)};
+
+\begin{pgfonlayer}{background}
+\node[draw=gray!55, dashed, rounded corners=4pt, inner sep=2.8mm,
+      fit=(split)(vec),
+      label={[font=\scriptsize\itshape, gray!75]above:Indexing}] (idxbox) {};
+\end{pgfonlayer}
+
+% --- Right branch: fine-tuning
+\node[train] (td)    at ( 4.5, 3.9) {training pairs};
+\node[train] (ft)    at ( 4.5, 2.6) {LoRA fine-tune\\(7B base)};
+\node[train] (ftllm) at ( 4.5, 1.2) {fine-tuned\\writer LLM};
+
+\begin{pgfonlayer}{background}
+\node[draw=blue!50, dashed, rounded corners=4pt, inner sep=2.8mm,
+      fit=(td)(ft)(ftllm),
+      label={[font=\scriptsize\itshape, blue!65]above:Fine-tuning}] (ftbox) {};
+\end{pgfonlayer}
+
+% --- Bottom: inference flow
+\node[person] (retailer) at (-8.4, -1.6) {retailer};
+\node[box]    (app)      at (-5.4, -1.6) {app};
+
+\node[rag] (sig) at (-0.4, -0.5) {context signals};
+\node[rag] (req) at (-0.4, -1.4) {shop profile};
+\node[rag] (ctx) at (-0.4, -2.3) {retrieved playbook\\+ past ideas};
+
+\begin{pgfonlayer}{background}
+\node[draw=yellow!55!black, dashed, rounded corners=4pt, inner sep=2.5mm,
+      fit=(sig)(req)(ctx),
+      label={[font=\scriptsize\itshape]above:RAG prompt}] (ragbox) {};
+\end{pgfonlayer}
+
+\node[box] (out) at ( 8.0, -1.6) {ideas};
+
+% --- Arrows: corpus splits into both branches
+\draw[arr] (data.south) -- (split.north);
+\draw[arr] (data.south) -- (td.north);
+
+% Indexing internal
+\draw[arr] (split) -- (vec);
+
+% Fine-tuning internal
+\draw[arr] (td) -- (ft);
+\draw[arr] (ft) -- (ftllm);
+
+% Inference flow
+\draw[arr] (retailer) -- (app);
+\draw[arr] (app) -- (ragbox.west);
+\draw[arr] (vec.south) to[out=-90, in=180] (ctx.west);
+\draw[arr] (ragbox.east) to[out=0, in=-90] (ftllm.south);
+\draw[arr] (ftllm.south east) to[out=-30, in=90] (out.north);
+
+% Feedback loop
+\draw[fb] (out.south) to[out=-90, in=-90, looseness=0.55]
+  node[below, font=\tiny\itshape, gray!75, sloped]{retailer feedback}
+  (retailer.south);
+
+\end{tikzpicture}%
+}
+\caption{Architecture of the recommendation engine: indexing and fine-tuning offline, RAG inference online, with retailer feedback closing the loop.}
+\label{fig:rec-pipeline}
+\end{figure}
+
+The inference path itself is organised as a six-stage chain. The stages are, in order: (1) context aggregation (Section~\ref{subsec:rec-context}), (2) playbook retrieval (Section~\ref{subsec:rec-playbook}), (3) anti-repetition retrieval (Section~\ref{subsec:rec-anti-repetition}), (4) the strategist, (5) the writers and (6) the translator, with stages 4 to 6 covered together in Section~\ref{subsec:rec-llm-chain}. Stages 1 to 3 produce the artefacts that ground the prompt, and stages 4 to 6 are the language-model calls that turn those artefacts into ideas. Each stage produces a small, well-typed artefact that is consumed by the next, and a failure in any single stage degrades the run gracefully rather than aborting it. The choice of six stages, rather than a single end-to-end prompt, is deliberate. Each stage has a narrowly scoped responsibility, exchanges a typed artefact rather than free text with its neighbours, and can be observed independently. When an idea is judged poor, the per-stage trace reveals whether the failure was in the signal, the retrieval, the planning or the drafting, which would not be possible if the whole pipeline were a single opaque call. The remaining subsections walk through the six stages in that order.
+
+\subsection{External context signals}
+\label{subsec:rec-context}
+
+The engine currently consumes three classes of external signal, with room to add more later. Each runs in parallel and is wrapped in its own error boundary, so a single failure does not abort the run. Failed sources are recorded and the rest continue.
+
+\paragraph{Weather.} A short-range forecast detects heatwaves, cold snaps and heavy rain, and turns each event into a signal tagged \emph{high}, \emph{medium} or \emph{low} with a one-line summary the prompt can read directly.
+
+\paragraph{Holidays.} Upcoming public holidays in the shop's country are emitted over a fourteen-day lookahead, with severity scaling by proximity: \emph{high} at most three days away, \emph{medium} at most seven, \emph{low} further out.
+
+\paragraph{News.} Recent news items in the shop's country are emitted at \emph{low} severity as ambient context, useful for seeding an angle but never for overriding the day's plan.
+
+\begin{table}[!ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.4cm}|Y|}
+\hline
+\textbf{Signal} & \textbf{Severity rule} \\
+\hline
+Weather  & \emph{High} for heatwave or cold snap, \emph{medium} for sustained warm or cool spells, \emph{low} for heavy-rain probability $\geq 70\,\%$. \\
+\hline
+Holiday  & \emph{High} at $\leq 3$ days, \emph{medium} at $\leq 7$, \emph{low} further out. \\
+\hline
+News     & Always \emph{low}, ambient context only. \\
+\hline
+\end{tabularx}
+\caption{Context-signal severity rules.}
+\label{tab:rec-signals}
+\end{table}
+
+\subsection{The promotional playbook and retrieval-augmented generation}
+\label{subsec:rec-playbook}
+
+The engine's second grounding source is the platform's \emph{promotional playbook}: a curated table of marketing patterns that have been observed to work in independent retail. Each entry carries a \texttt{Theme} (e.g., ``rainy-day comfort food''), a \texttt{TriggerType} (\emph{weather}, \emph{holiday}, \emph{news} or \emph{seasonal}), a free-text \texttt{Trigger} description, a list of \texttt{Tactics} and an \texttt{ExampleCopy} excerpt, alongside a text embedding of those fields used at retrieval time.
+
+The playbook is partitioned by \emph{business domain}. The platform ships with a dedicated playbook for each of the four named domains it supports. \emph{Market} covers groceries, household goods, snacks and drinks. \emph{Food} covers caf\'es, bakeries and prepared meals. \emph{Retail} covers general-goods shops. \emph{Fashion} covers clothing and accessories. A fifth \emph{Other} playbook of domain-agnostic patterns takes over for shops whose domain falls outside the four. Adding a new named domain is purely an authoring exercise. A fresh set of entries is ingested under the same schema, no code change is required, and the engine picks the right playbook by matching the shop's recorded domain.
+
+The entries themselves were not generated by a model. They were authored by hand from three sources: marketing literature aimed at independent retailers, a manual review of the social-media output of small shops in the target region, and observations from the development team's pilot outreach. A pattern was admitted to the playbook only when it recurred across all three sources, so every entry corresponds to a tactic with a known precedent rather than to a novel suggestion the engine has to invent on its own. The result is a small corpus, in the low hundreds of entries, that is dense, opinionated and easy to inspect, which is exactly the regime in which retrieval-augmented prompting outperforms an end-to-end model call.
+
+At run-time the engine builds a short retrieval query from the top-ranked context signals and the shop's profile (for example: \emph{``Market shop ``Pet Store'' \(\mid\) weather: heatwave starting May 12 \(\mid\) holiday: Mother's Day in 2 days''}), embeds it through the same encoder used at ingestion, and retrieves the three nearest entries by cosine similarity within the playbook that matches the shop's domain, falling back to the general-purpose playbook when no domain-specific match is found. The retrieval is implemented over an HNSW index \cite{malkov2018hnsw} on the pgvector column, and the top-three entries are injected verbatim into the strategist prompt of Section~\ref{subsec:rec-llm-chain}. This is the retrieval-augmented generation pattern of Lewis et al.~\cite{lewis2020rag} adapted to a small, hand-curated corpus rather than to a large open knowledge base, on the principle that the marketing patterns small retailers benefit from are few, well known to specialists and best authored once than re-derived per request.
+
+\subsection{Anti-repetition via idea embeddings}
+\label{subsec:rec-anti-repetition}
+
+A second pgvector index records the embeddings of every idea the engine has ever produced for a tenant. After each run, the title and body of each new idea are concatenated, embedded by the same encoder, and stored in the \texttt{IdeaEmbedding} table introduced in Section~\ref{subsec:relational-schema}. At the start of the next run, the engine retrieves the five nearest neighbours of the current run's retrieval query within a thirty-day window and injects them, prefixed by a strict ``do not repeat these themes'' clause, into the writer prompt.
+
+The arrangement converts memory into retrieval: the engine has no notion of ``what was suggested last week'' beyond what the embedding space surfaces, but the embedding space surfaces semantically close ideas regardless of the exact words used to express them. A retailer who saw a ``rainy-day comfort food'' theme on Tuesday is not shown a ``cosy-weather snack box'' theme on Friday, even though no string match would catch the duplication.
+
+\subsection{The multi-stage language-model chain}
+\label{subsec:rec-llm-chain}
+
+The fourth, fifth and sixth stages are language-model calls organised as a chain rather than a single end-to-end prompt. The split lets each stage run at the temperature, JSON contract and model size that suit its task, and lets the writer stage fan out in parallel.
+
+\paragraph{Stage 4: the Strategist.}
+A single language-model call, at temperature $0.4$, is given the shop profile, the top context signals, the three retrieved playbook entries and a brief instruction to produce $N$ \emph{distinct angles}. Its output is a JSON document of the form
+\[
+\{\text{angles}: [\,\{\text{theme},\ \text{tone},\ \text{triggerSignal},\ \text{rationale}\},\ \dots\,]\}.
+\]
+The low temperature is appropriate here because planning benefits from consistency: the strategist's job is to spread the angles across the available signals, not to be inventive on each one.
+
+\paragraph{Stage 5: the Writers.}
+For each angle the strategist produced, a separate language-model call is issued in parallel, at temperature $0.8$. The writer is given the angle, the shop identity, and the anti-repetition block from Section~\ref{subsec:rec-anti-repetition}. Its output is a JSON document
+\[
+\{\text{id},\ \text{tone},\ \text{title},\ \text{meta},\ \text{body},\ \text{suggestedPost},\ \text{type},\ \text{imagePrompt}\}.
+\]
+The high temperature is appropriate here because drafting benefits from variation: identical angles drafted at low temperature produce ideas that are too uniform across days. When the retailer accepts a recommendation, the \texttt{type} (\emph{announcement} or \emph{promotion}) and \texttt{imagePrompt} fields redirect them to the generation studio on the matching asset flow (see the \emph{Asset generation} requirement in Section~\ref{subsec:functional-requirements}, p.~\pageref{par:asset-generation}) with the prompt already filled in.
+
+\paragraph{Stage 6: the Translator and persistence.}
+For platforms set to a non-English interface language, each English idea is translated by a parallel language-model call into the target language. The translator prompt explicitly forbids a list of marketing clich\'es (in the Romanian case: ``descoper\u{a}'', ``Premium'', generic discount phrasing) so that the localised output does not regress to the boilerplate that the playbook and writer stages were specifically chosen to avoid. The translated idea is stored alongside the English one on the same record, and the gallery picks the right language at read time. Persistence then writes the day's run into the \texttt{DailyRecommendation} table together with a context snapshot, after which Stage~6 issues the embedding writes that fuel the next day's anti-repetition retrieval.
+
+Table~\ref{tab:rec-stages} summarises the per-stage parameters.
+
+\begin{table}[!ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.6cm}|>{\raggedright\arraybackslash}p{2.0cm}|>{\raggedright\arraybackslash}p{1.5cm}|Y|}
+\hline
+\textbf{Stage} & \textbf{Calls per run} & \textbf{Temp.} & \textbf{Output shape} \\
+\hline
+Strategist  & 1                       & 0.4 & \texttt{\{angles: [\{theme, tone, triggerSignal, rationale\}\,\dots\,]\}} \\
+\hline
+Writer      & one per angle, parallel & 0.8 & \texttt{\{title, meta, body, suggestedPost, imagePrompt, type\}} \\
+\hline
+Translator  & one per idea, parallel  & 0.4 & translated counterpart of the writer output \\
+\hline
+\end{tabularx}
+\caption{Per-stage parameters of the recommendation chain.}
+\label{tab:rec-stages}
+\end{table}
+
+\subsection{Model selection}
+\label{subsec:rec-model-selection}
+
+Several language models were trialled against the same fixed batch of $(\text{shop}, \text{day}, \text{signal})$ inputs and compared on three axes: tonal fit, specificity to the \texttt{triggerSignal}, and JSON-schema adherence. The candidates were \emph{Gemma 3B}, \emph{DeepSeek}, a LoRA-fine-tuned seven-billion-parameter writer, and the enterprise APIs \emph{Claude} and \emph{Gemini}. The enterprise options produced the best output overall, with the cleanest structured responses and the fewest generic CTAs. The fine-tuned writer came close on tonal fit and specificity at a fraction of the hosting cost, while \emph{Gemma 3B} and \emph{DeepSeek} drifted back to boilerplate phrasing on weaker signals. Table~\ref{tab:rec-model-comparison} summarises the comparison. That gap is the immediate motivation for the writer-stage fine-tuning described next.
+
+{\small\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|Y|Y|Y|Y|}
+\caption{Qualitative comparison of the candidate models on the three evaluation axes.}\label{tab:rec-model-comparison}\\
+\hline
+\textbf{Model} & \textbf{Tonal fit} & \textbf{Specificity} & \textbf{JSON adherence} & \textbf{Hosting cost} \\
+\hline
+\endfirsthead
+
+\multicolumn{5}{l}{\textit{Table~\ref{tab:rec-model-comparison} continued from previous page}}\\
+\hline
+\textbf{Model} & \textbf{Tonal fit} & \textbf{Specificity} & \textbf{JSON adherence} & \textbf{Hosting cost} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{5}{r}{\textit{Continued on next page}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+Claude (API)            & Excellent & Excellent & Excellent & High \\
+\hline
+Gemini (API)            & Excellent & Excellent & Excellent & High \\
+\hline
+Fine-tuned 7B (LoRA)    & Strong    & Strong    & Good      & Low  \\
+\hline
+DeepSeek                & Fair      & Fair      & Good      & Low  \\
+\hline
+Gemma 3B                & Weak      & Weak      & Fair      & Very low \\
+\hline
+\end{tabularx}}
+
+\subsection{Fine-tuning the writer model}
+\label{subsec:rec-finetune}
+
+The strategist and translator stages are well served by an off-the-shelf instruction-tuned base model, because their tasks (producing a small structured plan and translating short text) are close enough to the model's pre-training distribution that prompt engineering is sufficient. The writer stage is the place where this is no longer true. A base seven-billion-parameter instruction model, even when given the strategist angle, the playbook entries and the anti-repetition block, gravitates back to the same handful of marketing tropes (``Discover our premium selection'', ``Don't miss out''), regardless of how strongly the prompt forbids them.
+
+The platform therefore serves the writer role with a fine-tuned variant of a seven-billion-parameter instruction model in the Qwen family, adapted via low-rank adaptation (LoRA) \cite{hu2022lora} on a curated corpus of marketing copy from independent retailers. LoRA was preferred over full fine-tuning because the corpus is small, the base model is already well aligned to instruction following, and the low-rank adapters can be hot-swapped at deployment time without redistributing the base weights. The corpus pairs context-signal triples with handcrafted copy that exhibits the qualities the boilerplate base model lacks: a specific, time-bounded reaction to the signal, a voice consistent with a single shop owner, and a concrete call to action that names a real product or aisle rather than a generic category. The strategist and translator continue to use the un-adapted base model.
+
+The choice to fine-tune only the writer is itself part of the protocol-over-model-size argument that runs through this chapter: the writer is the one stage where a base model's failures are systematic and visible to the retailer, and the cheapest fix is to adapt the model to the platform's voice rather than ask the prompt to do all the work.
+
+\section{Image Generation Pipelines}
+\label{sec:hybrid-catalogue}
+
+\subsection{Asset paths and prompting strategy}
+\label{subsec:gen-overview}
+
+The platform produces three families of marketing assets: announcements, wallpapers and catalogues. Each family has its own service, but the three services share the same back end. Each service assembles a prompt and an optional list of inline reference images, then hands both to the \texttt{IImageProvider} interface, which forwards them to whichever provider the retailer picked at request time (the Gemini provider in production, a mock provider in tests). What differs between services is only the prompt template and which inputs become inline images. Figure~\ref{fig:image-provider-interface} sketches the arrangement.
+
+A single-shot prompt covers all three. Generation runs from a phone, has to finish in a few seconds, and is paid for in one inference call. Because the platform already knows the asset family before building the prompt, it can pre-select the right template and fill in the retailer's brand context, format and reference photos directly.
+
+\begin{figure}[H]
+\centering
+\resizebox{0.85\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize},
+    svc/.style={draw, rounded corners=2pt, minimum width=32mm, minimum height=10mm, align=center, fill=gray!10},
+    iface/.style={draw, rounded corners=2pt, minimum width=44mm, minimum height=14mm, align=center, fill=yellow!15},
+    prov/.style={draw, rounded corners=2pt, minimum width=28mm, minimum height=10mm, align=center, fill=blue!8},
+    arr/.style={-{Latex[length=1.6mm]}, thick}
+]
+
+\node[svc] (ann) at (0, 1.6)  {Announcement\\service};
+\node[svc] (wal) at (0, 0)    {Wallpaper\\service};
+\node[svc] (cat) at (0, -1.6) {Catalogue\\service};
+
+\node[iface] (iface) at (5.6, 0) {\texttt{IImageProvider}\\\scriptsize\texttt{GenerateAsync(}\\\scriptsize\texttt{prompt, inlineImages)}};
+
+\node[prov, minimum width=36mm, minimum height=14mm] (prov) at (10.8, 0) {Image generation providers\\\scriptsize (Gemini, OpenAI, \dots)};
+
+\draw[arr] (ann.east) -- (iface.west);
+\draw[arr] (wal.east) -- (iface.west);
+\draw[arr] (cat.east) -- (iface.west);
+
+\draw[arr] (iface.east) -- (prov.west);
+
+\end{tikzpicture}%
+}
+\caption{All three asset services share the same \texttt{IImageProvider} call, with the provider chosen per request.}
+\label{fig:image-provider-interface}
+\end{figure}
+
+\textbf{Announcement.} Each of the three sub-types listed in the functional requirements is rendered by its own prompt template behind the same entry point. The general announcement template hands the model the raw content and lets it pick between an event headline and a tip-card layout. The job-post template assembles the prompt from structured fields (title, schedule, salary, requirements, with-person or text-only style) and applies a no-invented-CTA rule so application instructions appear only when the retailer typed them in. The promotion template treats the discount as the hero and folds in product reference photos when supplied. A single-shot prompt fits all three because the variation lives in the inputs, not in the reasoning.
+
+\textbf{Wallpaper.} Wallpapers are background templates onto which real product photos are pasted later. The prompt is built dynamically from the brand context the retailer has filled in. A header band is reserved only when there is brand text or a logo, a footer band only when there is contact or social information, and otherwise the whole canvas is given over to a clean hero zone. Two rules close every wallpaper prompt: the hero area must stay plain, with no patterns or props, and the only text the model may render is the exact strings the prompt lists.
+
+\textbf{Catalogue.} The catalogue path turns the retailer's product photos, brand context, layout style, colour theme and format into a single catalogue image. The prompt carries an art-direction block (composition, typography, lighting, colour) so that one call to the provider produces a usable result without a separate critique step. Catalogue generation has two modes. The default mode lets the model render everything, the products included. The preserve mode keeps the retailer's product pixels untouched.
+
+The preserve mode is the most complex path on the platform. It is the only one that combines a generative step with a deterministic post-processor, and the only one that imposes a strict contract on the model output, namely a coloured silhouette around each product and a quiet zone of clean background around each silhouette, that the post-processor then relies on. It exists because some retailers cannot tolerate any change to their products, even small rewrites of label text or substitutions with visually similar items, which off-the-shelf multimodal models still produce regularly. The rest of this section explores how the preserve mode is built, why a fully generative pipeline does not meet that bar, and how the deterministic compositor closes the gap.
+
+\subsection{Why a fully generative pipeline is insufficient}
+\label{subsec:hyb-motivation}
+
+A retail catalogue must show \emph{the actual products on offer}. A photograph of a packet of crisps that subtly differs from the real packet, in label colour, in label text or in shape, is not a marketing asset; it is a misrepresentation of the goods, and a small retailer cannot publish it without risking customer trust and, in some jurisdictions, falling foul of advertising law. The bar for product fidelity is therefore much higher than for the surrounding scene.
+
+State-of-the-art multimodal image models, even when conditioned on the retailer's own product photographs as inline references, fail this bar with regularity. Two failure modes recur. The first is \emph{label hallucination}: the model preserves the rough shape and dominant colour of the product but invents the text on its label, producing a packet whose typeface, brand mark and ingredient list are entirely fictional. The second is \emph{lookalike substitution}: the model replaces the reference product with a different but visually similar one, for example a near-identical chocolate bar from a competing brand. A small but persistent failure rate of either kind is unacceptable for marketing material that goes out under the retailer's name.
+
+The hybrid catalogue mode introduced in Section~\ref{sec:requirements} of Chapter~\ref{chap:architecture} is the platform's response to this constraint. Its central idea is to decouple \emph{scene generation}, which generative models do well, from \emph{product fidelity}, which they do badly, and to enforce the latter with a small deterministic post-processor.
+
+\subsection{The outline-as-protocol idea}
+\label{subsec:hyb-protocol}
+
+The platform asks the model to render the full catalogue scene with the retailer's products in place, and to draw a tight \emph{silhouette outline} around each product in a unique marker colour reserved for that product. The model is told to keep every product faithful to its reference in size, shape and orientation, which current models do reliably. A deterministic compositor then detects each marker colour, erases the rendered product together with its outline, inpaints the residue, and pastes the retailer's real product photograph into the cleaned region at the same position and size. The product is therefore untouched, pixel for pixel, while the model handles the backdrop, props, colour grading, layout and accompanying text.
+
+The mode exists for retailers who cannot tolerate any change to their packaging. Even visually similar renders often rewrite label text, alter typography or invent small graphical details that the retailer spots at a glance. The hybrid path leaves the packaging exactly as the retailer supplied it.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize},
+    ref/.style   ={draw=black!55,        line width=0.5pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=gray!8},
+    model/.style ={draw=blue!55!black,   line width=0.5pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=blue!6},
+    cmp/.style   ={draw=orange!65!black, line width=0.5pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=orange!10},
+    bad/.style   ={draw=red!55!black,    line width=0.6pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=red!8},
+    good/.style  ={draw=green!50!black,  line width=0.6pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=green!10},
+    arr/.style   ={-{Latex[length=2mm,width=1.6mm]}, thick, draw=black!70},
+    arrlbl/.style={font=\tiny\itshape, fill=white, inner sep=1pt},
+    rowlbl/.style={font=\small\bfseries\itshape, anchor=east, text=black!70}
+]
+
+% --- (a) pure generative ---
+\node[ref]   (refA) at (0,    2.6) {Reference\\photographs};
+\node[model] (mdlA) at (4.2,  2.6) {Multimodal\\model};
+\node[bad]   (outA) at (8.4,  2.6) {Final image\\\textit{products distorted}};
+\draw[arr] (refA) -- (mdlA);
+\draw[arr] (mdlA) -- (outA);
+
+% --- (b) hybrid ---
+\node[ref]   (refB) at (0,    0) {Reference\\photographs};
+\node[model] (mdlB) at (4.2,  0) {Multimodal model\\\scriptsize(outline mode)};
+\node[cmp]   (cmpB) at (8.4,  0) {Deterministic\\compositor};
+\node[good]  (outB) at (12.6, 0) {Final image\\\textit{products faithful}};
+\draw[arr] (refB) -- (mdlB);
+\draw[arr] (mdlB) -- node[arrlbl, above=1pt]{outlined scene} (cmpB);
+\draw[arr] (cmpB) -- (outB);
+
+% --- Real reference photographs also feed the compositor ---
+\draw[arr, dashed, draw=black!55] (refB.south)
+    to[out=-55, in=-125, looseness=0.9]
+    node[arrlbl, below=2pt]{real product photos}
+    (cmpB.south);
+
+% --- Row badges ---
+\node[rowlbl] at (-1.7, 2.6) {(a) pure};
+\node[rowlbl] at (-1.7, 0)   {(b) hybrid};
+
+\end{tikzpicture}%
+}
+\caption{Pure generative path versus hybrid path}
+\label{fig:hybrid-vs-pure}
+\end{figure}
+
+\subsection{The three-stage pipeline}
+\label{subsec:hyb-pipeline}
+
+The pipeline has three stages: a marker-palette selection step that decides which colours to reserve for which products, an outline-rendering step in which the multimodal model produces a placeholder catalogue, and a deterministic detect-and-composite step that turns the placeholder into the final image. Figure~\ref{fig:hybrid-pipeline} shows the artefacts that flow between the stages.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize},
+    inp/.style    ={draw=black!50,        line width=0.4pt, rounded corners=2pt,   minimum width=28mm, minimum height=8mm,  align=center, fill=gray!6,   font=\scriptsize\itshape},
+    proc/.style   ={draw=gray!65,         line width=0.5pt, rounded corners=2.5pt, minimum width=32mm, minimum height=11mm, align=center, fill=gray!12},
+    aicall/.style ={draw=blue!60!black,   line width=0.7pt, rounded corners=2.5pt, minimum width=34mm, minimum height=12mm, align=center, fill=blue!8},
+    art/.style    ={draw=yellow!60!black, line width=0.4pt, rounded corners=2pt,   minimum width=30mm, minimum height=8mm,  align=center, fill=yellow!15, font=\scriptsize\itshape},
+    final/.style  ={draw=green!55!black,  line width=0.7pt, rounded corners=2.5pt, minimum width=32mm, minimum height=10mm, align=center, fill=green!10},
+    arr/.style    ={-{Latex[length=1.8mm,width=1.5mm]}, thick, draw=black!70},
+    bg/.style     ={dashed, rounded corners=4pt, inner sep=2.8mm}
+]
+
+% ============ Stage 1: Marker palette ============
+\node[inp]  (in1a)       at (0, 5.6) {brand colours};
+\node[inp]  (in1b)       at (0, 4.4) {layout theme};
+\node[inp]  (in1c)       at (0, 3.2) {products};
+
+\node[proc] (palettesel) at (3.8, 4.4) {Marker palette\\selection};
+\node[art]  (palette)    at (3.8, 2.0) {marker assignment\\$\textit{product} \rightarrow \textit{hex}$};
+
+\draw[arr] (in1a.east) -- (palettesel.west);
+\draw[arr] (in1b.east) -- (palettesel.west);
+\draw[arr] (in1c.east) -- (palettesel.west);
+\draw[arr] (palettesel.south) -- (palette.north);
+
+\begin{pgfonlayer}{background}
+\node[bg, draw=gray!55, fill=gray!4,
+      fit=(in1a)(in1c)(palettesel)(palette),
+      label={[font=\scriptsize\bfseries\itshape, gray!75]above:Stage 1: marker palette}] {};
+\end{pgfonlayer}
+
+% ============ Stage 2: Outline rendering ============
+\node[inp]    (in2a)   at (7.2, 5.0) {scene prompt};
+\node[inp]    (in2b)   at (9.6, 5.0) {reference photos};
+
+\node[aicall] (mdl)    at (8.4, 2.6) {Multimodal model\\\scriptsize(outline mode)\\[1pt]\tiny\textsc{ai call}};
+\node[art]    (canvas) at (8.4, 0.4) {placeholder canvas\\\scriptsize(scene + outlined products)};
+
+\draw[arr] (in2a.south) -- (mdl.north);
+\draw[arr] (in2b.south) -- (mdl.north);
+\draw[arr] (palette.east) to[out=0, in=180] (mdl.west);
+\draw[arr] (mdl.south) -- (canvas.north);
+
+\begin{pgfonlayer}{background}
+\node[bg, draw=blue!55, fill=blue!3,
+      fit=(in2a)(in2b)(mdl)(canvas),
+      label={[font=\scriptsize\bfseries\itshape, blue!65]above:Stage 2: outline rendering}] {};
+\end{pgfonlayer}
+
+% ============ Stage 3: Detect and composite ============
+\node[proc]   (detect) at (13.6, 5.6) {Marker detect\\\scriptsize(Chebyshev match,\\\scriptsize largest component)};
+\node[proc]   (mask)   at (13.6, 3.9) {Mask construction\\\scriptsize(flood-fill + dilate)};
+\node[aicall] (lama)   at (13.6, 2.0) {LaMa inpainting\\\scriptsize(erase outlines,\\\scriptsize repaint background)\\[1pt]\tiny\textsc{ai call (IOPaint)}};
+\node[proc]   (paste)  at (13.6, 0.0) {Scale \& alpha-composite\\\scriptsize(retailer photo paste)};
+
+\draw[arr] (canvas.east) to[out=0, in=180, looseness=0.8] (detect.west);
+\draw[arr] (detect.south) -- (mask.north);
+\draw[arr] (mask.south)   -- (lama.north);
+\draw[arr] (lama.south)   -- (paste.north);
+
+\node[final] (out) at (13.6, -1.7) {Final image\\\scriptsize(products faithful)};
+\draw[arr] (paste.south) -- (out.north);
+
+\begin{pgfonlayer}{background}
+\node[bg, draw=orange!60, fill=orange!3,
+      fit=(detect)(mask)(lama)(paste),
+      label={[font=\scriptsize\bfseries\itshape, orange!70!black]above:Stage 3: detect and composite}] {};
+\end{pgfonlayer}
+
+\end{tikzpicture}%
+}
+\caption{Three-stage pipeline of the hybrid catalogue mode: marker palette selection, outline rendering by the multimodal model, and deterministic detect-erase-composite.}
+\label{fig:hybrid-pipeline}
+\end{figure}
+
+\paragraph{Stage 1: marker palette selection.}
+Before any model call is issued, the platform decides which colour will mark which product. The candidate pool is twelve highly saturated neon hues (magenta, cyan, electric violet, hot pink, chartreuse and so on), ordered so that the first $k$ entries are spread evenly around the hue circle for any $k$ from one to twelve. From this pool two exclusion rules remove unsuitable colours:
+
+\begin{enumerate}
+\item \emph{Brand-aware exclusion.} Candidates within Euclidean RGB distance~\cite{wyszecki1982color} $80$ of any brand-palette colour are dropped, so an outline cannot collide with a brand-coloured scene element at detection time.
+\item \emph{Theme-aware exclusion.} Each catalogue layout theme carries a small set of colours that the multimodal model tends to emit as scene fill (for example, in a Pop-Art or Vibrant theme the model emits greens and teals everywhere as background or prop colour). These hues are removed from the pool for the matching theme to avoid the same scene-fill / outline confusion.
+\end{enumerate}
+
+\paragraph{Stage 2: outline rendering.}
+The catalogue prompt is rewritten in \emph{outline mode}. The model is told, in unusually strict language, that it must draw \emph{only} a four-pixel solid stroke in the assigned marker colour around each product's silhouette, with no fill, no gradient, no glow, no drop shadow and no surrounding decoration. Three further rules support detection at Stage 3.
+
+\begin{itemize}
+\item An eighty-pixel \emph{quiet zone} around each outline is reserved: no overlay text, price tag or decorative element may enter it. The quiet zone gives the deterministic mask in Stage 3 enough room to be dilated without erasing surrounding scene content.
+\item Product orientation is constrained to that of the reference photograph: the model may rotate the product by a multiple of ninety degrees but is forbidden from inventing novel poses. Outlines drawn around invented poses are still detectable but bear no relation to the contour of the reference photograph that will be pasted in their place, which produces visible scale or aspect mismatches.
+\item Drop shadows and reflections under the placeholder regions are explicitly forbidden, because they survive the outline-detection mask and produce ``ghost'' shadows beneath the pasted product after compositing.
+\end{itemize}
+
+The provider call is issued through the existing \texttt{IImageProvider} abstraction (Listing~\ref{lst:iimageprovider}), so that the choice of multimodal model is an orthogonal configuration decision rather than a property of the pipeline.
+
+\paragraph{Stage 3: detect-and-composite.}
+The third stage runs entirely on the application server, with no further model calls (other than the judge described in Section~\ref{subsec:hyb-judge}). It proceeds in six sub-steps:
+
+\begin{enumerate}
+\item[\textbf{(a)}] \emph{Per-product colour matching.} Each pixel of the placeholder canvas is mapped to the closest marker colour by Chebyshev RGB distance under a tolerance of $80$, producing a per-pixel product index (or $-1$ if no marker is within tolerance).
+\item[\textbf{(b)}] \emph{Largest-component filter.} For each product, only the largest connected component of matched pixels is kept, discarding stray marker-coloured pixels in the background that would otherwise inflate the paste-back bounding box.
+\item[\textbf{(c)}] \emph{Outline thickening.} The retained outline is dilated by four pixels to absorb anti-aliased halo pixels at the stroke edge.
+\item[\textbf{(d)}] \emph{Inpaint mask construction.} A binary product-region mask is built by flood-filling unmatched cells from the canvas border and inverting the result, then dilated by fifteen pixels to also catch the model's occasional drop shadows.
+\item[\textbf{(e)}] \emph{LaMa inpainting.} The placeholder canvas and the mask are passed to a LaMa inpainting model \cite{suvorov2022lama} (served via IOPaint), chosen because it handles large masks, runs on CPU at acceptable latency, and needs no inference-time text prompt.
+\item[\textbf{(f)}] \emph{Product paste.} The retailer's source photograph is trimmed to its opaque bounding box, scaled by area to $0.8\times$ the median placeholder area, anchored at the placeholder's bottom-left corner so products ``stand'' on a baseline, and alpha-composited onto the inpainted canvas.
+\end{enumerate}
+
+Listing~\ref{lst:hybrid-loop} shows a slightly simplified version of the compositor's main loop; the production code performs the same steps with additional logging and per-product diagnostics that have been elided for legibility.
+
+\begin{lstlisting}[style=csharp, caption={Per-product compositing loop (simplified).}, label={lst:hybrid-loop}]
+foreach (var (product, marker) in assignments)
+{
+    var raw       = MatchByChebyshev(placeholder, marker, tolerance: 80);
+    var component = LargestConnectedComponent(raw);
+    var outline   = Dilate(component, radius: 4);
+    var mask      = BuildProductMask(outline);
+    mask          = Dilate(mask, radius: 15);
+
+    var cleaned   = await lama.InpaintAsync(placeholder, mask, ct);
+    var trimmed   = TrimTransparentBorder(product.Photo);
+    var scaled    = ScaleByArea(trimmed, target: medianBboxArea * 0.8);
+    var anchor    = BottomLeftOf(BoundingBox(component));
+    placeholder   = AlphaComposite(cleaned, scaled, anchor);
+}
+return placeholder;
+\end{lstlisting}
+
+\subsection{The quality gate: a language-model judge with retry}
+\label{subsec:hyb-judge}
+
+The Stage~3 output is a candidate final image, not the final image itself. A separate language-model call, the \emph{judge}, is given the candidate and asked, in one sentence, whether every product is acceptable: no leftover coloured outlines, no obvious paste seams, no major distortion of the pasted product. The judge is required to reply with a single word, either \texttt{YES} or \texttt{NO}. If the answer is \texttt{NO}, the entire pipeline (from Stage~2 onwards, with the marker assignment from Stage~1 preserved) is re-run. The loop is capped at three trials. If the judge service itself fails for any reason, the most recent candidate is accepted: the platform degrades open rather than blocking the retailer, on the principle that a marginally imperfect catalogue is more valuable than no catalogue at all.
+
+The choice of an off-the-shelf multimodal model as judge, rather than a learned classifier, is itself part of the protocol-over-training argument. The judge's job is not to score image realism in general but to detect a small list of well-defined compositional faults (residual marker pixels, visible seams at the paste boundary, gross distortion of the pasted product). Off-the-shelf multimodal models are reliable on well-defined visual checklists of this shape, are cheap to call once per candidate, and adapt to new failure modes by a prompt edit rather than a retraining cycle.
+
+\subsection{Empirical observations}
+\label{subsec:hyb-empirical}
+
+The pipeline was exercised informally during development on a sample of catalogues drawn across several shop profiles, layouts and product counts. Two observations are worth recording.
+
+The first is that the single-shot pipeline (Stages~1--3 followed by one judge call) was accepted by the judge in roughly seventy per cent of runs. The dominant failure mode at this rate was residual outline pixels at the boundary of an inpainted region, which the dilation in step~(d) of Stage~3 normally absorbs but occasionally misses when the model emits a partial outline that loops back on itself; the second-most-common failure mode was visible scale mismatch between a pasted product and its placeholder bounding box.
+
+The second is that on a smaller sub-sample where the judge's verdict was compared against a human reviewer, the two agreed in nearly every case. The human reviewer was asked the same one-sentence question the judge was asked, and the disagreements were a small handful in which the judge was strict (rejecting an image the human was happy to accept) rather than the reverse. This is consistent with the observation, across the broader literature, that strong multimodal models are reliable critics of compositional faults that are easy to describe verbally, and is the platform's evidence that the judge is a good proxy for the human reviewer that it replaces in production.
+
+If the per-trial acceptance probabilities are treated as approximately independent, capping the loop at three trials gives an effective acceptance rate of $1 - 0.30^{3} \approx 0.973$. Table~\ref{tab:hyb-acceptance} reports the corresponding rates for one, two and three trials. In practice, the user almost always receives an acceptable image after at most three internal retries, which matches the figures predicted by the independent-trial model and is consistent with the hands-on experience during development.
+
+\begin{table}[!ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\centering\arraybackslash}p{2.4cm}|>{\centering\arraybackslash}p{3.6cm}|Y|}
+\hline
+\textbf{Trials} & \textbf{Acceptance probability} & \textbf{Interpretation} \\
+\hline
+1 & $\approx 0.70$ & Single-shot baseline. \\
+\hline
+2 & $1 - 0.30^{2} = 0.91$ & At most one retry. \\
+\hline
+3 & $1 - 0.30^{3} \approx 0.97$ & Pipeline cap; the user-facing rate. \\
+\hline
+\end{tabularx}
+\caption{Compound acceptance probability under the independent-trial model, given a single-trial acceptance rate of $0.70$.}
+\label{tab:hyb-acceptance}
+\end{table}
+
+These figures are observational and informal; a controlled benchmark with a fixed evaluation set, blind human raters and per-failure-mode breakdown is left to future work. They are presented here to motivate the three-trial cap, not as a definitive measurement.
+
+\section{Print Pipeline and DPI Enhancer}
+\label{sec:print-pipeline}
+
+The print pipeline is the third place where a deterministic post-processor closes the gap between what the multimodal model emits and what the retailer needs. Generated assets ship at the model's native resolution, typically $1024 \times 1024$ pixels. A print of the same asset at $300\,$dpi requires materially more pixels: $1240 \times 1748$ for A6, rising to $3508 \times 4961$ for A3. The print pipeline therefore upscales below-target assets by a learned super-resolution model before laying them out in a paper-sized PDF.
+
+The model used is Real-ESRGAN \cite{wang2021realesrgan}, exported to ONNX and run through the application server's ONNX Runtime. Inputs at most $512$ pixels on a side are upscaled in a single forward pass; larger inputs are tiled into $256 \times 256$ source patches with sixteen pixels of overlap padding on each side, each patch is upscaled independently, and the upscaled patches are stitched back together. The overlap padding is what makes the tiling invisible: each interior pixel of the output appears in two adjacent tiles' interiors, and the stitching averages them, which suppresses the seam artefacts that naively tiled super-resolution produces. Tile-based inference also caps the model's peak memory consumption at the size of a single patch's intermediate activations, which keeps the upscaler runnable inside the same Container Apps revision as the rest of the API. Concurrent inference is bounded by a small semaphore, so that an unusually large print job cannot crowd out interactive traffic. Figure~\ref{fig:print-flow} sketches the print flow end to end.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize},
+    inp/.style    ={draw=black!50,        line width=0.4pt, rounded corners=2pt,   minimum width=28mm, minimum height=11mm, align=center, fill=gray!6,   font=\scriptsize\itshape},
+    proc/.style   ={draw=gray!65,         line width=0.5pt, rounded corners=2.5pt, minimum width=32mm, minimum height=12mm, align=center, fill=gray!12},
+    aicall/.style ={draw=blue!60!black,   line width=0.7pt, rounded corners=2.5pt, minimum width=32mm, minimum height=14mm, align=center, fill=blue!8},
+    final/.style  ={draw=green!55!black,  line width=0.7pt, cylinder, shape border rotate=90, aspect=0.25, minimum width=26mm, minimum height=12mm, align=center, fill=green!10},
+    arr/.style    ={-{Latex[length=1.8mm,width=1.5mm]}, thick, draw=black!70},
+    barr/.style   ={-{Latex[length=1.8mm,width=1.5mm]}, thick, dashed, draw=black!55}
+]
+
+\node[inp]    (src) at (0, 0)    {gallery image\\(native resolution)};
+\node[proc]   (chk) at (4.6, 0)  {compute target pixels\\\scriptsize(paper size @ $300\,$dpi)};
+\node[aicall] (up)  at (9.4, 1.9) {Real-ESRGAN\\tile upscaler\\[1pt]\tiny\textsc{ai call (ONNX)}};
+\node[proc]   (lay) at (14.2, 0) {PDF layout\\\scriptsize($\pm$ QR code)};
+\node[final]  (out) at (18.8, 0) {print-ready\\PDF in gallery};
+
+\draw[arr]  (src) -- (chk);
+\draw[arr]  (chk.north) to[out=60, in=180]  node[above, font=\tiny\itshape, pos=0.55] {if scale~$>1$} (up.west);
+\draw[arr]  (up.east)   to[out=0,  in=120] (lay.north);
+\draw[barr] (chk) -- node[above, font=\tiny\itshape] {else} (lay);
+\draw[arr]  (lay) -- (out);
+
+\end{tikzpicture}%
+}
+\caption{Print pipeline: assets are upscaled only when the target paper size at $300\,$dpi demands more pixels than the asset carries.}
+\label{fig:print-flow}
+\end{figure}
+
+The pipeline is built on the same protocol-over-model-size principle as the previous two contributions. The model used is older and smaller than the multimodal models the rest of the platform relies on, but the protocol around it (fixed paper sizes, a hard $300\,$dpi target, deterministic tile padding) is what makes its output reliable enough to send to a printer.
+
+\section{Closing remarks}
+\label{sec:contributions-closing}
+
+The three contributions described in this chapter share the same underlying argument. The recommendation engine grounds a language model in a curated playbook and a stream of external signals, and constrains it through a multi-stage chain whose intermediate artefacts are typed; the hybrid catalogue pipeline turns a multimodal model into an obedient scene generator by giving it a marker-outline contract, and uses a deterministic compositor to enforce that contract where the model breaks it; the print pipeline turns a smaller super-resolution model into a print-ready upscaler by tiling under fixed paper sizes and a hard dpi target. None of the three contributions is a new model. Each of them is a protocol that an existing model is asked to respect, together with the cheap deterministic machinery that handles the cases where it does not. The next chapter shows the assets the pipelines produce and describes the testing strategy that protects them.

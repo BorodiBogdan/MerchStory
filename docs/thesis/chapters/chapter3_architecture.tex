@@ -1,0 +1,936 @@
+\chapter{System Specification and Cloud Architecture}
+\label{chap:architecture}
+
+The platform's specification covers three layers: what it is required to do, how its components fit together, and how it is operated as a production cloud service on Microsoft Azure. The recommendation engine and the hybrid generative pipeline appear here only as participants in the architecture; their internal workings are deferred to the contributions chapter that follows. Most of what the platform delivers happens around the AI calls rather than inside them, so the orchestration, the credit ledger, the tenant isolation and the admission boundary are the elements that determine what a retailer actually receives.
+
+\section{Functional and Non-Functional Requirements}
+\label{sec:requirements}
+
+The objectives stated in Chapter~\ref{chap:introduction} establish what the platform exists to do. The present section translates those objectives into a set of requirements concrete enough to drive the architectural decisions that follow.
+
+\subsection{Functional requirements}
+\label{subsec:functional-requirements}
+
+The functional requirements are organised by capability area. Each paragraph describes what the platform must let its users do, abstracted from how the capability is delivered.
+
+\paragraph{Identity and shop onboarding.}
+The platform must allow a retailer to create an account, authenticate, and complete a brief onboarding flow that captures the shop's identity. Onboarding is a three-stage process that asks the retailer for the shop's basic descriptors, then for its visual brand identity, and finally for the contact details through which the shop reaches its customers. The parameters gathered here are not all mandatory at the point of generation: the retailer can decide, on a per-request basis, which of them to feed into the prompt and which to leave out, so that an asset can be made as specific or as generic as the situation calls for. Once onboarding is complete, the shop's currency and the language in which generated assets are to be produced are locked, and every subsequent generation request inherits both as default parameters.
+
+\paragraph{Product library.}
+The platform must let a retailer maintain a library of the products on offer. Each product carries a name, a category, a price and a representative photograph, and the retailer can create, edit and delete entries at will. The library is filterable by name, category and price range, and the lists it produces are consulted on every generation screen. Product photographs can also be cleaned up through a one-tap background-removal action, delegated to an external image-processing service, that replaces the original background with a transparent canvas suitable for compositing.
+
+\paragraph{Reference catalogue and search by photo.}
+Alongside the retailer's own library, the platform maintains a curated catalogue of professional product imagery covering the kinds of goods that small shops typically sell, such as snacks, drinks or household items, organised by a hierarchical category tree. When adding a product, the retailer takes a photograph of the real item with their phone and then chooses whether to keep that photograph as the product image or replace it with the closest match from the curated catalogue. The match is found by an internal AI model that compares the uploaded photograph against the catalogue's images, so a phone shot of, say, a coffee mug yields a small ranked list of catalogue mugs that look like it, without the retailer having to type a description. If a catalogue image is selected, it enters the retailer's library with the clean studio appearance that subsequent generation steps expect.
+
+\paragraph{Asset generation.}\label{par:asset-generation}
+The platform must produce three families of marketing imagery from the inputs gathered during onboarding and from the retailer's library. Announcements are single-product or single-event promotional posts, used to advertise a discount, a new arrival, a job opening or an upcoming store event. Catalogues are multi-product editorial layouts that gather a curated selection of the shop's offer into a single image, useful for seasonal campaigns or weekly highlights. Wallpapers are clean branded backdrops intended for in-store screens or social-media headers, where the shop's identity rather than any specific product is the focus.
+
+Each family is parameterised by the brand context recorded at onboarding and by the locked language, so that the supported language variants can be produced on demand. The generation contract itself is model-agnostic: several multimodal providers sit behind a single abstraction, and the retailer picks one at the moment of each request. Each model carries a credit cost that reflects its computational class and per-call price, so the cost-versus-quality trade-off is visible to the retailer rather than hidden inside the orchestrator. The catalogue family in particular is produced by three generator flavours:
+
+\begin{itemize}
+    \item \emph{Fully generative}: the multimodal model designs and renders the whole scene, products included.
+    \item \emph{Hybrid (preserve products)}: the model renders the scene with reserved placeholder regions, and the platform's compositor pastes the retailer's actual product photographs into them so that product fidelity is preserved pixel for pixel.
+    \item \emph{In-house composite}: no model is invoked at generation time, and the platform's deterministic compositor lays out the products, prices and brand identity directly onto a chosen background image.
+\end{itemize}
+
+\noindent The announcement family is in turn sub-typed by post intent, with each sub-type carrying its own prompt template and required fields:
+
+\begin{itemize}
+    \item \emph{Announcement}: a general post for store news such as new arrivals, in-store events or schedule changes.
+    \item \emph{Job Post}: a hiring notice covering the open role, its responsibilities and the channel for applications.
+    \item \emph{Promotion}: a discount-driven post advertising a price cut, coupon code or time-limited offer on selected products.
+\end{itemize}
+
+\noindent The internal mechanics of the hybrid catalogue mode are deferred to the contributions chapter that follows.
+
+\paragraph{Daily marketing recommendations.}
+Once a day, the platform must produce a small ranked set of fresh marketing themes adapted to the retailer's shop and to the day's external context (weather, local events, holidays). Each theme is presented as a fully drafted promotional idea, in the locked language, and the retailer may either dismiss it, react to it, or hand it directly to the asset-generation pipeline as a starting prompt. The recommendation engine that produces these themes is the first of the two main contributions of this thesis and is described in detail in \textit{Chapter 4}.
+
+\paragraph{Asset library and print export.}
+Every generated asset, regardless of family and mode, is persisted to the retailer's gallery, where it can be browsed and filtered by asset type, by date and by name. The gallery is the canonical record of everything the platform has produced for the shop. Any gallery item may be exported as a print-ready document, in paper sizes A6 to A3, at $300\,$dpi; if the source asset is below the target resolution, the platform's premium print pipeline upscales it through a learned super-resolution model before laying out the page.
+
+\paragraph{Billing and credit accounting.}
+Every generation that consumes a paid AI provider must be debited against a per-tenant credit balance. The ledger is consistency-critical: a debit is recorded only when the AI call succeeds, a refund is issued only when it fails, and no retailer can be charged for a call that produced no asset. Each billable call is therefore wrapped in an atomic debit-and-record block, and any provider failure triggers an automatic refund. A small administrative interface lets operators grant credits to tenants and inspect the ledger, which is currently the only way a retailer's balance can grow.
+
+\paragraph{Administration.}
+A small set of capabilities is reserved to operators with the administrative flag set on their account, giving them broad oversight of the platform's data and tenants when intervention is required. The administrative surface is deliberately spartan and lives inside the same client application as the retailer surface, with the privileged screens hidden from non-administrative accounts.
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.6cm}|Y|}
+\hline
+\textbf{Capability area} & \textbf{Brief description} \\
+\hline
+Identity and onboarding & Account creation and a three-stage shop profile, with currency and language locked at the end. \\
+\hline
+Product library         & Create, edit and delete products with photographs, filters by name, category and price, and one-tap background removal. \\
+\hline
+Reference search        & Browse the curated catalogue, or match a phone photograph against it through an internal AI model. \\
+\hline
+Asset generation        & Announcements, catalogues and wallpapers, generated with a user-selected provider in fully generative or hybrid mode. \\
+\hline
+Daily recommendations   & Daily themed promotional ideas grounded in the shop profile and external context. \\
+\hline
+Library and print       & Persistent gallery with print-ready export from A6 to A3, upscaled by super-resolution when needed. \\
+\hline
+Billing                 & Transactional credit ledger with an atomic debit-and-record around every AI call. \\
+\hline
+Administration          & Broad operator oversight over platform data and tenants. \\
+\hline
+\end{tabularx}
+\caption{Summary of functional requirements by capability area.}
+\label{tab:functional-requirements}
+\end{table}
+
+\subsection{Non-functional requirements}
+\label{subsec:nonfunctional-requirements}
+
+\paragraph{Performance.}
+Routine read and write operations must feel instantaneous, completing within a couple of hundred milliseconds from the client's perspective. Operations that depend on AI calls are inherently slower, taking seconds to tens of seconds, and cannot be served within a synchronous request. They are therefore modelled as asynchronous jobs, with the client showing a loading state while the work runs and notifying the user once the result is ready.
+
+\paragraph{Cost-awareness.}
+Every paid AI call has a non-trivial unit cost, so the platform must keep aggregate spend under control without surprising its retailers. The credit-and-coin model provides per-call backpressure and makes the cost-versus-quality trade-off explicit through credits weighted by the chosen model. A second layer of defence sits at the gateway, where rate-limit policies are configured per tenant and per endpoint class.
+
+\paragraph{Availability and graceful degradation.}
+The platform integrates several third-party services (multimodal image providers, a background-removal service, geocoding), each of which can fail or rate-limit independently of the others. When one of them is unavailable the platform must still deliver value: a recommendation run must not be aborted if a single context-signal provider fails, an asset generation must produce an actionable error and refund the credit if the chosen image provider is down, and a geocoding failure must not block onboarding. The design therefore commits to per-integration isolation, retries with exponential backoff and circuit-breaker policies on every external HTTP call.
+
+\paragraph{Access control as an admission gate.}
+The retailer-facing surface of the platform is open: any retailer can sign up and use it. What is closed off is the operational side. The development environment, the cloud-side secrets and the underlying Azure resources are reachable only through identities on an allow-list maintained inside Microsoft Entra ID, and anyone outside that list cannot touch the platform's internals at all. Retailer authentication and authorisation are a separate concern, handled inside the application once a request has reached the public surface.
+
+\paragraph{Per-tenant data isolation.}
+Once a request has been admitted, the platform must guarantee that no retailer can read, modify or otherwise observe another retailer's data. Tenant identity is carried explicitly on every database query, on every blob-storage signed URL and on every cache key, and cross-tenant queries are not part of the normal API surface. The administrative endpoints constitute the only deliberate exception and are reachable only by accounts whose administrative flag is set.
+
+\paragraph{Localisation.}
+The platform supports two interface and generation languages, English and Romanian, with the chosen language locked at onboarding and carried as a flag on the user record, on the shop record and on every generated asset. Generated artefacts are stored alongside their translations rather than regenerated on language switch, so that toggling the interface language has no monetary cost. The choice between different currencies follows the same locking pattern.
+
+\paragraph{Auditability and maintainability.}
+Every request produces a structured log line carrying a tenant identifier and a request correlation identifier, and every external HTTP call propagates that correlation identifier downstream. Distributed traces are emitted for the multi-stage pipelines such as image generation and daily recommendations, so the latency of each stage can be examined in isolation. On the maintainability side, the source code is organised by feature folder, so a change to a single capability such as the wallet touches one area of the codebase and the dependency graph between feature areas is kept shallow.
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.0cm}|Y|}
+\hline
+\textbf{Requirement} & \textbf{Architectural mechanism} \\
+\hline
+Interactive read/write latency & Cached read paths and stateless API for horizontal scale-out. \\
+\hline
+Long-running AI work & Asynchronous job model with client-polled status. \\
+\hline
+Cost backpressure & Per-call credit debit and gateway rate limits per tenant. \\
+\hline
+Graceful degradation & Retry with backoff, circuit breakers and per-integration isolation. \\
+\hline
+Closed admission & Entra ID allow-list at the gateway. \\
+\hline
+Tenant isolation & Tenant-scoped queries, signed URLs and cache keys. \\
+\hline
+Localisation & Language flag carried end-to-end with pre-translated assets. \\
+\hline
+Auditability & Correlation IDs in logs and per-stage distributed traces. \\
+\hline
+\end{tabularx}
+\caption{Non-functional requirements and the architectural mechanisms that satisfy them.}
+\label{tab:nonfunctional-requirements}
+\end{table}
+
+\section{High-Level Architecture}
+\label{sec:high-level-architecture}
+
+The platform is organised in three tiers. A \emph{client}, shipped to the retailer as a web, iOS and Android application from a single codebase, talks to a \emph{stateless application server} that mediates between the user-facing surface and the platform's external dependencies. The application server sits behind an \emph{API gateway} that handles admission, transport security and rate limiting. From there, the server orchestrates calls to a handful of third-party services (the chosen multimodal image provider, the background-removal service and the geocoding service) and persists state in a \emph{data plane} made of a relational database with a vector extension and a separate object store for binary assets. Figure~\ref{fig:three-tier} sketches the arrangement.
+
+\begin{figure}[ht]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize},
+    client/.style={draw, rounded corners=2pt, minimum width=20mm, minimum height=7mm, align=center, fill=gray!5},
+    gw/.style={draw, rounded corners=2pt, minimum width=92mm, minimum height=8mm, align=center, fill=gray!15},
+    svc/.style={draw, rounded corners=2pt, minimum width=22mm, minimum height=10mm, align=center, fill=gray!5},
+    cache/.style={draw, rounded corners=2pt, minimum width=98mm, minimum height=7mm, align=center, fill=yellow!15},
+    store/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum width=22mm, minimum height=10mm, align=center, fill=gray!5},
+    ext/.style={draw, dashed, rounded corners=2pt, minimum width=24mm, minimum height=8mm, align=center},
+    arr/.style={-{Latex[length=1.6mm]}, thick}
+]
+
+% Clients (top)
+\node[client] (web)     at (2.0,8.0) {Web client};
+\node[client] (ios)     at (5.0,8.0) {iOS client};
+\node[client] (android) at (8.0,8.0) {Android client};
+
+% API gateway centered above the application server, raised for breathing room
+\node[gw] (gw) at (5.0,6.5) {API gateway (TLS, CORS, rate limits)};
+
+% Application server: feature services in two rows of four, spacing 2.5 units
+\node[svc] (auth)    at (1.25,4.4) {Auth};
+\node[svc] (shop)    at (3.75,4.4) {Shop profile};
+\node[svc] (prod)    at (6.25,4.4) {Product library};
+\node[svc] (gallery) at (8.75,4.4) {Gallery};
+
+\node[svc] (refs)    at (1.25,3.0) {Reference\\search};
+\node[svc] (gen)     at (3.75,3.0) {Image\\generation};
+\node[svc] (reco)    at (6.25,3.0) {Recommendation\\engine};
+\node[svc] (bill)    at (8.75,3.0) {Billing\\(credits)};
+
+% In-process cache spans the cluster
+\node[cache] (cache) at (5.0,1.7) {In-process per-tenant cache (read-path, invalidated on writes)};
+
+% Application server bounding box
+\begin{pgfonlayer}{background}
+\node[draw, dashed, rounded corners=4pt, inner sep=4mm,
+      fit=(auth)(shop)(prod)(gallery)(refs)(gen)(reco)(bill)(cache),
+      label={[font=\scriptsize\itshape]above left:Application server (.NET, Semantic Kernel)}] (server) {};
+\end{pgfonlayer}
+
+% Data plane (lowered for breathing room under the cluster)
+\node[store] (db)   at (3.5,-0.8) {PostgreSQL\\+ pgvector};
+\node[store] (blob) at (6.5,-0.8) {Blob storage};
+
+% External services (left)
+\node[ext] (ai)  at (-2.6,4.4) {Multimodal AI\\providers};
+\node[ext] (bg)  at (-2.6,3.0) {Background\\removal};
+\node[ext] (geo) at (-2.6,1.7) {Geocoding};
+
+% Arrows: clients to gateway
+\draw[arr] (web)     -- (web     |- gw.north);
+\draw[arr] (ios)     -- (gw.north);
+\draw[arr] (android) -- (android |- gw.north);
+
+% Gateway to server (straight down, centred)
+\draw[arr] (gw.south) -- (server.north);
+
+% Server to data plane (straight vertical lines)
+\draw[arr] (server.south -| db.north)   -- (db.north);
+\draw[arr] (server.south -| blob.north) -- (blob.north);
+
+% External services to server
+\draw[arr] (ai.east)  -- (server.west |- ai);
+\draw[arr] (bg.east)  -- (server.west |- bg);
+\draw[arr] (geo.east) -- (server.west |- geo);
+
+\end{tikzpicture}%
+}
+\caption{High-level architecture of the platform.}
+\label{fig:three-tier}
+\end{figure}
+
+The application server is deliberately stateless. Every request carries the credentials by which the platform identifies the retailer, and the server keeps no in-memory session beyond the lifetime of the request itself. The arrangement lets the server scale horizontally without coordination, and it keeps every piece of surviving state in the data plane where transactional consistency is the database's job rather than the application's.
+
+Two request shapes are supported. A \emph{synchronous} request is served end-to-end while the client waits and is used for routine reads and writes such as logging in or listing products. An \emph{asynchronous job} request is used for any operation whose work is dominated by long-running external calls. The server returns a job identifier as soon as the work is queued, and the client polls a status endpoint until the result is ready. Figure~\ref{fig:request-flows} contrasts the two flows.
+
+\begin{figure}[ht]
+\centering
+\begin{minipage}[t]{0.46\textwidth}
+\centering
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize\sffamily},
+    arr/.style={-{Latex[length=1.6mm]}, thick}
+]
+\node (cl) at (0,0) {Client};
+\node (sv) at (3.0,0) {Server};
+\draw[thick] (cl) -- ++(0,-2.6);
+\draw[thick] (sv) -- ++(0,-2.6);
+\draw[arr] (0,-0.6) -- node[above]{request} (3.0,-0.6);
+\draw[arr] (3.0,-1.6) -- node[above]{response} (0,-1.6);
+\node[align=center] at (1.5,-2.4) {\itshape synchronous};
+\end{tikzpicture}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.46\textwidth}
+\centering
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize\sffamily},
+    arr/.style={-{Latex[length=1.6mm]}, thick}
+]
+\node (cl) at (0,0) {Client};
+\node (sv) at (3.0,0) {Server};
+\draw[thick] (cl) -- ++(0,-3.6);
+\draw[thick] (sv) -- ++(0,-3.6);
+\draw[arr] (0,-0.5) -- node[above]{submit} (3.0,-0.5);
+\draw[arr] (3.0,-1.0) -- node[above]{job id} (0,-1.0);
+\draw[arr] (0,-1.7) -- node[above]{poll} (3.0,-1.7);
+\draw[arr] (3.0,-2.1) -- node[above]{pending} (0,-2.1);
+\draw[arr] (0,-2.7) -- node[above]{poll} (3.0,-2.7);
+\draw[arr] (3.0,-3.1) -- node[above]{result} (0,-3.1);
+\node[align=center] at (1.5,-3.5) {\itshape asynchronous job};
+\end{tikzpicture}
+\end{minipage}
+\caption{The two request shapes supported by the platform. Synchronous requests are served while the client waits; asynchronous job requests return immediately with a job identifier, and the client polls a status endpoint until the result is available.}
+\label{fig:request-flows}
+\end{figure}
+
+It is useful to record the implementation technologies once. The client is built with React Native (Expo), which lets a single TypeScript codebase be exported as a static web build, an iOS application and an Android application. The server is an ASP.NET Core minimal-API service running on .NET 10. The data plane consists of PostgreSQL 18 with the pgvector extension and Microsoft Azure Blob Storage. React Native was chosen to keep a single codebase for the heterogeneous device population of the target audience, and ASP.NET Core was chosen for its first-class support of the Semantic Kernel orchestration framework on which the platform's AI layer depends.
+
+\section{Client Tier}
+\label{sec:client-tier}
+
+The client is the only tier the retailer ever sees directly, and it is the surface for all data entry, asset review and administrative operations.
+
+Behind that surface the client is a thin shell over the remote API, with almost no domain logic of its own. Shared interface state lives in a small number of context providers (authentication, theme, shop profile, in-progress onboarding form) whose role is to hold values that several screens need to read in common. A single API client at the network boundary attaches the access token to every outgoing request, refreshes that token transparently when it expires, and translates server responses into the typed shapes that the rest of the codebase consumes.
+
+Because almost every action costs real credits on the server side, the client takes a conservative line on optimistic UI: a write is reflected to the user only once it has been confirmed by the server.
+
+The route tree mirrors the platform's user model. Unauthenticated routes serve registration and login. An onboarding group leads first-time accounts through the shop-profile setup and refuses to release them to the rest of the application until it is complete. The main set of tabs covers the home screen, the products library, the gallery, asset creation, the wallet and the profile. An administrative group hidden behind a flag exposes the operator capabilities.
+
+\subsection{User interface}
+\label{subsec:client-ui}
+
+The retailer's first encounter with the platform is a sign-in screen with the option to register a new account. A first-time account is then led through the three-stage shop onboarding, and the rest of the application is unlocked only once the profile has been recorded.
+
+\begin{figure}[!ht]
+\centering
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/client/login.png}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/client/onboarding.png}
+\end{minipage}
+\caption{Login screen and shop onboarding step.}
+\label{fig:client-auth}
+\end{figure}
+
+Once onboarding is complete, the retailer lands on the home surface, a tab bar that gives one-tap access to the main parts of the application. Asset creation is the heart of the daily workflow: the retailer chooses an asset family, picks the products to feature and the model to use, and is shown an explicit progress indicator while the generation runs in the background.
+
+\begin{figure}[!ht]
+\centering
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/client/home.png}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/client/asset-creation.png}
+\end{minipage}
+\caption{Home tabs and the asset-creation flow.}
+\label{fig:client-main}
+\end{figure}
+
+Every generated asset is collected in the gallery, where the retailer can browse, filter and export past work. The wallet shows the credit balance and the history of debits and refunds, so the cost of each generation is visible and auditable from the same tab bar.
+
+\begin{figure}[!ht]
+\centering
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/client/gallery.png}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/client/wallet.png}
+\end{minipage}
+\caption{Gallery and wallet screens.}
+\label{fig:client-output}
+\end{figure}
+
+\section{Application Server}
+\label{sec:application-server}
+
+The application server is a minimal-API ASP.NET Core service running on .NET 10. It hosts every feature service the platform exposes and is the host for the Semantic Kernel orchestration layer through which every AI-bound call passes.
+
+\subsection{Why .NET, and why Semantic Kernel}
+\label{subsec:why-dotnet}
+
+The choice of platform deserves comment because .NET is a less obvious pick for a contemporary AI application than Node.js or Python. The platform's core is an AI orchestration layer that routes prompts across multiple providers, manages prompt templates, applies retrieval-augmented context to language-model calls, and chains several calls in sequence for the daily recommendation engine. Microsoft's \emph{Semantic Kernel} is a first-class .NET library that bundles all of these facilities behind a unified abstraction, with clean integration into the ASP.NET Core dependency-injection container. Building the server in .NET therefore makes Semantic Kernel a native citizen of the architecture rather than a foreign component, which is the decisive reason for choosing ASP.NET Core minimal-API over Node.js with Express or Python with FastAPI.
+
+The choice of orchestrator does not lock the platform to the Microsoft AI ecosystem. Semantic Kernel sits above a uniform provider abstraction, and the providers it talks to span both Azure offerings such as Azure OpenAI and Azure AI Foundry, and non-Microsoft offerings such as Google's Gemini family and the Nano Banana image model. Swapping a model is therefore a configuration change rather than a code change. Figure~\ref{fig:semantic-kernel} sketches the arrangement.
+
+\begin{figure}[!ht]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize},
+    layer/.style={draw, rounded corners=3pt, minimum width=120mm, minimum height=11mm, align=center, fill=gray!10, line width=0.4pt},
+    sk/.style={draw, rounded corners=3pt, minimum width=120mm, minimum height=14mm, align=center, fill=blue!8, line width=0.4pt},
+    azure/.style={draw, rounded corners=3pt, minimum width=24mm, minimum height=12mm, align=center, fill=blue!8, line width=0.4pt},
+    prov/.style={draw, rounded corners=3pt, minimum width=24mm, minimum height=12mm, align=center, fill=gray!5, line width=0.4pt},
+    arr/.style={-{Latex[length=2mm]}, thick, gray!75}
+]
+
+% Top layer
+\node[layer] (api) at (0, 4.5) {\textbf{Application server} \quad (ASP.NET Core, .NET 10)};
+
+% Semantic Kernel layer
+\node[sk] (sk) at (0, 2.7) {\textbf{Semantic Kernel}\\\scriptsize prompt templates \;$\cdot$\; retrieval-augmented context \;$\cdot$\; multi-stage chaining};
+
+% Provider clusters with bigger horizontal gap between Azure and external
+\node[azure] (aoai) at (-5.4, 0.3) {Azure OpenAI};
+\node[azure] (afnd) at (-2.4, 0.3) {Azure AI\\Foundry};
+\node[prov]  (gem)  at ( 2.4, 0.3) {Google Gemini};
+\node[prov]  (nb)   at ( 5.4, 0.3) {Nano Banana};
+
+% Cluster dashed wrappers with labels
+\begin{pgfonlayer}{background}
+\node[draw=blue!45, dashed, rounded corners=4pt, inner sep=2.5mm,
+      fit=(aoai)(afnd),
+      label={[font=\scriptsize\itshape, blue!65]below:Azure ecosystem}] (azurebox) {};
+\node[draw=gray!55, dashed, rounded corners=4pt, inner sep=2.5mm,
+      fit=(gem)(nb),
+      label={[font=\scriptsize\itshape, gray!75]below:External providers}] (extbox) {};
+\end{pgfonlayer}
+
+% Arrows
+\draw[arr] (api.south) -- (sk.north);
+\draw[arr] (sk.south) -- (aoai.north);
+\draw[arr] (sk.south) -- (afnd.north);
+\draw[arr] (sk.south) -- (gem.north);
+\draw[arr] (sk.south) -- (nb.north);
+
+\end{tikzpicture}%
+}
+\caption{Semantic Kernel as a uniform layer over Azure and non-Azure providers.}
+\label{fig:semantic-kernel}
+\end{figure}
+
+\subsection{Capability areas}
+\label{subsec:capabilities}
+
+Each capability area on the server is a bounded service that exposes a small set of HTTP endpoints. Their roles are summarised below.
+
+\paragraph{Authentication and session management.}
+A successful login produces a short-lived JWT access token and a longer-lived refresh token. The access token is validated locally on every request, the refresh token is stored in the database and is rotated each time it is used, and a background service periodically removes tokens that have expired or been revoked.
+
+\paragraph{Tenant data services.}
+The retailer-facing entities (shop profile, products, gallery, wallet) are each served by a dedicated feature service that exposes CRUD operations over its part of the schema, with the per-tenant cache and isolation rules inherited from the data layer. Coordination between services is performed at the endpoint layer rather than through direct inter-service calls.
+
+\paragraph{Image-generation orchestrator.}
+A thin layer fronts the supported image providers behind a single \texttt{IImageProvider} abstraction shown in Listing~\ref{lst:iimageprovider}. Each provider has a concrete implementation that wraps its SDK, and a mock implementation returns a deterministic placeholder image during automated testing.
+
+\begin{lstlisting}[style=csharp, caption={The \texttt{IImageProvider} abstraction.}, label={lst:iimageprovider}]
+public interface IImageProvider
+{
+    Task<ImageGenerationResult> GenerateAsync(
+        string prompt,
+        IReadOnlyList<string?>? inlineImages = null,
+        CancellationToken cancellationToken = default);
+}
+\end{lstlisting}
+
+\paragraph{Recommendation orchestrator.}
+The daily recommendation engine is exposed here as a single service whose inputs and outputs match the functional requirement above and whose internals are the subject of the contributions chapter that follows.
+
+\paragraph{Credit ledger.}
+The credit ledger is the in-process service that sits between every billable AI call and the database. It exposes a single primitive, \emph{run-with-debit}, which opens a database transaction, debits the cost, runs the work, and commits only when the work succeeds. A failure rolls the transaction back so that no debit is ever recorded for unsuccessful work.
+
+\paragraph{Background work.}
+Two long-running services run in the same process as the request handler. A job runner consumes pending recommendation runs, and a cleaner deletes expired refresh tokens. At the platform's data volumes a separate worker tier is not justified.
+
+\paragraph{HTTP surface.}
+The application server exposes a small, feature-grouped HTTP API. Table~\ref{tab:http-endpoints} lists each route group along with its prefix and purpose.
+
+{\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}p{3.6cm}|Y|}
+\hline
+\textbf{Group} & \textbf{Prefix} & \textbf{Purpose} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Group} & \textbf{Prefix} & \textbf{Purpose} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\caption{HTTP route groups exposed by the application server.}
+\label{tab:http-endpoints}
+\endlastfoot
+Auth & \texttt{/auth} & Register, log in, refresh tokens and change interface language. \\
+\hline
+Shop & \texttt{/shop} & Read and update the shop profile and logo. \\
+\hline
+Products & \texttt{/products} & CRUD over the retailer's product library, with one-tap background removal. \\
+\hline
+Reference catalogue & \texttt{/reference-images} & Browse, search and bulk-import the curated reference catalogue. \\
+\hline
+Image generation & \texttt{/generate-image} & Produce announcements, catalogues and wallpapers in fully generative or hybrid mode. \\
+\hline
+Gallery & \texttt{/gallery} & Save, list, rename and delete generated assets. \\
+\hline
+Wallet & \texttt{/wallet} & Read the credit balance and ledger, and grant credits (operator only). \\
+\hline
+Recommendations & \texttt{/recommendations} & Fetch today's ideas, request a refresh and leave feedback. \\
+\hline
+Print & \texttt{/print} & Render a gallery item to a print-ready document. \\
+\end{tabularx}
+}
+
+\subsection{Internal layering}
+\label{subsec:server-layering}
+
+Each feature follows a simple internal layering, shown in Figure~\ref{fig:server-layering}. The endpoint layer handles HTTP concerns only and delegates to a feature service that holds the business logic. The feature service in turn calls the data layer or, for AI-bound work, the Semantic-Kernel-mediated provider abstractions. Those abstractions are the only place from which outbound HTTP calls to third parties leave, which keeps retries, circuit breakers and credential management in one place.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=8mm,
+    every node/.style={font=\small\sffamily},
+    box/.style={draw, rounded corners=2pt, minimum width=72mm, minimum height=10mm, align=center, fill=gray!5},
+    arr/.style={-{Latex[length=2mm]}, thick}
+]
+\node[box] (ep) {Endpoints (\texttt{Map\dots Endpoints})};
+\node[box, below=of ep] (svc) {Feature services};
+\node[box, below=of svc] (orch) {Semantic Kernel + \texttt{IImageProvider}};
+\node[box, below=of orch] (http) {External HTTP boundary};
+\draw[arr] (ep) -- (svc);
+\draw[arr] (svc) -- (orch);
+\draw[arr] (orch) -- (http);
+\end{tikzpicture}
+\caption{Internal layering of a feature folder on the server.}
+\label{fig:server-layering}
+\end{figure}
+
+\section{Data Layer}
+\label{sec:data-layer}
+
+The data layer holds every piece of state that survives a request. PostgreSQL with the pgvector extension stores all relational data and the platform's two embedding spaces, and a separate Azure Blob Storage account holds the binary assets. Each application-server replica fronts the database with a process-local per-tenant read cache. Figure~\ref{fig:data-plane} shows the arrangement and the Azure-hosted compute that reads and writes it.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize},
+    compute/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=10mm, align=center, fill=blue!5},
+    cache/.style={draw, rounded corners=2pt, minimum width=110mm, minimum height=7mm, align=center, fill=yellow!15},
+    pgv/.style={draw, rounded corners=2pt, minimum width=24mm, minimum height=11mm, align=center, fill=blue!8},
+    blob/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum width=22mm, minimum height=14mm, align=center, fill=gray!5},
+    arr/.style={-{Latex[length=1.8mm]}, thick}
+]
+
+% Compute layer
+\node[compute] (api)    at (-4.2, 5.2) {API replicas\\\scriptsize (.NET 10)};
+\node[compute] (recjob) at ( 0.0, 5.2) {Recommendation\\job runner};
+\node[compute] (tokjob) at ( 4.2, 5.2) {Refresh-token\\cleaner};
+
+% In-process cache lives inside the compute box
+\node[cache] (cache) at (0, 3.6) {In-process per-tenant read cache (in-memory, replica-local)};
+
+\begin{pgfonlayer}{background}
+\node[draw, dashed, rounded corners=4pt, inner sep=4mm,
+      fit=(api)(recjob)(tokjob)(cache),
+      label={[font=\scriptsize\itshape]above:Azure Container Apps revision}] (compute_box) {};
+\end{pgfonlayer}
+
+% PostgreSQL Flexible Server with three sub-stores
+\node[pgv] (relt) at (-4.0, 0.4) {Relational\\tables};
+\node[pgv] (clip) at (-1.3, 0.4) {pgvector\\(CLIP image\\embeddings)};
+\node[pgv] (txt)  at ( 1.4, 0.4) {pgvector\\(text\\embeddings)};
+
+\begin{pgfonlayer}{background}
+\node[draw, dashed, rounded corners=4pt, inner sep=3mm,
+      fit=(relt)(clip)(txt),
+      label={[font=\scriptsize\itshape]above left:Azure Database for PostgreSQL Flexible Server}] (pg_box) {};
+\end{pgfonlayer}
+
+% Blob storage on the right
+\node[blob] (blobstore) at (5.0, -0.2) {Azure\\Blob Storage};
+
+% Arrows
+\draw[arr] (compute_box.south -| pg_box.north) -- (pg_box.north);
+\draw[arr] (compute_box.south -| blobstore.north) -- (blobstore.north);
+
+\end{tikzpicture}%
+}
+\caption{The data plane and the Azure compute that reads and writes it.}
+\label{fig:data-plane}
+\end{figure}
+
+\subsection{Relational schema}
+\label{subsec:relational-schema}
+
+The schema is a foreign-key spine that ties every record to a tenant. At its centre is the user-account table, with one row per retailer and a flag for operators. The other tables fall into two groups: tenant-scoped tables that hang off the user, and global tables that hold catalogue data and context signals shared across tenants. Figure~\ref{fig:schema} shows the arrangement.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\tiny},
+    entity/.style={
+        draw, rectangle split, rectangle split parts=2,
+        rectangle split draw splits=true,
+        rectangle split part fill={gray!20, gray!5},
+        rounded corners=1pt,
+        text width=22mm,
+        align=left,
+        inner sep=1.5pt
+    },
+    user/.style={
+        draw, rectangle split, rectangle split parts=2,
+        rectangle split draw splits=true,
+        rectangle split part fill={blue!22, blue!7},
+        rounded corners=1pt,
+        text width=22mm,
+        align=left,
+        inner sep=1.5pt
+    },
+    vec/.style={
+        draw, rectangle split, rectangle split parts=2,
+        rectangle split draw splits=true,
+        rectangle split part fill={yellow!35, yellow!12},
+        rounded corners=1pt,
+        text width=22mm,
+        align=left,
+        inner sep=1.5pt
+    },
+    fk/.style={->, >=Latex, thin, gray!70}
+]
+
+% Tenant tables above AppUser
+\node[entity] (shop) at (-4.5, 3.4) {%
+    \textbf{ShopProfile}
+    \nodepart{two}
+    UserId (FK, unique)\\
+    BrandName\\
+    BusinessDomain\\
+    Currency
+};
+\node[entity] (prod) at (0, 3.4) {%
+    \textbf{Product}
+    \nodepart{two}
+    UserId (FK)\\
+    Name\\
+    Price, Category\\
+    ImageBlobKey
+};
+\node[entity] (gen) at (4.5, 3.4) {%
+    \textbf{GeneratedImage}
+    \nodepart{two}
+    UserId (FK)\\
+    Name\\
+    AssetType\\
+    ImageBlobKey
+};
+
+% AppUser at centre
+\node[user] (user) at (0, 1.6) {%
+    \textbf{AppUser}
+    \nodepart{two}
+    Id (PK)\\
+    Email\\
+    IsAdmin\\
+    CoinBalance
+};
+
+% Tenant tables below AppUser
+\node[entity] (coin) at (-4.5,-0.2) {%
+    \textbf{CoinTransaction}
+    \nodepart{two}
+    UserId (FK)\\
+    Amount\\
+    BalanceAfter\\
+    RelatedGenImage (FK)
+};
+\node[entity] (rec) at (0,-0.2) {%
+    \textbf{DailyRecommend.}
+    \nodepart{two}
+    UserId (FK)\\
+    GeneratedAtUtc\\
+    IdeasJson
+};
+\node[vec] (emb) at (4.5,-0.2) {%
+    \textbf{IdeaEmbedding}
+    \nodepart{two}
+    UserId (FK)\\
+    DailyRecId (FK)\\
+    Embedding (text)
+};
+
+% FK arrows tenant -> AppUser
+\draw[fk] (shop) -- (user);
+\draw[fk] (prod) -- (user);
+\draw[fk] (gen)  -- (user);
+\draw[fk] (coin) -- (user);
+\draw[fk] (rec)  -- (user);
+\draw[fk] (emb)  -- (user);
+
+\begin{pgfonlayer}{background}
+\node[draw, dashed, rounded corners=4pt, inner sep=4mm,
+      fit=(shop)(prod)(gen)(user)(coin)(rec)(emb),
+      label={[font=\scriptsize\itshape]above left:Tenant-scoped tables}] (tenant_box) {};
+\end{pgfonlayer}
+
+% Global tables
+\node[entity] (cat) at (-4.5,-2.6) {%
+    \textbf{Category}
+    \nodepart{two}
+    Id (PK)\\
+    Name\\
+    ParentCategoryId (FK self)
+};
+\node[vec] (rim) at (-1.5,-2.6) {%
+    \textbf{ReferenceImage}
+    \nodepart{two}
+    CategoryId (FK)\\
+    Name\\
+    ImageBlobKey\\
+    Embedding (CLIP)
+};
+\node[vec] (pp) at (1.5,-2.6) {%
+    \textbf{PromoPlaybook}
+    \nodepart{two}
+    BusinessDomain\\
+    Theme, Trigger\\
+    Tactics\\
+    Embedding (text)
+};
+\node[entity] (hol) at (4.5,-2.6) {%
+    \textbf{Holiday}
+    \nodepart{two}
+    CountryCode\\
+    Year, Date\\
+    Name
+};
+
+\draw[fk] (rim) -- (cat);
+\draw[fk] (cat.north) to[out=110, in=70, looseness=8] (cat.north);
+
+\begin{pgfonlayer}{background}
+\node[draw, dashed, rounded corners=4pt, inner sep=3mm,
+      fit=(cat)(rim)(pp)(hol),
+      label={[font=\scriptsize\itshape]below left:Global tables}] (global_box) {};
+\end{pgfonlayer}
+
+\end{tikzpicture}%
+}
+\caption{Database schema with key fields.}
+\label{fig:schema}
+\end{figure}
+
+Two consequences of this layout matter at runtime. The first is that tenant isolation is enforced at the schema level rather than relying on application discipline. Every retailer-owned row carries a UserId foreign key, and the feature services filter on it before returning any data, so a misbehaving or malformed query can at worst read the wrong row, never the wrong tenant's data. The second is that the credit ledger is append-only and self-checking. Each CoinTransaction stores the delta and the resulting balance, so the wallet can be reconciled against the ledger at any point and a divergence would surface immediately. Together these properties hand the schema responsibility for two of the platform's hardest invariants, which would otherwise be re-verified by every endpoint touching retailer data or money.
+
+{\footnotesize
+\renewcommand{\arraystretch}{1.1}
+\begin{tabularx}{\textwidth}{|>{\ttfamily}p{4.5cm}|Y|}
+\hline
+\textnormal{\textbf{Table}} & \textbf{Purpose} \\
+\hline
+\endfirsthead
+\hline
+\textnormal{\textbf{Table}} & \textbf{Purpose} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\caption{Purpose of each table in the schema.}
+\label{tab:schema-tables}
+\endlastfoot
+AppUser & Identifies a retailer (or operator) and tracks the credit balance. \\
+\hline
+ShopProfile & Holds the brand identity and contact details captured during onboarding. \\
+\hline
+Product & An item the retailer sells, with name, price and a representative photograph. \\
+\hline
+GeneratedImage & An entry in the gallery, tagged with its asset family. \\
+\hline
+CoinTransaction & A row of the credit ledger that records a debit or refund and, optionally, the asset it paid for. \\
+\hline
+DailyRecommendation & The day's marketing ideas together with the context snapshot used to produce them. \\
+\hline
+IdeaEmbedding & A per-idea text embedding used to deduplicate themes against the shop's recent ideas. \\
+\hline\hline
+Category & A node in the reference catalogue's hierarchical tree. \\
+\hline
+ReferenceImage & A curated product photograph with a CLIP embedding for search-by-photo. \\
+\hline
+PromoPlaybookEntry & A known-good promotional pattern with a text embedding the recommendation engine retrieves over. \\
+\hline
+Holiday & A cached public holiday for a country and year, used as a context signal. \\
+\end{tabularx}
+}
+
+\subsection{Caching}
+\label{subsec:caching}
+
+Some screens read the same data on every visit, such as the product list, the gallery, the shop profile and the wallet balance. The feature services that serve these reads put their results in an in-process cache keyed by tenant and feature. A write on behalf of a tenant invalidates the matching entry, so the next read goes back to the database. The cache stays in-process rather than distributed because the application server is stateless, and at the platform's data volumes that is enough to keep the read paths cheap without paying for a separate cache service.
+
+\subsection{Object storage}
+\label{subsec:object-storage}
+
+Binary assets such as raw and processed product photographs, generated images and exported PDFs are kept out of the relational database and live in Microsoft Azure Blob Storage. The arrangement is conventional and is justified by the cost asymmetry between row storage and blob storage, and by the need to serve large files efficiently. The relational schema records the blob key and content type for each binary, and access is mediated by short-lived signed URLs (SAS tokens) issued by the application server, so that no public URL ever leaks beyond the request that needs it. Containers are private with no anonymous access tier, and the only path through which a retailer's assets are reachable is the application server.
+
+\begin{figure}[!ht]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize},
+    actor/.style={draw, rectangle, rounded corners=2pt, minimum width=24mm, minimum height=8mm, align=center, fill=gray!10},
+    arr/.style={->, >=Latex, thin}
+]
+
+% Actors at top
+\node[actor] (client) at (0, 5)   {Client};
+\node[actor] (server) at (4.5, 5) {Application server};
+\node[actor] (db)     at (9, 5)   {PostgreSQL};
+\node[actor] (blob)   at (13, 5)  {Blob storage};
+
+% Lifelines
+\draw[dashed, gray!60] (client.south) -- ++(0,-7);
+\draw[dashed, gray!60] (server.south) -- ++(0,-7);
+\draw[dashed, gray!60] (db.south)     -- ++(0,-7);
+\draw[dashed, gray!60] (blob.south)   -- ++(0,-7);
+
+% Messages
+\draw[arr] (0, 4.0)   -- node[above]{1. GET image} (4.5, 4.0);
+\draw[arr] (4.5, 3.2) -- node[above]{2. lookup blob key} (9, 3.2);
+\draw[arr] (9, 2.4)   -- node[above]{3. blob key + content type} (4.5, 2.4);
+\node[font=\tiny\itshape, text=gray!70] at (4.5, 1.6) {sign SAS URL};
+\draw[arr] (4.5, 0.8) -- node[above]{4. signed SAS URL} (0, 0.8);
+\draw[arr] (0, -0.2)  -- node[above]{5. GET via signed URL} (13, -0.2);
+\draw[arr] (13, -1.0) -- node[above]{6. image bytes} (0, -1.0);
+
+\end{tikzpicture}%
+}
+\caption{Image retrieval flow.}
+\label{fig:object-storage-flow}
+\end{figure}
+
+\section{Cloud Deployment on Microsoft Azure}
+\label{sec:azure-deployment}
+
+Azure was chosen because it gives the platform a managed, well-supported and trustworthy foundation for everything outside the AI calls themselves. The platform runs on .NET and uses Semantic Kernel for orchestration, both of which are Microsoft technologies and receive first-class support on Azure. Azure also brings enterprise-grade reliability, regional redundancy and a long track record of security and compliance certifications, all of which matter for a service that holds retailer data and runs paid AI calls on their behalf. The managed services Azure offers, from PostgreSQL Flexible Server to Container Apps, Key Vault, Blob Storage and Application Insights, fit the platform's needs without requiring a dedicated operations team.
+
+\begin{figure}[ht]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\scriptsize\sffamily},
+    box/.style={draw, rounded corners=2pt, minimum width=28mm, minimum height=10mm, align=center, fill=gray!5},
+    azurebox/.style={draw, rounded corners=2pt, minimum width=28mm, minimum height=10mm, align=center, fill=blue!10},
+    store/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum width=24mm, minimum height=12mm, align=center, fill=blue!8},
+    ext/.style={draw, dashed, rounded corners=2pt, minimum width=28mm, minimum height=10mm, align=center},
+    gh/.style={draw, rounded corners=2pt, minimum width=28mm, minimum height=10mm, align=center, fill=gray!12},
+    arr/.style={-{Latex[length=2mm]}, thick}
+]
+
+% Top row: Client (left) and GitHub (right)
+\node[box] (cl)     at (-3.0, 8.0) {Client\\(web, iOS, Android)};
+\node[gh]  (github) at ( 4.0, 8.0) {GitHub repo\\(Actions CI/CD)};
+
+% Edge layer: Azure-provided ingress (left) and Container Registry (right)
+\node[azurebox] (apim) at (-3.0, 6.0) {Container Apps ingress\\\scriptsize (TLS, Azure DDoS)};
+\node[azurebox] (acr)  at ( 4.0, 6.0) {Container Registry\\(\texttt{merchstoryacr})};
+
+% Container Apps Environment apps
+\node[azurebox] (api) at (-2.5, 3.5) {\texttt{merchstory-api}};
+\node[azurebox] (web) at ( 1.5, 3.5) {\texttt{merchstory-web}};
+
+% Storage row inside the VNet
+\node[store]    (db)   at (-5.5, 1.0) {PostgreSQL\\Flexible Server\\(pgvector)};
+\node[store]    (blob) at ( 1.0, 1.0) {Azure\\Blob Storage};
+\node[azurebox] (kv)   at ( 4.5, 1.0) {Azure Key Vault};
+
+% Ops row directly under merchstory-api
+\node[azurebox] (logs) at (-2.5, -1.5) {App Insights\\+ Log Analytics};
+
+% External (non-Azure) services on the left, outside the VNet
+\node[ext] (aip) at (-10.5, 5.0) {Multimodal AI\\providers};
+\node[ext] (bg)  at (-10.5, 3.5) {Background\\removal};
+\node[ext] (geo) at (-10.5, 2.0) {Geocoding};
+
+% Container Apps Environment frame
+\begin{pgfonlayer}{background}
+\node[draw=blue!50, dashed, rounded corners=3pt, fit=(api)(web), inner sep=2.5mm, label={[font=\scriptsize\itshape, blue!60]above:Container Apps Environment}] (capps_env) {};
+\end{pgfonlayer}
+
+% Private VNet frame
+\begin{pgfonlayer}{background}
+\node[draw=gray!60, dashed, rounded corners=4pt, fit=(capps_env)(acr)(db)(blob)(kv)(logs), inner sep=5mm, label={[font=\small\itshape]below right:private VNet}] (vnet) {};
+\end{pgfonlayer}
+
+% Arrows: client traffic
+\draw[arr] (cl) -- (apim);
+\draw[arr] (apim) -- (capps_env.north -| apim);
+
+% CI/CD: GitHub push, ACR pull
+\draw[arr] (github) -- node[right, font=\tiny]{push image} (acr);
+\draw[arr] (acr) -- node[right, font=\tiny]{pull image} (web);
+
+% api → data plane
+\draw[arr] (api) -- (db);
+\draw[arr] (api) -- (blob);
+\draw[arr] (api) -- (kv);
+\draw[arr] (api) -- (logs);
+
+% api → external services
+\draw[arr] (api.west) -- (aip.east);
+\draw[arr] (api.west) -- (bg.east);
+\draw[arr] (api.west) -- (geo.east);
+
+\end{tikzpicture}%
+}
+\caption{The platform's deployment topology on Microsoft Azure.}
+\label{fig:deployment}
+\end{figure}
+
+\paragraph{Compute for the API and for background work.}
+The application server runs on Azure Container Apps, a managed container runtime built on Kubernetes that provides per-replica scale-out without the operational burden of managing a cluster directly. The choice was made over Azure App Service on two grounds. First, the platform packages its server as a container image already. Second, Container Apps integrates more cleanly with Azure API Management and with the private virtual network in which the data plane lives. A single long-running background service, the refresh-token cleaner, runs as an \texttt{IHostedService} inside the same Container Apps revision as the API. Recommendation generations are started by request handlers as fire-and-forget tasks tracked by an in-memory job registry, so a separate worker tier is not justified at the platform's data volumes.
+
+\paragraph{Hosting the web client.}
+The web build of the client runs as its own Azure Container App (\texttt{merchstory-web}), pulling its image from the same registry as the API. The mobile builds for iOS and Android are distributed through their respective application stores and are not deployed to Azure. The web client and the mobile clients consume exactly the same API surface, and nothing on the server is conditional on the client kind.
+
+\paragraph{Database.}
+The relational store, including its pgvector extension, runs on Azure Database for PostgreSQL Flexible Server. The flexible-server tier is preferred over the older single-server tier because it supports custom extensions including pgvector, allows VNet-integrated private networking, and provides point-in-time restore over a configurable retention window. Backups are taken automatically, and long-running migrations are executed during deployment before the new container revision becomes ready.
+
+\paragraph{Object storage.}
+Binary assets live in Azure Blob Storage as described in Section~\ref{subsec:object-storage}. The deployment adds a private endpoint inside the VNet, so the storage account is invisible from the public Internet.
+
+\paragraph{Edge and gateway.}
+The platform's public surface is the Container Apps Environment's built-in ingress. Azure provides TLS termination, edge load balancing and platform-level DDoS protection at the network edge for free, so no separate API gateway sits in front of the Container App. Per-tenant rate limiting is enforced inside the application server itself, using the .NET built-in rate-limiter middleware partitioned per authenticated user, with tighter limits on the asset-generation endpoints than on the read-only ones so that a misbehaving tenant cannot exhaust the platform's AI budget for the others.
+
+\paragraph{Identity and access admission.}
+Retailers authenticate against the application server itself, which issues a JWT access token and a refresh token on login and rotates them on every refresh. The retailer-facing API does not sit behind any cloud gateway. Operator access to the development environment and to the cloud secrets is gated separately by Microsoft Entra ID, with the operator's identity matched against an allow-list before any administrative resource becomes reachable. The two channels share no credentials, so the retailer session protocol stays independent of the operator admission flow.
+
+\paragraph{Secrets.}
+Every credential consumed by the platform, including the AI provider keys, the background-removal API key and the database connection string, is stored in Azure Key Vault and read at start-up by the Container Apps revision through a system-assigned managed identity. Credentials never appear in container images, in environment files committed to source control or in deployment manifests.
+
+\paragraph{Observability and analytics.}
+Application Insights collects distributed traces, structured logs and live metrics from every component. Each request is tagged with a tenant identifier and a correlation identifier that is propagated through every external HTTP call, so that the entire trajectory of a recommendation run or of an image generation can be reconstructed from a single trace. A small set of Log Analytics dashboards aggregates operational metrics such as ideas generated per day, image-generation latency percentiles per provider, AI-provider error rate and credit-debit volume per tenant, and is consulted manually rather than feeding any automatic decision.
+
+\paragraph{Service-to-service identity.}
+All authentication between the application server and the other Azure services it consumes (Key Vault, Blob Storage, the database, Application Insights) uses Azure managed identities rather than shared secrets. This removes an entire class of credential-leak risk and simplifies key rotation, which becomes the responsibility of Azure rather than of the platform.
+
+\paragraph{Continuous integration and deployment.}
+The platform's build and deploy pipeline is hosted on GitHub Actions. A push to a feature branch triggers the test suites described in Section~\ref{sec:testing-strategy}; merging into \texttt{master} triggers the build of a new container image, its push to the platform's container registry, and the rollout of a new revision on Container Apps. The web client follows an analogous flow, with the build artefact uploaded to the static-site account on success.
+
+\paragraph{Network shape.}
+The VNet topology is conservative. The database, the blob storage account and Key Vault are reachable only through private endpoints inside the VNet, with their public network access disabled at the resource level. The Container Apps Environment sits in the same VNet and exposes only its built-in HTTPS ingress to the Internet. External AI providers are reached over the public Internet from the Container App, with their credentials read from Key Vault at start-up.
+
+Table~\ref{tab:nfr-azure} maps each non-functional requirement onto the Azure service that fulfils it.
+
+{\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.0cm}|Y|}
+\hline
+\textbf{Requirement} & \textbf{Azure service(s)} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Requirement} & \textbf{Azure service(s)} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\caption{Mapping from non-functional requirements to Azure services.}
+\label{tab:nfr-azure}
+\endlastfoot
+Interactive read/write latency & Container Apps (autoscaled) and the in-process cache. \\
+\hline
+Long-running AI work & Container Apps with hosted services for jobs. \\
+\hline
+Cost backpressure & In-app rate limiter and credit ledger. \\
+\hline
+Graceful degradation & Per-integration retries and circuit breakers in the application. \\
+\hline
+Closed admission (operator) & Microsoft Entra ID allow-list. \\
+\hline
+Tenant isolation & Per-tenant queries and SAS-scoped blob URLs. \\
+\hline
+Secret management & Azure Key Vault with managed identities. \\
+\hline
+Auditability & Application Insights traces and logs, with Log Analytics dashboards. \\
+\end{tabularx}
+}

@@ -1,0 +1,119 @@
+%\documentclass[12pt]{scrreprt}
+\documentclass[12pt]{report} 
+
+% language may be romanian or english (default is english)
+% type may be bachelor or master (default is bachelor)
+\usepackage[language=english, type=bachelor]{style}
+
+%\geometry{a4paper,top=2.5cm,left=3cm,right=2.5cm,bottom=2.5cm}
+%in style
+%controlling the appearance of your headers and footers
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\lhead{}
+\chead{}
+\renewcommand{\headrulewidth}{0.2pt}
+\renewcommand{\footrulewidth}{0.2pt}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\usepackage{longtable}
+\usepackage{ltablex}
+\keepXColumns
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,shapes.geometric,shapes.multipart,backgrounds}
+
+\usepackage{xcolor}
+\usepackage{listings}
+
+\makeatletter
+\renewcommand\paragraph{\@startsection{paragraph}{4}{\z@}%
+  {2.5ex \@plus 1ex \@minus .2ex}%
+  {1ex \@plus .2ex}%
+  {\normalfont\normalsize\bfseries}}
+\makeatother
+
+\definecolor{lstKeyword}{RGB}{0, 51, 178}
+\definecolor{lstString}{RGB}{163, 21, 21}
+\definecolor{lstComment}{RGB}{0, 128, 0}
+\definecolor{lstType}{RGB}{43, 145, 175}
+\definecolor{lstBg}{RGB}{248, 248, 248}
+\definecolor{lstFrame}{RGB}{210, 210, 210}
+
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{lstFrame},
+    backgroundcolor=\color{lstBg},
+    showstringspaces=false,
+    keywordstyle=\bfseries\color{lstKeyword},
+    stringstyle=\color{lstString},
+    commentstyle=\itshape\color{lstComment},
+    emphstyle=\color{lstType},
+    columns=fullflexible,
+    captionpos=b
+}
+
+\lstdefinestyle{csharp}{
+    language={[Sharp]C},
+    morekeywords={var, async, await, Task, IReadOnlyList, CancellationToken},
+    emph={ImageGenerationResult, IImageProvider},
+    emphstyle=\color{lstType}
+}
+
+\begin{document}
+
+% --- PRIMA PAGINĂ (Păstrată) ---
+\specialization{COMPUTER SCIENCE IN ENGLISH}
+\title{Automating Marketing Assets through Generative RAG and Contextual Recommendation}
+\author{Borodi Bogdan-Vasile}
+\supervisor{Lect. Horea-Bogdan Mure\c{s}an}
+
+\maketitle
+
+% --- SECȚIUNEA ELIMINATĂ ERA AICI ---
+
+\newpage
+\thispagestyle{empty}
+\mbox{}
+\newpage
+\pagenumbering{roman} 
+
+\cleardoublepage
+ABSTRACT
+\vspace{0.5cm}	
+\hrule
+\vspace{0.5cm}	
+
+Small and independent retailers need professional digital marketing materials but lack the time, budget and design expertise that larger competitors take for granted. This thesis presents a cross-platform application that automates the creation of marketing assets, such as promotional announcements, product catalogues and brand wallpapers, directly from a retailer's own product photographs and shop information, so that visual campaigns can be produced in seconds from a phone or a desktop browser.
+
+\textit{Chapter 1} motivates the work and states its objectives. \textit{Chapter 2} introduces the theoretical foundations: image-generating models, prompt design, retrieval-augmented generation and learned visual similarity. \textit{Chapter 3} describes the system architecture and its deployment on Microsoft Azure. \textit{Chapter 4} presents two technical contributions: a recommendation engine that produces fresh marketing themes from external context and a curated promotional playbook, and a hybrid generation technique that preserves the retailer's product photograph while the model designs the surrounding scene. \textit{Chapter 5} reports the platform's results, sample generated assets and the testing strategy that protects them.
+
+The main contribution is the design and implementation of an end-to-end system that brings generative AI into the daily workflow of non-technical retailers. The platform combines prompt strategies tailored to each asset family, external context gathered and reasoned over to suggest fresh themes, and a hybrid generative-deterministic pipeline that keeps the retailer's actual products faithful. Experimentation showed that purely generative approaches are insufficient for marketing content that must stay truthful to a real product, while a small amount of deterministic compositing applied after generation removes this limitation at a manageable cost.
+
+The thesis offers original insights into the trade-offs between fully generative pipelines and hybrid generative-deterministic ones, and into the value of grounding daily marketing suggestions in real-world contextual signals.
+
+\tableofcontents
+
+\newpage
+\pagenumbering{arabic}
+
+% Chapter inputs are commented out until each chapter file is authored.
+% Uncomment each line once chapters/<name>.tex exists, otherwise LaTeX aborts and produces no PDF.
+\input{chapters/chapter1_introduction}
+\input{chapters/chapter2_background}
+\input{chapters/chapter3_architecture}
+\input{chapters/chapter4}
+\input{chapters/chapter5}
+\input{chapters/chapter6_conclusions}
+
+\bibliography{references}
+
+\end{document}

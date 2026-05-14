@@ -52,6 +52,4 @@ web-build/
 *.lot
 *.pdf
 *.run.xml
-*.tex
 *.toc
-*.bib
