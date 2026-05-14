@@ -274,9 +274,7 @@ Because almost every action costs real credits on the server side, the client ta
 
 The route tree mirrors the platform's user model. Unauthenticated routes serve registration and login. An onboarding group leads first-time accounts through the shop-profile setup and refuses to release them to the rest of the application until it is complete. The main set of tabs covers the home screen, the products library, the gallery, asset creation, the wallet and the profile. An administrative group hidden behind a flag exposes the operator capabilities.
 
-\subsection{User interface}
 \label{subsec:client-ui}
-
 The retailer's first encounter with the platform is a sign-in screen with the option to register a new account. A first-time account is then led through the three-stage shop onboarding, and the rest of the application is unlocked only once the profile has been recorded.
 
 \begin{figure}[!ht]
@@ -330,7 +328,7 @@ Every generated asset is collected in the gallery, where the retailer can browse
 
 The application server is a minimal-API ASP.NET Core service running on .NET 10. It hosts every feature service the platform exposes and is the host for the Semantic Kernel orchestration layer through which every AI-bound call passes.
 
-\subsection{Why .NET, and why Semantic Kernel}
+\subsection{Stack choice, capability areas and internal layering}
 \label{subsec:why-dotnet}
 
 The choice of platform deserves comment because .NET is a less obvious pick for a contemporary AI application than Node.js or Python. The platform's core is an AI orchestration layer that routes prompts across multiple providers, manages prompt templates, applies retrieval-augmented context to language-model calls, and chains several calls in sequence for the daily recommendation engine. Microsoft's \emph{Semantic Kernel} is a first-class .NET library that bundles all of these facilities behind a unified abstraction, with clean integration into the ASP.NET Core dependency-injection container. Building the server in .NET therefore makes Semantic Kernel a native citizen of the architecture rather than a foreign component, which is the decisive reason for choosing ASP.NET Core minimal-API over Node.js with Express or Python with FastAPI.
@@ -384,9 +382,7 @@ The choice of orchestrator does not lock the platform to the Microsoft AI ecosys
 \label{fig:semantic-kernel}
 \end{figure}
 
-\subsection{Capability areas}
-\label{subsec:capabilities}
-
+\paragraph{Capability areas.}\label{subsec:capabilities}
 Each capability area on the server is a bounded service that exposes a small set of HTTP endpoints. Their roles are summarised below.
 
 \paragraph{Authentication and session management.}
@@ -457,9 +453,7 @@ Print & \texttt{/print} & Render a gallery item to a print-ready document. \\
 \end{tabularx}
 }
 
-\subsection{Internal layering}
-\label{subsec:server-layering}
-
+\paragraph{Internal layering.}\label{subsec:server-layering}
 Each feature follows a simple internal layering, shown in Figure~\ref{fig:server-layering}. The endpoint layer handles HTTP concerns only and delegates to a feature service that holds the business logic. The feature service in turn calls the data layer or, for AI-bound work, the Semantic-Kernel-mediated provider abstractions. Those abstractions are the only place from which outbound HTTP calls to third parties leave, which keeps retries, circuit breakers and credential management in one place.
 
 \begin{figure}[H]
@@ -537,7 +531,7 @@ The data layer holds every piece of state that survives a request. PostgreSQL wi
 \label{fig:data-plane}
 \end{figure}
 
-\subsection{Relational schema}
+\subsection{Relational schema, caching and object storage}
 \label{subsec:relational-schema}
 
 The schema is a foreign-key spine that ties every record to a tenant. At its centre is the user-account table, with one row per retailer and a flag for operators. The other tables fall into two groups: tenant-scoped tables that hang off the user, and global tables that hold catalogue data and context signals shared across tenants. Figure~\ref{fig:schema} shows the arrangement.
@@ -741,14 +735,10 @@ Holiday & A cached public holiday for a country and year, used as a context sign
 \end{tabularx}
 }
 
-\subsection{Caching}
-\label{subsec:caching}
-
+\paragraph{Caching.}\label{subsec:caching}
 Some screens read the same data on every visit, such as the product list, the gallery, the shop profile and the wallet balance. The feature services that serve these reads put their results in an in-process cache keyed by tenant and feature. A write on behalf of a tenant invalidates the matching entry, so the next read goes back to the database. The cache stays in-process rather than distributed because the application server is stateless, and at the platform's data volumes that is enough to keep the read paths cheap without paying for a separate cache service.
 
-\subsection{Object storage}
-\label{subsec:object-storage}
-
+\paragraph{Object storage.}\label{subsec:object-storage}
 Binary assets such as raw and processed product photographs, generated images and exported PDFs are kept out of the relational database and live in Microsoft Azure Blob Storage. The arrangement is conventional and is justified by the cost asymmetry between row storage and blob storage, and by the need to serve large files efficiently. The relational schema records the blob key and content type for each binary, and access is mediated by short-lived signed URLs (SAS tokens) issued by the application server, so that no public URL ever leaks beyond the request that needs it. Containers are private with no anonymous access tier, and the only path through which a retailer's assets are reachable is the application server.
 
 \begin{figure}[!ht]

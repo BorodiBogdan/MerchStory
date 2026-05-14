@@ -77,13 +77,11 @@ Conditional generation is most commonly achieved through \emph{classifier-free g
 \label{fig:diffusion}
 \end{figure}
 
-\subsection{Multimodal foundation models with image output}
+\subsection{Multimodal foundation models and their limitations}
 
 A more recent line of work places a multimodal large language model in front of the image generator. Familiar examples are ChatGPT, which routes image-generation requests to DALL-E, and Gemini, which calls one of Google's image submodels (most recently the so-called Nano-Banana family). The user supplies text and reference images in a single prompt, and the front-end model encodes both modalities into a shared embedding space (dense vector representations of text and images, treated more carefully in Section~\ref{sec:rag}) so that words and pixels can be reasoned about jointly; it then plans the composition and orchestrates an underlying image-generation submodel (most often diffusion-based, sometimes specialised for editing or compositing) that actually produces the pixels. Through attention over the supplied references, such systems can be instructed to preserve specific elements (a brand logo, a particular product, a colour palette) and they typically respect such instructions to a remarkable degree, although the result is rarely a pixel-perfect copy: small changes in colour, shape or texture remain possible. The diffusion techniques outlined above are therefore not superseded by these systems but wrapped inside a more capable, multimodal interface that expresses tasks such as ``redesign this poster while keeping the logo intact'' or ``compose these three product photographs into a single advertisement'' in a single call.
 
 The proposed application relies on a multimodal model of this latter kind. The reason is twofold. First, marketing imagery for small retailers is rarely text-only: every shop has a logo, often a slogan, and frequently a small set of product photographs that must be incorporated faithfully. A model that accepts the logo, the product photographs, and the textual description of the desired scene in a single call removes the need for a separate compositing step at the input side. Second, the model's image-to-image capability is a prerequisite for the hybrid pipeline described in Section~\ref{sec:hybrid}, in which the generator is asked to produce a scene around designated placeholder regions rather than a finished advertisement.
-
-\subsection{Known limitations and the case for hybrid pipelines}
 
 For all their fluency, modern image generators have well-documented weaknesses. Three of these are directly relevant to this thesis. First, \emph{identity preservation} of specific real-world objects is brittle: even when a clean photograph of a product is supplied as a reference, the generator tends to alter its colour, texture, label, or shape in subtle but commercially unacceptable ways. Second, photorealistic \emph{text rendering} inside generated images, although greatly improved in the latest model generations, remains unreliable for non-trivial strings such as price tags or longer slogans. Third, \emph{brand fidelity} is hard to control through prompting alone: a precise hex colour or a particular typeface is rarely reproduced exactly, however explicitly the prompt specifies it.
 
@@ -111,52 +109,19 @@ A well-formed prompt for a modern generative model can be decomposed into severa
 \node[block, below=2mm of layout.south west, anchor=north west] (rules) {\textbf{Content rules.}\;\; what to include, tone, currency formatting.};
 \node[block, below=2mm of rules.south west, anchor=north west] (neg) {\textbf{Negative constraints.}\;\; no sparkles, no fake bokeh, no clipart.};
 \end{tikzpicture}
-\caption{Anatomy of a structured prompt for image generation, as used by the proposed application. Each block contributes a separable concern: role, brand context, spatial layout, content rules, and negative constraints.}
+\caption{Anatomy of a structured prompt for image generation.}
 \label{fig:prompt-anatomy}
 \end{figure}
 
-\subsection{Zero-shot, few-shot and chain-of-thought prompting}
+\subsection{Prompting patterns used by the platform}
 
-The simplest prompting style, called \emph{zero-shot}, asks the model to perform a task without any examples; it relies entirely on the model's pretraining to understand what is requested. A more elaborate style, \emph{few-shot} prompting, supplies a small number of input--output examples in the prompt itself so that the model can generalise from them \cite{brown2020gpt3}. A third pattern, \emph{chain-of-thought prompting}, explicitly invites the model to verbalise its intermediate reasoning before producing its final answer, which has been shown to improve accuracy on tasks that require multi-step inference \cite{wei2022cot}.
+Three basic prompting styles frame the rest of this section: \emph{zero-shot} asks the model to perform a task without examples; \emph{few-shot} supplies a handful of input--output examples for the model to generalise from; and \emph{chain-of-thought} \cite{wei2022cot} invites the model to verbalise its intermediate reasoning. The proposed application uses zero-shot for image generation, where in-context examples would themselves have to be images and would inflate the token budget, and chain-of-thought in the recommendation engine of Section~\ref{sec:rag}, where a sequence of language-model calls reasons about which marketing themes to propose before drafting them. Beyond these basics, two further techniques recur throughout the platform: layout-aware prompting and multimodal prompting.
 
-The proposed application uses zero-shot prompting almost exclusively for image generation, for two reasons. The first is that meaningful in-context examples of marketing imagery would themselves have to be images, and supplying them through the prompt would multiply the number of input tokens substantially. The second is that the diversity required of the generator (different products, different shop types, different colour palettes) makes a fixed set of few-shot examples likely to bias the output rather than help it. Chain-of-thought prompting, on the other hand, is used in the recommendation engine described in Section~\ref{sec:rag}, where a sequence of language-model calls reasons about which marketing themes to propose before drafting them.
-
-\begin{table}[ht]
-\centering
-\caption{Prompting patterns at a glance.}
-\label{tab:prompting-patterns}
-\small
-\renewcommand{\arraystretch}{1.3}
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.5cm}
-                  >{\raggedright\arraybackslash}p{5.5cm}
-                  >{\raggedright\arraybackslash}p{4.0cm}@{}}
-\toprule
-\textbf{Pattern} & \textbf{When it is appropriate} & \textbf{Use in the platform} \\
-\midrule
-Zero-shot & Tasks the base model already understands & Image generation prompts \\
-\addlinespace[4pt]
-Few-shot \cite{brown2020gpt3} & Domain-specific tasks with cheap examples & Not used \\
-\addlinespace[4pt]
-Chain-of-thought \cite{wei2022cot} & Multi-step reasoning tasks & Recommendation engine \\
-\addlinespace[4pt]
-Structured, layout-aware & When output regions matter & Catalogue and wallpaper prompts \\
-\addlinespace[4pt]
-Multimodal & When references are visual, not textual & Logo and product-photo inputs \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsection{Structured and layout-aware prompting}
-
+\paragraph{Structured and layout-aware prompting.}
 When the desired output has a non-trivial spatial structure, the prompt itself can declare that structure explicitly. In the proposed application, wallpaper prompts allocate the canvas into a header band, a hero area, and a footer band, each with a specific percentage of the vertical space and a specific responsibility (the hero band carries the product, the footer the contact information, and so on). Catalogue prompts go further still, declaring placeholder regions in which the actual product photographs will subsequently be pasted by a deterministic compositor. Such layout-aware prompting reduces the model's task from ``design an entire advertisement'' to ``design a scene that respects this layout'', which is markedly easier and considerably more controllable.
 
-\subsection{Multimodal prompting}
-
+\paragraph{Multimodal prompting.}
 Multimodal prompting refers to the practice of including reference images, alongside textual instructions, inside a single prompt. In the proposed application this is used routinely: the brand logo is supplied as a reference image so that the model can place it without re-inventing it, and product photographs are supplied so that the model can lay out a scene around them. This is qualitatively different from a text-only prompt asking for ``a coffee shop logo on a wooden table'': the model is shown the actual logo, not merely told that one exists.
-
-\subsection{Negative prompting and explicit guardrails}
-
-A practical concern with image generators is their well-known tendency to drift towards a particular aesthetic associated with mid-quality online image content (glowing sparkles, exaggerated bokeh, comic-style clipart, rainbow gradients). The simplest mitigation, used throughout the proposed application's prompts, is to enumerate these unwanted elements explicitly as forbidden. Some models also expose a dedicated \emph{negative prompt} channel for the same purpose. The effect of these guardrails is to reduce the variance of the generator's output and to bring it closer to the visual register of professional marketing material.
 
 \section{Retrieval-Augmented Generation}
 \label{sec:rag}
@@ -169,13 +134,11 @@ Three weaknesses of language models motivate retrieval augmentation. First, thei
 
 In the proposed application, retrieval augmentation is used in the daily marketing-recommendation engine in two distinct ways, both of which are described in detail in \textit{Chapter 4} but introduced here for the sake of vocabulary. The first retrieval pass draws from the user's own history of recently generated ideas, so that the language model is reminded of themes it has already proposed and instructed not to repeat them. The second retrieval pass draws from a curated knowledge base of promotional tactics organised by business domain (a craft beer shop, a clothing boutique, a family restaurant), so that the model's suggestions are anchored in patterns that are known to work in that domain.
 
-\subsection{Vector embeddings as a representation of meaning}
+\subsection{Vector embeddings and approximate nearest-neighbour search}
 
 The retrieval step in a RAG pipeline does not, in general, search for literal keyword matches; it searches for semantic ones. The standard mechanism is to map each indexed item (a paragraph, a product description, an image) into a fixed-length vector in \(\mathbb{R}^d\), in such a way that semantically similar items are close together in vector space. Such mappings are known as \emph{embeddings}, and they are produced by neural encoders trained either on language data alone or jointly on language and vision (Section~\ref{sec:visual-similarity}).
 
 This dense, embedding-based approach contrasts with classical sparse retrieval methods such as TF--IDF and BM25, which represent documents by very high-dimensional sparse vectors of term frequencies. Sparse methods remain competitive when the user query and the indexed text share vocabulary, but they fail in the common case where two passages express the same idea using different words, or where the query is an image rather than a text. Dense embeddings handle both cases naturally.
-
-\subsection{Approximate nearest-neighbour search}
 
 Once items have been embedded, retrieval reduces to finding the \(k\) nearest neighbours of a query vector under some distance function, typically cosine distance for normalised embeddings. Exact search through every indexed vector is linear in the size of the index and quickly becomes infeasible for collections beyond a few hundred thousand items. The standard remedy is to use an \emph{approximate nearest-neighbour} (ANN) index, which trades a small amount of recall for a substantial speed-up.
 
@@ -228,7 +191,7 @@ The fourth and last technical pillar of the proposed application is the ability 
 
 Classical computer vision attacked the visual-similarity problem with hand-crafted feature descriptors such as SIFT, SURF and HOG, complemented by perceptual hashes such as pHash for near-duplicate detection. These methods remain useful in narrow scenarios (detecting, for instance, that two photographs depict the same physical scene from slightly different angles), but they capture geometric and textural patterns rather than semantic content, and they degrade sharply when the two images differ in lighting, background or styling, as is invariably the case between a phone photograph and a curated catalogue shot. Deep learned features replaced them precisely because they generalise across such nuisance variations: a convolutional or transformer-based encoder, trained on a sufficiently diverse dataset, learns to map an image to a compact vector that reflects its semantic content rather than its pixel-level appearance.
 
-\subsection{Contrastive vision--language pre-training: CLIP}
+\subsection{CLIP and embedding storage with pgvector}
 
 The Contrastive Language--Image Pre-training (CLIP) family of models \cite{radford2021clip} is perhaps the most influential learned-feature system of recent years. CLIP is trained on hundreds of millions of (image, caption) pairs scraped from the web. The architecture is deliberately simple: an image encoder (typically a Vision Transformer \cite{dosovitskiy2020vit}, with the proposed application using the ViT-B/32 variant whose patches measure $32\times32$) and a text encoder (a smaller transformer) project images and captions into a shared embedding space. Training proceeds by maximising the similarity of matching pairs and minimising the similarity of non-matching pairs through a symmetric InfoNCE-style objective:
 
@@ -265,7 +228,7 @@ The result is an embedding space in which an image and a caption that describe t
 \label{fig:clip}
 \end{figure}
 
-\subsection{Embedding spaces in practice: dimension, normalisation, distance}
+Having established what CLIP produces, two practical questions remain: how the resulting vectors should be compared, and where they should be stored.
 
 The image encoder used by the proposed application produces 512-dimensional embeddings. Whether such embeddings are compared by cosine similarity, Euclidean distance or inner product is in principle a free choice, but in practice these metrics are not all equivalent. Cosine similarity, defined as
 
@@ -305,28 +268,20 @@ Euclidean distance & \(\|u - v\|\)                                 & yes & monot
 \end{tabular}
 \end{table}
 
-\subsection{Vector databases and the pgvector extension}
-
-Once embeddings have been produced, they must be stored, indexed and queried. A dedicated vector database such as Pinecone, Milvus or Qdrant is one option; another is to extend a traditional relational database with vector capabilities. The proposed application takes the latter route, using the pgvector extension to PostgreSQL, which adds a \texttt{vector(n)} column type, three distance operators (\texttt{<\#>} for negative inner product, \texttt{<=>} for cosine distance and \texttt{<->} for Euclidean distance), and HNSW and IVFFlat index types tied directly to the database's query planner. This is a deliberate architectural choice. The data volumes generated by small retailers are modest, on the order of tens of thousands of products and ideas per active user, not the billions that justify a specialised vector store \cite{johnson2019billion}. Keeping embeddings in the operational database means that a single transaction can update a product, store its embedding, and update its derived analytics; it also means that retrieval can be combined with ordinary SQL filters (``find similar products that belong to this user, are not deleted, and are currently in stock'') in one query, without the consistency headaches of a separate index. Within this thesis, accordingly, ``the vector index'' and ``the database'' refer to the same PostgreSQL instance.
+Once embeddings have been produced, they must be stored, indexed and queried. A dedicated vector database such as Pinecone, Milvus or Qdrant is one option; another is to extend a traditional relational database with vector capabilities. The proposed application takes the latter route, using the pgvector extension to PostgreSQL, which adds a \texttt{vector(n)} column type, three distance operators (\texttt{<\#>} for negative inner product, \texttt{<=>} for cosine distance and \texttt{<->} for Euclidean distance), and HNSW and IVFFlat index types tied directly to the database's query planner. This is a deliberate architectural choice. The data volumes generated by small retailers are modest, on the order of tens of thousands of products and ideas per active user, not the billions that justify a specialised vector store. Keeping embeddings in the operational database means that a single transaction can update a product, store its embedding, and update its derived analytics; it also means that retrieval can be combined with ordinary SQL filters (``find similar products that belong to this user, are not deleted, and are currently in stock'') in one query, without the consistency headaches of a separate index. Within this thesis, accordingly, ``the vector index'' and ``the database'' refer to the same PostgreSQL instance.
 
 \section{Hybrid Generative--Deterministic Pipelines}
 \label{sec:hybrid}
 
-\subsection{Splitting generation and compositing}
+\subsection{Splitting generation from compositing and user-controlled fidelity}
 
 A generative model alone is insufficient for marketing imagery whenever the output must remain truthful to a real, specific product: even with the original photograph supplied as a reference, drift in colour, texture and silhouette is the rule rather than the exception. The way out, adopted by the proposed application and detailed in \textit{Chapter 4}, is to split the work between a generative phase and a deterministic phase. The generator produces a faithful background scene with explicit placeholder regions, marked by colours that the prompt forbids it from reusing elsewhere; a compositing step then pastes the actual product photographs into those regions and overlays the textual elements. The combined output benefits from the creative latitude of the model and the pixel-level fidelity of the compositor, a hybrid that neither approach delivers on its own.
+
+The same split is exposed to the user as a toggle on product preservation. When it is on, the strictest version of the pipeline is used: the generator designs only the background, the compositor places the products, and what the customer sees is, at the pixel level, the retailer's actual photograph. When it is off, the generator is allowed to render the products itself and given more creative latitude, although the prompt still asks it to respect their colour, shape and proportions; small liberties such as a different angle or a more stylised lighting become possible. The two modes do not share the same prompt: when preservation is on, the system substitutes a specialised prompt that asks for placeholder-only regions and forbids the model from drawing into them; when it is off, a less constrained prompt asks for a finished advertisement.
+
+Together with the recommendation engine, the prompt-engineering practices, the retrieval-augmented context and the visual-similarity search, the hybrid pipeline binds the four pillars of this chapter into a single end-to-end platform whose hardest invariants (product identity, brand fidelity, contextual relevance) are guaranteed by the simplest and most predictable layer that can plausibly enforce them.
 
 \subsection{Print-ready output via super-resolution}
 
 When the user later asks for a printable version of an asset that has already been generated and composited, the platform runs an additional, on-demand stage that lifts the finished image to poster-grade resolution. The model used at this step is Real-ESRGAN \cite{wang2021realesrgan}, a GAN-based super-resolution network trained on synthetic blur, noise and compression artefacts so that it generalises to the kind of slightly imperfect outputs that real generation pipelines produce. Two ONNX checkpoints are kept in service, at $\times 2$ and $\times 4$ scale, which together cover A4 and A3 print sizes. Only the generated background passes through the upscaler; the products and text were placed by deterministic code at the target resolution and stay perfectly crisp, so the upscaler need only sharpen the part of the image that is forgiving of minor reconstruction artefacts.
 
-\subsection{User-controlled fidelity and creativity}
-
-Product preservation is exposed to the user as a toggle. When it is on, the strictest version of the pipeline is used: the generator designs only the background, the compositor places the products, and what the customer sees is, at the pixel level, the retailer's actual photograph. When it is off, the generator is allowed to render the products itself and given more creative latitude, although the prompt still asks it to respect their colour, shape and proportions; small liberties such as a different angle or a more stylised lighting become possible. The two modes do not share the same prompt: when preservation is on, the system substitutes a specialised prompt that asks for placeholder-only regions and forbids the model from drawing into them; when it is off, a less constrained prompt asks for a finished advertisement.
-
-Together with the recommendation engine, the prompt-engineering practices, the retrieval-augmented context and the visual-similarity search, the hybrid pipeline binds the four pillars of this chapter into a single end-to-end platform whose hardest invariants (product identity, brand fidelity, contextual relevance) are guaranteed by the simplest and most predictable layer that can plausibly enforce them.
-
-\section{Summary}
-\label{sec:bg-summary}
-
-This chapter has introduced four families of techniques on which the rest of the thesis depends. Generative models, and diffusion-based and multimodal-foundation-model generators in particular, supply the raw image-synthesis capability that turns a prompt and a few reference photographs into a candidate marketing asset. Prompt engineering supplies the discipline by which that capability is steered towards the visual register, layout and constraints of professional marketing material. Retrieval-augmented generation, together with the multi-agent orchestration that surrounds it, supplies the mechanism by which the platform's daily marketing recommendations are grounded both in the user's own history and in a curated body of domain knowledge. Visual-similarity search, built on CLIP-style learned embeddings stored inside a pgvector-enabled PostgreSQL database, supplies the means by which a casual phone photograph is mapped onto the curated reference catalogue from which subsequent generation will start. Finally, the hybrid generative--deterministic perspective laid out in Section~\ref{sec:hybrid} provides the architectural lens through which these components are combined. The chapters that follow describe how, taken together, they yield an end-to-end system capable of producing marketing assets at the speed and quality that small retailers actually need.
