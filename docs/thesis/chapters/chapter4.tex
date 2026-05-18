@@ -145,29 +145,29 @@ The inference path itself is organised as a six-stage chain. The stages are, in 
 
 The engine currently consumes three classes of external signal, with room to add more later. Each runs in parallel and is wrapped in its own error boundary, so a single failure does not abort the run. Failed sources are recorded and the rest continue.
 
-\paragraph{Weather.} A short-range forecast detects heatwaves, cold snaps and heavy rain, and turns each event into a signal tagged \emph{high}, \emph{medium} or \emph{low} with a one-line summary the prompt can read directly.
+\paragraph{Weather.} A short-range forecast detects heatwaves, cold snaps and heavy rain, and turns each event into a signal tagged high, medium or low with a one-line summary the prompt can read directly.
 
-\paragraph{Holidays.} Upcoming public holidays in the shop's country are emitted over a fourteen-day lookahead, with severity scaling by proximity: \emph{high} at most three days away, \emph{medium} at most seven, \emph{low} further out.
+\paragraph{Holidays.} Upcoming public holidays in the shop's country are emitted over a fourteen-day lookahead, with severity scaling by proximity: high at most three days away, medium at most seven, low further out.
 
-\paragraph{News.} Recent news items in the shop's country are emitted at \emph{low} severity as ambient context, useful for seeding an angle but never for overriding the day's plan.
+\paragraph{News.} Recent news items in the shop's country are emitted at low severity as ambient context, useful for seeding an angle but never for overriding the day's plan.
 
 \begin{table}[!ht]
 \centering
+\caption{Context-signal severity rules.}
+\label{tab:rec-signals}
 \small
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.4cm}|Y|}
 \hline
 \textbf{Signal} & \textbf{Severity rule} \\
 \hline
-Weather  & \emph{High} for heatwave or cold snap, \emph{medium} for sustained warm or cool spells, \emph{low} for heavy-rain probability $\geq 70\,\%$. \\
+Weather  & High for heatwave or cold snap, medium for sustained warm or cool spells, low for heavy-rain probability $\geq 70\,\%$. \\
 \hline
-Holiday  & \emph{High} at $\leq 3$ days, \emph{medium} at $\leq 7$, \emph{low} further out. \\
+Holiday  & High at $\leq 3$ days, medium at $\leq 7$, low further out. \\
 \hline
-News     & Always \emph{low}, ambient context only. \\
+News     & Always low, ambient context only. \\
 \hline
 \end{tabularx}
-\caption{Context-signal severity rules.}
-\label{tab:rec-signals}
 \end{table}
 
 A complementary signal, used at retrieval time rather than at prompt time, is the engine's own recent output. A second pgvector index records the embeddings of every idea the engine has ever produced for a tenant. After each run, the title and body of each new idea are concatenated, embedded by the same encoder, and stored in the \texttt{IdeaEmbedding} table introduced in Section~\ref{subsec:relational-schema}. At the start of the next run, the engine retrieves the five nearest neighbours of the current run's retrieval query within a thirty-day window and injects them, prefixed by a strict ``do not repeat these themes'' clause, into the writer prompt.
@@ -191,7 +191,7 @@ At run-time the engine builds a short retrieval query from the top-ranked contex
 The fourth, fifth and sixth stages are language-model calls organised as a chain rather than a single end-to-end prompt. The split lets each stage run at the temperature, JSON contract and model size that suit its task, and lets the writer stage fan out in parallel.
 
 \paragraph{Stage 4: the Strategist.}
-A single language-model call, at temperature $0.4$, is given the shop profile, the top context signals, the three retrieved playbook entries and a brief instruction to produce $N$ \emph{distinct angles}. Its output is a JSON document of the form
+A single language-model call, at temperature $0.4$, is given the shop profile, the top context signals, the three retrieved playbook entries and a brief instruction to produce $N$ distinct angles. Its output is a JSON document of the form
 \[
 \{\text{angles}: [\,\{\text{theme},\ \text{tone},\ \text{triggerSignal},\ \text{rationale}\},\ \dots\,]\}.
 \]
@@ -211,6 +211,8 @@ Table~\ref{tab:rec-stages} summarises the per-stage parameters.
 
 \begin{table}[!ht]
 \centering
+\caption{Per-stage parameters of the recommendation chain.}
+\label{tab:rec-stages}
 \small
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.6cm}|>{\raggedright\arraybackslash}p{2.0cm}|>{\raggedright\arraybackslash}p{1.5cm}|Y|}
@@ -224,14 +226,12 @@ Writer      & one per angle, parallel & 0.8 & \texttt{\{title, meta, body, sugge
 Translator  & one per idea, parallel  & 0.4 & translated counterpart of the writer output \\
 \hline
 \end{tabularx}
-\caption{Per-stage parameters of the recommendation chain.}
-\label{tab:rec-stages}
 \end{table}
 
 \subsection{Model selection and writer fine-tuning}
 \label{subsec:rec-model-selection}
 
-Several language models were trialled against the same fixed batch of $(\text{shop}, \text{day}, \text{signal})$ inputs and compared on three axes: tonal fit, specificity to the \texttt{triggerSignal}, and JSON-schema adherence. The candidates were \emph{Gemma 3B}, \emph{DeepSeek}, a LoRA-fine-tuned seven-billion-parameter writer, and the enterprise APIs \emph{Claude} and \emph{Gemini}. The enterprise options produced the best output overall, with the cleanest structured responses and the fewest generic CTAs. The fine-tuned writer came close on tonal fit and specificity at a fraction of the hosting cost, while \emph{Gemma 3B} and \emph{DeepSeek} drifted back to boilerplate phrasing on weaker signals. Table~\ref{tab:rec-model-comparison} summarises the comparison. That gap is the immediate motivation for the writer-stage fine-tuning described next.
+Several language models were trialled against the same fixed batch of $(\text{shop}, \text{day}, \text{signal})$ inputs and compared on three axes: tonal fit, specificity to the \texttt{triggerSignal}, and JSON-schema adherence. The candidates were Gemma 3B, DeepSeek, a LoRA-fine-tuned seven-billion-parameter writer, and the enterprise APIs Claude Opus 4.7 and Gemini 2.5 Pro. The enterprise options produced the best output overall, with the cleanest structured responses and the fewest generic CTAs. The fine-tuned writer came close on tonal fit and specificity at a fraction of the hosting cost, while Gemma 3B and DeepSeek drifted back to boilerplate phrasing on weaker signals. Table~\ref{tab:rec-model-comparison} summarises the comparison. That gap is the immediate motivation for the writer-stage fine-tuning described next.
 
 {\small\renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|Y|Y|Y|Y|}
@@ -248,15 +248,14 @@ Several language models were trialled against the same fixed batch of $(\text{sh
 \endhead
 
 \hline
-\multicolumn{5}{r}{\textit{Continued on next page}} \\
 \endfoot
 
 \hline
 \endlastfoot
 
-Claude (API)            & Excellent & Excellent & Excellent & High \\
+Claude Opus 4.7         & Excellent & Excellent & Excellent & High \\
 \hline
-Gemini (API)            & Excellent & Excellent & Excellent & High \\
+Gemini 2.5 Pro          & Excellent & Excellent & Excellent & High \\
 \hline
 Fine-tuned 7B (LoRA)    & Strong    & Strong    & Good      & Low  \\
 \hline
@@ -325,7 +324,7 @@ The preserve mode is the most complex path on the platform. It is the only one t
 \subsection{Why fully generative is insufficient and the outline-as-protocol idea}
 \label{subsec:hyb-motivation}
 
-A retail catalogue must show \emph{the actual products on offer}. A photograph of a packet of crisps that subtly differs from the real packet, in label colour, in label text or in shape, is not a marketing asset; it is a misrepresentation of the goods, and a small retailer cannot publish it without risking customer trust and, in some jurisdictions, falling foul of advertising law. The bar for product fidelity is therefore much higher than for the surrounding scene.
+A retail catalogue must show the actual products on offer. A photograph of a packet of crisps that subtly differs from the real packet, in label colour, in label text or in shape, is not a marketing asset; it is a misrepresentation of the goods, and a small retailer cannot publish it without risking customer trust and, in some jurisdictions, falling foul of advertising law. The bar for product fidelity is therefore much higher than for the surrounding scene.
 
 State-of-the-art multimodal image models, even when conditioned on the retailer's own product photographs as inline references, fail this bar with regularity. Two failure modes recur. The first is \emph{label hallucination}: the model preserves the rough shape and dominant colour of the product but invents the text on its label, producing a packet whose typeface, brand mark and ingredient list are entirely fictional. The second is \emph{lookalike substitution}: the model replaces the reference product with a different but visually similar one, for example a near-identical chocolate bar from a competing brand. A small but persistent failure rate of either kind is unacceptable for marketing material that goes out under the retailer's name.
 
@@ -469,12 +468,12 @@ The pipeline has three stages: a marker-palette selection step that decides whic
 Before any model call is issued, the platform decides which colour will mark which product. The candidate pool is twelve highly saturated neon hues (magenta, cyan, electric violet, hot pink, chartreuse and so on), ordered so that the first $k$ entries are spread evenly around the hue circle for any $k$ from one to twelve. From this pool two exclusion rules remove unsuitable colours:
 
 \begin{enumerate}
-\item \emph{Brand-aware exclusion.} Candidates within Euclidean RGB distance $80$ of any brand-palette colour are dropped, so an outline cannot collide with a brand-coloured scene element at detection time.
-\item \emph{Theme-aware exclusion.} Each catalogue layout theme carries a small set of colours that the multimodal model tends to emit as scene fill (for example, in a Pop-Art or Vibrant theme the model emits greens and teals everywhere as background or prop colour). These hues are removed from the pool for the matching theme to avoid the same scene-fill / outline confusion.
+\item Brand-aware exclusion: candidates within Euclidean RGB distance $80$ of any brand-palette colour are dropped, so an outline cannot collide with a brand-coloured scene element at detection time.
+\item Theme-aware exclusion: each catalogue layout theme carries a small set of colours that the multimodal model tends to emit as scene fill (for example, in a Pop-Art or Vibrant theme the model emits greens and teals everywhere as background or prop colour). These hues are removed from the pool for the matching theme to avoid the same scene-fill / outline confusion.
 \end{enumerate}
 
 \paragraph{Stage 2: outline rendering.}
-The catalogue prompt is rewritten in \emph{outline mode}. The model is told, in unusually strict language, that it must draw \emph{only} a four-pixel solid stroke in the assigned marker colour around each product's silhouette, with no fill, no gradient, no glow, no drop shadow and no surrounding decoration. Three further rules support detection at Stage 3.
+The catalogue prompt is rewritten in \emph{outline mode}. The model is told, in unusually strict language, that it must draw only a four-pixel solid stroke in the assigned marker colour around each product's silhouette, with no fill, no gradient, no glow, no drop shadow and no surrounding decoration. Three further rules support detection at Stage 3.
 
 \begin{itemize}
 \item An eighty-pixel \emph{quiet zone} around each outline is reserved: no overlay text, price tag or decorative element may enter it. The quiet zone gives the deterministic mask in Stage 3 enough room to be dilated without erasing surrounding scene content.
@@ -488,12 +487,12 @@ The provider call is issued through the existing \texttt{IImageProvider} abstrac
 The third stage runs entirely on the application server, with no further model calls (other than the judge described in Section~\ref{subsec:hyb-judge}). It proceeds in six sub-steps:
 
 \begin{enumerate}
-\item[\textbf{(a)}] \emph{Per-product colour matching.} Each pixel of the placeholder canvas is mapped to the closest marker colour by Chebyshev RGB distance under a tolerance of $80$, producing a per-pixel product index (or $-1$ if no marker is within tolerance).
-\item[\textbf{(b)}] \emph{Largest-component filter.} For each product, only the largest connected component of matched pixels is kept, discarding stray marker-coloured pixels in the background that would otherwise inflate the paste-back bounding box.
-\item[\textbf{(c)}] \emph{Outline thickening.} The retained outline is dilated by four pixels to absorb anti-aliased halo pixels at the stroke edge.
-\item[\textbf{(d)}] \emph{Inpaint mask construction.} A binary product-region mask is built by flood-filling unmatched cells from the canvas border and inverting the result, then dilated by fifteen pixels to also catch the model's occasional drop shadows.
-\item[\textbf{(e)}] \emph{LaMa inpainting.} The placeholder canvas and the mask are passed to a LaMa inpainting model \cite{suvorov2022lama} (served via IOPaint), chosen because it handles large masks, runs on CPU at acceptable latency, and needs no inference-time text prompt.
-\item[\textbf{(f)}] \emph{Product paste.} The retailer's source photograph is trimmed to its opaque bounding box, scaled by area to $0.8\times$ the median placeholder area, anchored at the placeholder's bottom-left corner so products ``stand'' on a baseline, and alpha-composited onto the inpainted canvas.
+\item[\textbf{(a)}] Per-product colour matching. Each pixel of the placeholder canvas is mapped to the closest marker colour by Chebyshev RGB distance under a tolerance of $80$, producing a per-pixel product index (or $-1$ if no marker is within tolerance).
+\item[\textbf{(b)}] Largest-component filter. For each product, only the largest connected component of matched pixels is kept, discarding stray marker-coloured pixels in the background that would otherwise inflate the paste-back bounding box.
+\item[\textbf{(c)}] Outline thickening. The retained outline is dilated by four pixels to absorb anti-aliased halo pixels at the stroke edge.
+\item[\textbf{(d)}] Inpaint mask construction. A binary product-region mask is built by flood-filling unmatched cells from the canvas border and inverting the result, then dilated by fifteen pixels to also catch the model's occasional drop shadows.
+\item[\textbf{(e)}] LaMa inpainting. The placeholder canvas and the mask are passed to a LaMa inpainting model \cite{suvorov2022lama} (served via IOPaint), chosen because it handles large masks, runs on CPU at acceptable latency, and needs no inference-time text prompt.
+\item[\textbf{(f)}] Product paste. The retailer's source photograph is trimmed to its opaque bounding box, scaled by area to $0.8\times$ the median placeholder area, anchored at the placeholder's bottom-left corner so products ``stand'' on a baseline, and alpha-composited onto the inpainted canvas.
 \end{enumerate}
 
 Listing~\ref{lst:hybrid-loop} shows a slightly simplified version of the compositor's main loop; the production code performs the same steps with additional logging and per-product diagnostics that have been elided for legibility.
@@ -534,6 +533,8 @@ If the per-trial acceptance probabilities are treated as approximately independe
 
 \begin{table}[!ht]
 \centering
+\caption{Compound acceptance probability under the independent-trial model, given a single-trial acceptance rate of $0.70$.}
+\label{tab:hyb-acceptance}
 \small
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\centering\arraybackslash}p{2.4cm}|>{\centering\arraybackslash}p{3.6cm}|Y|}
@@ -547,8 +548,6 @@ If the per-trial acceptance probabilities are treated as approximately independe
 3 & $1 - 0.30^{3} \approx 0.97$ & Pipeline cap; the user-facing rate. \\
 \hline
 \end{tabularx}
-\caption{Compound acceptance probability under the independent-trial model, given a single-trial acceptance rate of $0.70$.}
-\label{tab:hyb-acceptance}
 \end{table}
 
 These figures are observational and informal; a controlled benchmark with a fixed evaluation set, blind human raters and per-failure-mode breakdown is left to future work. They are presented here to motivate the three-trial cap, not as a definitive measurement.

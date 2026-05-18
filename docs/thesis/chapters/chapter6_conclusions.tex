@@ -11,11 +11,11 @@ The thread running through the contributions is that the gap between an off-the-
 Several extensions would meaningfully strengthen the platform.
 
 \begin{itemize}
-    \item \emph{Self-serve billing via Stripe.} Replace the admin-grant flow with Stripe Checkout for one-off credit packs and Stripe Billing for subscriptions, reconciling charges against the existing ledger through webhooks.
-    \item \emph{Engagement feedback loop.} Pull per-post reach, engagement and click-through from the connected social channels and feed them back into the recommendation engine as a per-shop signal, so future ideas favour patterns that have worked for that retailer.
-    \item \emph{Per-shop writer adaptation.} Use periodic LoRA refreshes on each shop's accepted-versus-rejected ideas to let the writer converge to the shop's voice without retraining the base model; the hot-swappable adapter infrastructure is already in place.
-    \item \emph{Short-form video generation.} Extend the pipeline beyond stills to $5$ to $15$\,s vertical clips for Reels, TikTok and Shorts; the hybrid contract translates naturally, with the compositor placing real product photos onto each generated frame.
-    \item \emph{Scheduled and automated publishing.} Let the retailer mark an accepted idea for auto-publication at a chosen time, with retry on platform failure, turning the platform from an authoring tool into a daily marketing operation that runs without operator help.
-    \item \emph{Print-on-demand fulfilment.} Partner with a print-on-demand provider so the A4 export becomes an in-app order for shipped flyers, which is the form most independent retailers actually need.
-    \item \emph{Controlled benchmark for the recommendation engine.} Run a rigorous study with a power-sized frozen evaluation set, blind human raters from the target audience, and a per-failure-mode breakdown, in place of the current LLM-as-judge and small pairwise pass.
+    \item Self-serve billing via Stripe: replace the admin-grant flow with Stripe Checkout for one-off credit packs and Stripe Billing for subscriptions, reconciling charges against the existing ledger through webhooks.
+    \item Engagement feedback loop: pull per-post reach, engagement and click-through from the connected social channels and feed them back into the recommendation engine as a per-shop signal, so future ideas favour patterns that have worked for that retailer.
+    \item Per-shop writer adaptation: use periodic LoRA refreshes on each shop's accepted-versus-rejected ideas to let the writer converge to the shop's voice without retraining the base model; the hot-swappable adapter infrastructure is already in place.
+    \item Short-form video generation: extend the pipeline beyond stills to $5$ to $15$\,s vertical clips for Reels, TikTok and Shorts; the hybrid contract translates naturally, with the compositor placing real product photos onto each generated frame.
+    \item Scheduled and automated publishing: let the retailer mark an accepted idea for auto-publication at a chosen time, with retry on platform failure, turning the platform from an authoring tool into a daily marketing operation that runs without operator help.
+    \item Print-on-demand fulfilment: partner with a print-on-demand provider so the A4 export becomes an in-app order for shipped flyers, which is the form most independent retailers actually need.
+    \item Controlled benchmark for the recommendation engine: run a rigorous study with a power-sized frozen evaluation set, blind human raters from the target audience, and a per-failure-mode breakdown, in place of the current LLM-as-judge and small pairwise pass.
 \end{itemize}

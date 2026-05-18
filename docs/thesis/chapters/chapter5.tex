@@ -30,14 +30,14 @@ The recommendation engine's writer stage produces stochastic text and cannot be 
 The reference set against which DeepEval is run is a frozen collection of $120$ $(\text{shop}, \text{day}, \text{signal})$ tuples that span urban and rural shop profiles, weak and strong context signals, and both supported languages. Three complementary checks are run on every model or prompt change:
 
 \begin{itemize}
-    \item \emph{Schema and format gate.} Every output must parse as the declared JSON schema, populate every required field and respect the fixed enumerations for \texttt{type} and \texttt{tone}. Schema failures fail the suite.
-    \item \emph{Forbidden-phrase regression.} A curated denylist of the boilerplate marketing tropes the writer prompt is built to discourage (``discover our premium selection'', ``don't miss out'', and their Romanian equivalents) is matched against the \texttt{title}, \texttt{body} and \texttt{suggestedPost} fields. The suite tracks the per-100-ideas rate of denylist hits and gates merges on it not regressing.
-    \item \emph{DeepEval metric battery.} Each output is scored on answer relevancy, faithfulness and hallucination using DeepEval's built-in metrics, and on two custom rubric metrics, \emph{Tone Match} and \emph{Schema Compliance}, whose criteria are written against the platform's brand-voice specification. The judge model is rotated between \emph{Claude} and \emph{Gemini} across runs to control for judge bias, following the LLM-as-judge protocol of Zheng et al.~\cite{zheng2023llmjudge}. DeepEval reports mean scores per axis with bootstrap confidence intervals; the suite flags regressions of more than $0.2$ rubric points.
+    \item Schema and format gate: every output must parse as the declared JSON schema, populate every required field and respect the fixed enumerations for \texttt{type} and \texttt{tone}. Schema failures fail the suite.
+    \item Forbidden-phrase regression: a curated denylist of the boilerplate marketing tropes the writer prompt is built to discourage (``discover our premium selection'', ``don't miss out'', and their Romanian equivalents) is matched against the \texttt{title}, \texttt{body} and \texttt{suggestedPost} fields. The suite tracks the per-100-ideas rate of denylist hits and gates merges on it not regressing.
+    \item DeepEval metric battery: each output is scored on answer relevancy, faithfulness and hallucination using DeepEval's built-in metrics, and on two custom rubric metrics, Tone Match and Schema Compliance, whose criteria are written against the platform's brand-voice specification. The judge model is rotated between Claude and Gemini across runs to control for judge bias, following the LLM-as-judge protocol of Zheng et al.~\cite{zheng2023llmjudge}. DeepEval reports mean scores per axis with bootstrap confidence intervals; the suite flags regressions of more than $0.2$ rubric points.
 \end{itemize}
 
 \subsection*{Cross-model evaluation}
 
-The same DeepEval harness is used to compare candidate writer models head-to-head on the reference set, so that decisions about which backbone to host, fine-tune or call as a managed service can be made on evidence rather than intuition. Five models are evaluated: \emph{Gemma 3 4B} as the open-weights base, \emph{Gemma 3 4B (fine-tuned)} after supervised fine-tuning on the platform's brand-voice corpus, \emph{DeepSeek} as an open-weights frontier comparison, and the closed \emph{Claude} and \emph{ChatGPT} families as managed-service baselines. Figure~\ref{fig:deepeval-models} reports the mean per-axis score, on a $0$ to $100$ scale, with the y-axis truncated at $60$ to make the differences legible.
+The same DeepEval harness is used to compare candidate writer models head-to-head on the reference set, so that decisions about which backbone to host, fine-tune or call as a managed service can be made on evidence rather than intuition. Five models are evaluated: Gemma 3 4B as the open-weights base, Gemma 3 4B (fine-tuned) after supervised fine-tuning on the platform's brand-voice corpus, DeepSeek as an open-weights frontier comparison, and the closed Claude and ChatGPT families as managed-service baselines. Figure~\ref{fig:deepeval-models} reports the mean per-axis score, on a $0$ to $100$ scale, with the y-axis truncated at $60$ to make the differences legible.
 
 \begin{figure}[!ht]
 \centering
@@ -130,7 +130,7 @@ The same DeepEval harness is used to compare candidate writer models head-to-hea
 \label{fig:deepeval-models}
 \end{figure}
 
-The reading of Figure~\ref{fig:deepeval-models} is the story the chapter argues. The off-the-shelf \emph{Gemma 3 4B} model is the weakest on every axis, with the largest gap on \emph{Tone Match}, the metric most sensitive to brand voice and to Romanian-language register. Supervised fine-tuning on the platform's brand-voice corpus closes most of that gap: the fine-tuned variant is within two points of the strongest model on every axis and \emph{leads} on \emph{Tone Match} ($93.8$), overtaking both \emph{Claude} ($90.6$) and \emph{ChatGPT} ($88.4$). The closed-frontier models retain a small lead on raw \emph{Faithfulness} and \emph{Hallucination-Free Rate}, where their scale advantage shows. On the operational dimensions that matter for a small-retailer product, namely tone match and schema compliance, a fine-tuned $4$-billion-parameter open model is at parity with managed services that cost two orders of magnitude more per call, and is therefore the platform's default writer.
+The reading of Figure~\ref{fig:deepeval-models} is the story the chapter argues. The off-the-shelf Gemma 3 4B model is the weakest on every axis, with the largest gap on Tone Match, the metric most sensitive to brand voice and to Romanian-language register. Supervised fine-tuning on the platform's brand-voice corpus closes most of that gap: the fine-tuned variant is within two points of the strongest model on every axis and leads on Tone Match ($93.8$), overtaking both Claude ($90.6$) and ChatGPT ($88.4$). The closed-frontier models retain a small lead on raw Faithfulness and Hallucination-Free Rate, where their scale advantage shows. On the operational dimensions that matter for a small-retailer product, namely tone match and schema compliance, a fine-tuned $4$-billion-parameter open model is at parity with managed services that cost two orders of magnitude more per call, and is therefore the platform's default writer.
 
 A complementary human-rated pass is run before each release: two independent reviewers perform pairwise comparisons of the platform's output against the un-adapted seven-billion-parameter writer on a $30$-tuple stratified sub-sample, and the win-rate is recorded. Image generation is evaluated only manually, by running a small canonical prompt set against each live provider and inspecting the assets for product fidelity and tonal fit.
 
@@ -141,6 +141,8 @@ The build pipeline is hosted on GitHub Actions. On every pull request it runs th
 
 \begin{table}[!ht]
 \centering
+\caption{Mapping from functional capability area to the test layer that protects it.}
+\label{tab:capability-test-layer}
 \small
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.0cm}|Y|Y|Y|}
@@ -164,6 +166,4 @@ Billing                   & yes & yes & n/a \\
 Administration            & yes & yes & n/a \\
 \hline
 \end{tabularx}
-\caption{Mapping from functional capability area to the test layer that protects it.}
-\label{tab:capability-test-layer}
 \end{table}

@@ -1,7 +1,7 @@
 \chapter{Theoretical Background}
 \label{chap:background}
 
-The platform proposed in this thesis sits at the intersection of several research areas: image generation by neural networks, the practice of guiding such networks through carefully designed prompts, retrieval-augmented generation as a means of grounding large language models in external knowledge, and the use of learned visual representations to compare images. The aim of this chapter is to introduce the concepts and vocabulary on which the rest of the thesis depends, so that the architectural choices in \textit{Chapter 3} and the implementation details in \textit{Chapter 4} can be discussed with the appropriate technical precision. No attempt is made at exhaustive coverage; the focus is firmly on those ideas that recur in subsequent chapters.
+The platform proposed in this thesis sits at the intersection of several research areas: image generation by neural networks, the practice of guiding such networks through carefully designed prompts, retrieval-augmented generation as a means of grounding large language models in external knowledge, and the use of learned visual representations to compare images. The aim of this chapter is to introduce the concepts and vocabulary on which the rest of the thesis depends, so that the architectural choices in Chapter 3 and the implementation details in Chapter 4 can be discussed with the appropriate technical precision. No attempt is made at exhaustive coverage; the focus is firmly on those ideas that recur in subsequent chapters.
 
 \section{Generative Models for Image Synthesis}
 \label{sec:generative-models}
@@ -126,7 +126,7 @@ Large language models are remarkably fluent, but they are also famously unreliab
 
 Retrieval augmentation promotes external storage to a first-class element of the inference pipeline, sidestepping three known weaknesses of pure language models: a bounded context window, a tendency to hallucinate verifiable facts, and the high cost of fine-tuning relative to updating a retrieval index.
 
-The daily recommendation engine of \textit{Chapter 4} uses two retrieval passes: one over the user's recently generated ideas to discourage repetition, and one over a curated knowledge base of promotional tactics organised by business domain so that suggestions are anchored in patterns known to work for shops of that type.
+The daily recommendation engine of Chapter 4 uses two retrieval passes: one over the user's recently generated ideas to discourage repetition, and one over a curated knowledge base of promotional tactics organised by business domain so that suggestions are anchored in patterns known to work for shops of that type.
 
 \subsection{Vector embeddings and approximate nearest-neighbour search}
 
@@ -144,20 +144,61 @@ Conceptually, a RAG pipeline operates in three steps, illustrated in Figure~\ref
 
 \begin{figure}[ht]
 \centering
+\definecolor{ragInk}{HTML}{1F2933}
+\definecolor{ragBorder}{HTML}{A8B0BA}
+\definecolor{ragArrow}{HTML}{7B8794}
+\definecolor{ragSlate}{HTML}{3D5A80}
+\definecolor{ragSlateBg}{HTML}{EBEFF5}
+\definecolor{ragAmber}{HTML}{A7693E}
+\definecolor{ragAmberBg}{HTML}{F4ECDF}
+\definecolor{ragSage}{HTML}{4F7A5C}
+\definecolor{ragSageBg}{HTML}{E8F0EA}
+\resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    node distance=8mm and 7mm,
-    every node/.style={font=\small\sffamily},
-    box/.style={draw, rounded corners=2pt, minimum width=22mm, minimum height=10mm, align=center, fill=gray!5},
-    store/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum width=18mm, minimum height=12mm, align=center, fill=gray!5},
-    arr/.style={-{Latex[length=2mm]}, thick}
+    >={Latex[length=2.8mm,width=2.4mm]},
+    node distance=4.5mm,
+    every node/.style={font=\small\sffamily, text=ragInk},
+    box/.style={
+        draw=ragBorder, line width=0.5pt,
+        rounded corners=3pt,
+        minimum width=24mm, minimum height=15mm,
+        align=center, fill=white, inner sep=2pt
+    },
+    store/.style={
+        draw=ragBorder, line width=0.5pt,
+        cylinder, shape border rotate=90, aspect=0.3,
+        minimum width=20mm, minimum height=16mm,
+        align=center, fill=white, inner sep=1pt
+    },
+    arr/.style={
+        ->, line width=0.9pt, draw=ragArrow,
+        shorten >=1.5pt, shorten <=1.5pt
+    },
+    phaseband/.style={
+        rounded corners=5pt,
+        inner xsep=8pt, inner ysep=9pt
+    },
+    phase/.style={
+        font=\footnotesize\sffamily\bfseries,
+        inner sep=1pt
+    },
+    accent/.style={
+        line width=1.1pt, line cap=round
+    }
 ]
 \node[box] (q) {Query};
 \node[box, right=of q] (emb) {Embedding\\encoder};
 \node[store, right=of emb] (idx) {Vector\\index};
 \node[box, right=of idx] (top) {Top-\(k\)\\retrieved};
-\node[box, below=8mm of top] (prompt) {Augmented\\prompt};
-\node[box, left=of prompt] (llm) {Language\\model};
-\node[box, left=of llm] (ans) {Grounded\\answer};
+\node[box, right=of top] (prompt) {Augmented\\prompt};
+\node[box, right=of prompt] (llm) {Language\\model};
+\node[box, right=of llm] (ans) {Grounded\\answer};
+
+\begin{scope}[on background layer]
+    \node[phaseband, fit=(q)(top), fill=ragSlateBg] (rband) {};
+    \node[phaseband, fit=(prompt), fill=ragAmberBg] (aband) {};
+    \node[phaseband, fit=(llm)(ans), fill=ragSageBg] (gband) {};
+\end{scope}
 
 \draw[arr] (q) -- (emb);
 \draw[arr] (emb) -- (idx);
@@ -165,8 +206,16 @@ Conceptually, a RAG pipeline operates in three steps, illustrated in Figure~\ref
 \draw[arr] (top) -- (prompt);
 \draw[arr] (prompt) -- (llm);
 \draw[arr] (llm) -- (ans);
-\end{tikzpicture}
-\caption{The retrieve--augment--generate pipeline. A query is embedded, the index returns the top-\(k\) most similar entries, those entries are spliced into a prompt, and the language model produces an answer grounded in the retrieved material.}
+
+\node[phase, text=ragSlate, above=3mm of rband.north] (rlabel) {RETRIEVE};
+\node[phase, text=ragAmber, above=3mm of aband.north] (alabel) {AUGMENT};
+\node[phase, text=ragSage,  above=3mm of gband.north] (glabel) {GENERATE};
+
+\draw[accent, draw=ragSlate] (rlabel.south west) -- (rlabel.south east);
+\draw[accent, draw=ragAmber] (alabel.south west) -- (alabel.south east);
+\draw[accent, draw=ragSage]  (glabel.south west) -- (glabel.south east);
+\end{tikzpicture}}
+\caption{The retrieve--augment--generate (RAG) pipeline.}
 \label{fig:rag}
 \end{figure}
 
@@ -265,7 +314,7 @@ Once embeddings have been produced, they must be stored and queried. The propose
 \section{Hybrid Generative--Deterministic Pipelines}
 \label{sec:hybrid}
 
-A generative model alone is insufficient whenever the output must remain truthful to a real, specific product: drift in colour, texture and silhouette is the rule rather than the exception. The way out, detailed in \textit{Chapter~\ref{chap:contributions}}, is to split the work between a generative phase that produces a background scene with explicit placeholder regions and a deterministic phase that pastes the actual product photographs into those regions and overlays the textual elements. The same split is exposed to the user as a toggle on product preservation: on, the generator designs only the background and the compositor places the products at pixel-level fidelity; off, the generator renders the products itself with more creative latitude, guided by but not bound to their original colour and shape.
+A generative model alone is insufficient whenever the output must remain truthful to a real, specific product: drift in colour, texture and silhouette is the rule rather than the exception. The way out, detailed in Chapter~\ref{chap:contributions}, is to split the work between a generative phase that produces a background scene with explicit placeholder regions and a deterministic phase that pastes the actual product photographs into those regions and overlays the textual elements. The same split is exposed to the user as a toggle on product preservation: on, the generator designs only the background and the compositor places the products at pixel-level fidelity; off, the generator renders the products itself with more creative latitude, guided by but not bound to their original colour and shape.
 
 For print export, the platform additionally upscales the finished asset with Real-ESRGAN \cite{wang2021realesrgan}; the full print pipeline is described in Section~\ref{sec:print-pipeline}.
 

@@ -44,7 +44,7 @@ Each family is parameterised by the brand context recorded at onboarding and by 
 \noindent The internal mechanics of the hybrid catalogue mode are deferred to the contributions chapter that follows.
 
 \paragraph{Daily marketing recommendations.}
-Once a day, the platform must produce a small ranked set of fresh marketing themes adapted to the retailer's shop and to the day's external context (weather, local events, holidays). Each theme is presented as a fully drafted promotional idea, in the locked language, and the retailer may either dismiss it, react to it, or hand it directly to the asset-generation pipeline as a starting prompt. The recommendation engine that produces these themes is the first of the two main contributions of this thesis and is described in detail in \textit{Chapter 4}.
+Once a day, the platform must produce a small ranked set of fresh marketing themes adapted to the retailer's shop and to the day's external context (weather, local events, holidays). Each theme is presented as a fully drafted promotional idea, in the locked language, and the retailer may either dismiss it, react to it, or hand it directly to the asset-generation pipeline as a starting prompt. The recommendation engine that produces these themes is the first of the two main contributions of this thesis and is described in detail in Chapter 4.
 
 \paragraph{Asset library and print export.}
 Every generated asset, regardless of family and mode, is persisted to the retailer's gallery, where it can be browsed and filtered by asset type, by date and by name. The gallery is the canonical record of everything the platform has produced for the shop. Any gallery item may be exported as a print-ready document, in paper sizes A6 to A3, at $300\,$dpi; if the source asset is below the target resolution, the platform's premium print pipeline upscales it through a learned super-resolution model before laying out the page.
@@ -57,6 +57,8 @@ A small set of capabilities is reserved to operators with the administrative fla
 
 \begin{table}[ht]
 \centering
+\caption{Summary of functional requirements by capability area.}
+\label{tab:functional-requirements}
 \small
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.6cm}|Y|}
@@ -80,8 +82,6 @@ Billing                 & Transactional credit ledger with an atomic debit-and-r
 Administration          & Broad operator oversight over platform data and tenants. \\
 \hline
 \end{tabularx}
-\caption{Summary of functional requirements by capability area.}
-\label{tab:functional-requirements}
 \end{table}
 
 \subsection{Non-functional requirements}
@@ -110,6 +110,8 @@ Every request produces a structured log line carrying a tenant identifier and a 
 
 \begin{table}[ht]
 \centering
+\caption{Non-functional requirements and the architectural mechanisms that satisfy them.}
+\label{tab:nonfunctional-requirements}
 \small
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.0cm}|Y|}
@@ -133,8 +135,6 @@ Localisation & Language flag carried end-to-end with pre-translated assets. \\
 Auditability & Correlation IDs in logs and per-stage distributed traces. \\
 \hline
 \end{tabularx}
-\caption{Non-functional requirements and the architectural mechanisms that satisfy them.}
-\label{tab:nonfunctional-requirements}
 \end{table}
 
 \section{High-Level Architecture}
@@ -419,6 +419,7 @@ The application server exposes a small, feature-grouped HTTP API. Table~\ref{tab
 {\small
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}p{3.6cm}|Y|}
+\caption{HTTP route groups exposed by the application server.}\label{tab:http-endpoints}\\
 \hline
 \textbf{Group} & \textbf{Prefix} & \textbf{Purpose} \\
 \hline
@@ -430,8 +431,6 @@ The application server exposes a small, feature-grouped HTTP API. Table~\ref{tab
 \hline
 \endfoot
 \hline
-\caption{HTTP route groups exposed by the application server.}
-\label{tab:http-endpoints}
 \endlastfoot
 Auth & \texttt{/auth} & Register, log in, refresh tokens and change interface language. \\
 \hline
@@ -439,17 +438,17 @@ Shop & \texttt{/shop} & Read and update the shop profile and logo. \\
 \hline
 Products & \texttt{/products} & CRUD over the retailer's product library, with one-tap background removal. \\
 \hline
-Reference catalogue & \texttt{/reference-images} & Browse, search and bulk-import the curated reference catalogue. \\
+Reference catalogue & /reference-images & Browse, search and bulk-import the curated reference catalogue. \\
 \hline
-Image generation & \texttt{/generate-image} & Produce announcements, catalogues and wallpapers in fully generative or hybrid mode. \\
+Image generation & /generate-image & Produce announcements, catalogues and wallpapers in fully generative or hybrid mode. \\
 \hline
-Gallery & \texttt{/gallery} & Save, list, rename and delete generated assets. \\
+Gallery & /gallery & Save, list, rename and delete generated assets. \\
 \hline
-Wallet & \texttt{/wallet} & Read the credit balance and ledger, and grant credits (operator only). \\
+Wallet & /wallet & Read the credit balance and ledger, and grant credits (operator only). \\
 \hline
-Recommendations & \texttt{/recommendations} & Fetch today's ideas, request a refresh and leave feedback. \\
+Recommendations & /recommendations & Fetch today's ideas, request a refresh and leave feedback. \\
 \hline
-Print & \texttt{/print} & Render a gallery item to a print-ready document. \\
+Print & /print & Render a gallery item to a print-ready document. \\
 \end{tabularx}
 }
 
@@ -696,42 +695,41 @@ Two consequences of this layout matter at runtime. The first is that tenant isol
 
 {\footnotesize
 \renewcommand{\arraystretch}{1.1}
-\begin{tabularx}{\textwidth}{|>{\ttfamily}p{4.5cm}|Y|}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.5cm}|Y|}
+\caption{Purpose of each table in the schema.}\label{tab:schema-tables}\\
 \hline
-\textnormal{\textbf{Table}} & \textbf{Purpose} \\
+\textbf{Table} & \textbf{Purpose} \\
 \hline
 \endfirsthead
 \hline
-\textnormal{\textbf{Table}} & \textbf{Purpose} \\
+\textbf{Table} & \textbf{Purpose} \\
 \hline
 \endhead
 \hline
 \endfoot
 \hline
-\caption{Purpose of each table in the schema.}
-\label{tab:schema-tables}
 \endlastfoot
-AppUser & Identifies a retailer (or operator) and tracks the credit balance. \\
+\texttt{AppUser} & Identifies a retailer (or operator) and tracks the credit balance. \\
 \hline
-ShopProfile & Holds the brand identity and contact details captured during onboarding. \\
+\texttt{ShopProfile} & Holds the brand identity and contact details captured during onboarding. \\
 \hline
-Product & An item the retailer sells, with name, price and a representative photograph. \\
+\texttt{Product} & An item the retailer sells, with name, price and a representative photograph. \\
 \hline
-GeneratedImage & An entry in the gallery, tagged with its asset family. \\
+\texttt{GeneratedImage} & An entry in the gallery, tagged with its asset family. \\
 \hline
-CoinTransaction & A row of the credit ledger that records a debit or refund and, optionally, the asset it paid for. \\
+\texttt{CoinTransaction} & A row of the credit ledger that records a debit or refund and, optionally, the asset it paid for. \\
 \hline
-DailyRecommendation & The day's marketing ideas together with the context snapshot used to produce them. \\
+\texttt{DailyRecommendation} & The day's marketing ideas together with the context snapshot used to produce them. \\
 \hline
-IdeaEmbedding & A per-idea text embedding used to deduplicate themes against the shop's recent ideas. \\
+\texttt{IdeaEmbedding} & A per-idea text embedding used to deduplicate themes against the shop's recent ideas. \\
 \hline\hline
-Category & A node in the reference catalogue's hierarchical tree. \\
+\texttt{Category} & A node in the reference catalogue's hierarchical tree. \\
 \hline
-ReferenceImage & A curated product photograph with a CLIP embedding for search-by-photo. \\
+\texttt{ReferenceImage} & A curated product photograph with a CLIP embedding for search-by-photo. \\
 \hline
-PromoPlaybookEntry & A known-good promotional pattern with a text embedding the recommendation engine retrieves over. \\
+\texttt{PromoPlaybookEntry} & A known-good promotional pattern with a text embedding the recommendation engine retrieves over. \\
 \hline
-Holiday & A cached public holiday for a country and year, used as a context signal. \\
+\texttt{Holiday} & A cached public holiday for a country and year, used as a context signal. \\
 \end{tabularx}
 }
 
@@ -888,11 +886,10 @@ The platform's build and deploy pipeline is hosted on GitHub Actions. A push to 
 \paragraph{Network shape.}
 The VNet topology is conservative. The database, the blob storage account and Key Vault are reachable only through private endpoints inside the VNet, with their public network access disabled at the resource level. The Container Apps Environment sits in the same VNet and exposes only its built-in HTTPS ingress to the Internet.
 
-Table~\ref{tab:nfr-azure} maps each non-functional requirement onto the Azure service that fulfils it.
-
 {\small
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.0cm}|Y|}
+\caption{Mapping from non-functional requirements to Azure services.}\label{tab:nfr-azure}\\
 \hline
 \textbf{Requirement} & \textbf{Azure service(s)} \\
 \hline
@@ -904,8 +901,6 @@ Table~\ref{tab:nfr-azure} maps each non-functional requirement onto the Azure se
 \hline
 \endfoot
 \hline
-\caption{Mapping from non-functional requirements to Azure services.}
-\label{tab:nfr-azure}
 \endlastfoot
 Interactive read/write latency & Container Apps (autoscaled) and the in-process cache. \\
 \hline
