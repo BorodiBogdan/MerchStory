@@ -1,7 +1,7 @@
 \chapter{Theoretical Background}
 \label{chap:background}
 
-The platform proposed in this thesis sits at the intersection of several research areas: image generation by neural networks, the practice of guiding such networks through carefully designed prompts, retrieval-augmented generation as a means of grounding large language models in external knowledge, and the use of learned visual representations to compare images. The aim of this chapter is to introduce the concepts and vocabulary on which the rest of the thesis depends, so that the architectural choices in Chapter 3 and the implementation details in Chapter 4 can be discussed with the appropriate technical precision. No attempt is made at exhaustive coverage; the focus is firmly on those ideas that recur in subsequent chapters.
+The platform proposed in this thesis sits at the intersection of several research areas: image generation by neural networks, the practice of guiding such networks through carefully designed prompts, retrieval-augmented generation as a means of grounding large language models in external knowledge, and the use of learned visual representations to compare images. This chapter introduces the concepts and vocabulary the rest of the thesis assumes. No attempt is made at exhaustive coverage; the focus is on those ideas that recur in subsequent chapters.
 
 \section{Generative Models for Image Synthesis}
 \label{sec:generative-models}
@@ -12,7 +12,7 @@ The first technical pillar of the proposed application is the synthesis of photo
 
 Image generation is the task of drawing samples from a probability distribution over images. A generative model attempts to approximate the unknown data distribution \(p_{\text{data}}(x)\) of natural images using a parametric distribution \(p_\theta(x)\), so that new samples drawn from \(p_\theta\) are indistinguishable from real photographs to a human observer. In modern conditional generation, the distribution is further conditioned on a textual description \(c\), and the task becomes that of sampling from \(p_\theta(x \mid c)\).
 
-Generative adversarial networks (GANs) \cite{goodfellow2014gan} and variational autoencoders (VAEs) \cite{kingma2014vae} dominated the field before the diffusion era, but each suffers well-known drawbacks (training instability and mode collapse for GANs, blurred outputs for VAEs) that limit their use for the kind of photorealistic synthesis required here. Table~\ref{tab:generative-paradigms} summarises the two paradigms that dominate the present landscape and which this thesis builds on.
+Generative adversarial networks (GANs) \cite{goodfellow2014gan} and variational autoencoders (VAEs) \cite{kingma2014vae} dominated the field before the diffusion era, but each suffers well-known drawbacks (training instability and mode collapse for GANs, blurred outputs for VAEs) that limit their use for the kind of photorealistic synthesis required here. Table~\ref{tab:generative-paradigms} summarises the two paradigms that this thesis builds on.
 
 \begin{table}[ht]
 \centering
@@ -20,24 +20,20 @@ Generative adversarial networks (GANs) \cite{goodfellow2014gan} and variational 
 \label{tab:generative-paradigms}
 \small
 \renewcommand{\arraystretch}{1.3}
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.7cm}
-                  >{\raggedright\arraybackslash}p{2.4cm}
-                  >{\raggedright\arraybackslash}p{1.6cm}
-                  >{\raggedright\arraybackslash}p{2.2cm}
-                  >{\raggedright\arraybackslash}p{2.6cm}@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.7cm}|>{\raggedright\arraybackslash}p{2.4cm}|>{\raggedright\arraybackslash}p{1.6cm}|>{\raggedright\arraybackslash}p{2.2cm}|Y|}
+\hline
 \textbf{Paradigm} & \textbf{Training objective} & \textbf{Sampling cost} & \textbf{Conditioning} & \textbf{Suitability} \\
-\midrule
-Diffusion \cite{ho2020ddpm,rombach2022ldm} & Denoising score matching & High (many steps) & Strong via guidance & Backbone of most modern systems \\
-\addlinespace[4pt]
+\hline
+Diffusion \cite{ho2020ddpm,rombach2022ldm} & Denoising score matching & High (many steps) & Strong via guidance & Default in current systems \\
+\hline
 Multimodal LLM with image output & LLM front-end over diffusion submodel & Moderate & Native (text and image) & Used by the platform \\
-\bottomrule
-\end{tabular}
+\hline
+\end{tabularx}
 \end{table}
 
 \subsection{Diffusion models}
 
-Denoising diffusion probabilistic models \cite{ho2020ddpm} have, since 2020, become the dominant approach to high-fidelity image synthesis. The intuition is appealingly simple. A \emph{forward process} progressively corrupts a clean image \(x_0\) by adding small amounts of Gaussian noise over \(T\) time-steps, producing a sequence \(x_0, x_1, \dots, x_T\) in which \(x_T\) is essentially pure noise. The forward step is
+Denoising diffusion probabilistic models \cite{ho2020ddpm} have, since 2020, become the dominant approach to high-fidelity image synthesis. The underlying intuition is simple. A \emph{forward process} progressively corrupts a clean image \(x_0\) by adding small amounts of Gaussian noise over \(T\) time-steps, producing a sequence \(x_0, x_1, \dots, x_T\) in which \(x_T\) approaches pure Gaussian noise. The forward step is
 
 \begin{equation}
 q(x_t \mid x_{t-1}) = \mathcal{N}\big(x_t;\; \sqrt{1 - \beta_t}\, x_{t-1},\; \beta_t \mathbf{I}\big),
@@ -46,7 +42,7 @@ q(x_t \mid x_{t-1}) = \mathcal{N}\big(x_t;\; \sqrt{1 - \beta_t}\, x_{t-1},\; \be
 
 where \(\{\beta_t\}_{t=1}^{T}\) is a fixed variance schedule. A neural network, typically a U-Net, is then trained to invert each step of this process: given a noisy \(x_t\), it predicts the noise that was added, which is equivalent to predicting a slightly less noisy \(x_{t-1}\). At inference time, sampling proceeds in reverse, starting from random Gaussian noise and gradually denoising it into a coherent image, as illustrated schematically in Figure~\ref{fig:diffusion}.
 
-Conditional generation is most commonly achieved through \emph{classifier-free guidance}, in which the same network is trained both with and without the textual condition \(c\), and at sampling time the predicted noise is extrapolated away from the unconditional prediction and towards the conditional one. This yields strong text adherence at the cost of some sample diversity. Latent diffusion models \cite{rombach2022ldm}, of which Stable Diffusion is the best known instance, perform the entire diffusion process in the compressed latent space of a pretrained autoencoder rather than at the pixel level, which dramatically reduces the computational cost of training and sampling. The text condition itself is supplied by a separate language encoder, often a transformer \cite{vaswani2017attention}, whose output embeddings are injected into the U-Net through cross-attention layers.
+Conditional generation is most commonly achieved through \emph{classifier-free guidance}, in which the same network is trained both with and without the textual condition \(c\), and at sampling time the predicted noise is extrapolated away from the unconditional prediction and towards the conditional one. This yields strong text adherence at the cost of some sample diversity. Latent diffusion models \cite{rombach2022ldm}, of which Stable Diffusion is the best known instance, perform the entire diffusion process in the compressed latent space of a pretrained autoencoder rather than at the pixel level, which reduces the computational cost of training and sampling by orders of magnitude. The text condition itself is supplied by a separate language encoder, often a transformer \cite{vaswani2017attention}, whose output embeddings are injected into the U-Net through cross-attention layers.
 
 \begin{figure}[ht]
 \centering
@@ -84,7 +80,7 @@ For all their fluency, modern image generators have well-documented weaknesses. 
 \section{Prompt Engineering}
 \label{sec:prompt-engineering}
 
-The output quality of modern generative models depends sharply on prompt phrasing. \emph{Prompt engineering} is the body of empirically discovered patterns for coaxing reliable output from models otherwise treated as black boxes; this section covers the patterns used by the proposed application.
+The output quality of modern generative models depends sharply on prompt phrasing. \emph{Prompt engineering} is the body of empirically discovered patterns for coaxing reliable output from models otherwise treated as black boxes.
 
 \subsection{Anatomy of a prompt}
 
@@ -247,25 +243,70 @@ The result is an embedding space in which an image and a caption that describe t
 
 \begin{figure}[ht]
 \centering
+
+\definecolor{clipImgC}{HTML}{4C72B0}
+\definecolor{clipTxtC}{HTML}{CC785C}
+
 \begin{tikzpicture}[
     every node/.style={font=\small\sffamily},
-    enc/.style={draw, rounded corners=2pt, minimum width=22mm, minimum height=10mm, align=center, fill=gray!5},
-    inp/.style={draw, dashed, rounded corners=2pt, minimum width=22mm, minimum height=10mm, align=center},
-    space/.style={draw, ellipse, minimum width=40mm, minimum height=22mm, align=center, fill=gray!3},
-    arr/.style={-{Latex[length=2mm]}, thick}
+    inpImg/.style={draw, dashed, rounded corners=2pt, minimum width=24mm, minimum height=11mm, align=center, fill=clipImgC!5, line width=0.5pt, draw=clipImgC!60!black},
+    inpTxt/.style={draw, dashed, rounded corners=2pt, minimum width=24mm, minimum height=11mm, align=center, fill=clipTxtC!5, line width=0.5pt, draw=clipTxtC!60!black},
+    encImg/.style={draw, rounded corners=3pt, minimum width=24mm, minimum height=12mm, align=center, fill=clipImgC!12, line width=0.7pt, draw=clipImgC!75!black},
+    encTxt/.style={draw, rounded corners=3pt, minimum width=24mm, minimum height=12mm, align=center, fill=clipTxtC!12, line width=0.7pt, draw=clipTxtC!75!black},
+    arrImg/.style={-{Latex[length=2mm]}, thick, draw=clipImgC!75!black},
+    arrTxt/.style={-{Latex[length=2mm]}, thick, draw=clipTxtC!75!black},
+    pairLine/.style={dotted, line width=0.7pt, draw=gray!70},
+    imgDot/.style={circle, fill=clipImgC, minimum size=2.4mm, inner sep=0pt},
+    txtDot/.style={circle, fill=clipTxtC, minimum size=2.4mm, inner sep=0pt}
 ]
-\node[inp] (img) at (0,0) {Image};
-\node[inp, below=10mm of img] (txt) {Caption};
-\node[enc, right=8mm of img] (imgEnc) {Image\\encoder};
-\node[enc, right=8mm of txt] (txtEnc) {Text\\encoder};
-\node[space, right=12mm of imgEnc, yshift=-7mm] (sp) {shared\\embedding\\space};
 
-\draw[arr] (img) -- (imgEnc);
-\draw[arr] (txt) -- (txtEnc);
-\draw[arr] (imgEnc) -- (sp.west |- imgEnc.east);
-\draw[arr] (txtEnc) -- (sp.west |- txtEnc.east);
+% Inputs
+\node[inpImg] (img) at (0, 1.4) {Image};
+\node[inpTxt] (txt) at (0,-1.4) {\itshape ``a coffee mug''};
+
+% Encoders
+\node[encImg] (imgEnc) at (3.6, 1.4) {Image\\encoder};
+\node[encTxt] (txtEnc) at (3.6,-1.4) {Text\\encoder};
+
+% Shared embedding space (ellipse)
+\draw[line width=0.7pt, draw=gray!55, fill=gray!3] (8.2, 0) ellipse (2.7cm and 2.05cm);
+\node[font=\scriptsize\sffamily\itshape, anchor=south] at (8.2, 1.9) {shared embedding space};
+
+% Background matched pairs (image dot near text dot)
+\node[imgDot] (i1) at (6.8, 0.85) {};
+\node[txtDot] (t1) at (7.15, 0.55) {};
+\draw[pairLine] (i1) -- (t1);
+
+\node[imgDot] (i2) at (9.25, 0.75) {};
+\node[txtDot] (t2) at (9.5, 1.0) {};
+\draw[pairLine] (i2) -- (t2);
+
+\node[imgDot] (i3) at (6.95,-0.75) {};
+\node[txtDot] (t3) at (6.7,-1.05) {};
+\draw[pairLine] (i3) -- (t3);
+
+\node[imgDot] (i4) at (9.2,-0.65) {};
+\node[txtDot] (t4) at (9.45,-0.95) {};
+\draw[pairLine] (i4) -- (t4);
+
+% Highlighted pair (the example coffee-mug pair)
+\node[imgDot, minimum size=3.4mm] (iHi) at (8.2, 0.1) {};
+\node[txtDot, minimum size=3.4mm] (tHi) at (8.52, 0.32) {};
+\draw[line width=0.6pt, draw=gray!75] (iHi) -- (tHi);
+\draw[dashed, line width=0.5pt, draw=gray!70] (8.36, 0.21) circle (5.5mm);
+
+% Arrows: inputs to encoders, encoders to highlighted pair
+\draw[arrImg] (img) -- (imgEnc);
+\draw[arrTxt] (txt) -- (txtEnc);
+\draw[arrImg] (imgEnc.east) to[out=0, in=160] (iHi);
+\draw[arrTxt] (txtEnc.east) to[out=0, in=200] (tHi);
+
+% Legend
+\node[font=\scriptsize\sffamily, anchor=west] at (5.7,-2.55) {\textcolor{clipImgC}{$\bullet$}\;image embeddings};
+\node[font=\scriptsize\sffamily, anchor=west] at (8.5,-2.55) {\textcolor{clipTxtC}{$\bullet$}\;text embeddings};
+
 \end{tikzpicture}
-\caption{The dual-encoder architecture of CLIP. Image and text encoders are trained jointly so that the embeddings of matching (image, caption) pairs lie close together in a shared space, while non-matching pairs are pushed apart.}
+\caption{The dual-encoder architecture of CLIP. Image and text encoders are trained jointly so that the embeddings of matching (image, caption) pairs land close together in a shared space, while non-matching pairs are pushed apart. The dashed circle highlights the embedding of the example coffee-mug photo together with its caption; dotted segments mark four further matched pairs.}
 \label{fig:clip}
 \end{figure}
 
@@ -293,20 +334,17 @@ For this reason, the proposed application L2-normalises every embedding before s
 \label{tab:metrics}
 \small
 \renewcommand{\arraystretch}{1.3}
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.0cm}
-                  >{\raggedright\arraybackslash}p{4.2cm}
-                  >{\raggedright\arraybackslash}p{2.8cm}
-                  >{\raggedright\arraybackslash}p{3.0cm}@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.0cm}|>{\raggedright\arraybackslash}p{4.2cm}|>{\raggedright\arraybackslash}p{2.8cm}|Y|}
+\hline
 \textbf{Metric} & \textbf{Formula} & \textbf{Magnitude-aware?} & \textbf{After L2 normalisation} \\
-\midrule
+\hline
 Cosine similarity & \(\langle u, v \rangle / (\|u\| \cdot \|v\|)\) & no & equals inner product \\
-\addlinespace[4pt]
+\hline
 Inner product     & \(\langle u, v \rangle\)                       & yes & equals cosine similarity \\
-\addlinespace[4pt]
+\hline
 Euclidean distance & \(\|u - v\|\)                                 & yes & monotonic in cosine \\
-\bottomrule
-\end{tabular}
+\hline
+\end{tabularx}
 \end{table}
 
 Once embeddings have been produced, they must be stored and queried. The proposed application uses the pgvector extension to PostgreSQL rather than a dedicated vector database such as Pinecone or Milvus; pgvector adds a \texttt{vector(n)} column type, distance operators for cosine, inner product and Euclidean metrics, and HNSW and IVFFlat indexes tied directly to the query planner. The choice is deliberate: small-retailer data volumes are modest (tens of thousands of items per active user, not the billions that justify a specialised store), and co-locating embeddings with the operational data lets a single transaction update a product, its embedding and its analytics, and lets retrieval combine with ordinary SQL filters (``similar products belonging to this user, not deleted, in stock'') in one query. Within this thesis, ``the vector index'' and ``the database'' therefore refer to the same PostgreSQL instance.

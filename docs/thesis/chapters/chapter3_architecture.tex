@@ -1,7 +1,7 @@
 \chapter{System Specification and Cloud Architecture}
 \label{chap:architecture}
 
-The platform's specification covers three layers: what it is required to do, how its components fit together, and how it is operated as a production cloud service on Microsoft Azure. The recommendation engine and the hybrid generative pipeline appear here only as participants in the architecture; their internal workings are deferred to the contributions chapter that follows. Most of what the platform delivers happens around the AI calls rather than inside them, so the orchestration, the credit ledger, the tenant isolation and the admission boundary are the elements that determine what a retailer actually receives.
+The platform's specification covers three layers: what it has to do, how its components fit together, and how it runs on Microsoft Azure as a production service. The recommendation engine and the hybrid generative pipeline appear here only as participants in the architecture; their internal workings are deferred to the contributions chapter that follows. Most of what the platform delivers happens around the AI calls rather than inside them, so the orchestration, the credit ledger, the tenant isolation and the admission boundary are the elements that determine what a retailer actually receives.
 
 \section{Functional and Non-Functional Requirements}
 \label{sec:requirements}
@@ -13,47 +13,65 @@ The objectives stated in Chapter~\ref{chap:introduction} establish what the plat
 
 The functional requirements are organised by capability area. Each paragraph describes what the platform must let its users do, abstracted from how the capability is delivered.
 
-\paragraph{Identity and shop onboarding.}
-The platform must allow a retailer to create an account, authenticate, and complete a brief onboarding flow that captures the shop's identity. Onboarding is a three-stage process that asks the retailer for the shop's basic descriptors, then for its visual brand identity, and finally for the contact details through which the shop reaches its customers. The parameters gathered here are not all mandatory at the point of generation: the retailer can decide, on a per-request basis, which of them to feed into the prompt and which to leave out, so that an asset can be made as specific or as generic as the situation calls for. Once onboarding is complete, the shop's currency and the language in which generated assets are to be produced are locked, and every subsequent generation request inherits both as default parameters.
+\textbf{Identity and shop onboarding:} The platform must allow a retailer to create an account, authenticate, and complete a brief onboarding flow that captures the shop's identity. Onboarding is a three-stage process that captures, in turn, the shop's basic descriptors, its visual brand identity, and the contact details through which the shop reaches its customers. The parameters gathered here are not all mandatory at the point of generation: the retailer can decide, on a per-request basis, which of them to feed into the prompt and which to leave out, so that an asset can be made as specific or as generic as the situation calls for. Once onboarding is complete, the shop's currency and the language in which generated assets are to be produced are locked, and every subsequent generation request inherits both as default parameters.
 
-\paragraph{Product library.}
-The platform must let a retailer maintain a library of the products on offer. Each product carries a name, a category, a price and a representative photograph, and the retailer can create, edit and delete entries at will. The library is filterable by name, category and price range, and the lists it produces are consulted on every generation screen. Product photographs can also be cleaned up through a one-tap background-removal action, delegated to an external image-processing service, that replaces the original background with a transparent canvas suitable for compositing.
+\textbf{Product library:} Each retailer maintains a library of the products on offer. Each product carries a name, a category, a price and a representative photograph, and the retailer can create, edit and delete entries at will. The library is filterable by name, category and price range, and the lists it produces are consulted on every generation screen. Product photographs can also be cleaned up through a one-tap background-removal action, delegated to an external image-processing service, that replaces the original background with a transparent canvas suitable for compositing.
 
-\paragraph{Reference catalogue and search by photo.}
-Alongside the retailer's own library, the platform maintains a curated catalogue of professional product imagery covering the kinds of goods that small shops typically sell, such as snacks, drinks or household items, organised by a hierarchical category tree. When adding a product, the retailer takes a photograph of the real item with their phone and then chooses whether to keep that photograph as the product image or replace it with the closest match from the curated catalogue. The match is found by an internal AI model that compares the uploaded photograph against the catalogue's images, so a phone shot of, say, a coffee mug yields a small ranked list of catalogue mugs that look like it, without the retailer having to type a description. If a catalogue image is selected, it enters the retailer's library with the clean studio appearance that subsequent generation steps expect.
+\textbf{Reference catalogue and search by photo:} Alongside the retailer's own library, the platform maintains a curated catalogue of professional product imagery covering the kinds of goods that small shops typically sell, such as snacks, drinks or household items, organised by a hierarchical category tree. When adding a product, the retailer takes a photograph of the real item with their phone and then chooses whether to keep that photograph as the product image or replace it with the closest match from the curated catalogue. The match is found by an internal AI model that compares the uploaded photograph against the catalogue's images, so a phone shot of, say, a coffee mug yields a small ranked list of catalogue mugs that look like it, without the retailer having to type a description. If a catalogue image is selected, it enters the retailer's library with the clean studio appearance that subsequent generation steps expect.
 
-\paragraph{Asset generation.}\label{par:asset-generation}
-The platform must produce three families of marketing imagery from the inputs gathered during onboarding and from the retailer's library. Announcements are single-product or single-event promotional posts, used to advertise a discount, a new arrival, a job opening or an upcoming store event. Catalogues are multi-product editorial layouts that gather a curated selection of the shop's offer into a single image, useful for seasonal campaigns or weekly highlights. Wallpapers are clean branded backdrops intended for in-store screens or social-media headers, where the shop's identity rather than any specific product is the focus.
+\textbf{Asset generation:}\label{par:asset-generation} The platform must produce three families of marketing imagery from the inputs gathered during onboarding and from the retailer's library. Announcements are single-product or single-event promotional posts, used to advertise a discount, a new arrival, a job opening or an upcoming store event. Catalogues are multi-product editorial layouts that gather a curated selection of the shop's offer into a single image, useful for seasonal campaigns or weekly highlights. Wallpapers are clean branded backdrops intended for in-store screens or social-media headers, where the shop's identity rather than any specific product is the focus.
 
-Each family is parameterised by the brand context recorded at onboarding and by the locked language, so that the supported language variants can be produced on demand. The generation contract itself is model-agnostic: several multimodal providers sit behind a single abstraction, and the retailer picks one at the moment of each request. Each model carries a credit cost that reflects its computational class and per-call price, so the cost-versus-quality trade-off is visible to the retailer rather than hidden inside the orchestrator. The catalogue family in particular is produced by three generator flavours:
+Each family is parameterised by the brand context recorded at onboarding and by the locked language, so that the supported language variants can be produced on demand. The generation contract itself is model-agnostic: several multimodal providers sit behind a single abstraction, and the retailer picks one at the moment of each request. Each model carries a credit cost that reflects its computational class and per-call price, so the cost-versus-quality trade-off is visible to the retailer rather than hidden inside the orchestrator. The catalogue family in particular is produced by three generator flavours, summarised in Table~\ref{tab:catalogue-flavours}.
 
-\begin{itemize}
-    \item \emph{Fully generative}: the multimodal model designs and renders the whole scene, products included.
-    \item \emph{Hybrid (preserve products)}: the model renders the scene with reserved placeholder regions, and the platform's compositor pastes the retailer's actual product photographs into them so that product fidelity is preserved pixel for pixel.
-    \item \emph{In-house composite}: no model is invoked at generation time, and the platform's deterministic compositor lays out the products, prices and brand identity directly onto a chosen background image.
-\end{itemize}
+\begin{table}[ht]
+\centering
+\caption{Catalogue generator flavours.}
+\label{tab:catalogue-flavours}
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.8cm}|Y|}
+\hline
+\textbf{Flavour} & \textbf{Description} \\
+\hline
+Fully generative & The multimodal model designs and renders the whole scene, products included. \\
+\hline
+Hybrid (preserve products) & The model renders the scene with reserved placeholder regions, and the platform's compositor pastes the retailer's actual product photographs into them so that product fidelity is preserved pixel for pixel. \\
+\hline
+In-house composite & No model is invoked at generation time, and the platform's deterministic compositor lays out the products, prices and brand identity directly onto a chosen background image. \\
+\hline
+\end{tabularx}
+\end{table}
 
-\noindent The announcement family is in turn sub-typed by post intent, with each sub-type carrying its own prompt template and required fields:
+The announcement family is in turn sub-typed by post intent, with each sub-type carrying its own prompt template and required fields (Table~\ref{tab:announcement-subtypes}).
 
-\begin{itemize}
-    \item \emph{Announcement}: a general post for store news such as new arrivals, in-store events or schedule changes.
-    \item \emph{Job Post}: a hiring notice covering the open role, its responsibilities and the channel for applications.
-    \item \emph{Promotion}: a discount-driven post advertising a price cut, coupon code or time-limited offer on selected products.
-\end{itemize}
+\begin{table}[ht]
+\centering
+\caption{Announcement sub-types.}
+\label{tab:announcement-subtypes}
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.8cm}|Y|}
+\hline
+\textbf{Sub-type} & \textbf{Description} \\
+\hline
+Announcement & A general post for store news such as new arrivals, in-store events or schedule changes. \\
+\hline
+Job post & A hiring notice covering the open role, its responsibilities and the channel for applications. \\
+\hline
+Promotion & A discount-driven post advertising a price cut, coupon code or time-limited offer on selected products. \\
+\hline
+\end{tabularx}
+\end{table}
 
-\noindent The internal mechanics of the hybrid catalogue mode are deferred to the contributions chapter that follows.
+The internal mechanics of the hybrid catalogue mode are deferred to the contributions chapter that follows.
 
-\paragraph{Daily marketing recommendations.}
-Once a day, the platform must produce a small ranked set of fresh marketing themes adapted to the retailer's shop and to the day's external context (weather, local events, holidays). Each theme is presented as a fully drafted promotional idea, in the locked language, and the retailer may either dismiss it, react to it, or hand it directly to the asset-generation pipeline as a starting prompt. The recommendation engine that produces these themes is the first of the two main contributions of this thesis and is described in detail in Chapter 4.
+\textbf{Daily marketing recommendations:} Once a day, the platform must produce a small ranked set of fresh marketing themes adapted to the retailer's shop and to the day's external context (weather, local events, holidays). Each theme is presented as a fully drafted promotional idea, in the locked language, and the retailer may either dismiss it, react to it, or hand it directly to the asset-generation pipeline as a starting prompt. The recommendation engine that produces these themes is the first of the two main contributions of this thesis and is described in detail in Chapter 4.
 
-\paragraph{Asset library and print export.}
-Every generated asset, regardless of family and mode, is persisted to the retailer's gallery, where it can be browsed and filtered by asset type, by date and by name. The gallery is the canonical record of everything the platform has produced for the shop. Any gallery item may be exported as a print-ready document, in paper sizes A6 to A3, at $300\,$dpi; if the source asset is below the target resolution, the platform's premium print pipeline upscales it through a learned super-resolution model before laying out the page.
+\textbf{Asset library and print export:} Every generated asset, regardless of family and mode, is persisted to the retailer's gallery, where it can be browsed and filtered by asset type, by date and by name. The gallery is the canonical record of everything the platform has produced for the shop. Any gallery item may be exported as a print-ready document, in paper sizes A6 to A3, at $300\,$dpi; if the source asset is below the target resolution, the platform's premium print pipeline upscales it through a learned super-resolution model before laying out the page.
 
-\paragraph{Billing and credit accounting.}
-Every generation that consumes a paid AI provider must be debited against a per-tenant credit balance. The ledger is consistency-critical: a debit is recorded only when the AI call succeeds, a refund is issued only when it fails, and no retailer can be charged for a call that produced no asset. Each billable call is therefore wrapped in an atomic debit-and-record block, and any provider failure triggers an automatic refund. A small administrative interface lets operators grant credits to tenants and inspect the ledger, which is currently the only way a retailer's balance can grow.
+\textbf{Billing and credit accounting:} Every generation that consumes a paid AI provider must be debited against a per-tenant credit balance. The ledger is consistency-critical: a debit is recorded only when the AI call succeeds, a refund is issued only when it fails, and no retailer can be charged for a call that produced no asset. Each billable call is therefore wrapped in an atomic debit-and-record block, and any provider failure triggers an automatic refund. A small administrative interface lets operators grant credits to tenants and inspect the ledger, which is currently the only way a retailer's balance can grow.
 
-\paragraph{Administration.}
-A small set of capabilities is reserved to operators with the administrative flag set on their account, giving them broad oversight of the platform's data and tenants when intervention is required. The administrative surface is deliberately spartan and lives inside the same client application as the retailer surface, with the privileged screens hidden from non-administrative accounts.
+\textbf{Administration:} A small set of capabilities is reserved to operators with the administrative flag set on their account, giving them broad oversight of the platform's data and tenants when intervention is required. The administrative surface is deliberately spartan and lives inside the same client application as the retailer surface, with the privileged screens hidden from non-administrative accounts.
 
 \begin{table}[ht]
 \centering
@@ -87,26 +105,17 @@ Administration          & Broad operator oversight over platform data and tenant
 \subsection{Non-functional requirements}
 \label{subsec:nonfunctional-requirements}
 
-\paragraph{Performance.}
-Routine read and write operations must feel instantaneous, completing within a couple of hundred milliseconds from the client's perspective. Operations that depend on AI calls are inherently slower, taking seconds to tens of seconds, and cannot be served within a synchronous request. They are therefore modelled as asynchronous jobs, with the client showing a loading state while the work runs and notifying the user once the result is ready.
+\textbf{Performance:} Routine read and write operations must feel instantaneous, completing within a couple of hundred milliseconds from the client's perspective. Operations that depend on AI calls are inherently slower, taking seconds to tens of seconds, and cannot be served within a synchronous request. They are therefore modelled as asynchronous jobs, with the client showing a loading state while the work runs and notifying the user once the result is ready.
 
-\paragraph{Cost-awareness.}
-Every paid AI call has a non-trivial unit cost, so the platform must keep aggregate spend under control without surprising its retailers. The credit-and-coin model provides per-call backpressure and makes the cost-versus-quality trade-off explicit through credits weighted by the chosen model. A second layer of defence sits at the gateway, where rate-limit policies are configured per tenant and per endpoint class.
+\textbf{Cost-awareness:} Every paid AI call has a non-trivial unit cost, so the platform must keep aggregate spend under control without surprising its retailers. The credit-and-coin model provides per-call backpressure and makes the cost-versus-quality trade-off explicit through credits weighted by the chosen model. A second layer of defence sits at the gateway, where rate-limit policies are configured per tenant and per endpoint class.
 
-\paragraph{Availability and graceful degradation.}
-The platform integrates several third-party services (multimodal image providers, a background-removal service, geocoding), each of which can fail or rate-limit independently of the others. When one of them is unavailable the platform must still deliver value: a recommendation run must not be aborted if a single context-signal provider fails, an asset generation must produce an actionable error and refund the credit if the chosen image provider is down, and a geocoding failure must not block onboarding. The design therefore commits to per-integration isolation, retries with exponential backoff and circuit-breaker policies on every external HTTP call.
+\textbf{Availability and graceful degradation:} The platform integrates several third-party services (multimodal image providers, a background-removal service, geocoding), each of which can fail or rate-limit independently of the others. When one of them is unavailable the platform must still complete useful work: a recommendation run must not be aborted if a single context-signal provider fails, an asset generation must produce an actionable error and refund the credit if the chosen image provider is down, and a geocoding failure must not block onboarding. The design therefore commits to per-integration isolation, retries with exponential backoff and circuit-breaker policies on every external HTTP call.
 
-\paragraph{Access control as an admission gate.}
-The retailer-facing surface of the platform is open: any retailer can sign up and use it. What is closed off is the operational side. The development environment, the cloud-side secrets and the underlying Azure resources are reachable only through identities on an allow-list maintained inside Microsoft Entra ID, and anyone outside that list cannot touch the platform's internals at all. Retailer authentication and authorisation are a separate concern, handled inside the application once a request has reached the public surface.
+\textbf{Security:} The retailer-facing surface of the platform is open, in the sense that any retailer can sign up and use it; what is closed off is the operational side, where the development environment, the cloud-side secrets and the underlying Azure resources are reachable only through identities on an allow-list maintained inside Microsoft Entra ID. Retailer authentication and authorisation are a separate concern, handled inside the application once a request has reached the public surface. Once a request has been admitted, the platform must also guarantee that no retailer can read, modify or otherwise observe another retailer's data. Tenant identity is carried explicitly on every database query, on every blob-storage signed URL and on every cache key, and cross-tenant queries are not part of the normal API surface. The administrative endpoints constitute the only deliberate exception and are reachable only by accounts whose administrative flag is set.
 
-\paragraph{Per-tenant data isolation.}
-Once a request has been admitted, the platform must guarantee that no retailer can read, modify or otherwise observe another retailer's data. Tenant identity is carried explicitly on every database query, on every blob-storage signed URL and on every cache key, and cross-tenant queries are not part of the normal API surface. The administrative endpoints constitute the only deliberate exception and are reachable only by accounts whose administrative flag is set.
+\textbf{Localisation:} The platform supports two interface and generation languages, English and Romanian, with the chosen language locked at onboarding and carried as a flag on the user record, on the shop record and on every generated asset. Generated artefacts are stored alongside their translations rather than regenerated on language switch, so that toggling the interface language has no monetary cost. The choice between different currencies follows the same locking pattern.
 
-\paragraph{Localisation.}
-The platform supports two interface and generation languages, English and Romanian, with the chosen language locked at onboarding and carried as a flag on the user record, on the shop record and on every generated asset. Generated artefacts are stored alongside their translations rather than regenerated on language switch, so that toggling the interface language has no monetary cost. The choice between different currencies follows the same locking pattern.
-
-\paragraph{Auditability and maintainability.}
-Every request produces a structured log line carrying a tenant identifier and a request correlation identifier, and every external HTTP call propagates that correlation identifier downstream. Distributed traces are emitted for the multi-stage pipelines such as image generation and daily recommendations, so the latency of each stage can be examined in isolation. On the maintainability side, the source code is organised by feature folder, so a change to a single capability such as the wallet touches one area of the codebase and the dependency graph between feature areas is kept shallow.
+\textbf{Auditability and maintainability:} Every request produces a structured log line carrying a tenant identifier and a request correlation identifier, and every external HTTP call propagates that correlation identifier downstream. Distributed traces are emitted for the multi-stage pipelines such as image generation and daily recommendations, so the latency of each stage can be examined in isolation. On the maintainability side, the source code is organised by feature folder, so a change to a single capability such as the wallet touches one area of the codebase and the dependency graph between feature areas is kept shallow.
 
 \begin{table}[ht]
 \centering
@@ -382,17 +391,12 @@ The choice of orchestrator does not lock the platform to the Microsoft AI ecosys
 \label{fig:semantic-kernel}
 \end{figure}
 
-\paragraph{Capability areas.}\label{subsec:capabilities}
-Each capability area on the server is a bounded service that exposes a small set of HTTP endpoints. Their roles are summarised below.
+\label{subsec:capabilities}
+Each capability area on the server is a bounded service that exposes a small set of HTTP endpoints. Authentication is handled inside the server itself: a successful login produces a short-lived JWT access token and a longer-lived refresh token. The access token is validated locally on every request, the refresh token is stored in the database and is rotated each time it is used, and a background service periodically removes tokens that have expired or been revoked.
 
-\paragraph{Authentication and session management.}
-A successful login produces a short-lived JWT access token and a longer-lived refresh token. The access token is validated locally on every request, the refresh token is stored in the database and is rotated each time it is used, and a background service periodically removes tokens that have expired or been revoked.
-
-\paragraph{Tenant data services.}
 The retailer-facing entities (shop profile, products, gallery, wallet) are each served by a dedicated feature service that exposes CRUD operations over its part of the schema, with the per-tenant cache and isolation rules inherited from the data layer. Coordination between services is performed at the endpoint layer rather than through direct inter-service calls.
 
-\paragraph{Image-generation orchestrator.}
-A thin layer fronts the supported image providers behind a single \texttt{IImageProvider} abstraction shown in Listing~\ref{lst:iimageprovider}. Each provider has a concrete implementation that wraps its SDK, and a mock implementation returns a deterministic placeholder image during automated testing.
+A thin orchestration layer fronts the supported image providers behind a single \texttt{IImageProvider} abstraction shown in Listing~\ref{lst:iimageprovider}. Each provider has a concrete implementation that wraps its SDK, and a mock implementation returns a deterministic placeholder image during automated testing.
 
 \begin{lstlisting}[style=csharp, caption={The \texttt{IImageProvider} abstraction.}, label={lst:iimageprovider}]
 public interface IImageProvider
@@ -404,17 +408,9 @@ public interface IImageProvider
 }
 \end{lstlisting}
 
-\paragraph{Recommendation orchestrator.}
-The daily recommendation engine is exposed here as a single service whose inputs and outputs match the functional requirement above and whose internals are the subject of the contributions chapter that follows.
+The daily recommendation engine is exposed as its own service, whose inputs and outputs match the functional requirement above and whose internals are the subject of the contributions chapter that follows. Sitting alongside it is the credit ledger, an in-process service that mediates between every billable AI call and the database. The ledger exposes a single primitive, \emph{run-with-debit}, which opens a database transaction, debits the cost, runs the work, and commits only when the work succeeds. A failure rolls the transaction back so that no debit is ever recorded for unsuccessful work.
 
-\paragraph{Credit ledger.}
-The credit ledger is the in-process service that sits between every billable AI call and the database. It exposes a single primitive, \emph{run-with-debit}, which opens a database transaction, debits the cost, runs the work, and commits only when the work succeeds. A failure rolls the transaction back so that no debit is ever recorded for unsuccessful work.
-
-\paragraph{Background work.}
-Two long-running services run in the same process as the request handler. A job runner consumes pending recommendation runs, and a cleaner deletes expired refresh tokens. At the platform's data volumes a separate worker tier is not justified.
-
-\paragraph{HTTP surface.}
-The application server exposes a small, feature-grouped HTTP API. Table~\ref{tab:http-endpoints} lists each route group along with its prefix and purpose.
+Two long-running background services run in the same process as the request handler: a job runner that consumes pending recommendation runs, and a cleaner that deletes expired refresh tokens. At the platform's data volumes a separate worker tier is not justified. All of this is exposed over a small, feature-grouped HTTP API; Table~\ref{tab:http-endpoints} lists each route group along with its prefix and purpose.
 
 {\small
 \renewcommand{\arraystretch}{1.3}
@@ -709,27 +705,27 @@ Two consequences of this layout matter at runtime. The first is that tenant isol
 \endfoot
 \hline
 \endlastfoot
-\texttt{AppUser} & Identifies a retailer (or operator) and tracks the credit balance. \\
+AppUser & Identifies a retailer (or operator) and tracks the credit balance. \\
 \hline
-\texttt{ShopProfile} & Holds the brand identity and contact details captured during onboarding. \\
+ShopProfile & Holds the brand identity and contact details captured during onboarding. \\
 \hline
-\texttt{Product} & An item the retailer sells, with name, price and a representative photograph. \\
+Product & An item the retailer sells, with name, price and a representative photograph. \\
 \hline
-\texttt{GeneratedImage} & An entry in the gallery, tagged with its asset family. \\
+GeneratedImage & An entry in the gallery, tagged with its asset family. \\
 \hline
-\texttt{CoinTransaction} & A row of the credit ledger that records a debit or refund and, optionally, the asset it paid for. \\
+CoinTransaction & A row of the credit ledger that records a debit or refund and, optionally, the asset it paid for. \\
 \hline
-\texttt{DailyRecommendation} & The day's marketing ideas together with the context snapshot used to produce them. \\
+DailyRecommendation & The day's marketing ideas together with the context snapshot used to produce them. \\
 \hline
-\texttt{IdeaEmbedding} & A per-idea text embedding used to deduplicate themes against the shop's recent ideas. \\
+IdeaEmbedding & A per-idea text embedding used to deduplicate themes against the shop's recent ideas. \\
 \hline\hline
-\texttt{Category} & A node in the reference catalogue's hierarchical tree. \\
+Category & A node in the reference catalogue's hierarchical tree. \\
 \hline
-\texttt{ReferenceImage} & A curated product photograph with a CLIP embedding for search-by-photo. \\
+ReferenceImage & A curated product photograph with a CLIP embedding for search-by-photo. \\
 \hline
-\texttt{PromoPlaybookEntry} & A known-good promotional pattern with a text embedding the recommendation engine retrieves over. \\
+PromoPlaybookEntry & A known-good promotional pattern with a text embedding the recommendation engine retrieves over. \\
 \hline
-\texttt{Holiday} & A cached public holiday for a country and year, used as a context signal. \\
+Holiday & A cached public holiday for a country and year, used as a context signal. \\
 \end{tabularx}
 }
 
@@ -853,38 +849,15 @@ Azure was chosen because it gives the platform a managed, well-supported and tru
 \label{fig:deployment}
 \end{figure}
 
-\paragraph{Compute for the API and for background work.}
-The application server runs on Azure Container Apps, a managed container runtime built on Kubernetes that provides per-replica scale-out without the operational burden of managing a cluster directly. The choice was made over Azure App Service on two grounds. First, the platform packages its server as a container image already. Second, Container Apps integrates more cleanly with Azure API Management and with the private virtual network in which the data plane lives. A single long-running background service, the refresh-token cleaner, runs as an \texttt{IHostedService} inside the same Container Apps revision as the API. Recommendation generations are started by request handlers as fire-and-forget tasks tracked by an in-memory job registry, so a separate worker tier is not justified at the platform's data volumes.
+The application server runs on Azure Container Apps, a managed container runtime built on Kubernetes that provides per-replica scale-out without the operational burden of managing a cluster directly. The choice was made over Azure App Service on two grounds. First, the platform packages its server as a container image already. Second, Container Apps integrates more cleanly with Azure API Management and with the private virtual network in which the data plane lives. A single long-running background service, the refresh-token cleaner, runs as an \texttt{IHostedService} inside the same Container Apps revision as the API. Recommendation generations are started by request handlers as fire-and-forget tasks tracked by an in-memory job registry, so a separate worker tier is not justified at the platform's data volumes. The web build of the client runs as its own Azure Container App (\texttt{merchstory-web}), pulling its image from the same registry as the API; the mobile builds for iOS and Android are distributed through their respective application stores and are not deployed to Azure.
 
-\paragraph{Hosting the web client.}
-The web build of the client runs as its own Azure Container App (\texttt{merchstory-web}), pulling its image from the same registry as the API. The mobile builds for iOS and Android are distributed through their respective application stores and are not deployed to Azure.
+The data plane consists of a relational store and an object store. The relational store, including its pgvector extension, runs on Azure Database for PostgreSQL Flexible Server. The flexible-server tier is preferred over the older single-server tier because it supports custom extensions including pgvector, allows VNet-integrated private networking, and provides point-in-time restore over a configurable retention window. Backups are taken automatically, and long-running migrations are executed during deployment before the new container revision becomes ready. Binary assets live in Azure Blob Storage as described in Section~\ref{subsec:object-storage}, with a private endpoint inside the VNet so that the storage account is invisible from the public Internet.
 
-\paragraph{Database.}
-The relational store, including its pgvector extension, runs on Azure Database for PostgreSQL Flexible Server. The flexible-server tier is preferred over the older single-server tier because it supports custom extensions including pgvector, allows VNet-integrated private networking, and provides point-in-time restore over a configurable retention window. Backups are taken automatically, and long-running migrations are executed during deployment before the new container revision becomes ready.
+The platform's public surface is the Container Apps Environment's built-in ingress. Azure provides TLS termination, edge load balancing and platform-level DDoS protection at the network edge for free, so no separate API gateway sits in front of the Container App. Per-tenant rate limiting is enforced inside the application server using the .NET built-in rate-limiter middleware, with tighter limits on the asset-generation endpoints so that a misbehaving tenant cannot exhaust the platform's AI budget for the others. Retailers authenticate against the application server itself, which issues a JWT access token and a refresh token on login and rotates them on every refresh, so the retailer-facing API does not sit behind any cloud gateway. Operator access to the development environment and to the cloud secrets is gated separately by Microsoft Entra ID, with the operator's identity matched against an allow-list before any administrative resource becomes reachable.
 
-\paragraph{Object storage.}
-Binary assets live in Azure Blob Storage as described in Section~\ref{subsec:object-storage}. The deployment adds a private endpoint inside the VNet, so the storage account is invisible from the public Internet.
+Every credential consumed by the platform, including the AI provider keys, the background-removal API key and the database connection string, is stored in Azure Key Vault and read at start-up by the Container Apps revision through a system-assigned managed identity. Credentials never appear in container images, in environment files committed to source control or in deployment manifests. The same managed identity also authenticates the application server against the other Azure services it consumes (Blob Storage, the database, Application Insights), so key rotation everywhere becomes the responsibility of Azure rather than of the platform. The VNet topology is conservative around all of this: the database, the blob storage account and Key Vault are reachable only through private endpoints inside the VNet, with their public network access disabled at the resource level, and the Container Apps Environment sits in the same VNet and exposes only its built-in HTTPS ingress to the Internet.
 
-\paragraph{Edge and gateway.}
-The platform's public surface is the Container Apps Environment's built-in ingress. Azure provides TLS termination, edge load balancing and platform-level DDoS protection at the network edge for free, so no separate API gateway sits in front of the Container App. Per-tenant rate limiting is enforced inside the application server using the .NET built-in rate-limiter middleware, with tighter limits on the asset-generation endpoints so that a misbehaving tenant cannot exhaust the platform's AI budget for the others.
-
-\paragraph{Identity and access admission.}
-Retailers authenticate against the application server itself, which issues a JWT access token and a refresh token on login and rotates them on every refresh. The retailer-facing API does not sit behind any cloud gateway. Operator access to the development environment and to the cloud secrets is gated separately by Microsoft Entra ID, with the operator's identity matched against an allow-list before any administrative resource becomes reachable.
-
-\paragraph{Secrets.}
-Every credential consumed by the platform, including the AI provider keys, the background-removal API key and the database connection string, is stored in Azure Key Vault and read at start-up by the Container Apps revision through a system-assigned managed identity. Credentials never appear in container images, in environment files committed to source control or in deployment manifests.
-
-\paragraph{Observability and analytics.}
-Application Insights collects distributed traces, structured logs and live metrics from every component. Each request is tagged with a tenant identifier and a correlation identifier that is propagated through every external HTTP call, so that the entire trajectory of a recommendation run or of an image generation can be reconstructed from a single trace. A small set of Log Analytics dashboards aggregates operational metrics and is consulted manually rather than feeding any automatic decision.
-
-\paragraph{Service-to-service identity.}
-All authentication between the application server and the other Azure services it consumes (Key Vault, Blob Storage, the database, Application Insights) uses Azure managed identities rather than shared secrets, so key rotation becomes the responsibility of Azure rather than of the platform.
-
-\paragraph{Continuous integration and deployment.}
-The platform's build and deploy pipeline is hosted on GitHub Actions. A push to a feature branch triggers the test suites described in Section~\ref{sec:testing-strategy}; merging into \texttt{master} triggers the build of a new container image, its push to the platform's container registry, and the rollout of a new revision on Container Apps. The web client follows an analogous flow, with the build artefact uploaded to the static-site account on success.
-
-\paragraph{Network shape.}
-The VNet topology is conservative. The database, the blob storage account and Key Vault are reachable only through private endpoints inside the VNet, with their public network access disabled at the resource level. The Container Apps Environment sits in the same VNet and exposes only its built-in HTTPS ingress to the Internet.
+On the operational side, Application Insights collects distributed traces, structured logs and live metrics from every component. Each request is tagged with a tenant identifier and a correlation identifier that is propagated through every external HTTP call, so that the entire trajectory of a recommendation run or of an image generation can be reconstructed from a single trace. A small set of Log Analytics dashboards aggregates operational metrics and is consulted manually rather than feeding any automatic decision. The build and deploy pipeline is hosted on GitHub Actions: a push to a feature branch triggers the test suites described in Section~\ref{sec:testing-strategy}, and merging into \texttt{master} triggers the build of a new container image, its push to the platform's container registry, and the rollout of a new revision on Container Apps. The web client follows an analogous flow, with the build artefact uploaded to the static-site account on success.
 
 {\small
 \renewcommand{\arraystretch}{1.3}
