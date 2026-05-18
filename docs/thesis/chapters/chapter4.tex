@@ -1,9 +1,9 @@
 \chapter{AI Pipeline Design and Implementation}
 \label{chap:contributions}
 
-Chapter~\ref{chap:architecture} treated the recommendation engine and the hybrid catalogue mode as services with a fixed contract. This chapter looks inside both. A shorter section at the end describes the print pipeline that supports them.
+Chapter~\ref{chap:architecture} treated the recommendation engine and the hybrid catalogue mode as services with a fixed contract. This chapter looks inside both, with a shorter closing section on the print pipeline that supports them.
 
-The same idea runs through all three. The gap between what an off-the-shelf generative model produces and what a small retailer is willing to publish is rarely closed by a bigger model. It is closed by the protocol that sits around the model. The recommendation engine grounds the language model in retrieved context through a multi-stage prompt chain. In the hybrid catalogue pipeline, a deterministic compositor enforces the boundary on what the image model is allowed to render. The print pipeline then tiles a small super-resolution model under fixed paper sizes.
+The same idea runs through all three. The gap between what an off-the-shelf generative model produces and what a small retailer is willing to publish is rarely closed by a bigger model; it is closed by the protocol that sits around the model. The recommendation engine grounds the language model in retrieved context through a multi-stage prompt chain, the hybrid catalogue pipeline uses a deterministic compositor to bound what the image model is allowed to render, and the print pipeline tiles a small super-resolution model under fixed paper sizes.
 
 \section{The Daily Recommendation Engine}
 \label{sec:recommendation-engine}
@@ -11,9 +11,9 @@ The same idea runs through all three. The gap between what an off-the-shelf gene
 \subsection{Problem statement and pipeline overview}
 \label{subsec:rec-problem}
 
-Small retailers know their products and their customers, but they rarely have time to plan a daily marketing schedule. Out-of-the-box language models, asked to suggest a promotion for today, default to season-blind, vendor-shaped boilerplate: ``discover our premium selection'', ``don't miss out on our exclusive offer''. The output is grammatical but useless. The recommendation engine's job is to produce, every day, a small ranked set of fresh marketing themes that are grounded in (a) the day's external context, (b) a curated promotional playbook of patterns that have worked in retail, and (c) the shop's own profile, while not repeating what the shop has already seen in the recent past.
+Small retailers know their products and their customers, but rarely have time to plan a daily marketing schedule. Out-of-the-box language models, asked to suggest a promotion for today, default to season-blind boilerplate: ``discover our premium selection'', ``don't miss out on our exclusive offer''. The recommendation engine's job is to produce, every day, a small ranked set of fresh marketing themes grounded in (a) the day's external context, (b) a curated promotional playbook of patterns that have worked in retail, and (c) the shop's own profile, without repeating what the shop has already seen in the recent past.
 
-The engine's output is not a final asset, but it is more than just copy. Each suggestion is a structured record that carries a title, body copy, a suggested social-media caption, an asset \emph{category} (\emph{announcement} or \emph{promotion}) and an \texttt{imagePrompt} written specifically for the image-generation pipeline of Section~\ref{sec:hybrid-catalogue}. Tapping ``generate'' on an idea hands the retailer to the asset-creation screen with the prompt and category already filled in, so that the path from a daily idea to a published asset is a single further confirmation. The engine is therefore the entry point of the platform's full creation flow, not a side feature. Figure~\ref{fig:rec-handoff} sketches that flow.
+The engine's output is not a final asset, but more than just copy. Each suggestion is a structured record carrying a title, body copy, a suggested social-media caption, an asset \emph{category} (\emph{announcement} or \emph{promotion}) and an \texttt{imagePrompt} written specifically for the image-generation pipeline of Section~\ref{sec:hybrid-catalogue}. Tapping ``generate'' hands the retailer to the asset-creation screen with the prompt and category already filled in, so the path from a daily idea to a published asset is a single further confirmation. The engine is therefore the entry point of the platform's full creation flow, not a side feature. Figure~\ref{fig:rec-handoff} sketches that flow.
 
 \begin{figure}[H]
 \centering
@@ -133,7 +133,7 @@ The engine has three parts that meet at inference time. An offline indexing path
 
 \end{tikzpicture}%
 }
-\caption{Architecture of the recommendation engine: indexing and fine-tuning offline, RAG inference online, with retailer feedback closing the loop.}
+\caption{Architecture of the recommendation engine.}
 \label{fig:rec-pipeline}
 \end{figure}
 

@@ -270,7 +270,7 @@ Two request shapes are supported. A \emph{synchronous} request is served end-to-
 \label{fig:request-flows}
 \end{figure}
 
-It is useful to record the implementation technologies once. The client is built with React Native (Expo), which lets a single TypeScript codebase be exported as a static web build, an iOS application and an Android application. The server is an ASP.NET Core minimal-API service running on .NET 10. The data plane consists of PostgreSQL 18 with the pgvector extension and Microsoft Azure Blob Storage. React Native was chosen to keep a single codebase for the heterogeneous device population of the target audience, and ASP.NET Core was chosen for its first-class support of the Semantic Kernel orchestration framework on which the platform's AI layer depends.
+It is useful to record the implementation technologies once. The client is built with React Native \cite{reactnative} (Expo), which lets a single TypeScript codebase be exported as a static web build, an iOS application and an Android application. The server is an ASP.NET Core minimal-API service running on .NET 10. The data plane consists of PostgreSQL 18 with the pgvector extension and Microsoft Azure Blob Storage. React Native was chosen to keep a single codebase for the heterogeneous device population of the target audience, and ASP.NET Core was chosen for its first-class support of the Semantic Kernel orchestration framework on which the platform's AI layer depends.
 
 \section{Client Tier}
 \label{sec:client-tier}
@@ -340,7 +340,7 @@ The application server is a minimal-API ASP.NET Core service running on .NET 10.
 \subsection{Stack choice, capability areas and internal layering}
 \label{subsec:why-dotnet}
 
-The choice of platform deserves comment because .NET is a less obvious pick for a contemporary AI application than Node.js or Python. The platform's core is an AI orchestration layer that routes prompts across multiple providers, manages prompt templates, applies retrieval-augmented context to language-model calls, and chains several calls in sequence for the daily recommendation engine. Microsoft's \emph{Semantic Kernel} is a first-class .NET library that bundles all of these facilities behind a unified abstraction, with clean integration into the ASP.NET Core dependency-injection container. Building the server in .NET therefore makes Semantic Kernel a native citizen of the architecture rather than a foreign component, which is the decisive reason for choosing ASP.NET Core minimal-API over Node.js with Express or Python with FastAPI.
+The choice of platform deserves comment because .NET is a less obvious pick for a contemporary AI application than Node.js or Python. The platform's core is an AI orchestration layer that routes prompts across multiple providers, manages prompt templates, applies retrieval-augmented context to language-model calls, and chains several calls in sequence for the daily recommendation engine. Microsoft's \emph{Semantic Kernel} \cite{semantickernel} is a first-class .NET library that bundles all of these facilities behind a unified abstraction, with clean integration into the ASP.NET Core dependency-injection container. Building the server in .NET therefore makes Semantic Kernel a native citizen of the architecture rather than a foreign component, which is the decisive reason for choosing ASP.NET Core minimal-API over Node.js with Express or Python with FastAPI.
 
 The choice of orchestrator does not lock the platform to the Microsoft AI ecosystem. Semantic Kernel sits above a uniform provider abstraction, and the providers it talks to span both Azure offerings such as Azure OpenAI and Azure AI Foundry, and non-Microsoft offerings such as Google's Gemini family and the Nano Banana image model. Swapping a model is therefore a configuration change rather than a code change. Figure~\ref{fig:semantic-kernel} sketches the arrangement.
 
@@ -428,11 +428,11 @@ Two long-running background services run in the same process as the request hand
 \endfoot
 \hline
 \endlastfoot
-Auth & \texttt{/auth} & Register, log in, refresh tokens and change interface language. \\
+Auth & /auth & Register, log in, refresh tokens and change interface language. \\
 \hline
-Shop & \texttt{/shop} & Read and update the shop profile and logo. \\
+Shop & /shop & Read and update the shop profile and logo. \\
 \hline
-Products & \texttt{/products} & CRUD over the retailer's product library, with one-tap background removal. \\
+Products & /products & CRUD over the retailer's product library, with one-tap background removal. \\
 \hline
 Reference catalogue & /reference-images & Browse, search and bulk-import the curated reference catalogue. \\
 \hline
