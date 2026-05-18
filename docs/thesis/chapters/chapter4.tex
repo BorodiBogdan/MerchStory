@@ -529,11 +529,11 @@ The first is that the single-shot pipeline (Stages~1--3 followed by one judge ca
 
 The second is that on a smaller sub-sample where the judge's verdict was compared against a human reviewer, the two agreed in nearly every case. The human reviewer was asked the same one-sentence question the judge was asked, and the disagreements were a small handful in which the judge was strict (rejecting an image the human was happy to accept) rather than the reverse. This is consistent with the observation, across the broader literature, that strong multimodal models are reliable critics of compositional faults that are easy to describe verbally, and is the platform's evidence that the judge is a good proxy for the human reviewer that it replaces in production.
 
-If the per-trial acceptance probabilities are treated as approximately independent, capping the loop at three trials gives an effective acceptance rate of $1 - 0.30^{3} \approx 0.973$. Table~\ref{tab:hyb-acceptance} reports the corresponding rates for one, two and three trials. In practice, the user almost always receives an acceptable image after at most three internal retries, which matches the figures predicted by the independent-trial model and is consistent with the hands-on experience during development.
+If the per-trial acceptance probabilities are treated as approximately independent, capping the loop at three trials gives an effective acceptance rate of $1 - 0.30^{3} \approx 0.973$. Table~\ref{tab:hyb-acceptance} reports the corresponding rates for one through five trials, so that the diminishing marginal gain from raising the cap is visible at a glance. The pipeline could be extended to four trials ($\approx 0.992$) or five ($\approx 0.998$) with a strict mathematical improvement in acceptance probability, at the cost of additional latency and a proportional rise in the number of multimodal calls per delivered catalogue. The application keeps the cap at three because a $\approx 97\%$ acceptance rate is already adequate for the small-retailer workflow, and because the latency and cost added by a fourth or fifth trial fall on every user even though only the worst few per cent of runs would benefit; raising the cap remains a one-line change should the operational data later justify it.
 
 \begin{table}[!ht]
 \centering
-\caption{Compound acceptance probability under the independent-trial model, given a single-trial acceptance rate of $0.70$.}
+\caption{Compound acceptance probability under the independent-trial model, given a single-trial acceptance rate of $0.70$. The pipeline caps at three trials in production; the four- and five-trial rows are shown to make the diminishing marginal gain from raising the cap visible.}
 \label{tab:hyb-acceptance}
 \small
 \renewcommand{\arraystretch}{1.3}
@@ -546,6 +546,10 @@ If the per-trial acceptance probabilities are treated as approximately independe
 2 & $1 - 0.30^{2} = 0.91$ & At most one retry. \\
 \hline
 3 & $1 - 0.30^{3} \approx 0.97$ & Pipeline cap; the user-facing rate. \\
+\hline
+4 & $1 - 0.30^{4} \approx 0.992$ & Available if the cap were raised; not adopted. \\
+\hline
+5 & $1 - 0.30^{5} \approx 0.998$ & Diminishing return, omitted in production. \\
 \hline
 \end{tabularx}
 \end{table}
