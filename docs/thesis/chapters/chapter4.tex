@@ -487,12 +487,12 @@ The provider call is issued through the existing \texttt{IImageProvider} abstrac
 The third stage runs entirely on the application server, with no further model calls (other than the judge described in Section~\ref{subsec:hyb-judge}). It proceeds in six sub-steps:
 
 \begin{enumerate}
-\item[\textbf{(a)}] Per-product colour matching. Each pixel of the placeholder canvas is mapped to the closest marker colour by Chebyshev RGB distance under a tolerance of $80$, producing a per-pixel product index (or $-1$ if no marker is within tolerance).
-\item[\textbf{(b)}] Largest-component filter. For each product, only the largest connected component of matched pixels is kept, discarding stray marker-coloured pixels in the background that would otherwise inflate the paste-back bounding box.
-\item[\textbf{(c)}] Outline thickening. The retained outline is dilated by four pixels to absorb anti-aliased halo pixels at the stroke edge.
-\item[\textbf{(d)}] Inpaint mask construction. A binary product-region mask is built by flood-filling unmatched cells from the canvas border and inverting the result, then dilated by fifteen pixels to also catch the model's occasional drop shadows.
-\item[\textbf{(e)}] LaMa inpainting. The placeholder canvas and the mask are passed to a LaMa inpainting model \cite{suvorov2022lama} (served via IOPaint), chosen because it handles large masks, runs on CPU at acceptable latency, and needs no inference-time text prompt.
-\item[\textbf{(f)}] Product paste. The retailer's source photograph is trimmed to its opaque bounding box, scaled by area to $0.8\times$ the median placeholder area, anchored at the placeholder's bottom-left corner so products ``stand'' on a baseline, and alpha-composited onto the inpainted canvas.
+\item[\textbf{(a)}] \textbf{Per-product colour matching.} Each pixel of the placeholder canvas is mapped to the closest marker colour by Chebyshev RGB distance under a tolerance of $80$, producing a per-pixel product index (or $-1$ if no marker is within tolerance).
+\item[\textbf{(b)}] \textbf{Largest-component filter.} For each product, only the largest connected component of matched pixels is kept, discarding stray marker-coloured pixels in the background that would otherwise inflate the paste-back bounding box.
+\item[\textbf{(c)}] \textbf{Outline thickening.} The retained outline is dilated by four pixels to absorb anti-aliased halo pixels at the stroke edge.
+\item[\textbf{(d)}] \textbf{Inpaint mask construction.} A binary product-region mask is built by flood-filling unmatched cells from the canvas border and inverting the result, then dilated by fifteen pixels to also catch the model's occasional drop shadows.
+\item[\textbf{(e)}] \textbf{LaMa inpainting.} The placeholder canvas and the mask are passed to a LaMa inpainting model \cite{suvorov2022lama} (served via IOPaint), chosen because it handles large masks, runs on CPU at acceptable latency, and needs no inference-time text prompt.
+\item[\textbf{(f)}] \textbf{Product paste.} The retailer's source photograph is trimmed to its opaque bounding box, scaled by area to $0.8\times$ the median placeholder area, anchored at the placeholder's bottom-left corner so products ``stand'' on a baseline, and alpha-composited onto the inpainted canvas.
 \end{enumerate}
 
 Listing~\ref{lst:hybrid-loop} shows a slightly simplified version of the compositor's main loop; the production code performs the same steps with additional logging and per-product diagnostics that have been elided for legibility.
