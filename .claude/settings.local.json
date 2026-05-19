@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex)"
+    ]
+  }
+}
