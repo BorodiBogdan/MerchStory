@@ -1,0 +1,358 @@
+\chapter{Theoretical Background}
+\label{chap:background}
+
+The platform proposed in this thesis sits at the intersection of several research areas: image generation by neural networks, the practice of guiding such networks through carefully designed prompts, retrieval-augmented generation as a means of grounding large language models in external knowledge, and the use of learned visual representations to compare images. This chapter introduces the concepts and vocabulary the rest of the thesis assumes. No attempt is made at exhaustive coverage; the focus is on those ideas that recur in subsequent chapters.
+
+\section{Generative Models for Image Synthesis}
+\label{sec:generative-models}
+
+The first technical pillar of the proposed application is the synthesis of photorealistic marketing imagery from a textual description and, in some cases, from one or more reference photographs supplied by the retailer. This section reviews how generative models have come to make such synthesis possible, with particular attention to the diffusion-based approach that underpins most of today's high-quality systems and to the more recent class of multimodal foundation models that can accept both text and images as input.
+
+\subsection{The generative modelling problem}
+
+Image generation is the task of drawing samples from a probability distribution over images. A generative model attempts to approximate the unknown data distribution \(p_{\text{data}}(x)\) of natural images using a parametric distribution \(p_\theta(x)\), so that new samples drawn from \(p_\theta\) are indistinguishable from real photographs to a human observer. In modern conditional generation, the distribution is further conditioned on a textual description \(c\), and the task becomes that of sampling from \(p_\theta(x \mid c)\).
+
+Generative adversarial networks (GANs) \cite{goodfellow2014gan} and variational autoencoders (VAEs) \cite{kingma2014vae} dominated the field before the diffusion era, but each suffers well-known drawbacks (training instability and mode collapse for GANs, blurred outputs for VAEs) \cite{arjovsky2017wgan} that limit their use for the kind of photorealistic synthesis required here. Table~\ref{tab:generative-paradigms} summarises the two paradigms that this thesis builds on.
+
+\begin{table}[ht]
+\centering
+\caption{Generative-model paradigms relevant to this thesis.}
+\label{tab:generative-paradigms}
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.7cm}|>{\raggedright\arraybackslash}p{2.4cm}|>{\raggedright\arraybackslash}p{1.6cm}|>{\raggedright\arraybackslash}p{2.2cm}|Y|}
+\hline
+\textbf{Paradigm} & \textbf{Training objective} & \textbf{Sampling cost} & \textbf{Conditioning} & \textbf{Suitability} \\
+\hline
+Diffusion \cite{ho2020ddpm,rombach2022ldm} & Denoising score matching & High (many steps) & Strong via guidance & Default in current systems \\
+\hline
+Multimodal LLM with image output & LLM front-end over diffusion submodel & Moderate & Native (text and image) & Used by the platform \\
+\hline
+\end{tabularx}
+\end{table}
+
+\subsection{Diffusion models}
+
+Denoising diffusion probabilistic models \cite{ho2020ddpm} have, since 2020, become the dominant approach to high-fidelity image synthesis. The underlying intuition is simple. A \emph{forward process} progressively corrupts a clean image \(x_0\) by adding small amounts of Gaussian noise over \(T\) time-steps, producing a sequence \(x_0, x_1, \dots, x_T\) in which \(x_T\) approaches pure Gaussian noise. The forward step is
+
+\begin{equation}
+q(x_t \mid x_{t-1}) = \mathcal{N}\big(x_t;\; \sqrt{1 - \beta_t}\, x_{t-1},\; \beta_t \mathbf{I}\big),
+\label{eq:diffusion-forward}
+\end{equation}
+
+where \(\{\beta_t\}_{t=1}^{T}\) is a fixed variance schedule. A neural network, typically a U-Net \cite{ronneberger2015unet}, is then trained to invert each step of this process: given a noisy \(x_t\), it predicts the noise that was added, which is equivalent to predicting a slightly less noisy \(x_{t-1}\). At inference time, sampling proceeds in reverse, starting from random Gaussian noise and gradually denoising it into a coherent image, as illustrated schematically in Figure~\ref{fig:diffusion}.
+
+Conditional generation is most commonly achieved through \emph{classifier-free guidance} \cite{ho2022cfg}, in which the same network is trained both with and without the textual condition \(c\), and at sampling time the predicted noise is extrapolated away from the unconditional prediction and towards the conditional one. This yields strong text adherence at the cost of some sample diversity. Latent diffusion models \cite{rombach2022ldm}, of which Stable Diffusion is the best known instance, perform the entire diffusion process in the compressed latent space of a pretrained autoencoder rather than at the pixel level, which reduces the computational cost of training and sampling by orders of magnitude. The text condition itself is supplied by a separate language encoder, often a transformer \cite{vaswani2017attention}, whose output embeddings are injected into the U-Net through cross-attention layers.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+    node distance=10mm and 6mm,
+    every node/.style={font=\small},
+    box/.style={draw, rounded corners=2pt, minimum width=12mm, minimum height=10mm, align=center},
+    arr/.style={-{Latex[length=2mm]}, thick}
+]
+\node[box] (x0) {$x_0$};
+\node[box, right=of x0] (x1) {$x_1$};
+\node[right=4mm of x1] (dots) {$\cdots$};
+\node[box, right=4mm of dots] (xt1) {$x_{T-1}$};
+\node[box, right=of xt1] (xt) {$x_T$};
+
+\draw[arr] (x0) -- node[above, font=\scriptsize] {$+\,\text{noise}$} (x1);
+\draw[arr] (x1) -- (dots);
+\draw[arr] (dots) -- (xt1);
+\draw[arr] (xt1) -- node[above, font=\scriptsize] {$+\,\text{noise}$} (xt);
+
+\draw[arr, dashed, bend left=30] (xt) to node[below, font=\scriptsize] {denoiser $\epsilon_\theta$, conditioned on text $c$} (x0);
+\end{tikzpicture}
+\caption{The forward and reverse processes of a diffusion model. The forward chain (solid) gradually adds noise to a clean image until it becomes pure Gaussian noise. A learned denoiser, conditioned on a text prompt~\(c\), reverses the chain (dashed) at sampling time.}
+\label{fig:diffusion}
+\end{figure}
+
+\subsection{Multimodal foundation models and their limitations}
+
+A more recent line of work places a multimodal large language model in front of the image generator. Familiar examples are ChatGPT, which routes image-generation requests to DALL-E \cite{openai_dalle3}, and Gemini, which calls one of Google's image submodels (most recently the Nano-Banana family) \cite{google_nanobanana}. The user supplies text and reference images in a single prompt; the front-end model encodes both modalities into a shared embedding space (Section~\ref{sec:rag}) and orchestrates an underlying, usually diffusion-based, submodel that produces the pixels. Through attention over the supplied references, such systems can be instructed to preserve specific elements (a logo, a product, a colour palette) and typically respect those instructions, although the result is rarely a pixel-perfect copy. The diffusion techniques described above are therefore not superseded but wrapped inside a multimodal interface that can express tasks like ``redesign this poster while keeping the logo intact'' in a single call.
+
+The proposed application relies on a multimodal model of this latter kind. A single call can ingest the shop's logo, the product photographs, and the textual description of the desired scene, removing the need for a separate input-side compositing step; and the model's image-to-image capability is a prerequisite for the hybrid pipeline of Section~\ref{sec:hybrid}, where the generator produces a scene around designated placeholder regions rather than a finished advertisement.
+
+For all their fluency, modern image generators have well-documented weaknesses. Three are directly relevant to this thesis. First, \emph{identity preservation} of specific real-world objects is brittle: even with a clean reference photograph, the generator tends to alter colour, texture, label, or shape in commercially unacceptable ways. Second, photorealistic \emph{text rendering}, although greatly improved in the latest model generations, remains unreliable for non-trivial strings such as price tags or longer slogans. Third, \emph{brand fidelity} is hard to enforce through prompting alone: a precise hex colour or a particular typeface is rarely reproduced exactly. Section~\ref{sec:hybrid} addresses these limitations through a hybrid pipeline that reduces the model's responsibility to producing a background scene with reserved regions, leaving product placement and text rendering to deterministic post-processing.
+
+\section{Prompt Engineering}
+\label{sec:prompt-engineering}
+
+The output quality of modern generative models depends sharply on prompt phrasing. \emph{Prompt engineering} is the body of empirically discovered patterns for coaxing reliable output from models otherwise treated as black boxes.
+
+\subsection{Anatomy of a prompt}
+
+A well-formed prompt for a modern generative model can be decomposed into several distinguishable parts: a \emph{role} or \emph{persona} that establishes the perspective from which the model should reason; a \emph{context} block supplying domain-specific facts; an \emph{instruction} stating what the model is to produce; a set of \emph{constraints} on the output's form and content; and, optionally, an \emph{output format} specification when downstream parsing is required \cite{anthropic_prompting,white2023promptpatterns}. Figure~\ref{fig:prompt-anatomy} illustrates the layout used by the catalogue-generation prompts in the proposed system.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+    every node/.style={font=\small\sffamily},
+    block/.style={draw, rounded corners=2pt, minimum width=82mm, minimum height=8mm, anchor=west, fill=gray!5},
+    label/.style={font=\scriptsize\itshape, gray}
+]
+\node[block] (role) at (0,0)         {\textbf{Role.}\;\; ``You are an art director at a top creative studio.''};
+\node[block, below=2mm of role.south west, anchor=north west] (ctx) {\textbf{Brand context.}\;\; name, slogan, colours, business domain.};
+\node[block, below=2mm of ctx.south west, anchor=north west] (layout) {\textbf{Layout zones.}\;\; header (15\%), hero (70\%), footer (15\%).};
+\node[block, below=2mm of layout.south west, anchor=north west] (rules) {\textbf{Content rules.}\;\; what to include, tone, currency formatting.};
+\node[block, below=2mm of rules.south west, anchor=north west] (neg) {\textbf{Negative constraints.}\;\; no sparkles, no fake bokeh, no clipart.};
+\end{tikzpicture}
+\caption{Anatomy of a structured prompt for image generation.}
+\label{fig:prompt-anatomy}
+\end{figure}
+
+\subsection{Prompting patterns used by the platform}
+
+Of the three standard prompting styles (zero-shot \cite{kojima2022zeroshot}, few-shot \cite{brown2020gpt3}, and chain-of-thought \cite{wei2022cot}), the proposed application uses zero-shot for image generation, where in-context examples would themselves be images and inflate the token budget, and chain-of-thought in the recommendation engine of Section~\ref{sec:rag}, where a chained sequence of language-model calls reasons about marketing themes before drafting them. Two further techniques recur throughout the platform: layout-aware prompting and multimodal prompting.
+
+\paragraph{Structured and layout-aware prompting.}
+When the desired output has a non-trivial spatial structure, the prompt itself can declare that structure explicitly. In the proposed application, wallpaper prompts allocate the canvas into a header band, a hero area, and a footer band, each with a specific percentage of the vertical space and a specific responsibility (the hero band carries the product, the footer the contact information, and so on). Catalogue prompts go further still, declaring placeholder regions in which the actual product photographs will subsequently be pasted by a deterministic compositor. Such layout-aware prompting reduces the model's task from ``design an entire advertisement'' to ``design a scene that respects this layout'', which is markedly easier and considerably more controllable.
+
+\paragraph{Multimodal prompting.}
+Multimodal prompting refers to the practice of including reference images, alongside textual instructions, inside a single prompt. In the proposed application this is used routinely: the brand logo is supplied as a reference image so that the model can place it without re-inventing it, and product photographs are supplied so that the model can lay out a scene around them. This is qualitatively different from a text-only prompt asking for ``a coffee shop logo on a wooden table'': the model is shown the actual logo, not merely told that one exists.
+
+\section{Retrieval-Augmented Generation}
+\label{sec:rag}
+
+Large language models are remarkably fluent, but they are also famously unreliable on facts that lie outside their training distribution: recent events, niche technical details, or anything that is private to a particular user or organisation. \emph{Retrieval-augmented generation} (RAG) is a now-standard architectural response to this limitation \cite{lewis2020rag}: instead of asking a model to answer from its parameters alone, the system first retrieves relevant external information from a separate store and includes it inside the prompt, so that the model can ground its output in that information rather than relying on memorised knowledge.
+
+\subsection{Motivation: grounding language models in external knowledge}
+
+Retrieval augmentation promotes external storage to a first-class element of the inference pipeline, sidestepping three known weaknesses of pure language models: a bounded context window, a tendency to hallucinate verifiable facts, and the high cost of fine-tuning relative to updating a retrieval index.
+
+The daily recommendation engine of Chapter 4 uses two retrieval passes: one over the user's recently generated ideas to discourage repetition, and one over a curated knowledge base of promotional tactics organised by business domain so that suggestions are anchored in patterns known to work for shops of that type.
+
+\subsection{Vector embeddings and approximate nearest-neighbour search}
+
+The retrieval step in a RAG pipeline does not, in general, search for literal keyword matches; it searches for semantic ones. The standard mechanism is to map each indexed item (a paragraph, a product description, an image) into a fixed-length vector in \(\mathbb{R}^d\), in such a way that semantically similar items are close together in vector space. Such mappings are known as \emph{embeddings}, and they are produced by neural encoders trained either on language data alone or jointly on language and vision (Section~\ref{sec:visual-similarity}).
+
+This dense, embedding-based approach contrasts with classical sparse retrieval methods such as TF--IDF \cite{sparckjones1972idf} and BM25 \cite{robertson2009bm25}, which represent documents by very high-dimensional sparse vectors of term frequencies. Sparse methods remain competitive when the user query and the indexed text share vocabulary, but they fail in the common case where two passages express the same idea using different words, or where the query is an image rather than a text. Dense embeddings handle both cases naturally.
+
+Once items have been embedded, retrieval reduces to finding the \(k\) nearest neighbours of a query vector under some distance function, typically cosine distance for normalised embeddings. Exact search through every indexed vector is linear in the size of the index and quickly becomes infeasible for collections beyond a few hundred thousand items. The standard remedy is to use an \emph{approximate nearest-neighbour} (ANN) index, which trades a small amount of recall for a substantial speed-up.
+
+The Hierarchical Navigable Small World (HNSW) algorithm \cite{malkov2018hnsw} is among the most widely used such indexes and is the one chosen by the proposed application. HNSW organises the vectors into a multi-layer graph with small-world properties: search descends from a sparse top layer through progressively denser ones, refining the nearest-neighbour estimate at each level. The proposed application uses the common defaults \(M = 16\) (bidirectional links per node) and \textit{ef\_construction}\,\(= 64\), which strike a reasonable balance between index size, build time, and recall for collections in the tens of thousands.
+
+\subsection{The retrieve--augment--generate pipeline}
+
+Conceptually, a RAG pipeline operates in three steps, illustrated in Figure~\ref{fig:rag}: \emph{retrieve} the top-\(k\) items most relevant to the user's query, \emph{augment} the prompt by including those items as additional context, and \emph{generate} the final answer by running the augmented prompt through the language model. The retrieval step is responsible for relevance; the augmentation step for fitting the retrieved material into the model's context window; and the generation step for producing fluent, well-formed output that respects the retrieved evidence.
+
+\begin{figure}[ht]
+\centering
+\definecolor{ragInk}{HTML}{1F2933}
+\definecolor{ragBorder}{HTML}{A8B0BA}
+\definecolor{ragArrow}{HTML}{7B8794}
+\definecolor{ragSlate}{HTML}{3D5A80}
+\definecolor{ragSlateBg}{HTML}{EBEFF5}
+\definecolor{ragAmber}{HTML}{A7693E}
+\definecolor{ragAmberBg}{HTML}{F4ECDF}
+\definecolor{ragSage}{HTML}{4F7A5C}
+\definecolor{ragSageBg}{HTML}{E8F0EA}
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    >={Latex[length=2.8mm,width=2.4mm]},
+    node distance=4.5mm,
+    every node/.style={font=\small\sffamily, text=ragInk},
+    box/.style={
+        draw=ragBorder, line width=0.5pt,
+        rounded corners=3pt,
+        minimum width=24mm, minimum height=15mm,
+        align=center, fill=white, inner sep=2pt
+    },
+    store/.style={
+        draw=ragBorder, line width=0.5pt,
+        cylinder, shape border rotate=90, aspect=0.3,
+        minimum width=20mm, minimum height=16mm,
+        align=center, fill=white, inner sep=1pt
+    },
+    arr/.style={
+        ->, line width=0.9pt, draw=ragArrow,
+        shorten >=1.5pt, shorten <=1.5pt
+    },
+    phaseband/.style={
+        rounded corners=5pt,
+        inner xsep=8pt, inner ysep=9pt
+    },
+    phase/.style={
+        font=\footnotesize\sffamily\bfseries,
+        inner sep=1pt
+    },
+    accent/.style={
+        line width=1.1pt, line cap=round
+    }
+]
+\node[box] (q) {Query};
+\node[box, right=of q] (emb) {Embedding\\encoder};
+\node[store, right=of emb] (idx) {Vector\\index};
+\node[box, right=of idx] (top) {Top-\(k\)\\retrieved};
+\node[box, right=of top] (prompt) {Augmented\\prompt};
+\node[box, right=of prompt] (llm) {Language\\model};
+\node[box, right=of llm] (ans) {Grounded\\answer};
+
+\begin{scope}[on background layer]
+    \node[phaseband, fit=(q)(top), fill=ragSlateBg] (rband) {};
+    \node[phaseband, fit=(prompt), fill=ragAmberBg] (aband) {};
+    \node[phaseband, fit=(llm)(ans), fill=ragSageBg] (gband) {};
+\end{scope}
+
+\draw[arr] (q) -- (emb);
+\draw[arr] (emb) -- (idx);
+\draw[arr] (idx) -- (top);
+\draw[arr] (top) -- (prompt);
+\draw[arr] (prompt) -- (llm);
+\draw[arr] (llm) -- (ans);
+
+\node[phase, text=ragSlate, above=3mm of rband.north] (rlabel) {RETRIEVE};
+\node[phase, text=ragAmber, above=3mm of aband.north] (alabel) {AUGMENT};
+\node[phase, text=ragSage,  above=3mm of gband.north] (glabel) {GENERATE};
+
+\draw[accent, draw=ragSlate] (rlabel.south west) -- (rlabel.south east);
+\draw[accent, draw=ragAmber] (alabel.south west) -- (alabel.south east);
+\draw[accent, draw=ragSage]  (glabel.south west) -- (glabel.south east);
+\end{tikzpicture}}
+\caption{The retrieve--augment--generate (RAG) pipeline.}
+\label{fig:rag}
+\end{figure}
+
+\subsection{Structured outputs and multi-agent orchestration}
+
+A practical RAG system rarely consists of a single language-model call. Decomposing a task into a chain of smaller, focused prompts with JSON-mode constrained decoding produces more reliable output than one opaque call and turns the pipeline into a controllable, observable structure that can be debugged component by component. The recommendation engine of Section~\ref{sec:recommendation-engine} applies exactly this pattern.
+
+\section{Measuring Visual Similarity}
+\label{sec:visual-similarity}
+
+The fourth and last technical pillar of the proposed application is the ability to compare images to each other. Specifically, when a retailer wants to populate their product library, they may upload a quick photograph taken on their phone and ask the system to find visually similar products in a curated reference catalogue, so that the matching reference image (with its clean studio background and standardised crop) can be used in subsequent generation steps. This section reviews the techniques that make such ``search by photo'' practical at the scale required.
+
+\subsection{From hand-crafted features to learned representations}
+
+Classical computer vision attacked the visual-similarity problem with hand-crafted feature descriptors such as SIFT \cite{lowe2004sift}, SURF \cite{bay2008surf} and HOG \cite{dalal2005hog}, complemented by perceptual hashes such as pHash \cite{zauner2010phash} for near-duplicate detection. These methods remain useful in narrow scenarios (detecting, for instance, that two photographs depict the same physical scene from slightly different angles), but they capture geometric and textural patterns rather than semantic content, and they degrade sharply when the two images differ in lighting, background or styling, as is invariably the case between a phone photograph and a curated catalogue shot. Deep learned features replaced them precisely because they generalise across such nuisance variations: a convolutional or transformer-based encoder, trained on a sufficiently diverse dataset, learns to map an image to a compact vector that reflects its semantic content rather than its pixel-level appearance.
+
+\subsection{CLIP and embedding storage with pgvector}
+
+The Contrastive Language--Image Pre-training (CLIP) family of models \cite{radford2021clip} is perhaps the most influential learned-feature system of recent years. CLIP is trained on hundreds of millions of (image, caption) pairs scraped from the web. The architecture is deliberately simple: an image encoder (typically a Vision Transformer \cite{dosovitskiy2020vit}, with the proposed application using the ViT-B/32 variant whose patches measure $32\times32$) and a text encoder (a smaller transformer) project images and captions into a shared embedding space. Training proceeds by maximising the similarity of matching pairs and minimising the similarity of non-matching pairs through a symmetric InfoNCE-style objective \cite{oord2018infonce}:
+
+\begin{equation}
+\mathcal{L} = -\frac{1}{2N} \sum_{i=1}^{N} \left[ \log \frac{\exp(\langle u_i, v_i \rangle / \tau)}{\sum_{j=1}^{N} \exp(\langle u_i, v_j \rangle / \tau)} + \log \frac{\exp(\langle v_i, u_i \rangle / \tau)}{\sum_{j=1}^{N} \exp(\langle v_j, u_i \rangle / \tau)} \right],
+\label{eq:clip-loss}
+\end{equation}
+
+where \(u_i\) and \(v_i\) are the image and text embeddings of the \(i\)-th pair in a batch of size \(N\), \(\langle \cdot, \cdot \rangle\) denotes cosine similarity, and \(\tau\) is a learned temperature parameter.
+
+The result is an embedding space in which an image and a caption that describe the same content are close together, regardless of which encoder produced them. This is enormously useful in practice: the same encoder that maps a phone photograph of a coffee mug to a vector can be used, without retraining, for image-to-image similarity search; and when text-to-image search is needed, the text encoder can be used to embed the query in the same space.
+
+\begin{figure}[ht]
+\centering
+
+\definecolor{clipImgC}{HTML}{4C72B0}
+\definecolor{clipTxtC}{HTML}{CC785C}
+
+\begin{tikzpicture}[
+    every node/.style={font=\small\sffamily},
+    inpImg/.style={draw, dashed, rounded corners=2pt, minimum width=24mm, minimum height=11mm, align=center, fill=clipImgC!5, line width=0.5pt, draw=clipImgC!60!black},
+    inpTxt/.style={draw, dashed, rounded corners=2pt, minimum width=24mm, minimum height=11mm, align=center, fill=clipTxtC!5, line width=0.5pt, draw=clipTxtC!60!black},
+    encImg/.style={draw, rounded corners=3pt, minimum width=24mm, minimum height=12mm, align=center, fill=clipImgC!12, line width=0.7pt, draw=clipImgC!75!black},
+    encTxt/.style={draw, rounded corners=3pt, minimum width=24mm, minimum height=12mm, align=center, fill=clipTxtC!12, line width=0.7pt, draw=clipTxtC!75!black},
+    arrImg/.style={-{Latex[length=2mm]}, thick, draw=clipImgC!75!black},
+    arrTxt/.style={-{Latex[length=2mm]}, thick, draw=clipTxtC!75!black},
+    pairLine/.style={dotted, line width=0.7pt, draw=gray!70},
+    imgDot/.style={circle, fill=clipImgC, minimum size=2.4mm, inner sep=0pt},
+    txtDot/.style={circle, fill=clipTxtC, minimum size=2.4mm, inner sep=0pt}
+]
+
+% Inputs
+\node[inpImg] (img) at (0, 1.4) {Image};
+\node[inpTxt] (txt) at (0,-1.4) {\itshape ``a coffee mug''};
+
+% Encoders
+\node[encImg] (imgEnc) at (3.6, 1.4) {Image\\encoder};
+\node[encTxt] (txtEnc) at (3.6,-1.4) {Text\\encoder};
+
+% Shared embedding space (ellipse)
+\draw[line width=0.7pt, draw=gray!55, fill=gray!3] (8.2, 0) ellipse (2.7cm and 2.05cm);
+\node[font=\scriptsize\sffamily\itshape, anchor=south] at (8.2, 1.9) {shared embedding space};
+
+% Background matched pairs (image dot near text dot)
+\node[imgDot] (i1) at (6.8, 0.85) {};
+\node[txtDot] (t1) at (7.15, 0.55) {};
+\draw[pairLine] (i1) -- (t1);
+
+\node[imgDot] (i2) at (9.25, 0.75) {};
+\node[txtDot] (t2) at (9.5, 1.0) {};
+\draw[pairLine] (i2) -- (t2);
+
+\node[imgDot] (i3) at (6.95,-0.75) {};
+\node[txtDot] (t3) at (6.7,-1.05) {};
+\draw[pairLine] (i3) -- (t3);
+
+\node[imgDot] (i4) at (9.2,-0.65) {};
+\node[txtDot] (t4) at (9.45,-0.95) {};
+\draw[pairLine] (i4) -- (t4);
+
+% Highlighted pair (the example coffee-mug pair)
+\node[imgDot, minimum size=3.4mm] (iHi) at (8.2, 0.1) {};
+\node[txtDot, minimum size=3.4mm] (tHi) at (8.52, 0.32) {};
+\draw[line width=0.6pt, draw=gray!75] (iHi) -- (tHi);
+\draw[dashed, line width=0.5pt, draw=gray!70] (8.36, 0.21) circle (5.5mm);
+
+% Arrows: inputs to encoders, encoders to highlighted pair
+\draw[arrImg] (img) -- (imgEnc);
+\draw[arrTxt] (txt) -- (txtEnc);
+\draw[arrImg] (imgEnc.east) to[out=0, in=160] (iHi);
+\draw[arrTxt] (txtEnc.east) to[out=0, in=200] (tHi);
+
+% Legend
+\node[font=\scriptsize\sffamily, anchor=west] at (5.7,-2.55) {\textcolor{clipImgC}{$\bullet$}\;image embeddings};
+\node[font=\scriptsize\sffamily, anchor=west] at (8.5,-2.55) {\textcolor{clipTxtC}{$\bullet$}\;text embeddings};
+
+\end{tikzpicture}
+\caption{The dual-encoder architecture of CLIP. Image and text encoders are trained jointly so that the embeddings of matching (image, caption) pairs land close together in a shared space, while non-matching pairs are pushed apart. The dashed circle highlights the embedding of the example coffee-mug photo together with its caption; dotted segments mark four further matched pairs.}
+\label{fig:clip}
+\end{figure}
+
+Having established what CLIP produces, two practical questions remain: how the resulting vectors should be compared, and where they should be stored.
+
+The image encoder used by the proposed application produces 512-dimensional embeddings. Whether such embeddings are compared by cosine similarity, Euclidean distance or inner product is in principle a free choice, but in practice these metrics are not all equivalent. Cosine similarity, defined as
+
+\begin{equation}
+\cos(u, v) = \frac{\langle u, v \rangle}{\|u\| \cdot \|v\|},
+\label{eq:cosine}
+\end{equation}
+
+measures the angle between two vectors and ignores their magnitudes. When the embeddings are L2-normalised (i.e.~rescaled to unit norm), cosine similarity coincides exactly with their inner product, and Euclidean distance becomes a strictly monotonic function of cosine similarity:
+
+\begin{equation}
+\|u - v\|^2 = 2 \big(1 - \langle u, v \rangle\big) \quad \text{when } \|u\| = \|v\| = 1.
+\label{eq:cos-l2-equiv}
+\end{equation}
+
+For this reason, the proposed application L2-normalises every embedding before storing it, which makes cosine, inner-product and (rank-equivalent) Euclidean retrieval interchangeable. Cosine is preferred because it is invariant to embedding magnitude, a property that matters whenever the encoder's output norm depends on the input in ways that should not influence retrieval. Table~\ref{tab:metrics} summarises the relationship between the three metrics.
+
+\begin{table}[ht]
+\centering
+\caption{Distance and similarity metrics on embeddings.}
+\label{tab:metrics}
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.0cm}|>{\raggedright\arraybackslash}p{4.2cm}|>{\raggedright\arraybackslash}p{2.8cm}|Y|}
+\hline
+\textbf{Metric} & \textbf{Formula} & \textbf{Magnitude-aware?} & \textbf{After L2 normalisation} \\
+\hline
+Cosine similarity & \(\langle u, v \rangle / (\|u\| \cdot \|v\|)\) & no & equals inner product \\
+\hline
+Inner product     & \(\langle u, v \rangle\)                       & yes & equals cosine similarity \\
+\hline
+Euclidean distance & \(\|u - v\|\)                                 & yes & monotonic in cosine \\
+\hline
+\end{tabularx}
+\end{table}
+
+Once embeddings have been produced, they must be stored and queried. The proposed application uses the pgvector \cite{pgvector} extension to PostgreSQL rather than a dedicated vector database such as Pinecone or Milvus; pgvector adds a \texttt{vector(n)} column type, distance operators for cosine, inner product and Euclidean metrics, and HNSW and IVFFlat indexes tied directly to the query planner. The choice is deliberate: small-retailer data volumes are modest (tens of thousands of items per active user, not the billions that justify a specialised store), and co-locating embeddings with the operational data lets a single transaction update a product, its embedding and its analytics, and lets retrieval combine with ordinary SQL filters (``similar products belonging to this user, not deleted, in stock'') in one query. Within this thesis, ``the vector index'' and ``the database'' therefore refer to the same PostgreSQL instance.
+
+\section{Hybrid Generative--Deterministic Pipelines}
+\label{sec:hybrid}
+
+A generative model alone is insufficient whenever the output must remain truthful to a real, specific product: drift in colour, texture and silhouette is the rule rather than the exception. The way out, detailed in Chapter~\ref{chap:contributions}, is to split the work between a generative phase that produces a background scene with explicit placeholder regions and a deterministic phase that pastes the actual product photographs into those regions and overlays the textual elements. The same split is exposed to the user as a toggle on product preservation: on, the generator designs only the background and the compositor places the products at pixel-level fidelity; off, the generator renders the products itself with more creative latitude, guided by but not bound to their original colour and shape.
+
+For print export, the platform additionally upscales the finished asset with Real-ESRGAN \cite{wang2021realesrgan}; the full print pipeline is described in Section~\ref{sec:print-pipeline}.
+
