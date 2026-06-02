@@ -4,6 +4,7 @@ using System.Text.Json;
 using MerchStory.Tests.Fakes;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Print;
 using MerchStoryAPI.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -88,6 +89,12 @@ public class PrintRouteTests : IDisposable
 
                 services.RemoveAll<IBlobStorage>();
                 services.AddSingleton<IBlobStorage>(this.blobs);
+
+                // The real Real-ESRGAN upscaler needs ONNX model files that aren't
+                // present in the test environment; swap in a Lanczos-only fake so
+                // the print pipeline can produce a correctly sized PDF offline.
+                services.RemoveAll<IUpscaler>();
+                services.AddSingleton<IUpscaler>(new FakeUpscaler());
             });
         });
 

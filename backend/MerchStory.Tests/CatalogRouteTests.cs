@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using MerchStory.Tests.Fakes;
 using MerchStoryAPI.Data;
+using MerchStoryAPI.ImageGeneration;
+using MerchStoryAPI.LlmServices;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Storage;
 using MerchStoryImageGeneration.Models;
@@ -29,6 +31,7 @@ public class CatalogRouteTests : IDisposable
     private readonly WebApplicationFactory<Program> factory;
     private readonly HttpClient client;
     private readonly ConfigurableMockImageProvider mockProvider;
+    private readonly FakeLlmService llmService = new();
     private Func<string, IReadOnlyList<string?>?, ImageGenerationResult> currentResponder;
     private string userId = string.Empty;
 
@@ -100,6 +103,15 @@ public class CatalogRouteTests : IDisposable
 
                 services.RemoveAll<IBlobStorage>();
                 services.AddSingleton<IBlobStorage, InMemoryBlobStorage>();
+
+                // Keep the preserve-mode pipeline entirely offline: the composite
+                // judge must not reach the real Anthropic API, and the marker
+                // inpainting must not reach a real IOPaint server.
+                services.RemoveAll<ILLMService>();
+                services.AddSingleton<ILLMService>(this.llmService);
+
+                services.RemoveAll<IOPaintClient>();
+                services.AddSingleton(FakeInpaint.Client());
             });
         });
 
@@ -159,9 +171,12 @@ public class CatalogRouteTests : IDisposable
     }
 
     [Fact]
-    public async Task Preserve_UnderdetectProducesPartialWarning()
+    public async Task Preserve_UnderdetectReturnsCompositeWithoutWarning()
     {
         // Canvas has outlines for only 2 of 3 colors (Charlie's color is missing).
+        // The inpaint-based compositor no longer flags partial detection: the two
+        // detected markers are composited and the response carries no warning. An
+        // absent marker is only visible in the per-product detection logs.
         byte[] canned = TestCanvas.CanvasWithOutlines(
             width: 1080,
             height: 1080,
@@ -198,9 +213,18 @@ public class CatalogRouteTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         string body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
-        Assert.Equal("preserve_partial_missing_products", doc.RootElement.GetProperty("warning").GetString());
-        var missing = doc.RootElement.GetProperty("missingProducts").EnumerateArray().Select(e => e.GetString()).ToList();
-        Assert.Contains("Charlie", missing);
+        Assert.True(doc.RootElement.TryGetProperty("imageBase64", out _));
+
+        // No partial-preserve warning is surfaced anymore.
+        bool hasWarning = doc.RootElement.TryGetProperty("warning", out var warn)
+            && warn.ValueKind == JsonValueKind.String;
+        Assert.False(hasWarning);
+
+        bool hasMissing = doc.RootElement.TryGetProperty("missingProducts", out var missing)
+            && missing.ValueKind == JsonValueKind.Array
+            && missing.GetArrayLength() > 0;
+        Assert.False(hasMissing);
+
         Assert.Single(this.mockProvider.Calls);
     }
 
