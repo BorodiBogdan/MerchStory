@@ -31,7 +31,11 @@ internal static class CatalogCompositor
 
     private const int TargetWidth = 1080;
 
-    public static ImageGenerationResult Composite(CatalogOnWallpaperApiRequest request)
+    // productImagesBase64 carries each product's photo, resolved server-side from blob
+    // storage and aligned by index with request.Products (null where the product has no image).
+    public static ImageGenerationResult Composite(
+        CatalogOnWallpaperApiRequest request,
+        IReadOnlyList<string?> productImagesBase64)
     {
         byte[] wallpaperBytes = DecodeBase64Image(request.WallpaperBase64);
         using var canvas = Image.Load<Rgba32>(wallpaperBytes);
@@ -49,10 +53,11 @@ internal static class CatalogCompositor
 
         var products = request.Products ?? [];
         var productImages = new List<Image<Rgba32>?>(products.Count);
-        foreach (var p in products)
+        for (int i = 0; i < products.Count; i++)
         {
-            productImages.Add(!string.IsNullOrWhiteSpace(p.ImageBase64)
-                ? Image.Load<Rgba32>(DecodeBase64Image(p.ImageBase64))
+            string? imageBase64 = i < productImagesBase64.Count ? productImagesBase64[i] : null;
+            productImages.Add(!string.IsNullOrWhiteSpace(imageBase64)
+                ? Image.Load<Rgba32>(DecodeBase64Image(imageBase64))
                 : null);
         }
 

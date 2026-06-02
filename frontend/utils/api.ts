@@ -308,9 +308,9 @@ export async function updateShopProfile(payload: ShopProfilePayload): Promise<Sh
 // ── Image generation ─────────────────────────────────────────────────────────
 
 export interface CatalogImageProduct {
+  id: string;
   name: string;
   price: number;
-  imageBase64: string | null;
   currency?: Currency;
 }
 
@@ -334,7 +334,7 @@ export interface GenerateAnnouncementImageParams {
   tone: string;
   format: string;
   brandContextFields?: string[];
-  productImages?: string[];
+  productImageIds?: string[];
   // Job Post only
   jobTitle?: string;
   jobSchedule?: string;

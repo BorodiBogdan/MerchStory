@@ -66,6 +66,10 @@ public static class ImageGenerationRoutes
 
             string resolvedLanguage = await ResolveLanguageAsync(db, userId, request.Language);
 
+            // Resolve product photos from blob storage by id, scoped to this user.
+            Dictionary<Guid, string> productImages = await FetchProductImagesAsync(
+                db, blobs, userId, request.Products.Select(p => p.Id));
+
             if (!request.PreserveProductImages)
             {
                 DeductResult debit = await wallet.TryDeductAsync(userId, 1, "Catalog generation", null);
@@ -76,14 +80,14 @@ public static class ImageGenerationRoutes
 
                 WalletCharge charge = new(wallet, userId, 1, "Catalog generation", debit.NewBalance!.Value);
                 return await HandleGeneration(
-                    () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext, logoBase64, resolvedCurrency, resolvedLanguage)),
+                    () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext, logoBase64, resolvedCurrency, resolvedLanguage, productImages)),
                     logger,
                     charge);
             }
 
             // Preserve mode: all products must carry a photo.
             var missingPhotos = request.Products
-                .Where(p => string.IsNullOrWhiteSpace(p.ImageBase64))
+                .Where(p => !productImages.TryGetValue(p.Id, out string? img) || string.IsNullOrWhiteSpace(img))
                 .Select(p => p.Name)
                 .ToList();
             if (missingPhotos.Count > 0)
@@ -135,6 +139,7 @@ public static class ImageGenerationRoutes
                 resolvedCurrency,
                 resolvedLanguage,
                 assignments,
+                productImages,
                 catalogService,
                 inpaintClient,
                 llmService,
@@ -188,6 +193,9 @@ public static class ImageGenerationRoutes
 
         app.MapPost("/generate-image/catalog-on-wallpaper", async (
             CatalogOnWallpaperApiRequest request,
+            ClaimsPrincipal principal,
+            AppDbContext db,
+            IBlobStorage blobs,
             ILogger<Program> logger) =>
         {
             if (request.Products is null || request.Products.Count == 0)
@@ -214,8 +222,22 @@ public static class ImageGenerationRoutes
                 });
             }
 
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            // Resolve product photos from blob storage, aligned to product order so the
+            // compositor can pair each card with its image by index.
+            Dictionary<Guid, string> productImages = await FetchProductImagesAsync(
+                db, blobs, userId, request.Products.Select(p => p.Id));
+            IReadOnlyList<string?> imagesInOrder = request.Products
+                .Select(p => productImages.GetValueOrDefault(p.Id))
+                .ToList();
+
             return await HandleGeneration(
-                () => Task.FromResult(CatalogCompositor.Composite(request)),
+                () => Task.FromResult(CatalogCompositor.Composite(request, imagesInOrder)),
                 logger);
         })
         .WithName("GenerateCatalogOnWallpaper")
@@ -267,6 +289,18 @@ public static class ImageGenerationRoutes
             BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
             string announcementLanguage = await ResolveLanguageAsync(db, userId, request.Language);
 
+            // Promotion posts can include product photos; resolve them from blob storage
+            // by id (scoped to the user), preserving the requested order.
+            List<string>? productImages = null;
+            if (request.ProductImageIds is { Count: > 0 } requestedIds)
+            {
+                Dictionary<Guid, string> resolved = await FetchProductImagesAsync(db, blobs, userId, requestedIds);
+                productImages = requestedIds
+                    .Where(resolved.ContainsKey)
+                    .Select(id => resolved[id])
+                    .ToList();
+            }
+
             DeductResult debit = await wallet.TryDeductAsync(userId, 1, "Announcement generation", null);
             if (!debit.Succeeded)
             {
@@ -275,7 +309,7 @@ public static class ImageGenerationRoutes
 
             WalletCharge charge = new(wallet, userId, 1, "Announcement generation", debit.NewBalance!.Value);
             return await HandleGeneration(
-                () => announcementService.GenerateAnnouncementImageAsync(request.ToServiceRequest(brandContext, logoBase64, announcementLanguage)),
+                () => announcementService.GenerateAnnouncementImageAsync(request.ToServiceRequest(brandContext, logoBase64, announcementLanguage, productImages)),
                 logger,
                 charge);
         })
@@ -388,6 +422,35 @@ public static class ImageGenerationRoutes
         // Download the bytes once and encode here so callers stay storage-agnostic.
         byte[] bytes = await blobs.DownloadAsync(blobKey);
         return Convert.ToBase64String(bytes);
+    }
+
+    // Resolves product ids to base64-encoded image bytes, pulled from blob storage.
+    // Scoped to the caller's own products, so the client supplies ids rather than the
+    // image bytes themselves. Products the user doesn't own, or that have no stored
+    // image, are simply absent from the result. Mirrors FetchLogoIfRequestedAsync.
+    private static async Task<Dictionary<Guid, string>> FetchProductImagesAsync(
+        AppDbContext db,
+        IBlobStorage blobs,
+        string userId,
+        IEnumerable<Guid> productIds)
+    {
+        List<Guid> ids = productIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        var rows = await db.Products
+            .Where(p => p.UserId == userId && ids.Contains(p.Id) && p.ImageBlobKey != null)
+            .Select(p => new { p.Id, BlobKey = p.ImageBlobKey! })
+            .ToListAsync();
+
+        // Downloads are independent I/O — fetch them concurrently. The product cap (8)
+        // keeps the fan-out small.
+        (Guid Id, string B64)[] downloads = await Task.WhenAll(rows.Select(async r =>
+            (r.Id, Convert.ToBase64String(await blobs.DownloadAsync(r.BlobKey)))));
+
+        return downloads.ToDictionary(x => x.Id, x => x.B64);
     }
 
     private static async Task<string?> FetchLogoBlobBase64Async(
@@ -537,6 +600,7 @@ public static class ImageGenerationRoutes
         string resolvedCurrency,
         string resolvedLanguage,
         IReadOnlyList<ProductMarkerAssignment> assignments,
+        IReadOnlyDictionary<Guid, string> productImages,
         ICatalogImageService catalogService,
         IOPaintClient inpaintClient,
         ILLMService llmService,
@@ -550,6 +614,7 @@ public static class ImageGenerationRoutes
                 logoBase64,
                 resolvedCurrency,
                 resolvedLanguage,
+                productImages,
                 assignments);
 
             ImageGenerationResult rawResult = await catalogService.GenerateCatalogImageAsync(preserveRequest);
@@ -736,7 +801,9 @@ public static class ImageGenerationRoutes
 }
 
 // ── API-layer DTOs ────────────────────────────────────────────────────────────
-internal sealed record CatalogProductApiItem(string Name, decimal Price, string? ImageBase64, string Currency = "USD");
+// The client sends the product Id; the backend resolves the image from blob storage
+// server-side (see FetchProductImagesAsync), so image bytes never travel on the wire.
+internal sealed record CatalogProductApiItem(Guid Id, string Name, decimal Price, string Currency = "USD");
 
 internal sealed record CatalogImageApiRequest(
     List<CatalogProductApiItem>? Products,
@@ -756,9 +823,13 @@ internal sealed record CatalogImageApiRequest(
         string? logoBase64,
         string currency,
         string language,
+        IReadOnlyDictionary<Guid, string> productImages,
         IReadOnlyList<ProductMarkerAssignment>? markerAssignments = null) =>
         new(
-            this.Products!.Select(p => new CatalogProductItem(p.Name, p.Price, p.ImageBase64)).ToList(),
+            this.Products!.Select(p => new CatalogProductItem(
+                p.Name,
+                p.Price,
+                productImages.GetValueOrDefault(p.Id))).ToList(),
             this.Layout,
             this.ColorTheme,
             this.Format,
@@ -805,7 +876,7 @@ internal sealed record AnnouncementImageApiRequest(
     string Tone,
     string Format,
     List<string>? BrandContextFields,
-    List<string>? ProductImages = null,
+    List<Guid>? ProductImageIds = null,
     string? JobTitle = null,
     string? JobSchedule = null,
     string? JobSalary = null,
@@ -813,14 +884,18 @@ internal sealed record AnnouncementImageApiRequest(
     List<string>? JobRequirements = null,
     string? Language = null)
 {
-    public AnnouncementImageRequest ToServiceRequest(BrandContext? brandContext, string? logoBase64, string language) =>
+    public AnnouncementImageRequest ToServiceRequest(
+        BrandContext? brandContext,
+        string? logoBase64,
+        string language,
+        IReadOnlyList<string>? productImages) =>
         new(
             this.PostType,
             this.Content ?? string.Empty,
             this.Tone,
             this.Format,
             brandContext,
-            this.ProductImages,
+            productImages,
             logoBase64,
             this.JobTitle,
             this.JobSchedule,

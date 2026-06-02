@@ -63,18 +63,7 @@ import {
 } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
 import * as galleryImageCache from '@/utils/galleryImageCache';
-import * as productImageCache from '@/utils/productImageCache';
 import * as productsCache from '@/utils/productsCache';
-
-async function loadProductImageBase64(id: string): Promise<string | null> {
-  try {
-    const entry = await productImageCache.load(id);
-    const comma = entry.uri.indexOf(',');
-    return comma >= 0 ? entry.uri.slice(comma + 1) : null;
-  } catch {
-    return null;
-  }
-}
 
 const isWeb = Platform.OS === 'web';
 const SIDEBAR_WIDTH = 320;
@@ -1715,14 +1704,12 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     setCatalogResult(null);
     setCatalogKept(false);
     try {
-      const productsWithImages = await Promise.all(
-        chosen.map(async (p) => ({
-          name: p.name,
-          price: p.price,
-          currency: p.currency,
-          imageBase64: await loadProductImageBase64(p.id),
-        }))
-      );
+      const productsWithImages = chosen.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        currency: p.currency,
+      }));
       const catalogCurrency = chosen[0].currency;
       const result = await generateCatalogImage({
         products: productsWithImages,
@@ -1809,14 +1796,12 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     setWallpaperOnResult(null);
     setWallpaperOnKept(false);
     try {
-      const productsWithImages = await Promise.all(
-        chosen.map(async (p) => ({
-          name: p.name,
-          price: p.price,
-          currency: p.currency,
-          imageBase64: await loadProductImageBase64(p.id),
-        }))
-      );
+      const productsWithImages = chosen.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        currency: p.currency,
+      }));
       setWallpaperOnResult(
         await generateCatalogOnWallpaper({
           products: productsWithImages,
@@ -2015,15 +2000,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     setAnnoResult(null);
     setAnnoKept(false);
     try {
-      const promotionProductImages =
+      const promotionProductImageIds =
         postType === 'Promotion' && promotionSelected.size > 0
-          ? (
-              await Promise.all(
-                products
-                  .filter((p) => promotionSelected.has(p.id))
-                  .map((p) => loadProductImageBase64(p.id))
-              )
-            ).filter((b64): b64 is string => !!b64)
+          ? products.filter((p) => promotionSelected.has(p.id)).map((p) => p.id)
           : undefined;
 
       const jobRequirementsList = isJobPost
@@ -2039,7 +2018,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         tone,
         format: annoFormat,
         brandContextFields: annoContextFields.length > 0 ? annoContextFields : undefined,
-        productImages: promotionProductImages,
+        productImageIds: promotionProductImageIds,
         jobTitle: isJobPost ? jobTitle.trim() : undefined,
         jobSchedule: isJobPost ? jobSchedule.trim() : undefined,
         jobSalary: isJobPost && jobSalary.trim().length > 0 ? jobSalary.trim() : undefined,

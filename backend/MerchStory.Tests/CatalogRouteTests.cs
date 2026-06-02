@@ -30,6 +30,7 @@ public class CatalogRouteTests : IDisposable
     private readonly HttpClient client;
     private readonly ConfigurableMockImageProvider mockProvider;
     private Func<string, IReadOnlyList<string?>?, ImageGenerationResult> currentResponder;
+    private string userId = string.Empty;
 
     public CatalogRouteTests()
     {
@@ -128,6 +129,9 @@ public class CatalogRouteTests : IDisposable
         this.currentResponder = (_, _) => new ImageGenerationResult(canned, "image/png");
 
         string token = await this.RegisterAndGetTokenAsync("happy@test.com");
+        Guid a = await this.SeedProductAsync("Product A");
+        Guid b = await this.SeedProductAsync("Product B");
+        Guid c = await this.SeedProductAsync("Product C");
 
         var response = await this.SendCatalogAsync(
             token,
@@ -135,9 +139,9 @@ public class CatalogRouteTests : IDisposable
             {
                 products = new[]
                 {
-                    ProductJson("Product A"),
-                    ProductJson("Product B"),
-                    ProductJson("Product C"),
+                    ProductJson(a, "Product A"),
+                    ProductJson(b, "Product B"),
+                    ProductJson(c, "Product C"),
                 },
                 layout = "Grid",
                 colorTheme = "Brand Colors",
@@ -170,6 +174,9 @@ public class CatalogRouteTests : IDisposable
         this.currentResponder = (_, _) => new ImageGenerationResult(canned, "image/png");
 
         string token = await this.RegisterAndGetTokenAsync("partial@test.com");
+        Guid alpha = await this.SeedProductAsync("Alpha");
+        Guid bravo = await this.SeedProductAsync("Bravo");
+        Guid charlie = await this.SeedProductAsync("Charlie");
 
         var response = await this.SendCatalogAsync(
             token,
@@ -177,9 +184,9 @@ public class CatalogRouteTests : IDisposable
             {
                 products = new[]
                 {
-                    ProductJson("Alpha"),
-                    ProductJson("Bravo"),
-                    ProductJson("Charlie"),
+                    ProductJson(alpha, "Alpha"),
+                    ProductJson(bravo, "Bravo"),
+                    ProductJson(charlie, "Charlie"),
                 },
                 layout = "Grid",
                 colorTheme = "Brand Colors",
@@ -206,12 +213,14 @@ public class CatalogRouteTests : IDisposable
         this.currentResponder = (_, _) => new ImageGenerationResult(emptyCanvas, "image/png");
 
         string token = await this.RegisterAndGetTokenAsync("zero@test.com");
+        Guid alpha = await this.SeedProductAsync("Alpha");
+        Guid bravo = await this.SeedProductAsync("Bravo");
 
         var response = await this.SendCatalogAsync(
             token,
             new
             {
-                products = new[] { ProductJson("Alpha"), ProductJson("Bravo") },
+                products = new[] { ProductJson(alpha, "Alpha"), ProductJson(bravo, "Bravo") },
                 layout = "Grid",
                 colorTheme = "Brand Colors",
                 format = "Square 1:1",
@@ -234,6 +243,8 @@ public class CatalogRouteTests : IDisposable
             "image/png");
 
         string token = await this.RegisterAndGetTokenAsync("missing@test.com");
+        Guid good = await this.SeedProductAsync("Good");
+        Guid bad = await this.SeedProductAsync("Bad", withImage: false);
 
         var response = await this.SendCatalogAsync(
             token,
@@ -241,8 +252,8 @@ public class CatalogRouteTests : IDisposable
             {
                 products = new[]
                 {
-                    ProductJson("Good"),
-                    new { name = "Bad", price = 10, imageBase64 = (string?)null, currency = "USD" },
+                    ProductJson(good, "Good"),
+                    ProductJson(bad, "Bad"),
                 },
                 layout = "Grid",
                 colorTheme = "Brand Colors",
@@ -255,6 +266,60 @@ public class CatalogRouteTests : IDisposable
         string body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
         Assert.Equal("preserve_requires_all_product_images", doc.RootElement.GetProperty("error").GetString());
+        Assert.Contains("Bad", doc.RootElement.GetProperty("missing").EnumerateArray().Select(e => e.GetString()));
+        Assert.Empty(this.mockProvider.Calls);
+    }
+
+    [Fact]
+    public async Task Preserve_IgnoresProductOwnedByAnotherUser()
+    {
+        this.currentResponder = (_, _) => new ImageGenerationResult(
+            TestCanvas.SolidCanvas(100, 100, new Rgba32(0, 0, 0, 255)),
+            "image/png");
+
+        string token = await this.RegisterAndGetTokenAsync("scope@test.com");
+        Guid mine = await this.SeedProductAsync("Mine");
+
+        // A product that exists and has a stored image, but belongs to a different user.
+        Guid foreign = Guid.NewGuid();
+        using (var scope = this.factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var blobs = (InMemoryBlobStorage)scope.ServiceProvider.GetRequiredService<IBlobStorage>();
+            string foreignKey = $"products/someone-else/{Guid.NewGuid():N}.png";
+            blobs.Seed(foreignKey, TestCanvas.SolidProductPng(100, 100, new Rgba32(10, 10, 10, 255)), "image/png");
+            db.Products.Add(new Product
+            {
+                Id = foreign,
+                UserId = "someone-else",
+                Name = "Foreign",
+                Price = 5m,
+                Currency = Currency.USD,
+                ImageBlobKey = foreignKey,
+                ImageContentType = "image/png",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await this.SendCatalogAsync(
+            token,
+            new
+            {
+                products = new[] { ProductJson(mine, "Mine"), ProductJson(foreign, "Foreign") },
+                layout = "Grid",
+                colorTheme = "Brand Colors",
+                format = "Square 1:1",
+                showPrices = true,
+                preserveProductImages = true,
+            });
+
+        // The foreign product is not resolvable for this user, so its image never leaks
+        // into the generation; preserve mode rejects the request as missing a photo.
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        Assert.Equal("preserve_requires_all_product_images", doc.RootElement.GetProperty("error").GetString());
+        Assert.Contains("Foreign", doc.RootElement.GetProperty("missing").EnumerateArray().Select(e => e.GetString()));
         Assert.Empty(this.mockProvider.Calls);
     }
 
@@ -263,7 +328,8 @@ public class CatalogRouteTests : IDisposable
     {
         string token = await this.RegisterAndGetTokenAsync("cap@test.com");
 
-        var products = Enumerable.Range(0, 9).Select(i => ProductJson($"P{i}")).ToArray();
+        // The >8 cap is enforced before any image resolution, so unseeded ids are fine here.
+        var products = Enumerable.Range(0, 9).Select(i => ProductJson(Guid.NewGuid(), $"P{i}")).ToArray();
         var response = await this.SendCatalogAsync(
             token,
             new
@@ -282,21 +348,54 @@ public class CatalogRouteTests : IDisposable
         Assert.Equal("too_many_products", doc.RootElement.GetProperty("error").GetString());
     }
 
-    private static object ProductJson(string name)
-    {
-        byte[] pngBytes = TestCanvas.SolidProductPng(100, 100, new Rgba32(200, 200, 200, 255));
-        return new
+    // Builds the wire payload for a product. Image bytes are no longer sent inline —
+    // the backend resolves them from blob storage by id (see SeedProductAsync).
+    private static object ProductJson(Guid id, string name) =>
+        new
         {
+            id,
             name,
             price = 9.99,
-            imageBase64 = Convert.ToBase64String(pngBytes),
             currency = "USD",
         };
+
+    // Seeds a Product row for the registered user and (optionally) stores its image in
+    // the in-memory blob fake under the product's ImageBlobKey, mirroring production.
+    // Returns the product id to reference in a generation request.
+    private async Task<Guid> SeedProductAsync(string name, bool withImage = true)
+    {
+        Guid productId = Guid.NewGuid();
+        string? blobKey = null;
+
+        using var scope = this.factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        if (withImage)
+        {
+            byte[] pngBytes = TestCanvas.SolidProductPng(100, 100, new Rgba32(200, 200, 200, 255));
+            blobKey = $"products/{this.userId}/{Guid.NewGuid():N}.png";
+            var blobs = (InMemoryBlobStorage)scope.ServiceProvider.GetRequiredService<IBlobStorage>();
+            blobs.Seed(blobKey, pngBytes, "image/png");
+        }
+
+        db.Products.Add(new Product
+        {
+            Id = productId,
+            UserId = this.userId,
+            Name = name,
+            Price = 9.99m,
+            Currency = Currency.USD,
+            ImageBlobKey = blobKey,
+            ImageContentType = withImage ? "image/png" : null,
+        });
+        await db.SaveChangesAsync();
+        return productId;
     }
 
     private async Task<string> RegisterAndGetTokenAsync(string email)
     {
         string uniqueId = "user-" + Guid.NewGuid();
+        this.userId = uniqueId;
         this.userManagerMock
             .Setup(m => m.CreateAsync(It.IsAny<AppUser>(), It.IsAny<string>()))
             .Callback<AppUser, string>((user, _) =>
