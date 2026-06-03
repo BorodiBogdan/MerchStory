@@ -959,7 +959,6 @@ export default function ProfileScreen() {
           {/* ── Hero ── */}
           <Animated.View style={[styles.heroWrap, heroAnimStyle]}>
             <View style={styles.heroCard}>
-              <View style={styles.heroGlow} pointerEvents="none" />
               <View style={styles.heroContent}>
                 <Pressable
                   onPress={isEditing ? pickLogo : undefined}
@@ -1228,16 +1227,6 @@ function makeStyles(
         ? { boxShadow: `0 16px 40px -20px ${colors.accent.primary}33` }
         : D.shadow.sm),
     } as any,
-    heroGlow: {
-      position: 'absolute',
-      top: -80,
-      right: -80,
-      width: 240,
-      height: 240,
-      borderRadius: 120,
-      backgroundColor: colors.accent.dim,
-      opacity: 0.8,
-    },
     heroContent: {
       flexDirection: isTablet ? 'row' : 'column',
       alignItems: isTablet ? 'center' : 'flex-start',

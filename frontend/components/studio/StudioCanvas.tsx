@@ -2748,9 +2748,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     return (
       <>
         <View style={styles.desktopRoot}>
-          <View style={styles.ambientGlow} pointerEvents="none" />
-          <View style={styles.ambientGlow2} pointerEvents="none" />
-
           {/* ── LEFT SIDEBAR ── */}
           <ReAnimated.View style={[styles.sidebar, heroEnterStyle]}>
             <ScrollView
@@ -2793,8 +2790,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             <ReAnimated.View style={[panelEnterStyle, { gap: D.spacing.lg }]}>
               {/* Hero header */}
               <View style={styles.heroWrap}>
-                <View style={styles.heroGlow} pointerEvents="none" />
-                <View style={styles.heroGlow2} pointerEvents="none" />
                 <View style={activeTab === 'catalog' ? styles.heroTextClamp : undefined}>
                   <View style={styles.heroEyebrow}>
                     <View style={styles.heroEyebrowDot} />
@@ -3317,7 +3312,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
 
           {/* Mobile hero header */}
           <View style={styles.mobileHero}>
-            <View style={styles.mobileHeroGlow} pointerEvents="none" />
             <Text style={styles.mobileHeroTitle}>{TAB_META_I18N[activeTab].label}</Text>
             <Text style={styles.mobileHeroSubtitle}>{TAB_META_I18N[activeTab].desc}</Text>
           </View>
@@ -4590,28 +4584,6 @@ function makeStyles(
       overflow: 'hidden',
     },
 
-    // ── Ambient decorative glows (pointerEvents: 'none') ───────────────────────
-    ambientGlow: {
-      position: 'absolute',
-      top: -160,
-      right: -160,
-      width: 440,
-      height: 440,
-      borderRadius: 220,
-      backgroundColor: colors.accent.primary,
-      opacity: 0.07,
-    },
-    ambientGlow2: {
-      position: 'absolute',
-      bottom: -180,
-      left: SIDEBAR_WIDTH - 80,
-      width: 360,
-      height: 360,
-      borderRadius: 180,
-      backgroundColor: colors.accent.secondary,
-      opacity: 0.05,
-    },
-
     // ── Sidebar ────────────────────────────────────────────────────────────────
     sidebar: {
       width: SIDEBAR_WIDTH,
@@ -4783,26 +4755,6 @@ function makeStyles(
         ? ({ boxShadow: `0 16px 40px -22px ${colors.accent.primary}40` } as any)
         : D.shadow.sm),
     } as any,
-    heroGlow: {
-      position: 'absolute',
-      top: -90,
-      right: -90,
-      width: 260,
-      height: 260,
-      borderRadius: 130,
-      backgroundColor: colors.accent.dim,
-      opacity: 0.9,
-    },
-    heroGlow2: {
-      position: 'absolute',
-      bottom: -80,
-      left: -60,
-      width: 200,
-      height: 200,
-      borderRadius: 100,
-      backgroundColor: colors.accent.secondary + '22',
-      opacity: 0.7,
-    },
     heroEyebrow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -5113,16 +5065,6 @@ function makeStyles(
         ? ({ boxShadow: `0 12px 32px -18px ${colors.accent.primary}40` } as any)
         : D.shadow.sm),
     } as any,
-    mobileHeroGlow: {
-      position: 'absolute',
-      top: -60,
-      right: -60,
-      width: 160,
-      height: 160,
-      borderRadius: 80,
-      backgroundColor: colors.accent.dim,
-      opacity: 0.85,
-    },
     mobileHeroTitle: {
       fontSize: D.fontSize['2xl'],
       fontWeight: D.fontWeight.bold,

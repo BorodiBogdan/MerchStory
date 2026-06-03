@@ -122,9 +122,6 @@ export default function StudioHub() {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.container}>
-        <View style={styles.ambientGlow} pointerEvents="none" />
-        <View style={styles.ambientGlow2} pointerEvents="none" />
-
         <StudioPageHero title={t('studio.title')} subtitle={t('studio.subtitle')} />
 
         <View style={styles.cardsRow}>
@@ -1017,28 +1014,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       maxWidth: 1120,
       position: 'relative',
     },
-    ambientGlow: {
-      position: 'absolute',
-      top: -120,
-      left: -120,
-      width: 360,
-      height: 360,
-      borderRadius: 360,
-      backgroundColor: colors.accent.dim,
-      opacity: 0.55,
-      ...(Platform.OS === 'web' ? ({ filter: 'blur(72px)' } as any) : {}),
-    } as any,
-    ambientGlow2: {
-      position: 'absolute',
-      bottom: -140,
-      right: -100,
-      width: 320,
-      height: 320,
-      borderRadius: 320,
-      backgroundColor: colors.accent.dim,
-      opacity: 0.35,
-      ...(Platform.OS === 'web' ? ({ filter: 'blur(80px)' } as any) : {}),
-    } as any,
     cardsRow: {
       marginTop: D.spacing.lg,
       flexDirection: isDesktop ? 'row' : 'column',
