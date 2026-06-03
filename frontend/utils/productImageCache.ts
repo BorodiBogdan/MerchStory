@@ -83,6 +83,14 @@ async function fetchWithSlot(id: string): Promise<Entry> {
 }
 
 export function prime(id: string, imageBase64: string, mimeType: string): void {
+  // Don't cache an image that never actually loaded: an empty/blank base64 would
+  // produce a broken data URI that the cache reports as a successfully loaded
+  // entry (no error, no retry), masking the real image. Evict any stale entry so
+  // the next load() re-fetches from the server.
+  if (!imageBase64.trim() || !mimeType.trim()) {
+    evict(id);
+    return;
+  }
   const uri = toDataUri(imageBase64, mimeType);
   const existing = entries.get(id);
   if (existing && existing.uri === uri) {
@@ -97,6 +105,11 @@ export function prime(id: string, imageBase64: string, mimeType: string): void {
 // Variant for callers that already have a remote URL (e.g. SAS URL from a
 // /products POST/PUT response) — skips the base64 round-trip.
 export function primeUrl(id: string, uri: string): void {
+  // Guard against caching a blank URL as a "loaded" image (see prime()).
+  if (!uri.trim()) {
+    evict(id);
+    return;
+  }
   const existing = entries.get(id);
   if (existing && existing.uri === uri) {
     touch(id);

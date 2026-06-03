@@ -1,12 +1,15 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using MerchStory.Tests.Fakes;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -74,13 +77,20 @@ public class AuthEndpointTests : IDisposable
                     .BuildServiceProvider();
                 services.AddDbContext<AppDbContext>(options =>
                     options.UseInMemoryDatabase(dbName)
-                           .UseInternalServiceProvider(inMemoryProvider));
+                           .UseInternalServiceProvider(inMemoryProvider)
+                           .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
 
                 services.RemoveAll<UserManager<AppUser>>();
                 services.AddSingleton(this.userManagerMock.Object);
 
                 services.RemoveAll<SignInManager<AppUser>>();
                 services.AddSingleton(this.signInManagerMock.Object);
+
+                // Keep the suite offline: the generate-image endpoint resolves
+                // IBlobStorage, which otherwise builds a real Azure client from
+                // appsettings. Tests must use mocks, never real storage.
+                services.RemoveAll<IBlobStorage>();
+                services.AddSingleton<IBlobStorage, InMemoryBlobStorage>();
             });
         });
 
@@ -214,7 +224,7 @@ public class AuthEndpointTests : IDisposable
 
         // The wallet check on protected endpoints requires the AppUser to exist in the DB.
         // UserManager is mocked, so the register call doesn't persist anything — seed the
-        // user directly with enough coins to pass EnsureCoinsAsync.
+        // user directly with enough credits to pass TryDeductAsync.
         using (var scope = this.factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -223,7 +233,7 @@ public class AuthEndpointTests : IDisposable
                 Id = "gen-user-id",
                 Email = "genuser@test.com",
                 UserName = "genuser@test.com",
-                CoinBalance = 100,
+                CreditBalance = 100,
             });
             await db.SaveChangesAsync();
         }

@@ -125,20 +125,20 @@ export interface AdminUserLookup {
   email: string;
   userName: string;
   isAdmin: boolean;
-  coinBalance: number;
+  creditBalance: number;
 }
 
-export interface GrantCoinsResponse {
+export interface GrantCreditsResponse {
   userId: string;
   userEmail: string;
   balance: number;
   transaction: WalletTransaction;
 }
 
-export class InsufficientCoinsError extends Error {
+export class InsufficientCreditsError extends Error {
   constructor() {
-    super('Insufficient coins');
-    this.name = 'InsufficientCoinsError';
+    super('Insufficient credits');
+    this.name = 'InsufficientCreditsError';
   }
 }
 
@@ -153,7 +153,7 @@ export interface AuthResponse {
   isShopSetupComplete: boolean;
   isAdmin: boolean;
   preferredLanguage: AppLanguage;
-  coinBalance: number;
+  creditBalance: number;
 }
 
 export interface BrandColor {
@@ -308,9 +308,9 @@ export async function updateShopProfile(payload: ShopProfilePayload): Promise<Sh
 // ── Image generation ─────────────────────────────────────────────────────────
 
 export interface CatalogImageProduct {
+  id: string;
   name: string;
   price: number;
-  imageBase64: string | null;
   currency?: Currency;
 }
 
@@ -334,7 +334,7 @@ export interface GenerateAnnouncementImageParams {
   tone: string;
   format: string;
   brandContextFields?: string[];
-  productImages?: string[];
+  productImageIds?: string[];
   // Job Post only
   jobTitle?: string;
   jobSchedule?: string;
@@ -346,7 +346,7 @@ export interface GenerateAnnouncementImageParams {
 
 async function parseGenerationResponse(response: Response): Promise<GenerateImageResponse> {
   if (response.status === 402) {
-    throw new InsufficientCoinsError();
+    throw new InsufficientCreditsError();
   }
 
   if (!response.ok) {
@@ -1047,11 +1047,11 @@ export async function lookupAdminUsers(query: string): Promise<AdminUserLookup[]
   return response.json() as Promise<AdminUserLookup[]>;
 }
 
-export async function grantCoins(
+export async function grantCredits(
   userEmail: string,
   amount: number,
   note?: string
-): Promise<GrantCoinsResponse> {
+): Promise<GrantCreditsResponse> {
   const response = await fetchWithAuth(`${API_URL}/wallet/grant`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1063,7 +1063,7 @@ export async function grantCoins(
       (errorData as { detail?: string }).detail ?? `Grant failed with status ${response.status}`
     );
   }
-  return response.json() as Promise<GrantCoinsResponse>;
+  return response.json() as Promise<GrantCreditsResponse>;
 }
 
 // ── Print Shop ───────────────────────────────────────────────────────────────

@@ -32,7 +32,7 @@ public static class WalletRoutes
                 return Results.Unauthorized();
             }
 
-            var recent = await db.CoinTransactions
+            var recent = await db.CreditTransactions
                 .AsNoTracking()
                 .Where(t => t.UserId == userId)
                 .OrderByDescending(t => t.CreatedAt)
@@ -46,7 +46,7 @@ public static class WalletRoutes
                     t.CreatedAt))
                 .ToListAsync(ct);
 
-            return Results.Ok(new WalletSummaryDto(user.CoinBalance, recent));
+            return Results.Ok(new WalletSummaryDto(user.CreditBalance, recent));
         });
 
         group.MapGet("/transactions", async (
@@ -65,7 +65,7 @@ public static class WalletRoutes
             int s = Math.Max(0, skip ?? 0);
             int t = Math.Clamp(take ?? 50, 1, 200);
 
-            IQueryable<CoinTransaction> query = db.CoinTransactions
+            IQueryable<CreditTransaction> query = db.CreditTransactions
                 .AsNoTracking()
                 .Where(x => x.UserId == userId);
 
@@ -88,7 +88,7 @@ public static class WalletRoutes
         });
 
         group.MapPost("/grant", async (
-            GrantCoinsRequest request,
+            GrantCreditsRequest request,
             UserManager<AppUser> userManager,
             WalletService wallet,
             ILogger<Program> logger,
@@ -121,8 +121,8 @@ public static class WalletRoutes
                 return Results.Problem(result.Error ?? "Grant failed.", statusCode: 500);
             }
 
-            CoinTransaction txn = result.Transaction;
-            return Results.Ok(new GrantCoinsResponse(
+            CreditTransaction txn = result.Transaction;
+            return Results.Ok(new GrantCreditsResponse(
                 target.Id,
                 target.Email!,
                 result.NewBalance.Value,
@@ -160,7 +160,7 @@ public static class WalletRoutes
                     u.Email ?? string.Empty,
                     u.UserName ?? string.Empty,
                     u.IsAdmin,
-                    u.CoinBalance))
+                    u.CreditBalance))
                 .ToListAsync(ct);
 
             return Results.Ok(matches);

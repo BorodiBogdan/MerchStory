@@ -32,8 +32,12 @@ var builder = WebApplication.CreateBuilder(args);
 // override appsettings.Development.json and env vars — exactly the opposite of what
 // we want. KV should provide production-grade defaults; local dev files and env
 // vars must win when present. So we re-layer the higher-priority sources after KV.
+// Tests run in the "Testing" environment and must stay fully offline (mocks only).
+// AddAzureKeyVault authenticates while configuration is being built, before any
+// WebApplicationFactory override can run, so it's the one integration the test
+// host can't mock away — skip it explicitly so tests never reach DefaultAzureCredential.
 string? keyVaultUri = builder.Configuration["KeyVault:Uri"];
-if (!string.IsNullOrEmpty(keyVaultUri))
+if (!string.IsNullOrEmpty(keyVaultUri) && !builder.Environment.IsEnvironment("Testing"))
 {
     builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
 
@@ -199,7 +203,7 @@ builder.Services.AddScoped<WalletService>();
 // Print Shop: PDF export of generated assets sized for paper. Premium tier
 // runs through the Real-ESRGAN ONNX upscaler; if the model isn't loaded the
 // service throws UpscalerUnavailableException and the route handler surfaces
-// it as a render failure (and refunds the coin charge).
+// it as a render failure (and refunds the credit charge).
 builder.Services.AddSingleton<PdfRenderer>();
 builder.Services.AddSingleton<IUpscaler, RealEsrganUpscaler>();
 builder.Services.AddScoped<QrLinkService>();

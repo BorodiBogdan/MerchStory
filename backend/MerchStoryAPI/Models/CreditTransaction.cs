@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace MerchStoryAPI.Models;
 
-public class CoinTransaction
+public class CreditTransaction
 {
     public int Id { get; set; }
 

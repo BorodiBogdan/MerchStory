@@ -561,10 +561,6 @@ export default function GalleryScreen() {
 
   return (
     <View style={styles.root}>
-      {/* Ambient accent glows */}
-      <View pointerEvents="none" style={styles.ambientGlow} />
-      <View pointerEvents="none" style={styles.ambientGlow2} />
-
       <View style={styles.pageContainer}>
         <Animated.View style={[styles.pageHeader, heroAnimStyle]}>
           <View style={styles.headerTextBlock}>
@@ -860,26 +856,6 @@ function makeStyles(
       flex: 1,
       backgroundColor: colors.bg.base,
       alignItems: isWeb ? 'center' : 'stretch',
-    },
-    ambientGlow: {
-      position: 'absolute',
-      top: -140,
-      right: -80,
-      width: 360,
-      height: 360,
-      borderRadius: 360,
-      backgroundColor: colors.accent.primary,
-      opacity: 0.08,
-    },
-    ambientGlow2: {
-      position: 'absolute',
-      top: 120,
-      left: -120,
-      width: 280,
-      height: 280,
-      borderRadius: 280,
-      backgroundColor: colors.accent.secondary,
-      opacity: 0.05,
     },
     pageContainer: {
       flex: 1,

@@ -18,11 +18,11 @@ import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
-import { type AdminUserLookup, grantCoins, lookupAdminUsers } from '@/utils/api';
+import { type AdminUserLookup, grantCredits, lookupAdminUsers } from '@/utils/api';
 
 const isWeb = Platform.OS === 'web';
 
-export default function AdminGrantCoinsScreen() {
+export default function AdminGrantCreditsScreen() {
   const { colors } = useTheme();
   const { isAdmin, isLoading } = useAuth();
   const router = useRouter();
@@ -113,7 +113,7 @@ export default function AdminGrantCoinsScreen() {
     setSubmitting(true);
     try {
       const trimmedNote = note.trim();
-      const result = await grantCoins(selected.email, amount, trimmedNote || undefined);
+      const result = await grantCredits(selected.email, amount, trimmedNote || undefined);
       setSuccessMessage(
         t('adminGrant.success')
           .replace('{amount}', String(amount))
@@ -123,7 +123,7 @@ export default function AdminGrantCoinsScreen() {
       setAmountText('');
       setNote('');
       // Update inline display so admin sees the new balance.
-      setSelected({ ...selected, coinBalance: result.balance });
+      setSelected({ ...selected, creditBalance: result.balance });
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : t('adminGrant.error.failed'));
     } finally {
@@ -196,7 +196,7 @@ export default function AdminGrantCoinsScreen() {
                 >
                   <View style={styles.lookupTextWrap}>
                     <Text style={styles.lookupEmail}>{u.email}</Text>
-                    <Text style={styles.lookupBalance}>{u.coinBalance} coins</Text>
+                    <Text style={styles.lookupBalance}>{u.creditBalance} credits</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={colors.text.muted} />
                 </Pressable>
@@ -209,7 +209,7 @@ export default function AdminGrantCoinsScreen() {
           <View style={styles.selectedCard}>
             <Ionicons name="person-circle-outline" size={20} color={colors.accent.primary} />
             <Text style={styles.selectedEmail}>{selected.email}</Text>
-            <Text style={styles.selectedBalance}>{selected.coinBalance} coins</Text>
+            <Text style={styles.selectedBalance}>{selected.creditBalance} credits</Text>
           </View>
         )}
 

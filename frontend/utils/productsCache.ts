@@ -137,6 +137,11 @@ export async function refresh(): Promise<void> {
 }
 
 export function addItem(item: ProductItem): void {
+  // If the list was never loaded from the server, don't seed it with a single
+  // optimistic item: that would flip `initialized` to true and make ensureLoaded
+  // skip the real fetch, so the page would show only this item. The next focus
+  // fetch returns the full list (including this item) anyway.
+  if (!state.initialized) return;
   const nextItems = [item, ...state.items];
   state = {
     ...state,

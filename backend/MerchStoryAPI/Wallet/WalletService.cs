@@ -41,28 +41,28 @@ public class WalletService
             return DeductResult.Failure("User not found.");
         }
 
-        if (user.CoinBalance < amount)
+        if (user.CreditBalance < amount)
         {
-            return DeductResult.Failure("Insufficient coins.");
+            return DeductResult.Failure("Insufficient credits.");
         }
 
-        user.CoinBalance -= amount;
+        user.CreditBalance -= amount;
 
-        CoinTransaction txn = new()
+        CreditTransaction txn = new()
         {
             UserId = user.Id,
             Amount = -amount,
-            BalanceAfter = user.CoinBalance,
+            BalanceAfter = user.CreditBalance,
             Description = description,
             RelatedGeneratedImageId = relatedGeneratedImageId,
             CreatedAt = DateTime.UtcNow,
         };
 
-        this.db.CoinTransactions.Add(txn);
+        this.db.CreditTransactions.Add(txn);
         await this.db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        return DeductResult.Success(user.CoinBalance, txn);
+        return DeductResult.Success(user.CreditBalance, txn);
     }
 
     public async Task<GrantResult> GrantAsync(
@@ -85,35 +85,35 @@ public class WalletService
             return GrantResult.Failure("User not found.");
         }
 
-        user.CoinBalance += amount;
+        user.CreditBalance += amount;
 
-        CoinTransaction txn = new()
+        CreditTransaction txn = new()
         {
             UserId = user.Id,
             Amount = amount,
-            BalanceAfter = user.CoinBalance,
+            BalanceAfter = user.CreditBalance,
             Description = description,
             CreatedAt = DateTime.UtcNow,
         };
 
-        this.db.CoinTransactions.Add(txn);
+        this.db.CreditTransactions.Add(txn);
         await this.db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        return GrantResult.Success(user.CoinBalance, txn);
+        return GrantResult.Success(user.CreditBalance, txn);
     }
 }
 
-public sealed record DeductResult(bool Succeeded, int? NewBalance, CoinTransaction? Transaction, string? Error)
+public sealed record DeductResult(bool Succeeded, int? NewBalance, CreditTransaction? Transaction, string? Error)
 {
-    public static DeductResult Success(int newBalance, CoinTransaction txn) => new(true, newBalance, txn, null);
+    public static DeductResult Success(int newBalance, CreditTransaction txn) => new(true, newBalance, txn, null);
 
     public static DeductResult Failure(string error) => new(false, null, null, error);
 }
 
-public sealed record GrantResult(bool Succeeded, int? NewBalance, CoinTransaction? Transaction, string? Error)
+public sealed record GrantResult(bool Succeeded, int? NewBalance, CreditTransaction? Transaction, string? Error)
 {
-    public static GrantResult Success(int newBalance, CoinTransaction txn) => new(true, newBalance, txn, null);
+    public static GrantResult Success(int newBalance, CreditTransaction txn) => new(true, newBalance, txn, null);
 
     public static GrantResult Failure(string error) => new(false, null, null, error);
 }

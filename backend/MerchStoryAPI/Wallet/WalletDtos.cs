@@ -12,8 +12,8 @@ public record WalletSummaryDto(int Balance, IReadOnlyList<WalletTransactionDto> 
 
 public record WalletTransactionPageDto(IReadOnlyList<WalletTransactionDto> Items, int Total);
 
-public record GrantCoinsRequest(string UserEmail, int Amount, string? Note);
+public record GrantCreditsRequest(string UserEmail, int Amount, string? Note);
 
-public record GrantCoinsResponse(string UserId, string UserEmail, int Balance, WalletTransactionDto Transaction);
+public record GrantCreditsResponse(string UserId, string UserEmail, int Balance, WalletTransactionDto Transaction);
 
-public record AdminUserLookupDto(string Id, string Email, string UserName, bool IsAdmin, int CoinBalance);
+public record AdminUserLookupDto(string Id, string Email, string UserName, bool IsAdmin, int CreditBalance);

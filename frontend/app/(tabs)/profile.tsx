@@ -6,7 +6,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -24,8 +23,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { ColorPicker } from '@/components/ui/ColorPicker';
 import { LogoutModal } from '@/components/ui/LogoutModal';
-import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useShop } from '@/context/shop';
@@ -208,9 +207,6 @@ export default function ProfileScreen() {
   const [isLoading, setIsLoading] = useState(isProfileLoading);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [colorPickerModal, setColorPickerModal] = useState<{ index: number; hex: string } | null>(
-    null
-  );
   const [isLogoutVisible, setIsLogoutVisible] = useState(false);
 
   // Entrance animation
@@ -654,15 +650,19 @@ export default function ProfileScreen() {
               key={index}
               style={[styles.infoRow, index === draft.brandColors.length - 1 && styles.infoRowLast]}
             >
-              <Pressable
-                onPress={() => setColorPickerModal({ index, hex: color.hex })}
-                style={styles.colorSwatchBtn}
-                accessibilityRole="button"
+              <ColorPicker
+                value={color.hex}
+                onChange={(hex) => updateBrandColor(index, { hex })}
+                label={`Color ${index + 1}`}
                 accessibilityLabel={`Pick color ${index + 1}`}
+                modalMaxWidth={420}
+                wrapStyle={styles.colorPickerWrap}
               >
-                <View style={[styles.colorSwatchEdit, { backgroundColor: color.hex }]} />
-                <Text style={styles.colorHexEdit}>{color.hex.toUpperCase()}</Text>
-              </Pressable>
+                <View style={styles.colorSwatchBtn}>
+                  <View style={[styles.colorSwatchEdit, { backgroundColor: color.hex }]} />
+                  <Text style={styles.colorHexEdit}>{color.hex.toUpperCase()}</Text>
+                </View>
+              </ColorPicker>
               <View style={styles.colorPctRow}>
                 <TextInput
                   style={[styles.infoInput, styles.colorPctInput]}
@@ -959,7 +959,6 @@ export default function ProfileScreen() {
           {/* ── Hero ── */}
           <Animated.View style={[styles.heroWrap, heroAnimStyle]}>
             <View style={styles.heroCard}>
-              <View style={styles.heroGlow} pointerEvents="none" />
               <View style={styles.heroContent}>
                 <Pressable
                   onPress={isEditing ? pickLogo : undefined}
@@ -1139,37 +1138,6 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      {/* Color picker modal */}
-      <Modal
-        visible={colorPickerModal !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setColorPickerModal(null)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setColorPickerModal(null)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            {colorPickerModal !== null && (
-              <RgbColorPicker
-                label={`Color ${colorPickerModal.index + 1}`}
-                value={colorPickerModal.hex}
-                onChange={(hex) => {
-                  updateBrandColor(colorPickerModal.index, { hex });
-                  setColorPickerModal((prev) => (prev ? { ...prev, hex } : null));
-                }}
-              />
-            )}
-            <Pressable
-              style={styles.modalDoneButton}
-              onPress={() => setColorPickerModal(null)}
-              accessibilityRole="button"
-              accessibilityLabel="Done"
-            >
-              <Text style={styles.modalDoneText}>Done</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
       <LogoutModal
         visible={isLogoutVisible}
         onConfirm={() => {
@@ -1228,16 +1196,6 @@ function makeStyles(
         ? { boxShadow: `0 16px 40px -20px ${colors.accent.primary}33` }
         : D.shadow.sm),
     } as any,
-    heroGlow: {
-      position: 'absolute',
-      top: -80,
-      right: -80,
-      width: 240,
-      height: 240,
-      borderRadius: 120,
-      backgroundColor: colors.accent.dim,
-      opacity: 0.8,
-    },
     heroContent: {
       flexDirection: isTablet ? 'row' : 'column',
       alignItems: isTablet ? 'center' : 'flex-start',
@@ -1517,6 +1475,9 @@ function makeStyles(
     brandColorsEditSection: {
       paddingTop: 0,
     },
+    colorPickerWrap: {
+      flex: 1,
+    },
     colorSwatchBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1583,40 +1544,6 @@ function makeStyles(
       fontSize: D.fontSize.xs,
       color: colors.accent.primary,
       fontWeight: D.fontWeight.semibold,
-    },
-
-    // ── Color picker modal ───────────────────────────────────────────────
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.55)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: D.spacing.lg,
-    },
-    modalCard: {
-      width: '100%',
-      maxWidth: 420,
-      backgroundColor: colors.bg.surface,
-      borderRadius: D.radius.lg,
-      padding: D.spacing.md,
-      borderWidth: 1,
-      borderColor: colors.border.default,
-      ...(Platform.OS === 'web'
-        ? { boxShadow: '0 20px 48px -20px rgba(0,0,0,0.45)' }
-        : D.shadow.modal),
-    } as any,
-    modalDoneButton: {
-      marginTop: D.spacing.sm,
-      height: 44,
-      borderRadius: D.radius.md,
-      backgroundColor: colors.accent.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    modalDoneText: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.semibold,
-      color: '#FFFFFF',
     },
 
     // ── Other domain ─────────────────────────────────────────────────────
