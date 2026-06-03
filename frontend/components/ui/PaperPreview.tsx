@@ -147,10 +147,6 @@ export function PaperPreview({
   return (
     <View style={styles.wrapper}>
       <View style={[styles.stage, { width: previewW + 48, height: previewH + 48 }]}>
-        <View
-          pointerEvents="none"
-          style={[styles.halo, { width: previewW + 48, height: previewH + 48 }]}
-        />
         <View style={[styles.paper, { width: previewW, height: previewH }]}>
           {dataUri ? (
             <Image source={{ uri: dataUri }} style={styles.image} resizeMode="stretch" />
@@ -202,13 +198,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       position: 'relative',
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    halo: {
-      position: 'absolute',
-      borderRadius: D.radius.xl,
-      backgroundColor: colors.accent.primary,
-      opacity: 0.18,
-      ...(Platform.OS === 'web' ? ({ filter: 'blur(36px)' } as object) : { ...D.shadow.glow }),
     },
     paper: {
       backgroundColor: '#FFFFFF',

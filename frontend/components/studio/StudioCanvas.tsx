@@ -30,14 +30,14 @@ import ReAnimated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
-import { CoinIcon } from '@/components/ui/CoinIcon';
+import { ColorPicker } from '@/components/ui/ColorPicker';
+import { CreditIcon } from '@/components/ui/CreditIcon';
 import { GalleryImage } from '@/components/ui/GalleryImage';
-import { InsufficientCoinsModal } from '@/components/ui/InsufficientCoinsModal';
+import { InsufficientCreditsModal } from '@/components/ui/InsufficientCreditsModal';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
 import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
-import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { D } from '@/constants/design';
 import type { GenerationType } from '@/constants/generationTypes';
 import { useAuth } from '@/context/auth';
@@ -54,7 +54,7 @@ import {
   generateCatalogOnWallpaper,
   type GenerateImageResponse,
   generateWallpaper,
-  InsufficientCoinsError,
+  InsufficientCreditsError,
   type PlacementZone,
   type ProductItem,
   saveToGallery,
@@ -63,18 +63,7 @@ import {
 } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
 import * as galleryImageCache from '@/utils/galleryImageCache';
-import * as productImageCache from '@/utils/productImageCache';
 import * as productsCache from '@/utils/productsCache';
-
-async function loadProductImageBase64(id: string): Promise<string | null> {
-  try {
-    const entry = await productImageCache.load(id);
-    const comma = entry.uri.indexOf(',');
-    return comma >= 0 ? entry.uri.slice(comma + 1) : null;
-  } catch {
-    return null;
-  }
-}
 
 const isWeb = Platform.OS === 'web';
 const SIDEBAR_WIDTH = 320;
@@ -201,8 +190,9 @@ function isColorLight(hex: string): boolean {
 
 const PRESET_SWATCH_SET = new Set(PRICE_SWATCHES.map((c) => c.toLowerCase()));
 
-// Circle swatch that opens a custom color picker. Uses the OS-native color picker
-// on web (zero-friction) and a small modal with the RGB picker on native.
+// Circle swatch that opens a custom color picker. The picking behavior (OS-native
+// picker on web, RGB modal on native) lives in the shared ColorPicker; this just
+// supplies the rainbow circle trigger.
 function CustomColorSwatch({
   value,
   onChange,
@@ -212,45 +202,12 @@ function CustomColorSwatch({
   onChange: (c: string) => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
-  const [modalOpen, setModalOpen] = useState(false);
   const isCustom = !PRESET_SWATCH_SET.has(value.toLowerCase());
-  const seed = isCustom && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#808080';
 
   const RAINBOW = ['#EF4444', '#F59E0B', '#EAB308', '#22C55E', '#3B82F6', '#A855F7'];
 
-  // The web <input type="color"> fires onChange continuously while the OS picker
-  // is open and the cursor moves. Each one triggers a re-render of the whole
-  // studio component (several thousand lines), which drops the cursor to a crawl.
-  // Coalesce into one update per animation frame so React only reconciles at 60fps,
-  // keeping the live preview smooth without starving the picker dialog.
-  const rafIdRef = useRef<number | null>(null);
-  const pendingRef = useRef<string | null>(null);
-  const onChangeRef = useRef(onChange);
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-  useEffect(
-    () => () => {
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-    },
-    []
-  );
-  const handleWebColorInput = useCallback((hex: string) => {
-    pendingRef.current = hex;
-    if (rafIdRef.current !== null) return;
-    rafIdRef.current = requestAnimationFrame(() => {
-      rafIdRef.current = null;
-      const next = pendingRef.current;
-      pendingRef.current = null;
-      if (next !== null) onChangeRef.current(next);
-    });
-  }, []);
-
   return (
-    <>
+    <ColorPicker value={value} onChange={onChange} label="Custom color">
       <View
         style={{
           width: 28,
@@ -286,91 +243,8 @@ function CustomColorSwatch({
         >
           <Ionicons name="color-palette" size={10} color="#1e1e1e" />
         </View>
-        {Platform.OS === 'web'
-          ? // Real native color input stretched over the circle. User's click on
-            // the input itself makes Chrome anchor the OS picker to this element.
-            React.createElement('input', {
-              type: 'color',
-              value: seed,
-              onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-                handleWebColorInput(e.target.value.toUpperCase()),
-              'aria-label': 'Pick a custom color',
-              style: {
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                opacity: 0,
-                border: 0,
-                padding: 0,
-                margin: 0,
-                cursor: 'pointer',
-                background: 'transparent',
-              },
-            })
-          : null}
-        {Platform.OS !== 'web' && (
-          <Pressable
-            onPress={() => setModalOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Pick a custom color"
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-          />
-        )}
       </View>
-
-      <Modal
-        visible={modalOpen && Platform.OS !== 'web'}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalOpen(false)}
-      >
-        <Pressable
-          style={{
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: D.spacing.lg,
-          }}
-          onPress={() => setModalOpen(false)}
-        >
-          <Pressable
-            style={{
-              width: '100%',
-              maxWidth: 360,
-              backgroundColor: colors.bg.surface,
-              borderRadius: D.radius.xl,
-              padding: D.spacing.lg,
-            }}
-            onPress={() => {}}
-          >
-            <RgbColorPicker label="Custom color" value={value} onChange={onChange} />
-            <Pressable
-              onPress={() => setModalOpen(false)}
-              style={{
-                marginTop: D.spacing.sm,
-                paddingVertical: 12,
-                borderRadius: D.radius.pill,
-                backgroundColor: colors.accent.primary,
-                alignItems: 'center',
-              }}
-            >
-              <Text
-                style={{
-                  color: '#fff',
-                  fontSize: D.fontSize.base,
-                  fontWeight: D.fontWeight.semibold,
-                }}
-              >
-                Done
-              </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    </>
+    </ColorPicker>
   );
 }
 
@@ -1018,7 +892,7 @@ function GenerateButton({
               >
                 · {cost}
               </Text>
-              <CoinIcon size={16} />
+              <CreditIcon size={16} />
             </View>
           )}
         </>
@@ -1522,7 +1396,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const t = useT();
   const router = useRouter();
   const { profile: shopProfile } = useShop();
-  const { coinBalance, setCoinBalance, refreshCoinBalance } = useAuth();
+  const { creditBalance, setCreditBalance, refreshCreditBalance } = useAuth();
   const [insufficientVisible, setInsufficientVisible] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -1688,16 +1562,16 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
 
   function handleAfterPaidGenerate(result: GenerateImageResponse | null | undefined) {
     if (result && typeof result.balance === 'number') {
-      setCoinBalance(result.balance);
+      setCreditBalance(result.balance);
     } else {
-      refreshCoinBalance();
+      refreshCreditBalance();
     }
   }
 
   function handleGenerationError(err: unknown, set: (msg: string) => void) {
-    if (err instanceof InsufficientCoinsError) {
+    if (err instanceof InsufficientCreditsError) {
       setInsufficientVisible(true);
-      set('Not enough coins.');
+      set('Not enough credits.');
       return;
     }
     set(err instanceof Error ? err.message : 'Something went wrong.');
@@ -1706,7 +1580,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   async function handleCatalogGenerate() {
     const chosen = products.filter((p) => selected.has(p.id));
     if (!chosen.length) return;
-    if (coinBalance < 1) {
+    if (creditBalance < 1) {
       setInsufficientVisible(true);
       return;
     }
@@ -1715,14 +1589,12 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     setCatalogResult(null);
     setCatalogKept(false);
     try {
-      const productsWithImages = await Promise.all(
-        chosen.map(async (p) => ({
-          name: p.name,
-          price: p.price,
-          currency: p.currency,
-          imageBase64: await loadProductImageBase64(p.id),
-        }))
-      );
+      const productsWithImages = chosen.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        currency: p.currency,
+      }));
       const catalogCurrency = chosen[0].currency;
       const result = await generateCatalogImage({
         products: productsWithImages,
@@ -1746,7 +1618,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   }
 
   async function handleGenerateWallpaper() {
-    if (coinBalance < 1) {
+    if (creditBalance < 1) {
       setInsufficientVisible(true);
       return;
     }
@@ -1809,14 +1681,12 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     setWallpaperOnResult(null);
     setWallpaperOnKept(false);
     try {
-      const productsWithImages = await Promise.all(
-        chosen.map(async (p) => ({
-          name: p.name,
-          price: p.price,
-          currency: p.currency,
-          imageBase64: await loadProductImageBase64(p.id),
-        }))
-      );
+      const productsWithImages = chosen.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        currency: p.currency,
+      }));
       setWallpaperOnResult(
         await generateCatalogOnWallpaper({
           products: productsWithImages,
@@ -1852,11 +1722,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
       // so we fetch the SAS URL and re-encode here. The cache stays URL-based.
       const res = await fetch(bytes.imageUrl);
       const blob = await res.blob();
-      const base64: string = await new Promise((resolve) => {
+      const base64: string = await new Promise((resolve, reject) => {
         const reader = new FileReader();
+        reader.onerror = () => reject(reader.error ?? new Error('Failed to read wallpaper.'));
         reader.onloadend = () => resolve((reader.result as string).split(',')[1] ?? '');
         reader.readAsDataURL(blob);
       });
+      if (!base64) throw new Error('Failed to read wallpaper.');
       galleryImageCache.prime(item.id, base64, bytes.mimeType);
       setWallpaperBase64(base64);
       setWallpaperStage('confirmed');
@@ -2006,7 +1878,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
 
   async function handleAnnoGenerate() {
     if (!annoReady) return;
-    if (coinBalance < 1) {
+    if (creditBalance < 1) {
       setInsufficientVisible(true);
       return;
     }
@@ -2015,15 +1887,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     setAnnoResult(null);
     setAnnoKept(false);
     try {
-      const promotionProductImages =
+      const promotionProductImageIds =
         postType === 'Promotion' && promotionSelected.size > 0
-          ? (
-              await Promise.all(
-                products
-                  .filter((p) => promotionSelected.has(p.id))
-                  .map((p) => loadProductImageBase64(p.id))
-              )
-            ).filter((b64): b64 is string => !!b64)
+          ? products.filter((p) => promotionSelected.has(p.id)).map((p) => p.id)
           : undefined;
 
       const jobRequirementsList = isJobPost
@@ -2039,7 +1905,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         tone,
         format: annoFormat,
         brandContextFields: annoContextFields.length > 0 ? annoContextFields : undefined,
-        productImages: promotionProductImages,
+        productImageIds: promotionProductImageIds,
         jobTitle: isJobPost ? jobTitle.trim() : undefined,
         jobSchedule: isJobPost ? jobSchedule.trim() : undefined,
         jobSalary: isJobPost && jobSalary.trim().length > 0 ? jobSalary.trim() : undefined,
@@ -2767,9 +2633,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     return (
       <>
         <View style={styles.desktopRoot}>
-          <View style={styles.ambientGlow} pointerEvents="none" />
-          <View style={styles.ambientGlow2} pointerEvents="none" />
-
           {/* ── LEFT SIDEBAR ── */}
           <ReAnimated.View style={[styles.sidebar, heroEnterStyle]}>
             <ScrollView
@@ -2812,8 +2675,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             <ReAnimated.View style={[panelEnterStyle, { gap: D.spacing.lg }]}>
               {/* Hero header */}
               <View style={styles.heroWrap}>
-                <View style={styles.heroGlow} pointerEvents="none" />
-                <View style={styles.heroGlow2} pointerEvents="none" />
                 <View style={activeTab === 'catalog' ? styles.heroTextClamp : undefined}>
                   <View style={styles.heroEyebrow}>
                     <View style={styles.heroEyebrowDot} />
@@ -3096,7 +2957,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         ? t('studio.generating')
                         : `${t('studio.generate')} · 1`}
                     </Text>
-                    {!wallpaperGenGenerating && <CoinIcon size={16} />}
+                    {!wallpaperGenGenerating && <CreditIcon size={16} />}
                   </Pressable>
                 </ScrollView>
               ) : (
@@ -3336,7 +3197,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
 
           {/* Mobile hero header */}
           <View style={styles.mobileHero}>
-            <View style={styles.mobileHeroGlow} pointerEvents="none" />
             <Text style={styles.mobileHeroTitle}>{TAB_META_I18N[activeTab].label}</Text>
             <Text style={styles.mobileHeroSubtitle}>{TAB_META_I18N[activeTab].desc}</Text>
           </View>
@@ -4378,7 +4238,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                       ? t('studio.generating')
                       : `${t('studio.generate')} · 1`}
                   </Text>
-                  {!wallpaperGenGenerating && <CoinIcon size={16} />}
+                  {!wallpaperGenGenerating && <CreditIcon size={16} />}
                 </Pressable>
               </ScrollView>
             ) : (
@@ -4585,7 +4445,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         onConfirm={handleKeepConfirm}
       />
 
-      <InsufficientCoinsModal
+      <InsufficientCreditsModal
         visible={insufficientVisible}
         onDismiss={() => setInsufficientVisible(false)}
       />
@@ -4607,28 +4467,6 @@ function makeStyles(
       backgroundColor: colors.bg.base,
       position: 'relative',
       overflow: 'hidden',
-    },
-
-    // ── Ambient decorative glows (pointerEvents: 'none') ───────────────────────
-    ambientGlow: {
-      position: 'absolute',
-      top: -160,
-      right: -160,
-      width: 440,
-      height: 440,
-      borderRadius: 220,
-      backgroundColor: colors.accent.primary,
-      opacity: 0.07,
-    },
-    ambientGlow2: {
-      position: 'absolute',
-      bottom: -180,
-      left: SIDEBAR_WIDTH - 80,
-      width: 360,
-      height: 360,
-      borderRadius: 180,
-      backgroundColor: colors.accent.secondary,
-      opacity: 0.05,
     },
 
     // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -4802,26 +4640,6 @@ function makeStyles(
         ? ({ boxShadow: `0 16px 40px -22px ${colors.accent.primary}40` } as any)
         : D.shadow.sm),
     } as any,
-    heroGlow: {
-      position: 'absolute',
-      top: -90,
-      right: -90,
-      width: 260,
-      height: 260,
-      borderRadius: 130,
-      backgroundColor: colors.accent.dim,
-      opacity: 0.9,
-    },
-    heroGlow2: {
-      position: 'absolute',
-      bottom: -80,
-      left: -60,
-      width: 200,
-      height: 200,
-      borderRadius: 100,
-      backgroundColor: colors.accent.secondary + '22',
-      opacity: 0.7,
-    },
     heroEyebrow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -5132,16 +4950,6 @@ function makeStyles(
         ? ({ boxShadow: `0 12px 32px -18px ${colors.accent.primary}40` } as any)
         : D.shadow.sm),
     } as any,
-    mobileHeroGlow: {
-      position: 'absolute',
-      top: -60,
-      right: -60,
-      width: 160,
-      height: 160,
-      borderRadius: 80,
-      backgroundColor: colors.accent.dim,
-      opacity: 0.85,
-    },
     mobileHeroTitle: {
       fontSize: D.fontSize['2xl'],
       fontWeight: D.fontWeight.bold,

@@ -74,7 +74,7 @@ export default function AdminScreen() {
       icon: 'cash-outline',
       title: t('admin.options.grantCoins.title'),
       description: t('admin.options.grantCoins.description'),
-      onPress: () => router.push('/admin-grant-coins'),
+      onPress: () => router.push('/admin-grant-credits'),
     },
   ];
 

@@ -10,7 +10,7 @@ namespace MerchStory.Tests;
 public class ProductPlaceholderCompositorTests
 {
     [Fact]
-    public void Composite_PaintsProductsOverOutlinedRegions()
+    public async Task Composite_PaintsProductsOverOutlinedRegions()
     {
         var canvas = TestCanvas.CanvasWithOutlines(
             width: 1080,
@@ -37,7 +37,8 @@ public class ProductPlaceholderCompositorTests
             new("Product C", "#9D00FF"),
         };
 
-        CompositeResult result = ProductPlaceholderCompositor.Composite(canvas, products, assignments);
+        CompositeResult result = await ProductPlaceholderCompositor.CompositeAsync(
+            canvas, products, assignments, FakeInpaint.Client());
 
         Assert.Null(result.FallbackReason);
         Assert.Equal(3, result.DetectedRegions);
@@ -56,7 +57,7 @@ public class ProductPlaceholderCompositorTests
     }
 
     [Fact]
-    public void Composite_AcceptsSolidFillFallback()
+    public async Task Composite_AcceptsSolidFillFallback()
     {
         var canvas = TestCanvas.CanvasWithSolidFills(
             width: 1080,
@@ -80,14 +81,15 @@ public class ProductPlaceholderCompositorTests
             new("Product B", "#00FFFF"),
         };
 
-        CompositeResult result = ProductPlaceholderCompositor.Composite(canvas, products, assignments);
+        CompositeResult result = await ProductPlaceholderCompositor.CompositeAsync(
+            canvas, products, assignments, FakeInpaint.Client());
 
         Assert.Null(result.FallbackReason);
         Assert.Equal(2, result.DetectedRegions);
     }
 
     [Fact]
-    public void Composite_ReturnsPartialPreserveWhenFewerOutlinesDetected()
+    public async Task Composite_FlagsUndetectedMarkerInDiagnostics()
     {
         // Canvas has outlines for only 2 of 3 products (the third color is missing).
         var canvas = TestCanvas.CanvasWithOutlines(
@@ -114,16 +116,23 @@ public class ProductPlaceholderCompositorTests
             new("Charlie", "#9D00FF"),
         };
 
-        CompositeResult result = ProductPlaceholderCompositor.Composite(canvas, products, assignments);
+        CompositeResult result = await ProductPlaceholderCompositor.CompositeAsync(
+            canvas, products, assignments, FakeInpaint.Client());
 
-        Assert.Equal(FallbackReason.PartialPreserve, result.FallbackReason);
-        Assert.Equal(2, result.DetectedRegions);
-        Assert.Single(result.MissingProductNames);
-        Assert.Contains("Charlie", result.MissingProductNames);
+        // Charlie's marker (#9D00FF) is absent from the canvas, so it matches zero
+        // pixels and is flagged as not detected in the per-product diagnostics.
+        Assert.NotNull(result.Diagnostics);
+        ColorDiagnostic charlie = Assert.Single(result.Diagnostics!, d => d.ProductName == "Charlie");
+        Assert.False(charlie.Detected);
+        Assert.Equal(0, charlie.TightPixelCount);
+
+        // The two products whose markers are present are detected.
+        Assert.True(result.Diagnostics!.Single(d => d.ProductName == "Alpha").Detected);
+        Assert.True(result.Diagnostics!.Single(d => d.ProductName == "Bravo").Detected);
     }
 
     [Fact]
-    public void Composite_ReturnsNoRegionsWhenNoOutlinesDetected()
+    public async Task Composite_ReturnsNoRegionsWhenNoOutlinesDetected()
     {
         var canvas = TestCanvas.SolidCanvas(1080, 1080, new Rgba32(128, 128, 128, 255));
 
@@ -137,7 +146,8 @@ public class ProductPlaceholderCompositorTests
             new("Alpha", "#FF00FF"),
         };
 
-        CompositeResult result = ProductPlaceholderCompositor.Composite(canvas, products, assignments);
+        CompositeResult result = await ProductPlaceholderCompositor.CompositeAsync(
+            canvas, products, assignments, FakeInpaint.Client());
 
         Assert.Equal(FallbackReason.NoRegions, result.FallbackReason);
         Assert.Equal(0, result.DetectedRegions);

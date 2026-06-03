@@ -18,9 +18,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CoinIcon } from '@/components/ui/CoinIcon';
+import { CreditIcon } from '@/components/ui/CreditIcon';
 import { GalleryImage } from '@/components/ui/GalleryImage';
-import { InsufficientCoinsModal } from '@/components/ui/InsufficientCoinsModal';
+import { InsufficientCreditsModal } from '@/components/ui/InsufficientCreditsModal';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
@@ -32,7 +32,7 @@ import {
   type GalleryItem,
   type GenerateImageResponse,
   generateWallpaper,
-  InsufficientCoinsError,
+  InsufficientCreditsError,
   saveToGallery,
 } from '@/utils/api';
 import * as galleryCache from '@/utils/galleryCache';
@@ -87,7 +87,7 @@ export default function WallpapersScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const { coinBalance, setCoinBalance, refreshCoinBalance } = useAuth();
+  const { creditBalance, setCreditBalance, refreshCreditBalance } = useAuth();
   const [insufficientVisible, setInsufficientVisible] = useState(false);
 
   const [items, setItems] = useState<GalleryItem[]>([]);
@@ -171,7 +171,7 @@ export default function WallpapersScreen() {
   }
 
   async function handleGenerate() {
-    if (coinBalance < 1) {
+    if (creditBalance < 1) {
       setInsufficientVisible(true);
       return;
     }
@@ -189,14 +189,14 @@ export default function WallpapersScreen() {
       setKeepError(null);
       setGenerateStage('result');
       if (typeof result.balance === 'number') {
-        setCoinBalance(result.balance);
+        setCreditBalance(result.balance);
       } else {
-        refreshCoinBalance();
+        refreshCreditBalance();
       }
     } catch (err) {
-      if (err instanceof InsufficientCoinsError) {
+      if (err instanceof InsufficientCreditsError) {
         setInsufficientVisible(true);
-        setGenerateError('Not enough coins.');
+        setGenerateError('Not enough credits.');
       } else {
         setGenerateError(err instanceof Error ? err.message : 'Generation failed.');
       }
@@ -489,7 +489,7 @@ export default function WallpapersScreen() {
                       ? t('wallpapers.modal.generating')
                       : `${t('wallpapers.modal.generate')} · 1`}
                   </Text>
-                  {!generating && <CoinIcon size={16} />}
+                  {!generating && <CreditIcon size={16} />}
                 </Pressable>
               </ScrollView>
             ) : (
@@ -656,7 +656,7 @@ export default function WallpapersScreen() {
         </Pressable>
       </Modal>
 
-      <InsufficientCoinsModal
+      <InsufficientCreditsModal
         visible={insufficientVisible}
         onDismiss={() => setInsufficientVisible(false)}
       />

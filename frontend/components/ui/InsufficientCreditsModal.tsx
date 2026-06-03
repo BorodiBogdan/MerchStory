@@ -9,22 +9,22 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { CoinIcon } from '@/components/ui/CoinIcon';
+import { CreditIcon } from '@/components/ui/CreditIcon';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 
-interface InsufficientCoinsModalProps {
+interface InsufficientCreditsModalProps {
   visible: boolean;
   cost?: number;
   onDismiss: () => void;
 }
 
-export function InsufficientCoinsModal({
+export function InsufficientCreditsModal({
   visible,
   cost = 1,
   onDismiss,
-}: InsufficientCoinsModalProps) {
+}: InsufficientCreditsModalProps) {
   const { colors } = useTheme();
   const t = useT();
   const router = useRouter();
@@ -79,7 +79,7 @@ export function InsufficientCoinsModal({
       <View style={styles.centerAnchor} pointerEvents="box-none">
         <Animated.View style={[styles.card, cardAnimStyle]}>
           <View style={styles.iconCircle}>
-            <CoinIcon size={32} />
+            <CreditIcon size={32} />
           </View>
           <Text style={styles.title}>{t('wallet.insufficient.title')}</Text>
           <Text style={styles.subtitle}>
