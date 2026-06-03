@@ -392,6 +392,8 @@ function IdeaCard({
   const translate = useRef(new Animated.Value(14)).current;
   const scale = useRef(new Animated.Value(1)).current;
   const hover = useRef(new Animated.Value(0)).current;
+  const lift = useRef(new Animated.Value(0)).current;
+  const [hovered, setHovered] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -422,28 +424,43 @@ function IdeaCard({
       useNativeDriver: false,
     }).start();
 
-  const haloOpacity = hover.interpolate({ inputRange: [0, 1], outputRange: [0, 0.8] });
+  const cardLift = lift.interpolate({ inputRange: [0, 1], outputRange: [0, -4] });
   const borderColor = hover.interpolate({
     inputRange: [0, 1],
-    outputRange: [colors.border.subtle, colors.accent.primary],
+    outputRange: [colors.border.strong, colors.border.focus],
   });
+
+  const handleHoverIn = () => {
+    if (Platform.OS !== 'web') return;
+    setHovered(true);
+    timingTo(hover, 1);
+    springTo(lift, 1);
+  };
+  const handleHoverOut = () => {
+    if (Platform.OS !== 'web') return;
+    setHovered(false);
+    timingTo(hover, 0);
+    springTo(lift, 0);
+  };
 
   return (
     <Animated.View
-      style={[styles.cardWrap, { opacity, transform: [{ translateY: translate }, { scale }] }]}
+      style={[
+        styles.cardWrap,
+        { opacity, transform: [{ translateY: translate }, { translateY: cardLift }, { scale }] },
+      ]}
     >
-      <Animated.View pointerEvents="none" style={[styles.halo, { opacity: haloOpacity }]} />
       <Pressable
         onPressIn={() => springTo(scale, 0.98)}
         onPressOut={() => springTo(scale, 1)}
-        onHoverIn={() => Platform.OS === 'web' && timingTo(hover, 1)}
-        onHoverOut={() => Platform.OS === 'web' && timingTo(hover, 0)}
+        onHoverIn={handleHoverIn}
+        onHoverOut={handleHoverOut}
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`${idea.sourceLabel}: ${idea.title}`}
         style={styles.pressable}
       >
-        <Animated.View style={[styles.card, { borderColor }]}>
+        <Animated.View style={[styles.card, { borderColor }, hovered && styles.cardHover]}>
           <View style={styles.sourceRow}>
             <View style={styles.sourcePill}>
               <Ionicons name={idea.sourceIcon} size={12} color={colors.text.muted} />
@@ -515,16 +532,14 @@ type HubOptionCardProps = {
 };
 
 function HubOptionCard({ card, index, isDesktop, onPress, t, colors }: HubOptionCardProps) {
-  const styles = useMemo(
-    () => makeCardStyles(colors, isDesktop, !!card.comingSoon),
-    [colors, isDesktop, card.comingSoon]
-  );
+  const styles = useMemo(() => makeCardStyles(colors, isDesktop), [colors, isDesktop]);
 
   const opacity = useRef(new Animated.Value(0)).current;
   const translate = useRef(new Animated.Value(16)).current;
   const scale = useRef(new Animated.Value(1)).current;
   const glow = useRef(new Animated.Value(0)).current;
-  const iconLift = useRef(new Animated.Value(0)).current;
+  const lift = useRef(new Animated.Value(0)).current;
+  const [hovered, setHovered] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -569,20 +584,22 @@ function HubOptionCard({ card, index, isDesktop, onPress, t, colors }: HubOption
   };
   const handleHoverIn = () => {
     if (Platform.OS !== 'web' || card.comingSoon) return;
+    setHovered(true);
     timingTo(glow, 1);
-    springTo(iconLift, 1);
+    springTo(lift, 1);
   };
   const handleHoverOut = () => {
     if (Platform.OS !== 'web' || card.comingSoon) return;
+    setHovered(false);
     timingTo(glow, 0);
-    springTo(iconLift, 0);
+    springTo(lift, 0);
   };
 
-  const iconTranslateY = iconLift.interpolate({ inputRange: [0, 1], outputRange: [0, -2] });
-  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  const iconTranslateY = lift.interpolate({ inputRange: [0, 1], outputRange: [0, -2] });
+  const cardLift = lift.interpolate({ inputRange: [0, 1], outputRange: [0, -4] });
   const borderActive = glow.interpolate({
     inputRange: [0, 1],
-    outputRange: [colors.border.subtle, colors.border.focus],
+    outputRange: [colors.border.strong, colors.border.focus],
   });
 
   const a11yLabel = `${t(card.labelKey)}. ${t(card.descKey)}${
@@ -595,11 +612,10 @@ function HubOptionCard({ card, index, isDesktop, onPress, t, colors }: HubOption
         styles.cardWrap,
         {
           opacity,
-          transform: [{ translateY: translate }, { scale }],
+          transform: [{ translateY: translate }, { translateY: cardLift }, { scale }],
         },
       ]}
     >
-      <Animated.View pointerEvents="none" style={[styles.glowHalo, { opacity: glowOpacity }]} />
       <Pressable
         onPress={onPress}
         onPressIn={handlePressIn}
@@ -611,7 +627,9 @@ function HubOptionCard({ card, index, isDesktop, onPress, t, colors }: HubOption
         accessibilityHint={t('studio.hub.cardCtaOpen')}
         style={styles.pressable}
       >
-        <Animated.View style={[styles.card, { borderColor: borderActive }]}>
+        <Animated.View
+          style={[styles.card, { borderColor: borderActive }, hovered && styles.cardHover]}
+        >
           {card.comingSoon && (
             <View style={styles.comingSoonPill}>
               <Ionicons name="time-outline" size={11} color={colors.accent.primary} />
@@ -761,16 +779,6 @@ function makeIdeaCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDes
       width: isDesktop ? ('calc(50% - 8px)' as any) : '100%',
       ...(isDesktop ? {} : {}),
     } as any,
-    halo: {
-      position: 'absolute',
-      inset: 0,
-      borderRadius: D.radius.xl,
-      backgroundColor: colors.accent.primary,
-      opacity: 0,
-      ...(Platform.OS === 'web'
-        ? ({ filter: 'blur(24px)', transform: [{ scale: 0.97 }] } as any)
-        : {}),
-    } as any,
     pressable: {
       borderRadius: D.radius.xl,
       ...(Platform.OS === 'web'
@@ -788,8 +796,17 @@ function makeIdeaCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDes
       overflow: 'hidden',
       ...(Platform.OS === 'web'
         ? ({
-            transitionProperty: 'border-color, background-color',
+            transitionProperty: 'border-color, background-color, box-shadow',
+            transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
             transitionDuration: '220ms',
+          } as any)
+        : {}),
+    } as any,
+    cardHover: {
+      ...(Platform.OS === 'web'
+        ? ({
+            backgroundColor: colors.bg.elevated,
+            boxShadow: '0 18px 40px -12px rgba(0,0,0,0.45)',
           } as any)
         : {}),
     } as any,
@@ -1023,11 +1040,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
   });
 }
 
-function makeCardStyles(
-  colors: ReturnType<typeof useTheme>['colors'],
-  isDesktop: boolean,
-  comingSoon: boolean
-) {
+function makeCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
   return StyleSheet.create({
     cardWrap: {
       flex: isDesktop ? 1 : undefined,
@@ -1035,22 +1048,12 @@ function makeCardStyles(
       minWidth: isDesktop ? 240 : undefined,
       position: 'relative',
     },
-    glowHalo: {
-      position: 'absolute',
-      inset: 0,
-      borderRadius: D.radius.xl,
-      backgroundColor: colors.accent.primary,
-      opacity: 0,
-      ...(Platform.OS === 'web'
-        ? ({ filter: 'blur(28px)', transform: [{ scale: 0.98 }] } as any)
-        : { ...D.shadow.glow }),
-    } as any,
     pressable: {
       borderRadius: D.radius.xl,
       ...(Platform.OS === 'web'
         ? ({
             outlineWidth: 0,
-            cursor: comingSoon ? 'pointer' : 'pointer',
+            cursor: 'pointer',
             transitionDuration: '200ms',
           } as any)
         : {}),
@@ -1070,7 +1073,16 @@ function makeCardStyles(
       ...(Platform.OS === 'web'
         ? ({
             transitionProperty: 'border-color, background-color, box-shadow',
+            transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
             transitionDuration: '220ms',
+          } as any)
+        : {}),
+    } as any,
+    cardHover: {
+      ...(Platform.OS === 'web'
+        ? ({
+            backgroundColor: colors.bg.elevated,
+            boxShadow: '0 18px 40px -12px rgba(0,0,0,0.45)',
           } as any)
         : {}),
     } as any,

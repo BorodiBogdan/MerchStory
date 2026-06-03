@@ -11,6 +11,7 @@ export type DesignColors = {
     focus: string;
     error: string;
     subtle: string;
+    strong: string;
   };
   accent: {
     primary: string;
@@ -43,6 +44,7 @@ export const darkColors: DesignColors = {
     focus: '#818CF8',
     error: '#F87171',
     subtle: 'rgba(255,255,255,0.08)',
+    strong: 'rgba(255,255,255,0.30)',
   },
   accent: {
     primary: '#818CF8',
@@ -75,6 +77,7 @@ export const lightColors: DesignColors = {
     focus: '#6366F1',
     error: '#DC2626',
     subtle: 'rgba(0,0,0,0.05)',
+    strong: 'rgba(0,0,0,0.20)',
   },
   accent: {
     primary: '#6366F1',
