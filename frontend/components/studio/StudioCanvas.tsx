@@ -30,6 +30,7 @@ import ReAnimated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
+import { ColorPicker } from '@/components/ui/ColorPicker';
 import { CreditIcon } from '@/components/ui/CreditIcon';
 import { GalleryImage } from '@/components/ui/GalleryImage';
 import { InsufficientCreditsModal } from '@/components/ui/InsufficientCreditsModal';
@@ -37,7 +38,6 @@ import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
 import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
-import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { D } from '@/constants/design';
 import type { GenerationType } from '@/constants/generationTypes';
 import { useAuth } from '@/context/auth';
@@ -190,8 +190,9 @@ function isColorLight(hex: string): boolean {
 
 const PRESET_SWATCH_SET = new Set(PRICE_SWATCHES.map((c) => c.toLowerCase()));
 
-// Circle swatch that opens a custom color picker. Uses the OS-native color picker
-// on web (zero-friction) and a small modal with the RGB picker on native.
+// Circle swatch that opens a custom color picker. The picking behavior (OS-native
+// picker on web, RGB modal on native) lives in the shared ColorPicker; this just
+// supplies the rainbow circle trigger.
 function CustomColorSwatch({
   value,
   onChange,
@@ -201,45 +202,12 @@ function CustomColorSwatch({
   onChange: (c: string) => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
-  const [modalOpen, setModalOpen] = useState(false);
   const isCustom = !PRESET_SWATCH_SET.has(value.toLowerCase());
-  const seed = isCustom && /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#808080';
 
   const RAINBOW = ['#EF4444', '#F59E0B', '#EAB308', '#22C55E', '#3B82F6', '#A855F7'];
 
-  // The web <input type="color"> fires onChange continuously while the OS picker
-  // is open and the cursor moves. Each one triggers a re-render of the whole
-  // studio component (several thousand lines), which drops the cursor to a crawl.
-  // Coalesce into one update per animation frame so React only reconciles at 60fps,
-  // keeping the live preview smooth without starving the picker dialog.
-  const rafIdRef = useRef<number | null>(null);
-  const pendingRef = useRef<string | null>(null);
-  const onChangeRef = useRef(onChange);
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-  useEffect(
-    () => () => {
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-    },
-    []
-  );
-  const handleWebColorInput = useCallback((hex: string) => {
-    pendingRef.current = hex;
-    if (rafIdRef.current !== null) return;
-    rafIdRef.current = requestAnimationFrame(() => {
-      rafIdRef.current = null;
-      const next = pendingRef.current;
-      pendingRef.current = null;
-      if (next !== null) onChangeRef.current(next);
-    });
-  }, []);
-
   return (
-    <>
+    <ColorPicker value={value} onChange={onChange} label="Custom color">
       <View
         style={{
           width: 28,
@@ -275,91 +243,8 @@ function CustomColorSwatch({
         >
           <Ionicons name="color-palette" size={10} color="#1e1e1e" />
         </View>
-        {Platform.OS === 'web'
-          ? // Real native color input stretched over the circle. User's click on
-            // the input itself makes Chrome anchor the OS picker to this element.
-            React.createElement('input', {
-              type: 'color',
-              value: seed,
-              onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-                handleWebColorInput(e.target.value.toUpperCase()),
-              'aria-label': 'Pick a custom color',
-              style: {
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                opacity: 0,
-                border: 0,
-                padding: 0,
-                margin: 0,
-                cursor: 'pointer',
-                background: 'transparent',
-              },
-            })
-          : null}
-        {Platform.OS !== 'web' && (
-          <Pressable
-            onPress={() => setModalOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Pick a custom color"
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-          />
-        )}
       </View>
-
-      <Modal
-        visible={modalOpen && Platform.OS !== 'web'}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalOpen(false)}
-      >
-        <Pressable
-          style={{
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: D.spacing.lg,
-          }}
-          onPress={() => setModalOpen(false)}
-        >
-          <Pressable
-            style={{
-              width: '100%',
-              maxWidth: 360,
-              backgroundColor: colors.bg.surface,
-              borderRadius: D.radius.xl,
-              padding: D.spacing.lg,
-            }}
-            onPress={() => {}}
-          >
-            <RgbColorPicker label="Custom color" value={value} onChange={onChange} />
-            <Pressable
-              onPress={() => setModalOpen(false)}
-              style={{
-                marginTop: D.spacing.sm,
-                paddingVertical: 12,
-                borderRadius: D.radius.pill,
-                backgroundColor: colors.accent.primary,
-                alignItems: 'center',
-              }}
-            >
-              <Text
-                style={{
-                  color: '#fff',
-                  fontSize: D.fontSize.base,
-                  fontWeight: D.fontWeight.semibold,
-                }}
-              >
-                Done
-              </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    </>
+    </ColorPicker>
   );
 }
 

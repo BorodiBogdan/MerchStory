@@ -6,8 +6,8 @@ import React, { useMemo, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
+import { ColorPicker } from '@/components/ui/ColorPicker';
 import { FloatingInput } from '@/components/ui/FloatingInput';
-import { RgbColorPicker } from '@/components/ui/RgbColorPicker';
 import { SetupShell } from '@/components/ui/SetupShell';
 import { StepProgress } from '@/components/ui/StepProgress';
 import { D } from '@/constants/design';
@@ -154,13 +154,23 @@ export default function Step1Screen() {
 
         {brandColors.map((color, index) => (
           <View key={index} style={styles.colorRow}>
-            <View style={styles.colorPickerWrapper}>
-              <RgbColorPicker
-                label={`${t('setup.step1.colorNumber')} ${index + 1}`}
-                value={color.hex}
-                onChange={(hex) => updateColor(index, { hex })}
-              />
-            </View>
+            <ColorPicker
+              value={color.hex}
+              onChange={(hex) => updateColor(index, { hex })}
+              label={`${t('setup.step1.colorNumber')} ${index + 1}`}
+              accessibilityLabel={`${t('setup.step1.colorNumber')} ${index + 1}`}
+              wrapStyle={styles.colorPickerWrapper}
+            >
+              <View style={styles.colorTrigger}>
+                <View style={[styles.colorTriggerSwatch, { backgroundColor: color.hex }]} />
+                <View style={styles.colorTriggerInfo}>
+                  <Text style={styles.colorTriggerLabel}>
+                    {`${t('setup.step1.colorNumber')} ${index + 1}`}
+                  </Text>
+                  <Text style={styles.colorTriggerHex}>{color.hex.toUpperCase()}</Text>
+                </View>
+              </View>
+            </ColorPicker>
             <View style={styles.pctInputWrapper}>
               <FloatingInput
                 label="%"
@@ -309,12 +319,43 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     colorRow: {
       flexDirection: 'row',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       gap: D.spacing.sm,
       marginBottom: D.spacing.sm,
     },
     colorPickerWrapper: {
       flex: 1,
+    },
+    colorTrigger: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      paddingVertical: D.spacing.sm,
+      paddingHorizontal: D.spacing.sm,
+      borderRadius: D.radius.md,
+      borderWidth: 1.5,
+      borderColor: colors.border.default,
+      backgroundColor: colors.bg.elevated,
+    },
+    colorTriggerSwatch: {
+      width: 36,
+      height: 36,
+      borderRadius: D.radius.sm,
+      borderWidth: 1,
+      borderColor: 'rgba(0,0,0,0.1)',
+    },
+    colorTriggerInfo: {
+      flex: 1,
+    },
+    colorTriggerLabel: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+    },
+    colorTriggerHex: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      fontFamily: 'monospace',
     },
     pctInputWrapper: {
       width: 72,
@@ -324,7 +365,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       height: 36,
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: D.spacing.sm,
     },
     totalIndicator: {
       fontSize: D.fontSize.sm,

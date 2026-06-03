@@ -366,7 +366,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], bottomInset: 
       flexDirection: 'row',
       alignItems: 'center',
       gap: D.spacing.xs,
-      marginLeft: D.spacing.sm,
+      marginLeft: D.spacing.md,
       flexShrink: 0,
     },
     logoButton: {
