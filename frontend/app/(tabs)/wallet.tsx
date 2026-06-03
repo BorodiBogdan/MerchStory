@@ -142,7 +142,7 @@ export default function WalletScreen() {
       <View style={styles.balanceCard}>
         <Text style={styles.balanceLabel}>{t('wallet.balance.label')}</Text>
         <View style={styles.balanceValueRow}>
-          <CreditIcon size={32} />
+          <CreditIcon size={32} style={styles.balanceIcon} />
           <Text style={styles.balanceValue}>{creditBalance}</Text>
           <Text style={styles.balanceUnit}>{t('wallet.balance.unit')}</Text>
         </View>
@@ -394,6 +394,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexDirection: 'row',
       alignItems: 'flex-end',
       gap: D.spacing.xs,
+    },
+    balanceIcon: {
+      alignSelf: 'center',
+      marginTop: 6,
     },
     balanceValue: {
       fontSize: D.fontSize['3xl'],
