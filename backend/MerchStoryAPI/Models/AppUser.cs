@@ -12,7 +12,7 @@ public class AppUser : IdentityUser
 
     public bool HasSetLanguagePreference { get; set; }
 
-    public int CoinBalance { get; set; }
+    public int CreditBalance { get; set; }
 
-    public ICollection<CoinTransaction> CoinTransactions { get; set; } = new List<CoinTransaction>();
+    public ICollection<CreditTransaction> CreditTransactions { get; set; } = new List<CreditTransaction>();
 }

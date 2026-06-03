@@ -328,8 +328,8 @@ public static class ImageGenerationRoutes
         }
 
         return Results.Problem(
-            title: "Insufficient coins",
-            detail: "You don't have enough coins to perform this action.",
+            title: "Insufficient credits",
+            detail: "You don't have enough credits to perform this action.",
             statusCode: StatusCodes.Status402PaymentRequired);
     }
 
@@ -576,7 +576,7 @@ public static class ImageGenerationRoutes
                 charge.Amount,
                 $"Refund: {charge.Description} ({reason})");
             logger.LogInformation(
-                "Refunded {Amount} coins to user {UserId}: {Reason}",
+                "Refunded {Amount} credits to user {UserId}: {Reason}",
                 charge.Amount,
                 charge.UserId,
                 reason);
@@ -585,7 +585,7 @@ public static class ImageGenerationRoutes
         {
             logger.LogError(
                 ex,
-                "Failed to refund {Amount} coins to user {UserId} for {Description} ({Reason})",
+                "Failed to refund {Amount} credits to user {UserId} for {Description} ({Reason})",
                 charge.Amount,
                 charge.UserId,
                 charge.Description,

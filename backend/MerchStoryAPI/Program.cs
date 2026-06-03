@@ -199,7 +199,7 @@ builder.Services.AddScoped<WalletService>();
 // Print Shop: PDF export of generated assets sized for paper. Premium tier
 // runs through the Real-ESRGAN ONNX upscaler; if the model isn't loaded the
 // service throws UpscalerUnavailableException and the route handler surfaces
-// it as a render failure (and refunds the coin charge).
+// it as a render failure (and refunds the credit charge).
 builder.Services.AddSingleton<PdfRenderer>();
 builder.Services.AddSingleton<IUpscaler, RealEsrganUpscaler>();
 builder.Services.AddScoped<QrLinkService>();

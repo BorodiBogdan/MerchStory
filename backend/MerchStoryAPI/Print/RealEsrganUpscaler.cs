@@ -11,7 +11,7 @@ namespace MerchStoryAPI.Print;
 // eager-load the model in the constructor with optional Azure Blob fallback
 // download. If a model fails to load the corresponding session stays null
 // and UpscaleAsync throws UpscalerUnavailableException — the print route
-// surfaces this as a render failure and refunds the premium coin charge.
+// surfaces this as a render failure and refunds the premium credit charge.
 // Tile-based inference keeps RAM bounded for A3 (4×) renders.
 public sealed class RealEsrganUpscaler : IUpscaler, IDisposable
 {

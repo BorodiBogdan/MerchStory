@@ -109,9 +109,9 @@ public class PrintRouteTests : IDisposable
     }
 
     [Fact]
-    public async Task Render_A4_ProducesPdfAndDebitsOneCoin()
+    public async Task Render_A4_ProducesPdfAndDebitsOneCredit()
     {
-        (string token, string userId) = await this.RegisterAndGetTokenAsync("standard@test.com", coins: 10);
+        (string token, string userId) = await this.RegisterAndGetTokenAsync("standard@test.com", credits: 10);
         Guid imageId = await this.SeedGeneratedImageAsync(userId);
 
         HttpResponseMessage response = await this.SendRenderAsync(token, new
@@ -127,7 +127,7 @@ public class PrintRouteTests : IDisposable
         Guid jobId = doc.RootElement.GetProperty("jobId").GetGuid();
 
         Assert.Equal(9, doc.RootElement.GetProperty("newBalance").GetInt32());
-        Assert.Equal(9, await this.GetCoinBalanceAsync(userId));
+        Assert.Equal(9, await this.GetCreditBalanceAsync(userId));
 
         PrintJob? job = await this.GetJobAsync(jobId);
         Assert.NotNull(job);
@@ -137,9 +137,9 @@ public class PrintRouteTests : IDisposable
     }
 
     [Fact]
-    public async Task Render_A3_DebitsOneCoinAndUpscales()
+    public async Task Render_A3_DebitsOneCreditAndUpscales()
     {
-        (string token, string userId) = await this.RegisterAndGetTokenAsync("premium@test.com", coins: 50);
+        (string token, string userId) = await this.RegisterAndGetTokenAsync("premium@test.com", credits: 50);
         Guid imageId = await this.SeedGeneratedImageAsync(userId);
 
         HttpResponseMessage response = await this.SendRenderAsync(token, new
@@ -153,13 +153,13 @@ public class PrintRouteTests : IDisposable
         using JsonDocument doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("ready", doc.RootElement.GetProperty("status").GetString());
         Assert.Equal(49, doc.RootElement.GetProperty("newBalance").GetInt32());
-        Assert.Equal(49, await this.GetCoinBalanceAsync(userId));
+        Assert.Equal(49, await this.GetCreditBalanceAsync(userId));
     }
 
     [Fact]
-    public async Task Render_WithoutEnoughCoins_Returns402()
+    public async Task Render_WithoutEnoughCredits_Returns402()
     {
-        (string token, string userId) = await this.RegisterAndGetTokenAsync("broke@test.com", coins: 0);
+        (string token, string userId) = await this.RegisterAndGetTokenAsync("broke@test.com", credits: 0);
         Guid imageId = await this.SeedGeneratedImageAsync(userId);
 
         HttpResponseMessage response = await this.SendRenderAsync(token, new
@@ -169,13 +169,13 @@ public class PrintRouteTests : IDisposable
         });
 
         Assert.Equal(HttpStatusCode.PaymentRequired, response.StatusCode);
-        Assert.Equal(0, await this.GetCoinBalanceAsync(userId));
+        Assert.Equal(0, await this.GetCreditBalanceAsync(userId));
     }
 
     [Fact]
     public async Task Render_WithQrUrl_CreatesResolvableSlug()
     {
-        (string token, string userId) = await this.RegisterAndGetTokenAsync("qr@test.com", coins: 10);
+        (string token, string userId) = await this.RegisterAndGetTokenAsync("qr@test.com", credits: 10);
         Guid imageId = await this.SeedGeneratedImageAsync(userId);
 
         HttpResponseMessage response = await this.SendRenderAsync(token, new
@@ -209,7 +209,7 @@ public class PrintRouteTests : IDisposable
     [Fact]
     public async Task Render_UnknownPaperSize_Returns400()
     {
-        (string token, string userId) = await this.RegisterAndGetTokenAsync("badsize@test.com", coins: 10);
+        (string token, string userId) = await this.RegisterAndGetTokenAsync("badsize@test.com", credits: 10);
         Guid imageId = await this.SeedGeneratedImageAsync(userId);
 
         HttpResponseMessage response = await this.SendRenderAsync(token, new
@@ -224,8 +224,8 @@ public class PrintRouteTests : IDisposable
     [Fact]
     public async Task Render_ImageOwnedByDifferentUser_Returns404()
     {
-        (string token, _) = await this.RegisterAndGetTokenAsync("a@test.com", coins: 10);
-        (_, string otherUserId) = await this.RegisterAndGetTokenAsync("b@test.com", coins: 10);
+        (string token, _) = await this.RegisterAndGetTokenAsync("a@test.com", credits: 10);
+        (_, string otherUserId) = await this.RegisterAndGetTokenAsync("b@test.com", credits: 10);
         Guid otherImageId = await this.SeedGeneratedImageAsync(otherUserId);
 
         HttpResponseMessage response = await this.SendRenderAsync(token, new
@@ -237,7 +237,7 @@ public class PrintRouteTests : IDisposable
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    private async Task<(string Token, string UserId)> RegisterAndGetTokenAsync(string email, int coins)
+    private async Task<(string Token, string UserId)> RegisterAndGetTokenAsync(string email, int credits)
     {
         string uniqueId = "user-" + Guid.NewGuid();
         this.userManagerMock
@@ -263,7 +263,7 @@ public class PrintRouteTests : IDisposable
                 Id = uniqueId,
                 Email = email,
                 UserName = email,
-                CoinBalance = coins,
+                CreditBalance = credits,
             });
             await db.SaveChangesAsync();
         }
@@ -306,12 +306,12 @@ public class PrintRouteTests : IDisposable
         return generated.Id;
     }
 
-    private async Task<int> GetCoinBalanceAsync(string userId)
+    private async Task<int> GetCreditBalanceAsync(string userId)
     {
         using IServiceScope scope = this.factory.Services.CreateScope();
         AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         AppUser user = await db.Users.SingleAsync(u => u.Id == userId);
-        return user.CoinBalance;
+        return user.CreditBalance;
     }
 
     private async Task<PrintJob?> GetJobAsync(Guid jobId)

@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { BrandLogo } from '@/components/ui/BrandLogo';
-import { CoinIcon } from '@/components/ui/CoinIcon';
+import { CreditIcon } from '@/components/ui/CreditIcon';
 import { NavMenuDropdown, type NavMenuItem } from '@/components/ui/NavMenuDropdown';
 import { ProfileWalletChoiceModal } from '@/components/ui/ProfileWalletChoiceModal';
 import { ProfileWalletDropdown } from '@/components/ui/ProfileWalletDropdown';
@@ -24,7 +24,8 @@ import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 
 export default function TabLayout() {
-  const { token, isLoading, isShopSetupComplete, coinBalance, email, isAdmin, signOut } = useAuth();
+  const { token, isLoading, isShopSetupComplete, creditBalance, email, isAdmin, signOut } =
+    useAuth();
   const [showChoice, setShowChoice] = useState(false);
   const [showNavMenu, setShowNavMenu] = useState(false);
   const { colors, colorScheme, toggleTheme } = useTheme();
@@ -143,10 +144,10 @@ export default function TabLayout() {
           (pressed || hovered) && { backgroundColor: colors.bg.input },
         ]}
         accessibilityRole="button"
-        accessibilityLabel={`${t('wallet.title')}: ${coinBalance}`}
+        accessibilityLabel={`${t('wallet.title')}: ${creditBalance}`}
       >
-        <CoinIcon size={16} />
-        <Text style={styles.balancePillText}>{coinBalance}</Text>
+        <CreditIcon size={16} />
+        <Text style={styles.balancePillText}>{creditBalance}</Text>
       </Pressable>
 
       <Pressable
@@ -257,7 +258,7 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="admin-grant-coins"
+          name="admin-grant-credits"
           options={{
             tabBarItemStyle: { display: 'none' },
           }}
@@ -303,7 +304,7 @@ export default function TabLayout() {
         <ProfileWalletDropdown
           visible={showChoice}
           email={email}
-          coinBalance={coinBalance}
+          creditBalance={creditBalance}
           isAdmin={isAdmin}
           onChooseProfile={() => {
             setShowChoice(false);
@@ -326,7 +327,7 @@ export default function TabLayout() {
       ) : (
         <ProfileWalletChoiceModal
           visible={showChoice}
-          coinBalance={coinBalance}
+          creditBalance={creditBalance}
           onChooseProfile={() => {
             setShowChoice(false);
             router.navigate('/(tabs)/profile');

@@ -9,7 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { CoinIcon } from '@/components/ui/CoinIcon';
+import { CreditIcon } from '@/components/ui/CreditIcon';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
@@ -17,7 +17,7 @@ import { useT } from '@/i18n';
 interface ProfileWalletDropdownProps {
   visible: boolean;
   email: string | null;
-  coinBalance: number;
+  creditBalance: number;
   isAdmin: boolean;
   onChooseProfile: () => void;
   onChooseWallet: () => void;
@@ -29,7 +29,7 @@ interface ProfileWalletDropdownProps {
 export function ProfileWalletDropdown({
   visible,
   email,
-  coinBalance,
+  creditBalance,
   isAdmin,
   onChooseProfile,
   onChooseWallet,
@@ -95,8 +95,8 @@ export function ProfileWalletDropdown({
               label={t('wallet.choice.wallet')}
               trailing={
                 <View style={styles.balancePill}>
-                  <CoinIcon size={12} />
-                  <Text style={styles.balancePillText}>{coinBalance}</Text>
+                  <CreditIcon size={12} />
+                  <Text style={styles.balancePillText}>{creditBalance}</Text>
                 </View>
               }
               onPress={onChooseWallet}

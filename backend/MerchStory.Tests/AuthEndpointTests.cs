@@ -214,7 +214,7 @@ public class AuthEndpointTests : IDisposable
 
         // The wallet check on protected endpoints requires the AppUser to exist in the DB.
         // UserManager is mocked, so the register call doesn't persist anything — seed the
-        // user directly with enough coins to pass EnsureCoinsAsync.
+        // user directly with enough credits to pass TryDeductAsync.
         using (var scope = this.factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -223,7 +223,7 @@ public class AuthEndpointTests : IDisposable
                 Id = "gen-user-id",
                 Email = "genuser@test.com",
                 UserName = "genuser@test.com",
-                CoinBalance = 100,
+                CreditBalance = 100,
             });
             await db.SaveChangesAsync();
         }

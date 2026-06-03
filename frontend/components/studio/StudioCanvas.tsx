@@ -30,9 +30,9 @@ import ReAnimated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
-import { CoinIcon } from '@/components/ui/CoinIcon';
+import { CreditIcon } from '@/components/ui/CreditIcon';
 import { GalleryImage } from '@/components/ui/GalleryImage';
-import { InsufficientCoinsModal } from '@/components/ui/InsufficientCoinsModal';
+import { InsufficientCreditsModal } from '@/components/ui/InsufficientCreditsModal';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
 import { ProductImage } from '@/components/ui/ProductImage';
@@ -54,7 +54,7 @@ import {
   generateCatalogOnWallpaper,
   type GenerateImageResponse,
   generateWallpaper,
-  InsufficientCoinsError,
+  InsufficientCreditsError,
   type PlacementZone,
   type ProductItem,
   saveToGallery,
@@ -1007,7 +1007,7 @@ function GenerateButton({
               >
                 · {cost}
               </Text>
-              <CoinIcon size={16} />
+              <CreditIcon size={16} />
             </View>
           )}
         </>
@@ -1511,7 +1511,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const t = useT();
   const router = useRouter();
   const { profile: shopProfile } = useShop();
-  const { coinBalance, setCoinBalance, refreshCoinBalance } = useAuth();
+  const { creditBalance, setCreditBalance, refreshCreditBalance } = useAuth();
   const [insufficientVisible, setInsufficientVisible] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -1677,16 +1677,16 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
 
   function handleAfterPaidGenerate(result: GenerateImageResponse | null | undefined) {
     if (result && typeof result.balance === 'number') {
-      setCoinBalance(result.balance);
+      setCreditBalance(result.balance);
     } else {
-      refreshCoinBalance();
+      refreshCreditBalance();
     }
   }
 
   function handleGenerationError(err: unknown, set: (msg: string) => void) {
-    if (err instanceof InsufficientCoinsError) {
+    if (err instanceof InsufficientCreditsError) {
       setInsufficientVisible(true);
-      set('Not enough coins.');
+      set('Not enough credits.');
       return;
     }
     set(err instanceof Error ? err.message : 'Something went wrong.');
@@ -1695,7 +1695,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   async function handleCatalogGenerate() {
     const chosen = products.filter((p) => selected.has(p.id));
     if (!chosen.length) return;
-    if (coinBalance < 1) {
+    if (creditBalance < 1) {
       setInsufficientVisible(true);
       return;
     }
@@ -1733,7 +1733,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   }
 
   async function handleGenerateWallpaper() {
-    if (coinBalance < 1) {
+    if (creditBalance < 1) {
       setInsufficientVisible(true);
       return;
     }
@@ -1993,7 +1993,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
 
   async function handleAnnoGenerate() {
     if (!annoReady) return;
-    if (coinBalance < 1) {
+    if (creditBalance < 1) {
       setInsufficientVisible(true);
       return;
     }
@@ -3077,7 +3077,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         ? t('studio.generating')
                         : `${t('studio.generate')} · 1`}
                     </Text>
-                    {!wallpaperGenGenerating && <CoinIcon size={16} />}
+                    {!wallpaperGenGenerating && <CreditIcon size={16} />}
                   </Pressable>
                 </ScrollView>
               ) : (
@@ -4359,7 +4359,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                       ? t('studio.generating')
                       : `${t('studio.generate')} · 1`}
                   </Text>
-                  {!wallpaperGenGenerating && <CoinIcon size={16} />}
+                  {!wallpaperGenGenerating && <CreditIcon size={16} />}
                 </Pressable>
               </ScrollView>
             ) : (
@@ -4566,7 +4566,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         onConfirm={handleKeepConfirm}
       />
 
-      <InsufficientCoinsModal
+      <InsufficientCreditsModal
         visible={insufficientVisible}
         onDismiss={() => setInsufficientVisible(false)}
       />

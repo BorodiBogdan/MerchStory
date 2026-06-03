@@ -32,7 +32,7 @@ interface AuthUser {
   userName: string;
   isShopSetupComplete: boolean;
   isAdmin: boolean;
-  coinBalance: number;
+  creditBalance: number;
 }
 
 interface AuthState {
@@ -41,7 +41,7 @@ interface AuthState {
   userName: string | null;
   isShopSetupComplete: boolean;
   isAdmin: boolean;
-  coinBalance: number;
+  creditBalance: number;
   isLoading: boolean;
 }
 
@@ -50,8 +50,8 @@ interface AuthContextValue extends AuthState {
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   completeShopSetup: () => Promise<void>;
-  setCoinBalance: (balance: number) => Promise<void>;
-  refreshCoinBalance: () => Promise<number | null>;
+  setCreditBalance: (balance: number) => Promise<void>;
+  refreshCreditBalance: () => Promise<number | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userName: null,
     isShopSetupComplete: false,
     isAdmin: false,
-    coinBalance: 0,
+    creditBalance: 0,
     isLoading: true,
   });
 
@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             userName: user.userName,
             isShopSetupComplete: user.isShopSetupComplete ?? false,
             isAdmin: user.isAdmin ?? false,
-            coinBalance: user.coinBalance ?? 0,
+            creditBalance: user.creditBalance ?? 0,
             isLoading: false,
           });
         } else {
@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
-      coinBalance: data.coinBalance ?? 0,
+      creditBalance: data.creditBalance ?? 0,
     };
     await storage.setItem(TOKEN_KEY, data.token);
     await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
-      coinBalance: user.coinBalance,
+      creditBalance: user.creditBalance,
       isLoading: false,
     });
   }
@@ -126,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
-      coinBalance: data.coinBalance ?? 0,
+      creditBalance: data.creditBalance ?? 0,
     };
     await storage.setItem(TOKEN_KEY, data.token);
     await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userName: data.userName,
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
-      coinBalance: user.coinBalance,
+      creditBalance: user.creditBalance,
       isLoading: false,
     });
   }
@@ -162,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userName: null,
       isShopSetupComplete: false,
       isAdmin: false,
-      coinBalance: 0,
+      creditBalance: 0,
       isLoading: false,
     });
   }
@@ -176,26 +176,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, isShopSetupComplete: true }));
   }
 
-  const setCoinBalance = useCallback(async (balance: number) => {
+  const setCreditBalance = useCallback(async (balance: number) => {
     const userJson = await storage.getItem(USER_KEY);
     if (userJson) {
       const user: AuthUser = JSON.parse(userJson);
-      const updated: AuthUser = { ...user, coinBalance: balance };
+      const updated: AuthUser = { ...user, creditBalance: balance };
       await storage.setItem(USER_KEY, JSON.stringify(updated));
     }
-    setState((prev) => ({ ...prev, coinBalance: balance }));
+    setState((prev) => ({ ...prev, creditBalance: balance }));
   }, []);
 
-  const refreshCoinBalance = useCallback(async (): Promise<number | null> => {
+  const refreshCreditBalance = useCallback(async (): Promise<number | null> => {
     try {
       const { getWallet } = await import('@/utils/api');
       const wallet = await getWallet();
-      await setCoinBalance(wallet.balance);
+      await setCreditBalance(wallet.balance);
       return wallet.balance;
     } catch {
       return null;
     }
-  }, [setCoinBalance]);
+  }, [setCreditBalance]);
 
   return (
     <AuthContext.Provider
@@ -205,8 +205,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signOut,
         completeShopSetup,
-        setCoinBalance,
-        refreshCoinBalance,
+        setCreditBalance,
+        refreshCreditBalance,
       }}
     >
       {children}

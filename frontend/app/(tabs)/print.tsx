@@ -23,7 +23,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChipSelector } from '@/components/ui/ChipSelector';
-import { CoinIcon } from '@/components/ui/CoinIcon';
+import { CreditIcon } from '@/components/ui/CreditIcon';
 import { FloatingInput } from '@/components/ui/FloatingInput';
 import { PaperPreview } from '@/components/ui/PaperPreview';
 import { D } from '@/constants/design';
@@ -86,7 +86,7 @@ function hasEnoughResolution(
 
 export default function PrintScreen() {
   const { colors } = useTheme();
-  const { coinBalance, setCoinBalance } = useAuth();
+  const { creditBalance, setCreditBalance } = useAuth();
   const t = useT();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -127,7 +127,7 @@ export default function PrintScreen() {
 
   const isPrintReady = hasEnoughResolution(imageDims, paperSize);
   const estimatedCost = isPrintReady ? 0 : PRINT_COST;
-  const insufficientCoins = coinBalance < estimatedCost;
+  const insufficientCredits = creditBalance < estimatedCost;
   const showQrBadge = includeQr && qrTargetUrl.trim().length > 0;
   const previewCaption = paperSize;
 
@@ -207,7 +207,7 @@ export default function PrintScreen() {
       await deliverPdf(ready.pdfUrl, selectedItem.name, paperSize);
       galleryCache.invalidate('Pdf');
       if (typeof job.newBalance === 'number') {
-        void setCoinBalance(job.newBalance);
+        void setCreditBalance(job.newBalance);
       }
       setRenderNotice(
         job.upscaled
@@ -238,12 +238,12 @@ export default function PrintScreen() {
     t('print.progress.step3'),
   ][progressStep];
 
-  const renderDisabled = !selectedItem || rendering || insufficientCoins;
+  const renderDisabled = !selectedItem || rendering || insufficientCredits;
   const renderLabel = rendering
     ? t('print.button.rendering')
     : !selectedItem
       ? t('print.button.pickFirst')
-      : insufficientCoins
+      : insufficientCredits
         ? `${t('print.button.needCoinsPrefix')} ${estimatedCost} ${t('print.coinsLabel')}`
         : t('print.button.generate');
 
@@ -284,7 +284,7 @@ export default function PrintScreen() {
       <CostInfo
         cost={estimatedCost}
         isFree={isPrintReady}
-        insufficientCoins={insufficientCoins}
+        insufficientCredits={insufficientCredits}
         onTopUp={() => router.push('/(tabs)/wallet')}
       />
 
@@ -840,19 +840,19 @@ function AssetPickerModal({
 function CostInfo({
   cost,
   isFree,
-  insufficientCoins,
+  insufficientCredits,
   onTopUp,
 }: {
   cost: number;
   isFree: boolean;
-  insufficientCoins: boolean;
+  insufficientCredits: boolean;
   onTopUp: () => void;
 }) {
   const { colors } = useTheme();
   const t = useT();
   const styles = useMemo(
-    () => makeCostStyles(colors, insufficientCoins),
-    [colors, insufficientCoins]
+    () => makeCostStyles(colors, insufficientCredits),
+    [colors, insufficientCredits]
   );
 
   return (
@@ -870,12 +870,12 @@ function CostInfo({
         ) : (
           <View style={styles.costRow}>
             <Text style={styles.costPrefix}>{t('print.cost.label')}</Text>
-            <CoinIcon size={14} />
+            <CreditIcon size={14} />
             <Text style={styles.costNumber}>{cost}</Text>
             <Text style={styles.costSuffix}>{t('print.coinsLabel')}</Text>
           </View>
         )}
-        {insufficientCoins && (
+        {insufficientCredits && (
           <View style={styles.warningRow}>
             <Text style={styles.warningText}>{t('print.cost.notEnoughCoins')}</Text>
             <Pressable

@@ -33,7 +33,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
     public DbSet<IdeaInteraction> IdeaInteractions => this.Set<IdeaInteraction>();
 
-    public DbSet<CoinTransaction> CoinTransactions => this.Set<CoinTransaction>();
+    public DbSet<CreditTransaction> CreditTransactions => this.Set<CreditTransaction>();
 
     public DbSet<PrintJob> PrintJobs => this.Set<PrintJob>();
 
@@ -283,7 +283,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
                   .OnDelete(DeleteBehavior.Cascade);
         });
 
-        builder.Entity<CoinTransaction>(entity =>
+        builder.Entity<CreditTransaction>(entity =>
         {
             entity.HasKey(t => t.Id);
 
@@ -291,7 +291,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
                   .IsDescending(false, true);
 
             entity.HasOne(t => t.User)
-                  .WithMany(u => u.CoinTransactions)
+                  .WithMany(u => u.CreditTransactions)
                   .HasForeignKey(t => t.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
 

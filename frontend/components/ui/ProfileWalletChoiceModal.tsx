@@ -10,14 +10,14 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { CoinIcon } from '@/components/ui/CoinIcon';
+import { CreditIcon } from '@/components/ui/CreditIcon';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 
 interface ProfileWalletChoiceModalProps {
   visible: boolean;
-  coinBalance: number;
+  creditBalance: number;
   onChooseProfile: () => void;
   onChooseWallet: () => void;
   onDismiss: () => void;
@@ -25,7 +25,7 @@ interface ProfileWalletChoiceModalProps {
 
 export function ProfileWalletChoiceModal({
   visible,
-  coinBalance,
+  creditBalance,
   onChooseProfile,
   onChooseWallet,
   onDismiss,
@@ -107,9 +107,9 @@ export function ProfileWalletChoiceModal({
               accessibilityRole="button"
               accessibilityLabel={t('wallet.choice.wallet')}
             >
-              <CoinIcon size={22} />
+              <CreditIcon size={22} />
               <Text style={styles.choiceLabel}>{t('wallet.choice.wallet')}</Text>
-              <Text style={styles.balanceBadge}>{coinBalance}</Text>
+              <Text style={styles.balanceBadge}>{creditBalance}</Text>
             </Pressable>
           </View>
         </Animated.View>

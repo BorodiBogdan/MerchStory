@@ -88,7 +88,7 @@ public static class PrintRoutes
                 if (!deduction.Succeeded)
                 {
                     return Results.Json(
-                        new { detail = deduction.Error ?? "Insufficient coins." },
+                        new { detail = deduction.Error ?? "Insufficient credits." },
                         statusCode: StatusCodes.Status402PaymentRequired);
                 }
             }
@@ -316,7 +316,7 @@ public static class PrintRoutes
 
     // Returns the smallest available Real-ESRGAN scale (1, 2, or 4) needed to
     // hit ~300 DPI on both edges for the chosen paper size. 1 means the source
-    // is already print-ready and no upscale (or coin charge) is required.
+    // is already print-ready and no upscale (or credit charge) is required.
     private static int RequiredScale(byte[] imageBytes, string paperSize)
     {
         if (!RequiredPixels300Dpi.TryGetValue(paperSize, out (int Short, int Long) needed))

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CoinIcon } from '@/components/ui/CoinIcon';
+import { CreditIcon } from '@/components/ui/CreditIcon';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
@@ -28,7 +28,7 @@ export default function WalletScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const t = useT();
-  const { coinBalance, setCoinBalance } = useAuth();
+  const { creditBalance, setCreditBalance } = useAuth();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [transactions, setTransactions] = useState<WalletTransaction[] | null>(null);
@@ -52,11 +52,11 @@ export default function WalletScreen() {
       setTransactions(firstPage.items);
       setTotal(firstPage.total);
       setPage(1);
-      await setCoinBalance(summary.balance);
+      await setCreditBalance(summary.balance);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load wallet');
     }
-  }, [setCoinBalance]);
+  }, [setCreditBalance]);
 
   const goToPage = useCallback(
     async (next: number) => {
@@ -131,7 +131,7 @@ export default function WalletScreen() {
         </Pressable>
         <View style={styles.headerTitleBlock}>
           <View style={styles.eyebrowRow}>
-            <CoinIcon size={14} />
+            <CreditIcon size={14} />
             <Text style={styles.eyebrow}>{t('wallet.eyebrow')}</Text>
           </View>
           <Text style={styles.title}>{t('wallet.title')}</Text>
@@ -142,8 +142,8 @@ export default function WalletScreen() {
       <View style={styles.balanceCard}>
         <Text style={styles.balanceLabel}>{t('wallet.balance.label')}</Text>
         <View style={styles.balanceValueRow}>
-          <CoinIcon size={32} />
-          <Text style={styles.balanceValue}>{coinBalance}</Text>
+          <CreditIcon size={32} />
+          <Text style={styles.balanceValue}>{creditBalance}</Text>
           <Text style={styles.balanceUnit}>{t('wallet.balance.unit')}</Text>
         </View>
       </View>
