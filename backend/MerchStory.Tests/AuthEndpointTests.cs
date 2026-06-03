@@ -1,12 +1,15 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using MerchStory.Tests.Fakes;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
+using MerchStoryAPI.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -74,13 +77,20 @@ public class AuthEndpointTests : IDisposable
                     .BuildServiceProvider();
                 services.AddDbContext<AppDbContext>(options =>
                     options.UseInMemoryDatabase(dbName)
-                           .UseInternalServiceProvider(inMemoryProvider));
+                           .UseInternalServiceProvider(inMemoryProvider)
+                           .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
 
                 services.RemoveAll<UserManager<AppUser>>();
                 services.AddSingleton(this.userManagerMock.Object);
 
                 services.RemoveAll<SignInManager<AppUser>>();
                 services.AddSingleton(this.signInManagerMock.Object);
+
+                // Keep the suite offline: the generate-image endpoint resolves
+                // IBlobStorage, which otherwise builds a real Azure client from
+                // appsettings. Tests must use mocks, never real storage.
+                services.RemoveAll<IBlobStorage>();
+                services.AddSingleton<IBlobStorage, InMemoryBlobStorage>();
             });
         });
 
