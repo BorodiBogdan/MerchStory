@@ -1837,11 +1837,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
       // so we fetch the SAS URL and re-encode here. The cache stays URL-based.
       const res = await fetch(bytes.imageUrl);
       const blob = await res.blob();
-      const base64: string = await new Promise((resolve) => {
+      const base64: string = await new Promise((resolve, reject) => {
         const reader = new FileReader();
+        reader.onerror = () => reject(reader.error ?? new Error('Failed to read wallpaper.'));
         reader.onloadend = () => resolve((reader.result as string).split(',')[1] ?? '');
         reader.readAsDataURL(blob);
       });
+      if (!base64) throw new Error('Failed to read wallpaper.');
       galleryImageCache.prime(item.id, base64, bytes.mimeType);
       setWallpaperBase64(base64);
       setWallpaperStage('confirmed');
