@@ -529,6 +529,7 @@ const en = {
   // Chip option labels
   'studio.layoutShowcaseLabel': 'Showcase',
   'studio.layoutStoryLabel': 'Story',
+  'studio.themeNoneLabel': 'None (let AI decide)',
   'studio.themeBrandLabel': 'Brand Colors',
   'studio.themeVibrantLabel': 'Vibrant',
   'studio.themeMonoLabel': 'Monochrome',

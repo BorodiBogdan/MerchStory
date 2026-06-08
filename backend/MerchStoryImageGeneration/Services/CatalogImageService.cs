@@ -5,11 +5,13 @@ namespace MerchStoryImageGeneration.Services;
 internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalogImageService
 {
     private const string SystemContext =
-        "You are an award-winning art director from a top creative studio (think Wieden+Kennedy, Pentagram, Mother). " +
-        "You design Instagram and Facebook ad campaigns that go viral for their VISUAL QUALITY — work that feels like " +
-        "editorial magazine spreads, premium e-commerce hero shots, and curated luxury catalogs. " +
-        "Never AI clipart, never generic stock-graphic, never busy. " +
-        "Every image you produce could be the lead post of a premium brand's social feed and stop a viewer's thumb mid-scroll. " +
+        "You are a talented art director who designs Instagram and Facebook ad campaigns for everyday shops and small businesses. " +
+        "Your work looks COOL and modern and has broad, mainstream appeal — it sells to ordinary people of every kind, " +
+        "not just an elite or luxury niche. It is polished, confident, and stylish without being cold, snobby, or exclusive. " +
+        "Crucially, it never looks like cheap, generic AI-generated garbage: no clipart, no stock-graphic blandness, no clutter, " +
+        "no plastic over-rendered look. Clean, well-composed, genuinely good-looking design that a regular person scrolling " +
+        "their feed would find attractive and trustworthy and want to buy from. " +
+        "Every image should be striking enough to stop a viewer's thumb mid-scroll. " +
         "Never add watermarks, placeholders, or lorem ipsum text.";
 
     public CatalogImageService(IImageProvider provider)
@@ -43,35 +45,42 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
 
     private static string BackgroundStyleHint(string style) =>
         string.Equals(style, "Realistic", StringComparison.OrdinalIgnoreCase)
-            ? "Background style: a CINEMATIC EDITORIAL ENVIRONMENT — staged like a high-end product photoshoot for a premium brand campaign. " +
-              "Soft directional key light from one side, gentle ambient fill, considered staging — a curated retail moment, " +
-              "not a busy shelf or cluttered storefront. Materials feel real and tactile: matte surfaces, natural wood, raw stone, brushed metal, linen, " +
-              "warm paper — never plastic shine, never glossy reflections. Props are minimal, intentional, and tonally aligned with the brand. " +
-              "Think the moodboard of a Kinfolk shoot or an Aesop in-store window. "
-            : "Background style: EDITORIAL GRAPHIC DESIGN at the level of an Apple product page, an Aesop web banner, or a Kinfolk hero spread. " +
-              "Solid color blocks or soft tonal gradients, refined geometric accents, generous negative space, magazine-quality typography. " +
+            ? "Background style: a GOOD-LOOKING REAL-WORLD SETTING — staged like a stylish but down-to-earth product photoshoot " +
+              "with broad mainstream appeal. Nice natural light, pleasant ambient fill, clean considered staging — an attractive everyday moment, " +
+              "not a busy shelf or cluttered storefront. Materials feel real and tactile: natural wood, linen, ceramic, fresh paper, soft fabric, " +
+              "sunlit surfaces — never plastic shine, never cheap glossy reflections. Props are simple, relatable, and tonally aligned with the scene. " +
+              "Cool and appealing to ordinary people, not sterile, not elite, not luxury-exclusive. "
+            : "Background style: CLEAN, COOL GRAPHIC DESIGN with broad mainstream appeal — the kind of stylish, modern social post " +
+              "that looks great to everyone, not just a luxury niche. Confident color blocks or smooth gradients, simple modern accents, " +
+              "comfortable negative space, clear good-looking typography. " +
               "No real-world environment, no shelves, no store fixtures, no physical props. " +
-              "The backdrop reads as deliberate graphic design — restrained, confident, never clipart, never decorative-for-decoration's-sake. ";
+              "The backdrop reads as deliberate, attractive design — modern and approachable, never cold, never elite, never clipart, " +
+              "never cheap AI-looking, never decorative-for-decoration's-sake. ";
 
     private static string CreativeDirectionBlock() =>
         "🎨 CREATIVE DIRECTION — non-negotiable aesthetic standard for every pixel of this image:\n\n" +
         "COMPOSITION: rule-of-thirds or intentional asymmetric balance. Generous negative space — let the design breathe. " +
         "One clear hero / focal hierarchy; the eye should know exactly where to land first, second, third. Never cram the canvas. " +
         "Avoid dead-center symmetry unless the composition explicitly calls for it.\n\n" +
-        "TYPOGRAPHY: editorial hierarchy — at most one confident display headline (large, weighty, refined), with smaller supporting type below it. " +
-        "Tight, deliberate kerning. Modern geometric sans-serif (Helvetica / Inter / Aktiv-Grotesk / Söhne feel) — or a refined serif " +
-        "(Canela / GT Sectra / Tiempos feel) when the brand is editorial / luxury / culinary. " +
+        "TYPOGRAPHY: clean, confident hierarchy — but DO NOT invent any headline, tagline, slogan, or marketing copy. " +
+        "🚫 NO MADE-UP TEXT: never write phrases like \"Premium Snacking Delights\", \"Discover Your Perfect Crunch\", " +
+        "\"Now Available\", \"Shop Now\", or any other invented headline/subtitle/CTA. The image is NOT allowed to contain " +
+        "marketing sentences you came up with. The ONLY text permitted is: the brand name / slogan and contact details from the " +
+        "brand identity block (only if provided, only where appropriate), and the product names and prices exactly as instructed. " +
+        "If no slogan was provided, there is NO headline — let the products and layout carry the design with empty space instead. " +
+        "When text does appear, use tight deliberate kerning, a modern geometric sans-serif (Helvetica / Inter / Aktiv-Grotesk feel). " +
         "Flat typography only — no decorative outlines, no gradients on text, no drop shadows on text, no chrome / metallic effects, " +
         "no clipart letterforms, no comic-book bubbles. Letters are crisp and confidently placed.\n\n" +
         "LIGHTING & DEPTH: soft, directional, sculpted illumination — magazine-quality. A subtle gradient of light across the scene " +
         "for depth. Never flat fluorescent lighting, never harsh on-camera flash look, never the over-evenly-lit AI-render look.\n\n" +
-        "COLOR DISCIPLINE: a tight palette of 3 to 5 colors maximum. Harmonious and intentional. " +
-        "Brand colors used confidently as flat color blocks, refined accents, or the dominant backdrop — not sprinkled randomly. " +
+        "COLOR DISCIPLINE: use whatever colors make the design look coolest — there is no fixed color count. " +
+        "Commit to a confident, striking palette with real attitude: colors that pop, contrast with purpose, and feel art-directed by someone with serious taste. " +
         "Avoid the muddy AI-pastel-everywhere look, avoid rainbow chaos, avoid jarring complementary clashes.\n\n" +
         "TEXTURE & MATERIAL: subtle grain, matte paper feel, soft fabric weave, or a delicate gradient — adds richness over flat backgrounds. " +
         "Never plastic-glossy, never airbrushed, never the smooth-3D-render look (unless the product itself is glossy / 3D — then match the product, not the backdrop).\n\n" +
-        "MOOD: aspirational, calm, confident. The image whispers premium, it does not shout. " +
-        "Never \"salesy\", never crowded with decoration, never carnival-loud.\n\n" +
+        "MOOD: confident, appealing, and cool, with broad mainstream taste — attractive to ordinary people of every kind, " +
+        "not aimed at an elite or luxury niche. Stylish but approachable. " +
+        "Never \"salesy\", never crowded with decoration, never carnival-loud, never cold or snobby.\n\n" +
         "🚫 ANTI-AI / ANTI-GENERIC GUARDRAILS — these are the hallmarks of forgettable AI catalog imagery. None may appear:\n" +
         "- No random sparkles, stars, twinkles, glitters, light flares, lens flares, sun rays, or god-rays.\n" +
         "- No generic glow effects, neon halos, or auras around objects/text.\n" +
@@ -82,8 +91,10 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
         "- No fake bokeh circles, blurred light orbs, or particle effects.\n" +
         "- No plastic-toy surfaces, fake-3D bevels, or chrome shine on text.\n" +
         "- No busy clutter, no \"more is more\" — restraint over decoration, every time.\n\n" +
-        "REFERENCE MOODBOARD (in order of preference, depending on brand fit): Apple product pages, Aesop web banners, Glossier social campaigns, " +
-        "Le Labo packaging, Lululemon lookbooks, IKEA print catalogs, Kinfolk magazine spreads, A24 film posters, Muji catalog photography.\n\n";
+        "REFERENCE MOODBOARD (depending on brand fit): clean, cool, broadly-loved consumer brand campaigns — " +
+        "the kind of stylish, well-designed social posts and print catalogs that mainstream brands like IKEA, Muji, Trader Joe's, " +
+        "Spotify, or a popular local cafe would run. Modern and good-looking, with wide everyday appeal — not luxury, not elite, " +
+        "not exclusive, and never cheap AI-looking clipart.\n\n";
 
     private static string FormatGuidance(string format) =>
         format switch
@@ -107,13 +118,41 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             _ => string.Empty,
         };
 
-    private static string ColorThemeGuidance(string theme)
+    // "None" (or empty) means the user wants no fixed color direction — let the AI choose.
+    private static bool IsNoTheme(string? theme) =>
+        string.IsNullOrWhiteSpace(theme) || string.Equals(theme, "None", StringComparison.OrdinalIgnoreCase);
+
+    private static string ColorThemeGuidance(string theme, string? brandColors, string backgroundStyle)
     {
+        if (IsNoTheme(theme))
+        {
+            bool socialPost = !string.Equals(backgroundStyle, "Realistic", StringComparison.OrdinalIgnoreCase);
+            if (socialPost)
+            {
+                return "Color-theme art direction (auto — no fixed theme, YOU choose, and it must look COOL and SELL): " +
+                       "do NOT fill the canvas with a single flat color, and do NOT leave the products floating on a plain, empty, or generic backdrop. " +
+                       "Study the provided product photos and pull a cohesive palette straight from them — sample each product's own dominant and accent colors, then build a bold, high-impact backdrop around them so it feels purpose-made for THESE exact products. Use as few or as many colors as the design needs — one striking color, or a dozen — whatever looks coolest; there is no color-count limit here. " +
+                       "Make the backdrop visually striking and energetic: dynamic overlapping color blocks, bold diagonal or asymmetric cuts, oversized graphic shapes, halftone or risograph-style print texture, confident retail-poster layouts with real visual punch. " +
+                       "Think a standout streetwear drop, a music-festival poster, or a viral brand campaign — eye-catching and full of attitude, NOT minimal, NOT timid, NOT plain. " +
+                       "Use FLAT solid-color technique to achieve it (this keeps it crisp and print-quality). " +
+                       "🚫 Avoid every hallmark of cheap AI imagery: NO gradients (including duotone washes, holographic, rainbow, or sunset gradients), NO glows, halos, auras, neon, light flares, sparkles, or bokeh, NO soft blurred light, NO over-rendered glossy 3D look. " +
+                       "The backdrop must look deliberately art-directed and human-designed — bold and cool, never a flat fill, never empty, never generic, never AI-looking.\n\n";
+            }
+
+            return "Color-theme art direction (auto — no fixed theme, YOU choose to best flatter the products): " +
+                   "sample the products' own colors from the provided photos and build a harmonious, complementary scheme and real-world setting around them, " +
+                   "so the staged scene feels cohesive and intentional — never generic, never a plain empty backdrop. " +
+                   "Keep it a believable photographic setting with natural light and real materials — no gradients, glows, halos, neon, or other artificial AI-looking effects.\n\n";
+        }
+
         if (string.Equals(theme, "Brand Colors", StringComparison.OrdinalIgnoreCase))
         {
+            string palette = string.IsNullOrWhiteSpace(brandColors)
+                ? string.Empty
+                : $" The brand palette is: {brandColors} — build the composition on exactly these colors.";
             return "Color-theme art direction (Brand Colors): lean confidently into the brand palette as the dominant compositional structure — " +
                    "use brand colors as large flat color blocks (a backdrop panel, a typography wash, an accent third) or as refined accent details. " +
-                   "Never dilute the brand into a generic rainbow; the palette IS the brand voice.\n\n";
+                   "Never dilute the brand into a generic rainbow; the palette IS the brand voice." + palette + "\n\n";
         }
 
         if (string.Equals(theme, "Vibrant", StringComparison.OrdinalIgnoreCase))
@@ -150,8 +189,9 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
     }
 
     private static string FinalQualityBar() =>
-        "FINAL BAR: this image must look like the lead post of a premium brand's Instagram feed — " +
-        "visually stunning, confidently restrained, and instantly more polished than 99% of small-business social-media content. " +
+        "FINAL BAR: this image must look like the lead post of a cool, well-designed brand with broad mainstream appeal — " +
+        "genuinely good-looking, confidently restrained, attractive to ordinary people of every kind, and instantly more polished " +
+        "than 99% of small-business social-media content (while never looking like cheap, generic AI output). " +
         "If a viewer scrolling through their feed wouldn't stop on this image, the design has failed.";
 
     private static string BuildPrompt(CatalogImageRequest r)
@@ -195,9 +235,9 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             BrandContextBlock(r.BrandContext) +
             logoNote +
             $"Create a stunning, scroll-stopping product catalog ad image in {r.Format} format. " +
-            $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}.\n\n" +
+            (IsNoTheme(r.ColorTheme) ? "\n\n" : $"Color theme: {r.ColorTheme}.\n\n") +
             FormatGuidance(r.Format) +
-            ColorThemeGuidance(r.ColorTheme) +
+            ColorThemeGuidance(r.ColorTheme, r.BrandColors, r.BackgroundStyle) +
             CreativeDirectionBlock() +
             productsClause +
             imageNote +
@@ -326,9 +366,9 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             productRefNote +
             nameSuppression +
             $"Create a stunning, scroll-stopping product catalog ad image in {r.Format} format. " +
-            $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}. " + priceLine + "\n\n" +
+            (IsNoTheme(r.ColorTheme) ? string.Empty : $"Color theme: {r.ColorTheme}. ") + priceLine + "\n\n" +
             FormatGuidance(r.Format) +
-            ColorThemeGuidance(r.ColorTheme) +
+            ColorThemeGuidance(r.ColorTheme, r.BrandColors, r.BackgroundStyle) +
             CreativeDirectionBlock() +
             BackgroundStyleHint(r.BackgroundStyle) + "\n" +
             "Render the products, scene, backdrop, props, brand elements, logo, and pricing badges naturally — " +
@@ -409,77 +449,105 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             return string.Empty;
         }
 
-        var lines = new List<string>();
+        // Text that MAY be rendered on the image when relevant (brand identity + contact).
+        var renderable = new List<string>();
         if (!string.IsNullOrWhiteSpace(ctx.BrandName))
         {
-            lines.Add($"- Brand: {ctx.BrandName}");
+            renderable.Add($"- Brand name: {ctx.BrandName}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.Slogan))
         {
-            lines.Add($"- Slogan: {ctx.Slogan}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ctx.BrandColors))
-        {
-            lines.Add($"- Brand colors: {ctx.BrandColors}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ctx.BusinessDomain))
-        {
-            lines.Add($"- Business domain: {ctx.BusinessDomain}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ctx.ShopType))
-        {
-            lines.Add($"- Shop type: {ctx.ShopType}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ctx.TargetAudience))
-        {
-            lines.Add($"- Target audience: {ctx.TargetAudience}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ctx.Competitors))
-        {
-            lines.Add($"- Competitors: {ctx.Competitors}");
+            renderable.Add($"- Slogan: {ctx.Slogan}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.PhoneNumber))
         {
-            lines.Add($"- Phone: {ctx.PhoneNumber}");
+            renderable.Add($"- Phone: {ctx.PhoneNumber}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.Email))
         {
-            lines.Add($"- Email: {ctx.Email}");
+            renderable.Add($"- Email: {ctx.Email}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.Addresses))
         {
-            lines.Add($"- Address: {ctx.Addresses}");
+            renderable.Add($"- Address: {ctx.Addresses}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.InstagramHandle))
         {
-            lines.Add($"- Instagram: {ctx.InstagramHandle}");
+            renderable.Add($"- Instagram: {ctx.InstagramHandle}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.FacebookHandle))
         {
-            lines.Add($"- Facebook: {ctx.FacebookHandle}");
+            renderable.Add($"- Facebook: {ctx.FacebookHandle}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.TikTokHandle))
         {
-            lines.Add($"- TikTok: {ctx.TikTokHandle}");
+            renderable.Add($"- TikTok: {ctx.TikTokHandle}");
         }
 
-        if (lines.Count == 0)
+        // Signals that steer the DESIGN ONLY and must never appear as written text.
+        // Brand colors are intentionally NOT included here: for catalogs the palette is
+        // driven solely by the "Brand Colors" color theme (see ColorThemeGuidance).
+        var designOnly = new List<string>();
+        if (!string.IsNullOrWhiteSpace(ctx.BusinessDomain))
+        {
+            designOnly.Add($"- Business domain: {ctx.BusinessDomain}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ctx.ShopType))
+        {
+            designOnly.Add($"- Shop type: {ctx.ShopType}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ctx.TargetAudience))
+        {
+            designOnly.Add($"- Target audience: {ctx.TargetAudience}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ctx.Competitors))
+        {
+            designOnly.Add($"- Competitors: {ctx.Competitors}");
+        }
+
+        if (renderable.Count == 0 && designOnly.Count == 0)
         {
             return string.Empty;
         }
 
-        return "Brand context:\n" + string.Join("\n", lines) + "\n\n";
+        var sb = new System.Text.StringBuilder();
+
+        if (renderable.Count > 0)
+        {
+            sb.Append(
+                "Brand identity (this is the ONLY information that is ever allowed to appear as written text in the image, " +
+                "and ONLY where it naturally belongs — e.g. brand name / slogan in a header, contact details in a footer; " +
+                "do not force every field in, and never invent extra copy):\n");
+            sb.Append(string.Join("\n", renderable));
+            sb.Append("\n\n");
+        }
+
+        if (designOnly.Count > 0)
+        {
+            sb.Append(
+                "Design-only signals — use these PURELY to inform aesthetic choices (palette, mood, styling, props, " +
+                "composition, photographic treatment). They describe the business; they are NOT marketing copy. " +
+                "NONE of these words or values may be written, printed, labeled, or rendered as text ANYWHERE in the image:\n");
+            sb.Append(string.Join("\n", designOnly));
+            sb.Append("\n\n");
+        }
+
+        sb.Append(
+            "TEXT DISCIPLINE: the only text permitted in the image is — the brand identity fields listed above (used " +
+            "sparingly and only where appropriate), the product names and prices exactly as instructed elsewhere in this prompt, " +
+            "and nothing else. Do NOT invent taglines, descriptions, marketing slogans, category labels, or any words derived " +
+            "from the design-only signals. If you are unsure whether a piece of text is allowed, leave it out.\n\n");
+
+        return sb.ToString();
     }
 }

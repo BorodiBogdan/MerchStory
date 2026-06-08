@@ -64,6 +64,12 @@ public static class ImageGenerationRoutes
             List<string>? textFields = StripLogoField(request.BrandContextFields);
             BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
 
+            // The "Brand Colors" color theme is the single place the shop palette is chosen;
+            // resolve it here so the prompt can build on the actual hex values.
+            string? brandColorsForTheme = string.Equals(request.ColorTheme, "Brand Colors", StringComparison.OrdinalIgnoreCase)
+                ? await FetchBrandColorsAsync(db, userId)
+                : null;
+
             string resolvedLanguage = await ResolveLanguageAsync(db, userId, request.Language);
 
             // Resolve product photos from blob storage by id, scoped to this user.
@@ -80,7 +86,7 @@ public static class ImageGenerationRoutes
 
                 WalletCharge charge = new(wallet, userId, 1, "Catalog generation", debit.NewBalance!.Value);
                 return await HandleGeneration(
-                    () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext, logoBase64, resolvedCurrency, resolvedLanguage, productImages)),
+                    () => catalogService.GenerateCatalogImageAsync(request.ToServiceRequest(brandContext, logoBase64, resolvedCurrency, resolvedLanguage, productImages, brandColors: brandColorsForTheme)),
                     logger,
                     charge);
             }
@@ -138,6 +144,7 @@ public static class ImageGenerationRoutes
                 logoBase64,
                 resolvedCurrency,
                 resolvedLanguage,
+                brandColorsForTheme,
                 assignments,
                 productImages,
                 catalogService,
@@ -599,6 +606,7 @@ public static class ImageGenerationRoutes
         string? logoBase64,
         string resolvedCurrency,
         string resolvedLanguage,
+        string? brandColorsForTheme,
         IReadOnlyList<ProductMarkerAssignment> assignments,
         IReadOnlyDictionary<Guid, string> productImages,
         ICatalogImageService catalogService,
@@ -615,7 +623,8 @@ public static class ImageGenerationRoutes
                 resolvedCurrency,
                 resolvedLanguage,
                 productImages,
-                assignments);
+                assignments,
+                brandColorsForTheme);
 
             ImageGenerationResult rawResult = await catalogService.GenerateCatalogImageAsync(preserveRequest);
             IReadOnlyList<CatalogProductItem> products = preserveRequest.Products;
@@ -807,7 +816,6 @@ internal sealed record CatalogProductApiItem(Guid Id, string Name, decimal Price
 
 internal sealed record CatalogImageApiRequest(
     List<CatalogProductApiItem>? Products,
-    string Layout,
     string ColorTheme,
     string Format,
     bool ShowPrices,
@@ -824,13 +832,13 @@ internal sealed record CatalogImageApiRequest(
         string currency,
         string language,
         IReadOnlyDictionary<Guid, string> productImages,
-        IReadOnlyList<ProductMarkerAssignment>? markerAssignments = null) =>
+        IReadOnlyList<ProductMarkerAssignment>? markerAssignments = null,
+        string? brandColors = null) =>
         new(
             this.Products!.Select(p => new CatalogProductItem(
                 p.Name,
                 p.Price,
                 productImages.GetValueOrDefault(p.Id))).ToList(),
-            this.Layout,
             this.ColorTheme,
             this.Format,
             this.ShowPrices,
@@ -841,7 +849,8 @@ internal sealed record CatalogImageApiRequest(
             this.PreserveProductImages,
             markerAssignments,
             this.BackgroundStyle,
-            this.ShowProductNames);
+            this.ShowProductNames,
+            brandColors);
 }
 
 internal sealed record WallpaperApiRequest(string Prompt, string Format, bool IncludeLogo, List<string>? BrandContextFields, string? Language = null)

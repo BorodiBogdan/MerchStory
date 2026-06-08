@@ -537,6 +537,7 @@ const ro: Dictionary = {
   // Chip option labels
   'studio.layoutShowcaseLabel': 'Vitrină',
   'studio.layoutStoryLabel': 'Story',
+  'studio.themeNoneLabel': 'Niciuna (lasă AI să decidă)',
   'studio.themeBrandLabel': 'Culorile brandului',
   'studio.themeVibrantLabel': 'Vibrant',
   'studio.themeMonoLabel': 'Monocrom',

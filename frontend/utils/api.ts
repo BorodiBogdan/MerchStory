@@ -316,7 +316,6 @@ export interface CatalogImageProduct {
 
 export interface GenerateCatalogImageParams {
   products: CatalogImageProduct[];
-  layout: string;
   colorTheme: string;
   format: string;
   showPrices: boolean;

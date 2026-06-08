@@ -524,6 +524,7 @@ function getLayoutOptions(tr: TranslateFn) {
 }
 function getColorOptions(tr: TranslateFn) {
   return [
+    { value: 'None', label: tr('studio.themeNoneLabel') },
     { value: 'Brand Colors', label: tr('studio.themeBrandLabel') },
     { value: 'Vibrant', label: tr('studio.themeVibrantLabel') },
     { value: 'Monochrome', label: tr('studio.themeMonoLabel') },
@@ -937,9 +938,6 @@ function ResultPreviewPanel({
   if (generating) {
     return (
       <View style={styles.previewPlaceholder}>
-        <View style={styles.previewHaloTR} pointerEvents="none" />
-        <View style={styles.previewHaloBL} pointerEvents="none" />
-        <View style={styles.previewHaloSpot} pointerEvents="none" />
         <View style={styles.previewIconCircle}>
           <ActivityIndicator size="small" color={colors.accent.primary} />
         </View>
@@ -1013,9 +1011,6 @@ function ResultPreviewPanel({
   }
   return (
     <View style={styles.previewPlaceholder}>
-      <View style={styles.previewHaloTR} pointerEvents="none" />
-      <View style={styles.previewHaloBL} pointerEvents="none" />
-      <View style={styles.previewHaloSpot} pointerEvents="none" />
       <View style={styles.previewIconCircle}>
         <Ionicons name="sparkles" size={30} color={colors.accent.primary} />
       </View>
@@ -1520,7 +1515,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [layout, setLayout] = useState('Showcase');
   const [colorTheme, setColorTheme] = useState('Brand Colors');
-  const [catalogFormat, setCatalogFormat] = useState('Square');
+  const [catalogFormat, setCatalogFormat] = useState('Poster');
   const [showPrices, setShowPrices] = useState(true);
   const [showProductNames, setShowProductNames] = useState(true);
   const [showCatalogProductNames, setShowCatalogProductNames] = useState(false);
@@ -1596,16 +1591,18 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         currency: p.currency,
       }));
       const catalogCurrency = chosen[0].currency;
+      // Brand colors are driven by the "Brand Colors" color theme, not the context
+      // chips, so they are excluded from the catalog's brand-context fields.
+      const catalogFields = catalogContextFields.filter((k) => k !== 'brandColors');
       const result = await generateCatalogImage({
         products: productsWithImages,
-        layout,
         colorTheme,
         format: catalogFormat,
         showPrices,
         showProductNames: showCatalogProductNames,
         backgroundStyle,
         preserveProductImages,
-        brandContextFields: catalogContextFields.length > 0 ? catalogContextFields : undefined,
+        brandContextFields: catalogFields.length > 0 ? catalogFields : undefined,
         currency: catalogCurrency,
       });
       setCatalogResult(result);
@@ -1852,6 +1849,31 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     [shopProfile, tr]
   );
 
+  // Catalogs pick brand colors through the "Brand Colors" color theme, so the brand
+  // colors chip is dropped from the catalog brand-context list to avoid duplication.
+  const catalogContextItems = useMemo(
+    () => contextItems.filter((i) => i.key !== 'brandColors'),
+    [contextItems]
+  );
+
+  // A realistic photographic background can't be art-directed onto the brand palette
+  // the way a graphic social post can, so the "Brand Colors" theme is hidden for it.
+  const catalogColorOptions = useMemo(
+    () =>
+      backgroundStyle === 'Realistic'
+        ? COLOR_OPTIONS.filter((o) => o.value !== 'Brand Colors')
+        : COLOR_OPTIONS,
+    [COLOR_OPTIONS, backgroundStyle]
+  );
+
+  // Switching to a realistic background while "Brand Colors" is selected falls back to
+  // letting the AI decide, so an unavailable theme is never sent.
+  useEffect(() => {
+    if (backgroundStyle === 'Realistic' && colorTheme === 'Brand Colors') {
+      setColorTheme('None');
+    }
+  }, [backgroundStyle, colorTheme]);
+
   const toggleCatalogField = useCallback((key: string) => {
     setCatalogContextFields((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
@@ -2069,11 +2091,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             {showBackgroundStyleHelp && (
               <Text style={styles.toggleHelper}>{t('studio.backgroundStyle.helper')}</Text>
             )}
-            <OptionLabel label={t('studio.opt.layout')} />
-            <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
             <OptionLabel label={t('studio.opt.colorTheme')} />
             <SidebarOptionGroup
-              options={COLOR_OPTIONS}
+              options={catalogColorOptions}
               selected={colorTheme}
               onSelect={setColorTheme}
             />
@@ -2087,7 +2107,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
               <Text style={styles.toggleHelper}>{t('studio.formatPosterHint')}</Text>
             )}
             <BrandContextSection
-              items={contextItems}
+              items={catalogContextItems}
               selected={catalogContextFields}
               onToggle={toggleCatalogField}
             />
@@ -3380,16 +3400,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     {showBackgroundStyleHelp && (
                       <Text style={styles.toggleHelper}>{t('studio.backgroundStyle.helper')}</Text>
                     )}
-                    <OptionLabel label={t('studio.opt.layout')} />
-                    <ChipSelector
-                      options={LAYOUT_OPTIONS}
-                      selected={layout}
-                      onSelect={setLayout}
-                      accessibilityLabel={t('studio.opt.layout')}
-                    />
                     <OptionLabel label={t('studio.opt.colorTheme')} />
                     <ChipSelector
-                      options={COLOR_OPTIONS}
+                      options={catalogColorOptions}
                       selected={colorTheme}
                       onSelect={setColorTheme}
                       accessibilityLabel={t('studio.opt.colorTheme')}
@@ -3406,10 +3419,10 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     )}
                   </View>
 
-                  {contextItems.length > 0 && (
+                  {catalogContextItems.length > 0 && (
                     <View style={styles.mobileSection}>
                       <BrandContextSection
-                        items={contextItems}
+                        items={catalogContextItems}
                         selected={catalogContextFields}
                         onToggle={toggleCatalogField}
                       />
@@ -4775,38 +4788,6 @@ function makeStyles(
       backgroundColor: colors.bg.base,
       position: 'relative',
       overflow: 'hidden',
-    },
-    // Ambient decorative blobs on preview placeholder — corner-positioned, very
-    // low opacity so the icon+text stay the focal point.
-    previewHaloTR: {
-      position: 'absolute',
-      top: -90,
-      right: -90,
-      width: 240,
-      height: 240,
-      borderRadius: 120,
-      backgroundColor: colors.accent.primary,
-      opacity: 0.09,
-    },
-    previewHaloBL: {
-      position: 'absolute',
-      bottom: -100,
-      left: -100,
-      width: 220,
-      height: 220,
-      borderRadius: 110,
-      backgroundColor: colors.accent.secondary,
-      opacity: 0.07,
-    },
-    previewHaloSpot: {
-      position: 'absolute',
-      top: 30,
-      left: 40,
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: colors.accent.primary,
-      opacity: 0.05,
     },
     previewIconCircle: {
       width: 72,

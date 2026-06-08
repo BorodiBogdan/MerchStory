@@ -4,8 +4,7 @@ public sealed record CatalogProductItem(string Name, decimal Price, string? Imag
 
 public sealed record CatalogImageRequest(
     IReadOnlyList<CatalogProductItem> Products,
-    string Layout,      // "Grid" | "Showcase" | "Minimal" | "Story"
-    string ColorTheme,  // "Brand Colors" | "Vibrant" | "Monochrome" | "Dark"
+    string ColorTheme,  // "None" (let AI decide) | "Brand Colors" | "Vibrant" | "Monochrome" | "Dark"
     string Format,      // "Poster" (A4, 1:√2) | "Square 1:1" | "Portrait 4:5" | "Story 9:16"
     bool ShowPrices,
     BrandContext? BrandContext = null,
@@ -15,6 +14,7 @@ public sealed record CatalogImageRequest(
     bool PreserveProductImages = false,
     IReadOnlyList<ProductMarkerAssignment>? MarkerAssignments = null,
     string BackgroundStyle = "SocialPost",  // "Realistic" | "SocialPost"
-    bool ShowProductNames = false);
+    bool ShowProductNames = false,
+    string? BrandColors = null);  // shop palette, only used when ColorTheme == "Brand Colors"
 
 public sealed record ProductMarkerAssignment(string ProductName, string MarkerHex);
