@@ -930,6 +930,38 @@ export async function searchReferenceImages(
   return response.json() as Promise<ReferenceImage[]>;
 }
 
+export async function searchReferenceImagesByText(
+  query: string,
+  topK = 10
+): Promise<ReferenceImage[]> {
+  const response = await fetchWithAuth(`${API_URL}/reference-images/search-text`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, topK }),
+  });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Text search failed (${response.status})`);
+  }
+  return response.json() as Promise<ReferenceImage[]>;
+}
+
+// Fetch a reference image's bytes through the API (server reads blob storage).
+// Used when picking a reference for a product: fetching the blob SAS URL directly
+// from the browser fails CORS, so we proxy the bytes through our own origin.
+export async function fetchReferenceImageData(
+  id: string
+): Promise<{ imageBase64: string; mimeType: string }> {
+  const response = await fetchWithAuth(`${API_URL}/reference-images/${id}/image`, {
+    method: 'GET',
+  });
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(err || `Failed to load reference image (${response.status})`);
+  }
+  return response.json() as Promise<{ imageBase64: string; mimeType: string }>;
+}
+
 export async function removeBackground(imageBase64: string): Promise<RemoveBackgroundResponse> {
   const response = await fetchWithAuth(`${API_URL}/products/remove-background`, {
     method: 'POST',
