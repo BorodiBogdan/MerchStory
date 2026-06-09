@@ -310,33 +310,81 @@ public static class ReferenceImageRoutes
                 return Results.Problem("Failed to process query image.", statusCode: 500);
             }
 
-            var matches = await db.ReferenceImages
-                .Include(r => r.Category)
-                    .ThenInclude(c => c!.ParentCategory)
-                        .ThenInclude(c => c!.ParentCategory)
-                .OrderBy(r => r.Embedding.CosineDistance(queryEmbedding))
-                .Take(topK)
-                .Select(r => new
-                {
-                    r.Id,
-                    r.Name,
-                    r.Category,
-                    r.ImageBlobKey,
-                    Similarity = 1.0 - (double)r.Embedding.CosineDistance(queryEmbedding),
-                })
-                .ToListAsync();
-
-            var results = matches
-                .Select(m => new SearchResult(
-                    m.Id,
-                    m.Name,
-                    CategoryResolver.BuildPath(m.Category),
-                    string.IsNullOrEmpty(m.ImageBlobKey) ? null : blobs.GetReadUrl(m.ImageBlobKey, ReferenceSasTtl).ToString(),
-                    m.Similarity))
-                .ToList();
-
+            var results = await QuerySimilarAsync(db, blobs, queryEmbedding, topK);
             return Results.Ok(results);
         }).RequireAuthorization();
+
+        // User endpoint — search the curated library by free text (CLIP text encoder),
+        // an alternative to the photo search above that maps into the same embedding space.
+        group.MapPost("/search-text", async (
+            TextSearchRequest request,
+            AppDbContext db,
+            IClipEmbeddingService clipService,
+            IBlobStorage blobs,
+            ILogger<Program> logger) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Query))
+            {
+                return Results.BadRequest("Query is required.");
+            }
+
+            int topK = Math.Clamp(request.TopK ?? 10, 1, 50);
+
+            Vector queryEmbedding;
+            try
+            {
+                queryEmbedding = clipService.EmbedText(request.Query.Trim());
+            }
+            catch (ClipServiceUnavailableException ex)
+            {
+                logger.LogWarning(ex, "Text search service unavailable while processing query.");
+                return Results.Problem(
+                    title: "Service unavailable",
+                    detail: "Text search service is currently unavailable. Please try again later.",
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to embed search query text.");
+                return Results.Problem("Failed to process query text.", statusCode: 500);
+            }
+
+            var results = await QuerySimilarAsync(db, blobs, queryEmbedding, topK);
+            return Results.Ok(results);
+        }).RequireAuthorization();
+    }
+
+    // Shared pgvector cosine search used by both the photo and text search endpoints.
+    private static async Task<List<SearchResult>> QuerySimilarAsync(
+        AppDbContext db,
+        IBlobStorage blobs,
+        Vector queryEmbedding,
+        int topK)
+    {
+        var matches = await db.ReferenceImages
+            .Include(r => r.Category)
+                .ThenInclude(c => c!.ParentCategory)
+                    .ThenInclude(c => c!.ParentCategory)
+            .OrderBy(r => r.Embedding.CosineDistance(queryEmbedding))
+            .Take(topK)
+            .Select(r => new
+            {
+                r.Id,
+                r.Name,
+                r.Category,
+                r.ImageBlobKey,
+                Similarity = 1.0 - (double)r.Embedding.CosineDistance(queryEmbedding),
+            })
+            .ToListAsync();
+
+        return matches
+            .Select(m => new SearchResult(
+                m.Id,
+                m.Name,
+                CategoryResolver.BuildPath(m.Category),
+                string.IsNullOrEmpty(m.ImageBlobKey) ? null : blobs.GetReadUrl(m.ImageBlobKey, ReferenceSasTtl).ToString(),
+                m.Similarity))
+            .ToList();
     }
 
     private static async Task<(int Saved, int Failed)> FlushBatchAsync(
@@ -432,6 +480,8 @@ public static class ReferenceImageRoutes
 internal sealed record AddReferenceImageRequest(string Name, string? CategoryPath, string ImageBase64);
 
 internal sealed record SearchRequest(string ImageBase64, int? TopK);
+
+internal sealed record TextSearchRequest(string Query, int? TopK);
 
 internal sealed record SearchResult(Guid Id, string Name, string CategoryPath, string? ImageUrl, double Similarity);
 
