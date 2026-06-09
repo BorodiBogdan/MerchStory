@@ -352,6 +352,45 @@ public static class ReferenceImageRoutes
             var results = await QuerySimilarAsync(db, blobs, queryEmbedding, topK);
             return Results.Ok(results);
         }).RequireAuthorization();
+
+        // User endpoint — return a chosen reference image's bytes as base64.
+        // The client uses this when picking a reference for a product: fetching
+        // the blob SAS URL directly from the browser fails CORS, so the bytes are
+        // proxied through the (CORS-enabled) API, which reads blob storage itself.
+        group.MapGet("/{id:guid}/image", async (
+            Guid id,
+            AppDbContext db,
+            IBlobStorage blobs,
+            CancellationToken ct) =>
+        {
+            var reference = await db.ReferenceImages
+                .Where(r => r.Id == id)
+                .Select(r => new { r.ImageBlobKey, r.ImageBase64 })
+                .FirstOrDefaultAsync(ct);
+
+            if (reference is null)
+            {
+                return Results.NotFound();
+            }
+
+            byte[] bytes;
+            if (!string.IsNullOrEmpty(reference.ImageBlobKey))
+            {
+                bytes = await blobs.DownloadAsync(reference.ImageBlobKey, ct);
+            }
+            else if (!string.IsNullOrEmpty(reference.ImageBase64))
+            {
+                bytes = DecodeBase64(reference.ImageBase64);
+            }
+            else
+            {
+                return Results.NotFound();
+            }
+
+            return Results.Ok(new ReferenceImageData(
+                Convert.ToBase64String(bytes),
+                SniffImageContentType(bytes)));
+        }).RequireAuthorization();
     }
 
     // Shared pgvector cosine search used by both the photo and text search endpoints.
@@ -484,6 +523,8 @@ internal sealed record SearchRequest(string ImageBase64, int? TopK);
 internal sealed record TextSearchRequest(string Query, int? TopK);
 
 internal sealed record SearchResult(Guid Id, string Name, string CategoryPath, string? ImageUrl, double Similarity);
+
+internal sealed record ReferenceImageData(string ImageBase64, string MimeType);
 
 internal sealed record CategoryNode(string Name, List<CategoryNode> Children);
 

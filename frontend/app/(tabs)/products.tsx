@@ -40,6 +40,7 @@ import {
   type Currency,
   currencySymbol,
   deleteProduct,
+  fetchReferenceImageData,
   formatPrice,
   type ProductDetail,
   type ProductFilters,
@@ -377,14 +378,18 @@ export default function ProductsScreen() {
 
   async function selectReferenceImage(ref: ReferenceImage) {
     if (!ref.imageUrl) return;
-    setDraftImageUri(ref.imageUrl);
-    // Reference search now returns blob URLs. We need base64 to send the bytes
-    // back as a product image — fetch+encode lazily, only when the user actually
-    // picks a reference (search result selection is rare).
+    // The search result only carries a blob SAS URL. Fetching that directly from
+    // the browser fails CORS (Azure storage doesn't allow this origin), so we pull
+    // the bytes through our own API instead and use the returned base64 both to
+    // display the image and to save it onto the product.
     try {
-      const base64 = await uriToBase64(ref.imageUrl);
-      setDraftImageBase64(base64);
+      const { imageBase64, mimeType } = await fetchReferenceImageData(ref.id);
+      setDraftImageBase64(imageBase64);
+      setDraftImageUri(`data:${mimeType};base64,${imageBase64}`);
     } catch {
+      // Couldn't load the bytes — show the blob URL so the user sees something,
+      // but leave base64 null (the product can't be saved with this image).
+      setDraftImageUri(ref.imageUrl);
       setDraftImageBase64(null);
     }
     setShowSimilarModal(false);
