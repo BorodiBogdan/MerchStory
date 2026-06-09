@@ -463,6 +463,11 @@ export interface GalleryImageBytes {
   mimeType: string;
 }
 
+export interface GalleryImageRaw {
+  imageBase64: string;
+  mimeType: string;
+}
+
 export interface GalleryFilters {
   types?: GenerationType[];
   assetType?: GalleryAssetType;
@@ -586,6 +591,18 @@ export async function fetchGalleryImage(id: string): Promise<GalleryImageBytes> 
     throw new Error(`Failed to load image (${response.status})`);
   }
   return response.json() as Promise<GalleryImageBytes>;
+}
+
+// Fetches the raw image bytes as base64 through our own API rather than the blob
+// SAS URL. Used when the caller needs the bytes in-process (e.g. inlining a saved
+// wallpaper into a catalog request): a direct browser fetch of the SAS URL is
+// CORS-blocked, but this authenticated endpoint reads the blob server-side.
+export async function fetchGalleryImageBase64(id: string): Promise<GalleryImageRaw> {
+  const response = await fetchWithAuth(`${API_URL}/gallery/${id}/image/raw`, {});
+  if (!response.ok) {
+    throw new Error(`Failed to load image (${response.status})`);
+  }
+  return response.json() as Promise<GalleryImageRaw>;
 }
 
 export async function deleteGalleryItem(id: string): Promise<void> {

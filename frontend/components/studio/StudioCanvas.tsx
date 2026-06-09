@@ -29,6 +29,7 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CatalogOfferModal } from '@/components/ui/CatalogOfferModal';
 import { ChipSelector } from '@/components/ui/ChipSelector';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { CreditIcon } from '@/components/ui/CreditIcon';
@@ -46,7 +47,7 @@ import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 import {
   fetchGallery,
-  fetchGalleryImage,
+  fetchGalleryImageBase64,
   formatPrice,
   type GalleryItem,
   generateAnnouncementImage,
@@ -1525,6 +1526,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [showPricesHelp, setShowPricesHelp] = useState(false);
   const [showNamesHelp, setShowNamesHelp] = useState(false);
   const [showBackgroundStyleHelp, setShowBackgroundStyleHelp] = useState(false);
+  const [reviewMode, setReviewMode] = useState<null | 'catalog' | 'wallpaperOn'>(null);
+  // In-modal base-price overrides (productId -> price), applied to the next generation only.
+  const priceOverridesRef = useRef<Record<string, number>>({});
   const [catalogGenerating, setCatalogGenerating] = useState(false);
   const [catalogResult, setCatalogResult] = useState<GenerateImageResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -1572,6 +1576,50 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     set(err instanceof Error ? err.message : 'Something went wrong.');
   }
 
+  function openCatalogReview() {
+    const chosen = products.filter((p) => selected.has(p.id));
+    if (!chosen.length) return;
+    if (creditBalance < 1) {
+      setInsufficientVisible(true);
+      return;
+    }
+    setReviewMode('catalog');
+  }
+
+  function openWallpaperOnReview() {
+    const chosen = products.filter((p) => selected.has(p.id));
+    if (!chosen.length || !wallpaperBase64) return;
+    setReviewMode('wallpaperOn');
+  }
+
+  // Settings recap shown on the review modal's "generation options" step.
+  function buildOptionsSummary(
+    mode: 'catalog' | 'wallpaperOn'
+  ): { label: string; value: string }[] {
+    const onOff = (v: boolean) => (v ? t('studio.offer.optOn') : t('studio.offer.optOff'));
+    if (mode === 'wallpaperOn') {
+      return [
+        { label: t('studio.offer.optLayout'), value: layout },
+        { label: t('studio.offer.optPrices'), value: onOff(showPrices) },
+        { label: t('studio.offer.optNames'), value: onOff(showProductNames) },
+      ];
+    }
+    return [
+      { label: t('studio.offer.optFormat'), value: catalogFormat },
+      { label: t('studio.offer.optTheme'), value: colorTheme },
+      { label: t('studio.offer.optBackground'), value: backgroundStyle },
+      { label: t('studio.offer.optPrices'), value: onOff(showPrices) },
+      { label: t('studio.offer.optNames'), value: onOff(showCatalogProductNames) },
+      { label: t('studio.offer.optPreserve'), value: onOff(preserveProductImages) },
+    ];
+  }
+
+  function runReviewGeneration(mode: null | 'catalog' | 'wallpaperOn') {
+    setReviewMode(null);
+    if (mode === 'catalog') void handleCatalogGenerate();
+    else if (mode === 'wallpaperOn') void handleWallpaperOnGenerate();
+  }
+
   async function handleCatalogGenerate() {
     const chosen = products.filter((p) => selected.has(p.id));
     if (!chosen.length) return;
@@ -1587,7 +1635,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
       const productsWithImages = chosen.map((p) => ({
         id: p.id,
         name: p.name,
-        price: p.price,
+        price: priceOverridesRef.current[p.id] ?? p.price,
         currency: p.currency,
       }));
       const catalogCurrency = chosen[0].currency;
@@ -1681,7 +1729,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
       const productsWithImages = chosen.map((p) => ({
         id: p.id,
         name: p.name,
-        price: p.price,
+        price: priceOverridesRef.current[p.id] ?? p.price,
         currency: p.currency,
       }));
       setWallpaperOnResult(
@@ -1713,20 +1761,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
 
   async function pickWallpaperFromLibrary(item: GalleryItem) {
     try {
-      const bytes = await fetchGalleryImage(item.id);
-      if (!bytes.imageUrl) return;
-      // The compositor needs raw base64 to inline into the catalog request,
-      // so we fetch the SAS URL and re-encode here. The cache stays URL-based.
-      const res = await fetch(bytes.imageUrl);
-      const blob = await res.blob();
-      const base64: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(reader.error ?? new Error('Failed to read wallpaper.'));
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1] ?? '');
-        reader.readAsDataURL(blob);
-      });
+      // The compositor needs raw base64 to inline into the catalog request. We
+      // fetch the bytes through our own API (which reads the blob server-side)
+      // rather than fetching the SAS URL directly: a browser fetch of the blob
+      // URL is CORS-blocked and fails with "Failed to fetch".
+      const { imageBase64: base64, mimeType } = await fetchGalleryImageBase64(item.id);
       if (!base64) throw new Error('Failed to read wallpaper.');
-      galleryImageCache.prime(item.id, base64, bytes.mimeType);
+      galleryImageCache.prime(item.id, base64, mimeType);
       setWallpaperBase64(base64);
       setWallpaperStage('confirmed');
       setWallpaperOnResult(null);
@@ -2177,7 +2218,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             label={
               selectedCount === 0 ? t('studio.selectProductsFirst') : t('studio.generateCatalog')
             }
-            onPress={handleCatalogGenerate}
+            onPress={openCatalogReview}
             cost={1}
           />
         ) : (
@@ -2191,7 +2232,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                   ? t('studio.selectProductsFirst')
                   : t('studio.placeOnWallpaper')
             }
-            onPress={handleWallpaperOnGenerate}
+            onPress={openWallpaperOnReview}
             cost="free"
           />
         )
@@ -3185,6 +3226,28 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           onCancel={() => setPendingKeep(null)}
           onConfirm={handleKeepConfirm}
         />
+
+        <InsufficientCreditsModal
+          visible={insufficientVisible}
+          onDismiss={() => setInsufficientVisible(false)}
+        />
+
+        <CatalogOfferModal
+          visible={reviewMode !== null}
+          products={products
+            .filter((p) => selected.has(p.id))
+            .map((p) => ({ id: p.id, name: p.name, price: p.price, currency: p.currency }))}
+          title={reviewMode === 'wallpaperOn' ? t('studio.placeOnWallpaper') : undefined}
+          allowOffer={reviewMode === 'catalog' && !preserveProductImages}
+          optionsSummary={reviewMode ? buildOptionsSummary(reviewMode) : []}
+          generating={reviewMode === 'wallpaperOn' ? wallpaperOnGenerating : catalogGenerating}
+          cost={reviewMode === 'wallpaperOn' ? undefined : 1}
+          onCancel={() => setReviewMode(null)}
+          onContinue={(_offer, overrides) => {
+            priceOverridesRef.current = overrides;
+            runReviewGeneration(reviewMode);
+          }}
+        />
       </>
     );
   }
@@ -3437,7 +3500,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         ? t('studio.selectProductsToGenerate')
                         : t('studio.generateCatalog')
                     }
-                    onPress={handleCatalogGenerate}
+                    onPress={openCatalogReview}
                     cost={1}
                   />
 
@@ -3777,7 +3840,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                           ? t('studio.selectProductsFirst')
                           : t('studio.placeOnWallpaper')
                     }
-                    onPress={handleWallpaperOnGenerate}
+                    onPress={openWallpaperOnReview}
                     cost="free"
                   />
 
@@ -4461,6 +4524,23 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
       <InsufficientCreditsModal
         visible={insufficientVisible}
         onDismiss={() => setInsufficientVisible(false)}
+      />
+
+      <CatalogOfferModal
+        visible={reviewMode !== null}
+        products={products
+          .filter((p) => selected.has(p.id))
+          .map((p) => ({ id: p.id, name: p.name, price: p.price, currency: p.currency }))}
+        title={reviewMode === 'wallpaperOn' ? t('studio.placeOnWallpaper') : undefined}
+        allowOffer={reviewMode === 'catalog' && !preserveProductImages}
+        optionsSummary={reviewMode ? buildOptionsSummary(reviewMode) : []}
+        generating={reviewMode === 'wallpaperOn' ? wallpaperOnGenerating : catalogGenerating}
+        cost={reviewMode === 'wallpaperOn' ? undefined : 1}
+        onCancel={() => setReviewMode(null)}
+        onContinue={(_offer, overrides) => {
+          priceOverridesRef.current = overrides;
+          runReviewGeneration(reviewMode);
+        }}
       />
     </KeyboardAvoidingView>
   );
