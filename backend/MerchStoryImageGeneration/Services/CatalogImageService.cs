@@ -1,3 +1,5 @@
+using System.Text;
+
 using MerchStoryImageGeneration.Models;
 
 namespace MerchStoryImageGeneration.Services;
@@ -5,11 +7,13 @@ namespace MerchStoryImageGeneration.Services;
 internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalogImageService
 {
     private const string SystemContext =
-        "You are an award-winning art director from a top creative studio (think Wieden+Kennedy, Pentagram, Mother). " +
-        "You design Instagram and Facebook ad campaigns that go viral for their VISUAL QUALITY — work that feels like " +
-        "editorial magazine spreads, premium e-commerce hero shots, and curated luxury catalogs. " +
-        "Never AI clipart, never generic stock-graphic, never busy. " +
-        "Every image you produce could be the lead post of a premium brand's social feed and stop a viewer's thumb mid-scroll. " +
+        "You are a talented art director who designs Instagram and Facebook ad campaigns for everyday shops and small businesses. " +
+        "Your work looks COOL and modern and has broad, mainstream appeal — it sells to ordinary people of every kind, " +
+        "not just an elite or luxury niche. It is polished, confident, and stylish without being cold, snobby, or exclusive. " +
+        "Crucially, it never looks like cheap, generic AI-generated garbage: no clipart, no stock-graphic blandness, no clutter, " +
+        "no plastic over-rendered look. Clean, well-composed, genuinely good-looking design that a regular person scrolling " +
+        "their feed would find attractive and trustworthy and want to buy from. " +
+        "Every image should be striking enough to stop a viewer's thumb mid-scroll. " +
         "Never add watermarks, placeholders, or lorem ipsum text.";
 
     public CatalogImageService(IImageProvider provider)
@@ -43,35 +47,44 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
 
     private static string BackgroundStyleHint(string style) =>
         string.Equals(style, "Realistic", StringComparison.OrdinalIgnoreCase)
-            ? "Background style: a CINEMATIC EDITORIAL ENVIRONMENT — staged like a high-end product photoshoot for a premium brand campaign. " +
-              "Soft directional key light from one side, gentle ambient fill, considered staging — a curated retail moment, " +
-              "not a busy shelf or cluttered storefront. Materials feel real and tactile: matte surfaces, natural wood, raw stone, brushed metal, linen, " +
-              "warm paper — never plastic shine, never glossy reflections. Props are minimal, intentional, and tonally aligned with the brand. " +
-              "Think the moodboard of a Kinfolk shoot or an Aesop in-store window. "
-            : "Background style: EDITORIAL GRAPHIC DESIGN at the level of an Apple product page, an Aesop web banner, or a Kinfolk hero spread. " +
-              "Solid color blocks or soft tonal gradients, refined geometric accents, generous negative space, magazine-quality typography. " +
+            ? "Background style: a GOOD-LOOKING REAL-WORLD SETTING — staged like a stylish but down-to-earth product photoshoot " +
+              "with broad mainstream appeal. Nice natural light, pleasant ambient fill, clean considered staging — an attractive everyday moment, " +
+              "not a busy shelf or cluttered storefront. Materials feel real and tactile: natural wood, linen, ceramic, fresh paper, soft fabric, " +
+              "sunlit surfaces — never plastic shine, never cheap glossy reflections. Props are simple, relatable, and tonally aligned with the scene. " +
+              "Cool and appealing to ordinary people, not sterile, not elite, not luxury-exclusive. "
+            : "Background style: CLEAN, COOL GRAPHIC DESIGN with broad mainstream appeal — the kind of stylish, modern social post " +
+              "that looks great to everyone, not just a luxury niche. Confident color blocks or smooth gradients, simple modern accents, " +
+              "comfortable negative space, clear good-looking typography. " +
               "No real-world environment, no shelves, no store fixtures, no physical props. " +
-              "The backdrop reads as deliberate graphic design — restrained, confident, never clipart, never decorative-for-decoration's-sake. ";
+              "The backdrop reads as deliberate, attractive design — modern and approachable, never cold, never elite, never clipart, " +
+              "never cheap AI-looking, never decorative-for-decoration's-sake. ";
 
     private static string CreativeDirectionBlock() =>
         "🎨 CREATIVE DIRECTION — non-negotiable aesthetic standard for every pixel of this image:\n\n" +
         "COMPOSITION: rule-of-thirds or intentional asymmetric balance. Generous negative space — let the design breathe. " +
         "One clear hero / focal hierarchy; the eye should know exactly where to land first, second, third. Never cram the canvas. " +
         "Avoid dead-center symmetry unless the composition explicitly calls for it.\n\n" +
-        "TYPOGRAPHY: editorial hierarchy — at most one confident display headline (large, weighty, refined), with smaller supporting type below it. " +
-        "Tight, deliberate kerning. Modern geometric sans-serif (Helvetica / Inter / Aktiv-Grotesk / Söhne feel) — or a refined serif " +
-        "(Canela / GT Sectra / Tiempos feel) when the brand is editorial / luxury / culinary. " +
+        "TYPOGRAPHY: clean, confident hierarchy — but DO NOT invent any headline, tagline, slogan, or marketing copy. " +
+        "🚫 NO MADE-UP TEXT: never write phrases like \"Premium Snacking Delights\", \"Discover Your Perfect Crunch\", " +
+        "\"Now Available\", \"Shop Now\", or any other invented headline/subtitle/CTA. The image is NOT allowed to contain " +
+        "marketing sentences you came up with. The ONLY text permitted is: the brand name / slogan and contact details from the " +
+        "brand identity block (only if provided, only where appropriate), and the product names and prices exactly as instructed. " +
+        "If no slogan was provided, there is NO headline — let the products and layout carry the design with empty space instead. " +
+        "When text does appear, use tight deliberate kerning, a modern geometric sans-serif (Helvetica / Inter / Aktiv-Grotesk feel). " +
         "Flat typography only — no decorative outlines, no gradients on text, no drop shadows on text, no chrome / metallic effects, " +
-        "no clipart letterforms, no comic-book bubbles. Letters are crisp and confidently placed.\n\n" +
+        "no clipart letterforms, no comic-book bubbles. Flat constrains EFFECTS, not color: text and the chip or tag it sits on " +
+        "may carry tasteful, well-judged color that harmonizes with the scene (the price and offer lockups in particular should look designed and considered, not a plain black-on-white default), " +
+        "as long as the letters themselves stay flat. Letters are crisp and confidently placed.\n\n" +
         "LIGHTING & DEPTH: soft, directional, sculpted illumination — magazine-quality. A subtle gradient of light across the scene " +
         "for depth. Never flat fluorescent lighting, never harsh on-camera flash look, never the over-evenly-lit AI-render look.\n\n" +
-        "COLOR DISCIPLINE: a tight palette of 3 to 5 colors maximum. Harmonious and intentional. " +
-        "Brand colors used confidently as flat color blocks, refined accents, or the dominant backdrop — not sprinkled randomly. " +
+        "COLOR DISCIPLINE: use whatever colors make the design look coolest — there is no fixed color count. " +
+        "Commit to a confident, striking palette with real attitude: colors that pop, contrast with purpose, and feel art-directed by someone with serious taste. " +
         "Avoid the muddy AI-pastel-everywhere look, avoid rainbow chaos, avoid jarring complementary clashes.\n\n" +
         "TEXTURE & MATERIAL: subtle grain, matte paper feel, soft fabric weave, or a delicate gradient — adds richness over flat backgrounds. " +
         "Never plastic-glossy, never airbrushed, never the smooth-3D-render look (unless the product itself is glossy / 3D — then match the product, not the backdrop).\n\n" +
-        "MOOD: aspirational, calm, confident. The image whispers premium, it does not shout. " +
-        "Never \"salesy\", never crowded with decoration, never carnival-loud.\n\n" +
+        "MOOD: confident, appealing, and cool, with broad mainstream taste — attractive to ordinary people of every kind, " +
+        "not aimed at an elite or luxury niche. Stylish but approachable. " +
+        "Never \"salesy\", never crowded with decoration, never carnival-loud, never cold or snobby.\n\n" +
         "🚫 ANTI-AI / ANTI-GENERIC GUARDRAILS — these are the hallmarks of forgettable AI catalog imagery. None may appear:\n" +
         "- No random sparkles, stars, twinkles, glitters, light flares, lens flares, sun rays, or god-rays.\n" +
         "- No generic glow effects, neon halos, or auras around objects/text.\n" +
@@ -82,8 +95,10 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
         "- No fake bokeh circles, blurred light orbs, or particle effects.\n" +
         "- No plastic-toy surfaces, fake-3D bevels, or chrome shine on text.\n" +
         "- No busy clutter, no \"more is more\" — restraint over decoration, every time.\n\n" +
-        "REFERENCE MOODBOARD (in order of preference, depending on brand fit): Apple product pages, Aesop web banners, Glossier social campaigns, " +
-        "Le Labo packaging, Lululemon lookbooks, IKEA print catalogs, Kinfolk magazine spreads, A24 film posters, Muji catalog photography.\n\n";
+        "REFERENCE MOODBOARD (depending on brand fit): clean, cool, broadly-loved consumer brand campaigns — " +
+        "the kind of stylish, well-designed social posts and print catalogs that mainstream brands like IKEA, Muji, Trader Joe's, " +
+        "Spotify, or a popular local cafe would run. Modern and good-looking, with wide everyday appeal — not luxury, not elite, " +
+        "not exclusive, and never cheap AI-looking clipart.\n\n";
 
     private static string FormatGuidance(string format) =>
         format switch
@@ -107,13 +122,41 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             _ => string.Empty,
         };
 
-    private static string ColorThemeGuidance(string theme)
+    // "None" (or empty) means the user wants no fixed color direction — let the AI choose.
+    private static bool IsNoTheme(string? theme) =>
+        string.IsNullOrWhiteSpace(theme) || string.Equals(theme, "None", StringComparison.OrdinalIgnoreCase);
+
+    private static string ColorThemeGuidance(string theme, string? brandColors, string backgroundStyle)
     {
+        if (IsNoTheme(theme))
+        {
+            bool socialPost = !string.Equals(backgroundStyle, "Realistic", StringComparison.OrdinalIgnoreCase);
+            if (socialPost)
+            {
+                return "Color-theme art direction (auto — no fixed theme, YOU choose, and it must look COOL and SELL): " +
+                       "do NOT fill the canvas with a single flat color, and do NOT leave the products floating on a plain, empty, or generic backdrop. " +
+                       "Study the provided product photos and pull a cohesive palette straight from them — sample each product's own dominant and accent colors, then build a bold, high-impact backdrop around them so it feels purpose-made for THESE exact products. Use as few or as many colors as the design needs — one striking color, or a dozen — whatever looks coolest; there is no color-count limit here. " +
+                       "Make the backdrop visually striking and energetic: dynamic overlapping color blocks, bold diagonal or asymmetric cuts, oversized graphic shapes, halftone or risograph-style print texture, confident retail-poster layouts with real visual punch. " +
+                       "Think a standout streetwear drop, a music-festival poster, or a viral brand campaign — eye-catching and full of attitude, NOT minimal, NOT timid, NOT plain. " +
+                       "Use FLAT solid-color technique to achieve it (this keeps it crisp and print-quality). " +
+                       "🚫 Avoid every hallmark of cheap AI imagery: NO gradients (including duotone washes, holographic, rainbow, or sunset gradients), NO glows, halos, auras, neon, light flares, sparkles, or bokeh, NO soft blurred light, NO over-rendered glossy 3D look. " +
+                       "The backdrop must look deliberately art-directed and human-designed — bold and cool, never a flat fill, never empty, never generic, never AI-looking.\n\n";
+            }
+
+            return "Color-theme art direction (auto — no fixed theme, YOU choose to best flatter the products): " +
+                   "sample the products' own colors from the provided photos and build a harmonious, complementary scheme and real-world setting around them, " +
+                   "so the staged scene feels cohesive and intentional — never generic, never a plain empty backdrop. " +
+                   "Keep it a believable photographic setting with natural light and real materials — no gradients, glows, halos, neon, or other artificial AI-looking effects.\n\n";
+        }
+
         if (string.Equals(theme, "Brand Colors", StringComparison.OrdinalIgnoreCase))
         {
+            string palette = string.IsNullOrWhiteSpace(brandColors)
+                ? string.Empty
+                : $" The brand palette is: {brandColors} — build the composition on exactly these colors.";
             return "Color-theme art direction (Brand Colors): lean confidently into the brand palette as the dominant compositional structure — " +
                    "use brand colors as large flat color blocks (a backdrop panel, a typography wash, an accent third) or as refined accent details. " +
-                   "Never dilute the brand into a generic rainbow; the palette IS the brand voice.\n\n";
+                   "Never dilute the brand into a generic rainbow; the palette IS the brand voice." + palette + "\n\n";
         }
 
         if (string.Equals(theme, "Vibrant", StringComparison.OrdinalIgnoreCase))
@@ -149,9 +192,76 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
                "and one signal-color accent drawn from the brand or the product itself. Restrained, magazine-quality, confidently quiet.\n\n";
     }
 
+    // Theme-aware direction for how the PRICE TAGS, OFFER CALLOUTS, and HEADLINE PRICE lockups look.
+    // Two failure modes to avoid: (a) a plain black-on-white default that looks basic and blends in, and
+    // (b) a loud, saturated color block (e.g. a product's brightest hue) that clashes with the scene.
+    // Default behaviour (auto/None, editorial, Brand Colors) aims for a TASTEFUL lockup whose tone
+    // harmonizes with the scene and background, pleasing to the eye. Vibrant and Pop Art stay bold
+    // within their own palettes. Monochrome and Dark return restrained on-theme text so their looks
+    // are preserved. The color lives in a flat chip/tag/panel (or the flat figures); type stays flat.
+    private static string PromoColorGuidance(string theme, string? brandColors, string backgroundStyle)
+    {
+        const string bans =
+            "Keep this colorful WITHOUT any banned decoration: a solid flat color chip, tag, or panel with crisp flat type on top, " +
+            "color and contrast only, never effects; no glows, halos, or auras; no gradients on the text or the fill; no chrome or " +
+            "metallic; no starbursts, SALE or NEW bursts, or splash badges; no ribbon, scroll, or pennant banners; no sparkles. ";
+
+        if (string.Equals(theme, "Monochrome", StringComparison.OrdinalIgnoreCase))
+        {
+            return "PROMO LOCKUP COLOR (Monochrome): keep the price tags, the offer callout, and any headline price tonal grayscale, " +
+                   "matching the monochrome scheme (rich black or deep charcoal type on paper-white, or paper-white type on a near-black tag). " +
+                   "Drive impact through weight, scale, and high contrast, not through color. At most the single tiny restrained color " +
+                   "accent the theme already allows (for example one small price chip, or a brand logo accent) may carry color; everything " +
+                   "else stays grayscale. Keep the lockups solid and flat: " + bans + "\n\n";
+        }
+
+        if (string.Equals(theme, "Dark", StringComparison.OrdinalIgnoreCase))
+        {
+            return "PROMO LOCKUP COLOR (Dark): keep the price tags, the offer callout, and any headline price in the dark scheme; " +
+                   "set the figures in the theme's warm off-white or muted gold against a deep tonal chip or panel (charcoal, espresso, " +
+                   "oxblood, near-black), exactly like the rest of the dark typography. Do NOT introduce bright or random accent colors; " +
+                   "the warm off-white or gold on dark IS the accent. Get the pop from strong light-on-dark contrast and confident scale. " + bans + "\n\n";
+        }
+
+        string accentSource;
+        if (string.Equals(theme, "Brand Colors", StringComparison.OrdinalIgnoreCase))
+        {
+            accentSource = string.IsNullOrWhiteSpace(brandColors)
+                ? "a refined tone drawn from the brand palette, used tastefully so it harmonizes with the scene"
+                : $"a refined tone drawn from the brand palette ({brandColors}), used tastefully so it harmonizes with the scene";
+        }
+        else if (string.Equals(theme, "Vibrant", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(theme, "Pop Art", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(theme, "Pop-Art", StringComparison.OrdinalIgnoreCase))
+        {
+            accentSource = "a bold color from this theme's own limited palette (these themes are meant to be vivid), kept harmonious within that palette so it never clashes";
+        }
+        else
+        {
+            accentSource = "a tone that harmonizes with the scene and its background: a soft, sophisticated neutral (cream, off-white, warm stone, kraft, soft charcoal) " +
+                           "or a gently muted, desaturated accent pulled from the scene's own palette, NOT the loudest or most saturated color of a product";
+        }
+
+        bool realistic = string.Equals(backgroundStyle, "Realistic", StringComparison.OrdinalIgnoreCase);
+        string sceneNote = realistic
+            ? "On the realistic, photographic background the lockup must look like a tasteful retail price tag that belongs in the scene and " +
+              "complements its natural materials and light. Do NOT drop a loud, saturated, clashing color block onto the photo, and do NOT leave " +
+              "a plain black or brown numeral on a white tag either. Aim for a refined, well-integrated tag that simply looks good to the eye. "
+            : "Let the lockup feel like a deliberate part of the layout, its tone pulled from the same palette as the backdrop so it harmonizes rather than competes. ";
+
+        return "PROMO LOCKUP COLOR: the price tags, the offer or discount callout (for example a buy-X-get-Y-free message), and " +
+               "any headline price should look TASTEFUL, well-designed, and harmonized with the rest of the image, easy and pleasant on the eye. " +
+               "They do NOT have to be brightly colored; what matters is that they look good and fit the scene, never a plain black-on-white " +
+               "default and never a loud color block that fights the background. " +
+               sceneNote +
+               $"Build each lockup on {accentSource}, with the figures set in a clean, legible, high-contrast flat color, and keep the whole " +
+               "lockup understated and confident. The type itself stays FLAT and crisp. " + bans + "\n\n";
+    }
+
     private static string FinalQualityBar() =>
-        "FINAL BAR: this image must look like the lead post of a premium brand's Instagram feed — " +
-        "visually stunning, confidently restrained, and instantly more polished than 99% of small-business social-media content. " +
+        "FINAL BAR: this image must look like the lead post of a cool, well-designed brand with broad mainstream appeal — " +
+        "genuinely good-looking, confidently restrained, attractive to ordinary people of every kind, and instantly more polished " +
+        "than 99% of small-business social-media content (while never looking like cheap, generic AI output). " +
         "If a viewer scrolling through their feed wouldn't stop on this image, the design has failed.";
 
     private static string BuildPrompt(CatalogImageRequest r)
@@ -177,17 +287,23 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             ? "Use the provided product photos as the basis for the visuals. "
             : string.Empty;
 
-        string productsClause = (r.ShowProductNames, r.ShowPrices) switch
-        {
-            (true, true) => $"Products: {namedWithPrices}. Render each product's name as flat typography near its product. ",
-            (true, false) => $"Products: {nameList}. Render each product's name as flat typography near its product. ",
-            (false, true) => $"Products (in order): {nameList}. Show only the prices ({priceList}) — one price per product, in the same order — and do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
-            (false, false) => $"Products (in order, for context only): {nameList}. Do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
-        };
+        bool hasOffer = r.Offer is not null && r.Offer.Groups.Count > 0;
+
+        string productsClause = hasOffer
+            ? BuildOfferClause(r)
+            : (r.ShowProductNames, r.ShowPrices) switch
+            {
+                (true, true) => $"Products: {namedWithPrices}. Render each product's name as flat typography near its product. ",
+                (true, false) => $"Products: {nameList}. Render each product's name as flat typography near its product. ",
+                (false, true) => $"Products (in order): {nameList}. Show only the prices ({priceList}) — one price per product, in the same order — and do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
+                (false, false) => $"Products (in order, for context only): {nameList}. Do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
+            };
 
         string priceClause = r.ShowPrices
             ? $"Display prices prominently using the {r.Currency} currency (symbol: {symbol})."
-            : "Do not show prices.";
+            : hasOffer
+                ? "Do not render any currency amounts or prices; still make the offers above (the discounts, bundles, and free items) clearly visible — how to present them is up to you."
+                : "Do not show prices.";
 
         return
             $"{SystemContext}\n\n" +
@@ -195,16 +311,167 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             BrandContextBlock(r.BrandContext) +
             logoNote +
             $"Create a stunning, scroll-stopping product catalog ad image in {r.Format} format. " +
-            $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}.\n\n" +
+            (IsNoTheme(r.ColorTheme) ? "\n\n" : $"Color theme: {r.ColorTheme}.\n\n") +
             FormatGuidance(r.Format) +
-            ColorThemeGuidance(r.ColorTheme) +
+            ColorThemeGuidance(r.ColorTheme, r.BrandColors, r.BackgroundStyle) +
             CreativeDirectionBlock() +
             productsClause +
             imageNote +
             priceClause + " " +
+            PromoColorGuidance(r.ColorTheme, r.BrandColors, r.BackgroundStyle) +
             BackgroundStyleHint(r.BackgroundStyle) + "\n\n" +
             FinalQualityBar();
     }
+
+    // Builds the products/offer description when the catalog carries discounts,
+    // groups, or bundles. Monetary amounts are gated on ShowPrices; the offer
+    // itself (discount %, that it's a bundle, that an item is free) is always
+    // conveyed, but HOW to present it is left to the model. Product-name labels
+    // are suppressed because the frontend disables them whenever an offer groups items.
+    private static string BuildOfferClause(CatalogImageRequest r)
+    {
+        CatalogOffer offer = r.Offer!;
+        bool showPrices = r.ShowPrices;
+        var grouped = new HashSet<CatalogProductItem>(offer.Groups.SelectMany(g => g.Items));
+        var loose = r.Products.Where(p => !grouped.Contains(p)).ToList();
+
+        var sb = new StringBuilder();
+        sb.Append(
+            "This catalog advertises promotional offers. Do NOT render any product-name labels, " +
+            "captions, or product-name typography anywhere in the image. Present each offer below as " +
+            "its own clear deal. Make the pricing and discount treatment look polished, modern, and " +
+            "genuinely eye-catching — a confident, well-composed price/discount lockup (for example a " +
+            "tasteful price tag, a clean chip or panel, or a confident typographic block) integrated into the " +
+            "design, NOT a plain number floating in a corner. ");
+        if (offer.Groups.Any(g => g.Percent > 0))
+        {
+            sb.Append(
+                "Where an offer has a percentage discount, show that discount percentage prominently, " +
+                "the original price clearly crossed out, and the new discounted price as the hero. ");
+        }
+
+        int idx = 1;
+        foreach (CatalogOfferGroupItem g in offer.Groups)
+        {
+            string names = string.Join(", ", g.Items.Select(p => p.Name));
+
+            if (g.Kind == CatalogOfferKind.Bundle)
+            {
+                bool allEqual = g.Items.Select(p => p.Price).Distinct().Count() == 1;
+                sb.Append($"Offer {idx} — a BUNDLE the customer buys all together as one deal: {names}. ");
+                sb.Append("Show these products as a single cohesive bundle, placed right next to each other, never scattered to different corners. ");
+
+                // Same-priced bundles surface one shared per-item price, so only forbid
+                // per-product prices when the prices differ and a combined total is the
+                // only sensible figure to show.
+                if (!allEqual)
+                {
+                    sb.Append("Treat them as one combined offer, so do NOT show individual per-product prices for bundle items. ");
+                }
+
+                if (g.Freebies.Count > 0)
+                {
+                    int freeCount = g.Freebies.Count;
+                    int paidCount = Math.Max(1, g.Items.Count - freeCount);
+                    bool allRange = g.Freebies.All(f => f.Kind == FreeItemKind.Range);
+                    string freeNames = string.Join(", ", g.Freebies.Select(f => f.ProductName));
+                    sb.Append(allRange
+                        ? $"Promote this as a \"buy {paidCount}, get {freeCount} free\" deal (write the wording in the catalog's language). "
+                        : $"Promote this as a \"buy {paidCount}, get {freeCount} free\" deal where the free item is {freeNames} (write the wording in the catalog's language). ");
+                    sb.Append("Do NOT place a \"FREE\" sticker, badge, or label on any individual product; communicate it only as that buy-X-get-Y-free message. ");
+                }
+
+                if (showPrices && allEqual)
+                {
+                    // Every item costs the same, so a single per-item price ("2.99 each")
+                    // is clearer than a summed total; the buy-X-get-Y wording already
+                    // carries the deal, e.g. "buy 2 at 2.99 each, get 1 free".
+                    decimal price = g.Items[0].Price;
+                    sb.Append($"Every item is the same price: {CurrencyFormatter.Format(price, r.Currency)} each");
+                    sb.Append(g.Percent > 0
+                        ? $", now {CurrencyFormatter.Format(Discount(price, g.Percent), r.Currency)} each after the discount. "
+                        : ". ");
+                    sb.Append("Show that single per-item price, NOT a summed-up bundle total. ");
+                    if (g.Freebies.Count > 0)
+                    {
+                        sb.Append("The free item is a bonus on top, not folded into that price. ");
+                    }
+                }
+                else if (showPrices && g.BundlePrice is decimal bundlePrice)
+                {
+                    // Mixed prices: only a combined total makes sense, so label it so the
+                    // customer knows the figure covers the whole bundle, not one item.
+                    string bundleLabel = string.Equals(r.Language, "RO", StringComparison.OrdinalIgnoreCase)
+                        ? "Preț pachet"
+                        : "Bundle price";
+                    sb.Append($"The price for the whole bundle is {CurrencyFormatter.Format(bundlePrice, r.Currency)}; label it with a short \"{bundleLabel}\" tag right next to the amount so it is clear this price covers the entire bundle, not a single item. ");
+                    sb.Append("This total is only for the items the customer pays for. The free item is a bonus on top: do NOT add it into or subtract it from this price, and do NOT present the free item as a price reduction or a crossed-out total. ");
+                    if (g.Percent > 0 && g.BundleOriginalPrice is decimal originalPrice && originalPrice != bundlePrice)
+                    {
+                        sb.Append($"This price is {FormatPercent(g.Percent)} off the usual {CurrencyFormatter.Format(originalPrice, r.Currency)}; show that discount with the original crossed out. ");
+                    }
+                }
+                else if (g.Percent > 0)
+                {
+                    sb.Append($"The bundle is {FormatPercent(g.Percent)} off; make the discount obvious without showing any prices. ");
+                }
+            }
+            else
+            {
+                bool allEqual = g.Items.Select(p => p.Price).Distinct().Count() == 1;
+                string discountPhrase = g.Percent > 0 ? $", each {FormatPercent(g.Percent)} off" : string.Empty;
+                sb.Append($"Offer {idx} — a GROUP of {g.Items.Count} products sold separately{discountPhrase}: {names}. ");
+                sb.Append("Show these products right next to each other as one cluster, never scattered to different corners. ");
+
+                if (showPrices)
+                {
+                    if (allEqual)
+                    {
+                        decimal price = g.Items[0].Price;
+                        sb.Append($"They are ALL the same price: {CurrencyFormatter.Format(price, r.Currency)}");
+                        sb.Append(g.Percent > 0
+                            ? $" each, now {CurrencyFormatter.Format(Discount(price, g.Percent), r.Currency)} each after the discount. "
+                            : " each. ");
+                    }
+                    else
+                    {
+                        string per = string.Join("; ", g.Items.Select(p => g.Percent > 0
+                            ? $"{p.Name}: {CurrencyFormatter.Format(p.Price, r.Currency)} now {CurrencyFormatter.Format(Discount(p.Price, g.Percent), r.Currency)}"
+                            : $"{p.Name}: {CurrencyFormatter.Format(p.Price, r.Currency)}"));
+                        sb.Append($"Prices — {per}. ");
+                    }
+                }
+                else if (g.Percent > 0)
+                {
+                    sb.Append($"They are {FormatPercent(g.Percent)} off; make the discount obvious without showing any prices. ");
+                }
+            }
+
+            idx++;
+        }
+
+        if (loose.Count > 0)
+        {
+            string looseNames = string.Join(", ", loose.Select(p => p.Name));
+            if (showPrices)
+            {
+                string looseList = string.Join(", ", loose.Select(p => CurrencyFormatter.Format(p.Price, r.Currency)));
+                sb.Append($"Also show these individual products (in order): {looseNames} — with their prices ({looseList}), one price per product. ");
+            }
+            else
+            {
+                sb.Append($"Also show these individual products (in order, for context): {looseNames}. ");
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private static decimal Discount(decimal price, decimal percent) =>
+        Math.Round(price * (1 - (percent / 100m)), 2);
+
+    private static string FormatPercent(decimal percent) =>
+        (percent == Math.Truncate(percent) ? ((int)percent).ToString() : percent.ToString("0.##")) + "%";
 
     private static string BuildOutlinePrompt(CatalogImageRequest r)
     {
@@ -326,9 +593,9 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             productRefNote +
             nameSuppression +
             $"Create a stunning, scroll-stopping product catalog ad image in {r.Format} format. " +
-            $"Layout style: {r.Layout}. Color theme: {r.ColorTheme}. " + priceLine + "\n\n" +
+            (IsNoTheme(r.ColorTheme) ? string.Empty : $"Color theme: {r.ColorTheme}. ") + priceLine + "\n\n" +
             FormatGuidance(r.Format) +
-            ColorThemeGuidance(r.ColorTheme) +
+            ColorThemeGuidance(r.ColorTheme, r.BrandColors, r.BackgroundStyle) +
             CreativeDirectionBlock() +
             BackgroundStyleHint(r.BackgroundStyle) + "\n" +
             "Render the products, scene, backdrop, props, brand elements, logo, and pricing badges naturally — " +
@@ -409,77 +676,105 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             return string.Empty;
         }
 
-        var lines = new List<string>();
+        // Text that MAY be rendered on the image when relevant (brand identity + contact).
+        var renderable = new List<string>();
         if (!string.IsNullOrWhiteSpace(ctx.BrandName))
         {
-            lines.Add($"- Brand: {ctx.BrandName}");
+            renderable.Add($"- Brand name: {ctx.BrandName}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.Slogan))
         {
-            lines.Add($"- Slogan: {ctx.Slogan}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ctx.BrandColors))
-        {
-            lines.Add($"- Brand colors: {ctx.BrandColors}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ctx.BusinessDomain))
-        {
-            lines.Add($"- Business domain: {ctx.BusinessDomain}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ctx.ShopType))
-        {
-            lines.Add($"- Shop type: {ctx.ShopType}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ctx.TargetAudience))
-        {
-            lines.Add($"- Target audience: {ctx.TargetAudience}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(ctx.Competitors))
-        {
-            lines.Add($"- Competitors: {ctx.Competitors}");
+            renderable.Add($"- Slogan: {ctx.Slogan}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.PhoneNumber))
         {
-            lines.Add($"- Phone: {ctx.PhoneNumber}");
+            renderable.Add($"- Phone: {ctx.PhoneNumber}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.Email))
         {
-            lines.Add($"- Email: {ctx.Email}");
+            renderable.Add($"- Email: {ctx.Email}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.Addresses))
         {
-            lines.Add($"- Address: {ctx.Addresses}");
+            renderable.Add($"- Address: {ctx.Addresses}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.InstagramHandle))
         {
-            lines.Add($"- Instagram: {ctx.InstagramHandle}");
+            renderable.Add($"- Instagram: {ctx.InstagramHandle}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.FacebookHandle))
         {
-            lines.Add($"- Facebook: {ctx.FacebookHandle}");
+            renderable.Add($"- Facebook: {ctx.FacebookHandle}");
         }
 
         if (!string.IsNullOrWhiteSpace(ctx.TikTokHandle))
         {
-            lines.Add($"- TikTok: {ctx.TikTokHandle}");
+            renderable.Add($"- TikTok: {ctx.TikTokHandle}");
         }
 
-        if (lines.Count == 0)
+        // Signals that steer the DESIGN ONLY and must never appear as written text.
+        // Brand colors are intentionally NOT included here: for catalogs the palette is
+        // driven solely by the "Brand Colors" color theme (see ColorThemeGuidance).
+        var designOnly = new List<string>();
+        if (!string.IsNullOrWhiteSpace(ctx.BusinessDomain))
+        {
+            designOnly.Add($"- Business domain: {ctx.BusinessDomain}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ctx.ShopType))
+        {
+            designOnly.Add($"- Shop type: {ctx.ShopType}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ctx.TargetAudience))
+        {
+            designOnly.Add($"- Target audience: {ctx.TargetAudience}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ctx.Competitors))
+        {
+            designOnly.Add($"- Competitors: {ctx.Competitors}");
+        }
+
+        if (renderable.Count == 0 && designOnly.Count == 0)
         {
             return string.Empty;
         }
 
-        return "Brand context:\n" + string.Join("\n", lines) + "\n\n";
+        var sb = new System.Text.StringBuilder();
+
+        if (renderable.Count > 0)
+        {
+            sb.Append(
+                "Brand identity (this is the ONLY information that is ever allowed to appear as written text in the image, " +
+                "and ONLY where it naturally belongs — e.g. brand name / slogan in a header, contact details in a footer; " +
+                "do not force every field in, and never invent extra copy):\n");
+            sb.Append(string.Join("\n", renderable));
+            sb.Append("\n\n");
+        }
+
+        if (designOnly.Count > 0)
+        {
+            sb.Append(
+                "Design-only signals — use these PURELY to inform aesthetic choices (palette, mood, styling, props, " +
+                "composition, photographic treatment). They describe the business; they are NOT marketing copy. " +
+                "NONE of these words or values may be written, printed, labeled, or rendered as text ANYWHERE in the image:\n");
+            sb.Append(string.Join("\n", designOnly));
+            sb.Append("\n\n");
+        }
+
+        sb.Append(
+            "TEXT DISCIPLINE: the only text permitted in the image is — the brand identity fields listed above (used " +
+            "sparingly and only where appropriate), the product names and prices exactly as instructed elsewhere in this prompt, " +
+            "and nothing else. Do NOT invent taglines, descriptions, marketing slogans, category labels, or any words derived " +
+            "from the design-only signals. If you are unsure whether a piece of text is allowed, leave it out.\n\n");
+
+        return sb.ToString();
     }
 }

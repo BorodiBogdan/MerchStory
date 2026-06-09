@@ -29,6 +29,7 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CatalogOfferModal } from '@/components/ui/CatalogOfferModal';
 import { ChipSelector } from '@/components/ui/ChipSelector';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { CreditIcon } from '@/components/ui/CreditIcon';
@@ -45,8 +46,9 @@ import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 import {
+  type CatalogOfferConfig,
   fetchGallery,
-  fetchGalleryImage,
+  fetchGalleryImageBase64,
   formatPrice,
   type GalleryItem,
   generateAnnouncementImage,
@@ -55,6 +57,7 @@ import {
   type GenerateImageResponse,
   generateWallpaper,
   InsufficientCreditsError,
+  offerHasGrouping,
   type PlacementZone,
   type ProductItem,
   saveToGallery,
@@ -524,6 +527,7 @@ function getLayoutOptions(tr: TranslateFn) {
 }
 function getColorOptions(tr: TranslateFn) {
   return [
+    { value: 'None', label: tr('studio.themeNoneLabel') },
     { value: 'Brand Colors', label: tr('studio.themeBrandLabel') },
     { value: 'Vibrant', label: tr('studio.themeVibrantLabel') },
     { value: 'Monochrome', label: tr('studio.themeMonoLabel') },
@@ -937,9 +941,6 @@ function ResultPreviewPanel({
   if (generating) {
     return (
       <View style={styles.previewPlaceholder}>
-        <View style={styles.previewHaloTR} pointerEvents="none" />
-        <View style={styles.previewHaloBL} pointerEvents="none" />
-        <View style={styles.previewHaloSpot} pointerEvents="none" />
         <View style={styles.previewIconCircle}>
           <ActivityIndicator size="small" color={colors.accent.primary} />
         </View>
@@ -1013,9 +1014,6 @@ function ResultPreviewPanel({
   }
   return (
     <View style={styles.previewPlaceholder}>
-      <View style={styles.previewHaloTR} pointerEvents="none" />
-      <View style={styles.previewHaloBL} pointerEvents="none" />
-      <View style={styles.previewHaloSpot} pointerEvents="none" />
       <View style={styles.previewIconCircle}>
         <Ionicons name="sparkles" size={30} color={colors.accent.primary} />
       </View>
@@ -1520,7 +1518,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [layout, setLayout] = useState('Showcase');
   const [colorTheme, setColorTheme] = useState('Brand Colors');
-  const [catalogFormat, setCatalogFormat] = useState('Square');
+  const [catalogFormat, setCatalogFormat] = useState('Poster');
   const [showPrices, setShowPrices] = useState(true);
   const [showProductNames, setShowProductNames] = useState(true);
   const [showCatalogProductNames, setShowCatalogProductNames] = useState(false);
@@ -1530,6 +1528,11 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [showPricesHelp, setShowPricesHelp] = useState(false);
   const [showNamesHelp, setShowNamesHelp] = useState(false);
   const [showBackgroundStyleHelp, setShowBackgroundStyleHelp] = useState(false);
+  const [reviewMode, setReviewMode] = useState<null | 'catalog' | 'wallpaperOn'>(null);
+  // In-modal base-price overrides (productId -> price), applied to the next generation only.
+  const priceOverridesRef = useRef<Record<string, number>>({});
+  // Offer config from the review modal, applied to the next catalog generation only.
+  const catalogOfferRef = useRef<CatalogOfferConfig | null>(null);
   const [catalogGenerating, setCatalogGenerating] = useState(false);
   const [catalogResult, setCatalogResult] = useState<GenerateImageResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -1577,6 +1580,50 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     set(err instanceof Error ? err.message : 'Something went wrong.');
   }
 
+  function openCatalogReview() {
+    const chosen = products.filter((p) => selected.has(p.id));
+    if (!chosen.length) return;
+    if (creditBalance < 1) {
+      setInsufficientVisible(true);
+      return;
+    }
+    setReviewMode('catalog');
+  }
+
+  function openWallpaperOnReview() {
+    const chosen = products.filter((p) => selected.has(p.id));
+    if (!chosen.length || !wallpaperBase64) return;
+    setReviewMode('wallpaperOn');
+  }
+
+  // Settings recap shown on the review modal's "generation options" step.
+  function buildOptionsSummary(
+    mode: 'catalog' | 'wallpaperOn'
+  ): { label: string; value: string }[] {
+    const onOff = (v: boolean) => (v ? t('studio.offer.optOn') : t('studio.offer.optOff'));
+    // Product-name row is rendered by the modal itself (it forces it off and
+    // annotates when the offer has a group/bundle), so it is omitted here.
+    if (mode === 'wallpaperOn') {
+      return [
+        { label: t('studio.offer.optLayout'), value: layout },
+        { label: t('studio.offer.optPrices'), value: onOff(showPrices) },
+      ];
+    }
+    return [
+      { label: t('studio.offer.optFormat'), value: catalogFormat },
+      { label: t('studio.offer.optTheme'), value: colorTheme },
+      { label: t('studio.offer.optBackground'), value: backgroundStyle },
+      { label: t('studio.offer.optPrices'), value: onOff(showPrices) },
+      { label: t('studio.offer.optPreserve'), value: onOff(preserveProductImages) },
+    ];
+  }
+
+  function runReviewGeneration(mode: null | 'catalog' | 'wallpaperOn') {
+    setReviewMode(null);
+    if (mode === 'catalog') void handleCatalogGenerate();
+    else if (mode === 'wallpaperOn') void handleWallpaperOnGenerate();
+  }
+
   async function handleCatalogGenerate() {
     const chosen = products.filter((p) => selected.has(p.id));
     if (!chosen.length) return;
@@ -1592,21 +1639,27 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
       const productsWithImages = chosen.map((p) => ({
         id: p.id,
         name: p.name,
-        price: p.price,
+        price: priceOverridesRef.current[p.id] ?? p.price,
         currency: p.currency,
       }));
       const catalogCurrency = chosen[0].currency;
+      // Brand colors are driven by the "Brand Colors" color theme, not the context
+      // chips, so they are excluded from the catalog's brand-context fields.
+      const catalogFields = catalogContextFields.filter((k) => k !== 'brandColors');
+      const offer = catalogOfferRef.current ?? undefined;
+      // Product-name labels are hidden whenever the offer has a group or bundle.
+      const namesForcedOff = offer?.isOffer ? offerHasGrouping(offer.groups) : false;
       const result = await generateCatalogImage({
         products: productsWithImages,
-        layout,
         colorTheme,
         format: catalogFormat,
         showPrices,
-        showProductNames: showCatalogProductNames,
+        showProductNames: namesForcedOff ? false : showCatalogProductNames,
         backgroundStyle,
         preserveProductImages,
-        brandContextFields: catalogContextFields.length > 0 ? catalogContextFields : undefined,
+        brandContextFields: catalogFields.length > 0 ? catalogFields : undefined,
         currency: catalogCurrency,
+        offer,
       });
       setCatalogResult(result);
       handleAfterPaidGenerate(result);
@@ -1684,7 +1737,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
       const productsWithImages = chosen.map((p) => ({
         id: p.id,
         name: p.name,
-        price: p.price,
+        price: priceOverridesRef.current[p.id] ?? p.price,
         currency: p.currency,
       }));
       setWallpaperOnResult(
@@ -1716,20 +1769,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
 
   async function pickWallpaperFromLibrary(item: GalleryItem) {
     try {
-      const bytes = await fetchGalleryImage(item.id);
-      if (!bytes.imageUrl) return;
-      // The compositor needs raw base64 to inline into the catalog request,
-      // so we fetch the SAS URL and re-encode here. The cache stays URL-based.
-      const res = await fetch(bytes.imageUrl);
-      const blob = await res.blob();
-      const base64: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(reader.error ?? new Error('Failed to read wallpaper.'));
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1] ?? '');
-        reader.readAsDataURL(blob);
-      });
+      // The compositor needs raw base64 to inline into the catalog request. We
+      // fetch the bytes through our own API (which reads the blob server-side)
+      // rather than fetching the SAS URL directly: a browser fetch of the blob
+      // URL is CORS-blocked and fails with "Failed to fetch".
+      const { imageBase64: base64, mimeType } = await fetchGalleryImageBase64(item.id);
       if (!base64) throw new Error('Failed to read wallpaper.');
-      galleryImageCache.prime(item.id, base64, bytes.mimeType);
+      galleryImageCache.prime(item.id, base64, mimeType);
       setWallpaperBase64(base64);
       setWallpaperStage('confirmed');
       setWallpaperOnResult(null);
@@ -1851,6 +1897,31 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     () => (shopProfile ? deriveContextItems(shopProfile, tr) : []),
     [shopProfile, tr]
   );
+
+  // Catalogs pick brand colors through the "Brand Colors" color theme, so the brand
+  // colors chip is dropped from the catalog brand-context list to avoid duplication.
+  const catalogContextItems = useMemo(
+    () => contextItems.filter((i) => i.key !== 'brandColors'),
+    [contextItems]
+  );
+
+  // A realistic photographic background can't be art-directed onto the brand palette
+  // the way a graphic social post can, so the "Brand Colors" theme is hidden for it.
+  const catalogColorOptions = useMemo(
+    () =>
+      backgroundStyle === 'Realistic'
+        ? COLOR_OPTIONS.filter((o) => o.value !== 'Brand Colors')
+        : COLOR_OPTIONS,
+    [COLOR_OPTIONS, backgroundStyle]
+  );
+
+  // Switching to a realistic background while "Brand Colors" is selected falls back to
+  // letting the AI decide, so an unavailable theme is never sent.
+  useEffect(() => {
+    if (backgroundStyle === 'Realistic' && colorTheme === 'Brand Colors') {
+      setColorTheme('None');
+    }
+  }, [backgroundStyle, colorTheme]);
 
   const toggleCatalogField = useCallback((key: string) => {
     setCatalogContextFields((prev) =>
@@ -2069,11 +2140,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             {showBackgroundStyleHelp && (
               <Text style={styles.toggleHelper}>{t('studio.backgroundStyle.helper')}</Text>
             )}
-            <OptionLabel label={t('studio.opt.layout')} />
-            <SidebarOptionGroup options={LAYOUT_OPTIONS} selected={layout} onSelect={setLayout} />
             <OptionLabel label={t('studio.opt.colorTheme')} />
             <SidebarOptionGroup
-              options={COLOR_OPTIONS}
+              options={catalogColorOptions}
               selected={colorTheme}
               onSelect={setColorTheme}
             />
@@ -2087,7 +2156,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
               <Text style={styles.toggleHelper}>{t('studio.formatPosterHint')}</Text>
             )}
             <BrandContextSection
-              items={contextItems}
+              items={catalogContextItems}
               selected={catalogContextFields}
               onToggle={toggleCatalogField}
             />
@@ -2157,7 +2226,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             label={
               selectedCount === 0 ? t('studio.selectProductsFirst') : t('studio.generateCatalog')
             }
-            onPress={handleCatalogGenerate}
+            onPress={openCatalogReview}
             cost={1}
           />
         ) : (
@@ -2171,7 +2240,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                   ? t('studio.selectProductsFirst')
                   : t('studio.placeOnWallpaper')
             }
-            onPress={handleWallpaperOnGenerate}
+            onPress={openWallpaperOnReview}
             cost="free"
           />
         )
@@ -3165,6 +3234,32 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           onCancel={() => setPendingKeep(null)}
           onConfirm={handleKeepConfirm}
         />
+
+        <InsufficientCreditsModal
+          visible={insufficientVisible}
+          onDismiss={() => setInsufficientVisible(false)}
+        />
+
+        <CatalogOfferModal
+          visible={reviewMode !== null}
+          products={products
+            .filter((p) => selected.has(p.id))
+            .map((p) => ({ id: p.id, name: p.name, price: p.price, currency: p.currency }))}
+          title={reviewMode === 'wallpaperOn' ? t('studio.placeOnWallpaper') : undefined}
+          allowOffer={reviewMode === 'catalog' && !preserveProductImages}
+          optionsSummary={reviewMode ? buildOptionsSummary(reviewMode) : []}
+          showProductNames={
+            reviewMode === 'wallpaperOn' ? showProductNames : showCatalogProductNames
+          }
+          generating={reviewMode === 'wallpaperOn' ? wallpaperOnGenerating : catalogGenerating}
+          cost={reviewMode === 'wallpaperOn' ? undefined : 1}
+          onCancel={() => setReviewMode(null)}
+          onContinue={(offer, overrides) => {
+            priceOverridesRef.current = overrides;
+            catalogOfferRef.current = offer;
+            runReviewGeneration(reviewMode);
+          }}
+        />
       </>
     );
   }
@@ -3380,16 +3475,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     {showBackgroundStyleHelp && (
                       <Text style={styles.toggleHelper}>{t('studio.backgroundStyle.helper')}</Text>
                     )}
-                    <OptionLabel label={t('studio.opt.layout')} />
-                    <ChipSelector
-                      options={LAYOUT_OPTIONS}
-                      selected={layout}
-                      onSelect={setLayout}
-                      accessibilityLabel={t('studio.opt.layout')}
-                    />
                     <OptionLabel label={t('studio.opt.colorTheme')} />
                     <ChipSelector
-                      options={COLOR_OPTIONS}
+                      options={catalogColorOptions}
                       selected={colorTheme}
                       onSelect={setColorTheme}
                       accessibilityLabel={t('studio.opt.colorTheme')}
@@ -3406,10 +3494,10 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     )}
                   </View>
 
-                  {contextItems.length > 0 && (
+                  {catalogContextItems.length > 0 && (
                     <View style={styles.mobileSection}>
                       <BrandContextSection
-                        items={contextItems}
+                        items={catalogContextItems}
                         selected={catalogContextFields}
                         onToggle={toggleCatalogField}
                       />
@@ -3424,7 +3512,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         ? t('studio.selectProductsToGenerate')
                         : t('studio.generateCatalog')
                     }
-                    onPress={handleCatalogGenerate}
+                    onPress={openCatalogReview}
                     cost={1}
                   />
 
@@ -3764,7 +3852,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                           ? t('studio.selectProductsFirst')
                           : t('studio.placeOnWallpaper')
                     }
-                    onPress={handleWallpaperOnGenerate}
+                    onPress={openWallpaperOnReview}
                     cost="free"
                   />
 
@@ -4449,6 +4537,25 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         visible={insufficientVisible}
         onDismiss={() => setInsufficientVisible(false)}
       />
+
+      <CatalogOfferModal
+        visible={reviewMode !== null}
+        products={products
+          .filter((p) => selected.has(p.id))
+          .map((p) => ({ id: p.id, name: p.name, price: p.price, currency: p.currency }))}
+        title={reviewMode === 'wallpaperOn' ? t('studio.placeOnWallpaper') : undefined}
+        allowOffer={reviewMode === 'catalog' && !preserveProductImages}
+        optionsSummary={reviewMode ? buildOptionsSummary(reviewMode) : []}
+        showProductNames={reviewMode === 'wallpaperOn' ? showProductNames : showCatalogProductNames}
+        generating={reviewMode === 'wallpaperOn' ? wallpaperOnGenerating : catalogGenerating}
+        cost={reviewMode === 'wallpaperOn' ? undefined : 1}
+        onCancel={() => setReviewMode(null)}
+        onContinue={(offer, overrides) => {
+          priceOverridesRef.current = overrides;
+          catalogOfferRef.current = offer;
+          runReviewGeneration(reviewMode);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -4775,38 +4882,6 @@ function makeStyles(
       backgroundColor: colors.bg.base,
       position: 'relative',
       overflow: 'hidden',
-    },
-    // Ambient decorative blobs on preview placeholder — corner-positioned, very
-    // low opacity so the icon+text stay the focal point.
-    previewHaloTR: {
-      position: 'absolute',
-      top: -90,
-      right: -90,
-      width: 240,
-      height: 240,
-      borderRadius: 120,
-      backgroundColor: colors.accent.primary,
-      opacity: 0.09,
-    },
-    previewHaloBL: {
-      position: 'absolute',
-      bottom: -100,
-      left: -100,
-      width: 220,
-      height: 220,
-      borderRadius: 110,
-      backgroundColor: colors.accent.secondary,
-      opacity: 0.07,
-    },
-    previewHaloSpot: {
-      position: 'absolute',
-      top: 30,
-      left: 40,
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: colors.accent.primary,
-      opacity: 0.05,
     },
     previewIconCircle: {
       width: 72,
