@@ -167,6 +167,9 @@ export default function ProductsScreen() {
   const SIMILAR_TEXT_TOP_K = 24;
   // Page size for the currently displayed results, set by whichever search ran.
   const [similarPageSize, setSimilarPageSize] = useState(SIMILAR_PAGE_SIZE);
+  // Which search produced the current results. Photo results show a match %;
+  // text (semantic) results don't, since the similarity scale isn't meaningful there.
+  const [similarSource, setSimilarSource] = useState<'photo' | 'text'>('photo');
 
   // Reference image search by text (CLIP text encoder) — no photo needed
   const [refSearchText, setRefSearchText] = useState('');
@@ -348,6 +351,7 @@ export default function ProductsScreen() {
       if (!previewOriginalB64) setPreviewOriginalB64(b64);
       const results = await searchReferenceImages(b64);
       setSimilarResults(results);
+      setSimilarSource('photo');
       setSimilarPageSize(SIMILAR_PAGE_SIZE);
       setSimilarPage(0);
       setShowSimilarModal(true);
@@ -366,6 +370,7 @@ export default function ProductsScreen() {
     try {
       const results = await searchReferenceImagesByText(query, SIMILAR_TEXT_TOP_K);
       setSimilarResults(results);
+      setSimilarSource('text');
       setSimilarPageSize(SIMILAR_TEXT_PAGE_SIZE);
       setSimilarPage(0);
       setShowSimilarModal(true);
@@ -914,17 +919,19 @@ export default function ProductsScreen() {
                                         style={styles.similarImage}
                                         resizeMode="contain"
                                       />
-                                      <View style={styles.similarMatchBadge}>
-                                        <Ionicons
-                                          name="flash"
-                                          size={10}
-                                          color="#fff"
-                                          style={{ marginRight: 3 }}
-                                        />
-                                        <Text style={styles.similarMatchText}>
-                                          {Math.round(item.similarity * 100)}%
-                                        </Text>
-                                      </View>
+                                      {similarSource === 'photo' && (
+                                        <View style={styles.similarMatchBadge}>
+                                          <Ionicons
+                                            name="flash"
+                                            size={10}
+                                            color="#fff"
+                                            style={{ marginRight: 3 }}
+                                          />
+                                          <Text style={styles.similarMatchText}>
+                                            {Math.round(item.similarity * 100)}%
+                                          </Text>
+                                        </View>
+                                      )}
                                     </View>
                                     <View style={styles.similarCardBody}>
                                       <Text style={styles.similarCardName} numberOfLines={2}>
