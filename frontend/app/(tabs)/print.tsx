@@ -379,10 +379,6 @@ export default function PrintScreen() {
     <View style={styles.previewColumn}>
       <View style={styles.previewCard}>
         <View style={styles.previewHeader}>
-          <View style={styles.eyebrow}>
-            <View style={styles.eyebrowDot} />
-            <Text style={styles.eyebrowText}>{t('print.preview.eyebrow')}</Text>
-          </View>
           <Text style={styles.previewTitle}>{t('print.preview.title')}</Text>
         </View>
         <PaperPreview
@@ -427,7 +423,6 @@ export default function PrintScreen() {
         <View style={styles.container}>
           <View style={styles.heroRow}>
             <Text style={styles.heroTitle}>{t('print.title')}</Text>
-            <Text style={styles.heroSubtitle}>{t('print.subtitle')}</Text>
           </View>
 
           {isDesktop ? (
@@ -468,11 +463,10 @@ export default function PrintScreen() {
 
 // ─── Section header ──────────────────────────────────────────────────────
 function SectionHeader({
-  eyebrow,
   title,
   helper,
 }: {
-  eyebrow: string;
+  eyebrow?: string; // accepted but ignored — kept for call-site compat
   title: string;
   helper?: string;
 }) {
@@ -480,10 +474,6 @@ function SectionHeader({
   const styles = useMemo(() => makeSectionHeaderStyles(colors), [colors]);
   return (
     <View style={styles.wrap}>
-      <View style={styles.eyebrow}>
-        <View style={styles.eyebrowDot} />
-        <Text style={styles.eyebrowText}>{eyebrow}</Text>
-      </View>
       <Text style={styles.title}>{title}</Text>
       {helper && <Text style={styles.helper}>{helper}</Text>}
     </View>
@@ -1010,7 +1000,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       flexGrow: 1,
       alignItems: 'center',
       paddingHorizontal: isDesktop ? D.spacing.xl : D.spacing.md,
-      paddingTop: isDesktop ? D.spacing.lg : D.spacing.md,
+      paddingTop: isDesktop ? D.spacing['2xl'] : D.spacing.xl,
       paddingBottom: isDesktop ? D.spacing.xl : D.spacing.lg,
     },
     container: {
@@ -1025,17 +1015,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       paddingBottom: D.spacing.xs,
     },
     heroTitle: {
-      fontSize: isDesktop ? D.fontSize.xl : D.fontSize['2xl'],
+      fontSize: D.fontSize['2xl'],
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
       letterSpacing: -0.6,
       lineHeight: isDesktop ? 28 : 36,
-    },
-    heroSubtitle: {
-      flex: isDesktop ? 1 : undefined,
-      fontSize: D.fontSize.sm,
-      color: colors.text.secondary,
-      lineHeight: 20,
     },
     twoCol: {
       flexDirection: 'row',
@@ -1067,24 +1051,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
     },
     previewHeader: {
       gap: 4,
-    },
-    eyebrow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    eyebrowDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.accent.primary,
-    },
-    eyebrowText: {
-      fontSize: D.fontSize.xs,
-      fontWeight: D.fontWeight.bold,
-      color: colors.accent.primary,
-      letterSpacing: 1,
-      textTransform: 'uppercase',
     },
     previewTitle: {
       fontSize: D.fontSize.lg,
@@ -1203,25 +1169,6 @@ function makeSectionHeaderStyles(colors: ReturnType<typeof useTheme>['colors']) 
   return StyleSheet.create({
     wrap: {
       marginBottom: D.spacing.sm,
-    },
-    eyebrow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 6,
-    },
-    eyebrowDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.accent.primary,
-    },
-    eyebrowText: {
-      fontSize: D.fontSize.xs,
-      fontWeight: D.fontWeight.bold,
-      color: colors.accent.primary,
-      letterSpacing: 1,
-      textTransform: 'uppercase',
     },
     title: {
       fontSize: D.fontSize.lg,

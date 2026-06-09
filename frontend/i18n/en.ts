@@ -165,7 +165,6 @@ const en = {
 
   // ── Print screen ─────────────────────────────────────────────────────────
   'print.title': 'Print Shop',
-  'print.subtitle': 'Export any generated asset as a paper-sized PDF, ready for the printer.',
   'print.section.assetEyebrow': 'Asset',
   'print.section.assetTitle': 'Pick what to print',
   'print.section.assetHelper': 'Choose a generated image from your gallery.',

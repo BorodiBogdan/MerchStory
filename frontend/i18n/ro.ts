@@ -169,7 +169,6 @@ const ro: Dictionary = {
 
   // ── Print screen ─────────────────────────────────────────────────────────
   'print.title': 'Tipărire',
-  'print.subtitle': 'Exportă orice creație ca PDF la formatul dorit, gata pentru imprimantă.',
   'print.section.assetEyebrow': 'Creație',
   'print.section.assetTitle': 'Alege ce vrei să tipărești',
   'print.section.assetHelper': 'Selectează o imagine generată din galeria ta.',

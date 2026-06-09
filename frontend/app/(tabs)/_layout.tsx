@@ -69,16 +69,20 @@ export default function TabLayout() {
         isActive: pathname.startsWith('/products'),
         onPress: () => router.navigate('/(tabs)/products'),
       },
-      {
-        key: 'print',
-        label: t('tabs.print'),
-        icon: 'print',
-        iconOutline: 'print-outline',
-        isActive: pathname.startsWith('/print'),
-        onPress: () => router.navigate('/(tabs)/print'),
-      },
+      ...(isAdmin
+        ? [
+            {
+              key: 'print',
+              label: t('tabs.print'),
+              icon: 'print',
+              iconOutline: 'print-outline',
+              isActive: pathname.startsWith('/print'),
+              onPress: () => router.navigate('/(tabs)/print'),
+            } as NavMenuItem,
+          ]
+        : []),
     ],
-    [pathname, t, router]
+    [pathname, t, router, isAdmin]
   );
 
   const menuNavItems: NavMenuItem[] = useMemo(
@@ -244,12 +248,16 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="print"
-          options={{
-            tabBarLabel: t('tabs.print'),
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? 'print' : 'print-outline'} size={22} color={color} />
-            ),
-          }}
+          options={
+            isAdmin
+              ? {
+                  tabBarLabel: t('tabs.print'),
+                  tabBarIcon: ({ color, focused }) => (
+                    <Ionicons name={focused ? 'print' : 'print-outline'} size={22} color={color} />
+                  ),
+                }
+              : { tabBarItemStyle: { display: 'none' } }
+          }
         />
         <Tabs.Screen
           name="admin"

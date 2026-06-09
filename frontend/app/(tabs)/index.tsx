@@ -225,14 +225,6 @@ function IdeasForYouSection({
     <View style={styles.sectionWrap}>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <View style={styles.eyebrow}>
-            <View style={styles.eyebrowDot} />
-            <Text style={styles.eyebrowText}>{t('ideas.sectionEyebrow')}</Text>
-            <View style={styles.liveBadge}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveText}>{t('ideas.sectionLive')}</Text>
-            </View>
-          </View>
           <Text style={styles.title}>{t('ideas.sectionTitle')}</Text>
           <Text style={styles.subtitle}>{t('ideas.sectionSubtitle')}</Text>
         </View>
@@ -678,49 +670,6 @@ function makeIdeasStyles(colors: ReturnType<typeof useTheme>['colors'], isDeskto
     headerText: {
       flex: 1,
       maxWidth: 640,
-    },
-    eyebrow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: D.spacing.sm,
-    },
-    eyebrowDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.accent.primary,
-    },
-    eyebrowText: {
-      fontSize: D.fontSize.xs,
-      fontWeight: D.fontWeight.bold,
-      color: colors.accent.primary,
-      letterSpacing: 1,
-      textTransform: 'uppercase',
-    },
-    liveBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      marginLeft: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: D.radius.pill,
-      backgroundColor: 'rgba(74,222,128,0.12)',
-      borderWidth: 1,
-      borderColor: 'rgba(74,222,128,0.45)',
-    },
-    liveDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: '#4ADE80',
-    },
-    liveText: {
-      fontSize: 9,
-      fontWeight: D.fontWeight.bold,
-      color: '#4ADE80',
-      letterSpacing: 1,
     },
     title: {
       fontSize: isDesktop ? D.fontSize.xl : D.fontSize.lg,

@@ -710,10 +710,6 @@ export default function ProductsScreen() {
       <View style={styles.pageContainer}>
         <Animated.View style={[styles.pageHeader, heroAnimStyle]}>
           <View style={styles.headerTextBlock}>
-            <View style={styles.eyebrowRow}>
-              <View style={styles.eyebrowDot} />
-              <Text style={styles.eyebrow}>Catalog</Text>
-            </View>
             <Text style={styles.pageTitle}>{t('products.pageTitle')}</Text>
             <View style={styles.subtitleRow}>
               <View style={styles.countChip}>
@@ -1655,25 +1651,6 @@ function makeStyles(
       flexGrow: 1,
       flexShrink: 1,
       minWidth: 220,
-    },
-    eyebrowRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      marginBottom: 6,
-    },
-    eyebrowDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 6,
-      backgroundColor: colors.accent.primary,
-    },
-    eyebrow: {
-      fontSize: 11,
-      fontWeight: D.fontWeight.bold,
-      color: colors.accent.primary,
-      textTransform: 'uppercase',
-      letterSpacing: 1.4,
     },
     pageTitle: {
       fontSize: isWeb ? D.fontSize['3xl'] : D.fontSize['2xl'],

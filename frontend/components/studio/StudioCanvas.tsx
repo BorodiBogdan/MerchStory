@@ -2745,10 +2745,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
               {/* Hero header */}
               <View style={styles.heroWrap}>
                 <View style={activeTab === 'catalog' ? styles.heroTextClamp : undefined}>
-                  <View style={styles.heroEyebrow}>
-                    <View style={styles.heroEyebrowDot} />
-                    <Text style={styles.heroEyebrowText}>GENERATION STUDIO</Text>
-                  </View>
                   <Text style={styles.heroTitle}>
                     {activeTab === 'catalog'
                       ? t('studio.navCatalog')
@@ -4747,28 +4743,6 @@ function makeStyles(
         ? ({ boxShadow: `0 16px 40px -22px ${colors.accent.primary}40` } as any)
         : D.shadow.sm),
     } as any,
-    heroEyebrow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      marginBottom: D.spacing.xs,
-    },
-    heroEyebrowDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.accent.primary,
-      ...(Platform.OS === 'web'
-        ? ({ boxShadow: `0 0 10px 2px ${colors.accent.primary}` } as any)
-        : {}),
-    } as any,
-    heroEyebrowText: {
-      fontSize: 10,
-      fontWeight: D.fontWeight.bold,
-      color: colors.accent.primary,
-      letterSpacing: 1.4,
-      textTransform: 'uppercase',
-    },
     heroTitle: {
       fontSize: D.fontSize['3xl'],
       fontWeight: D.fontWeight.bold,
