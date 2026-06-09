@@ -18,6 +18,8 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
     private static readonly float[] Std = [0.26862954f, 0.26130258f, 0.27577711f];
 
     private readonly InferenceSession? session;
+    private readonly InferenceSession? textSession;
+    private readonly ClipTokenizer? tokenizer;
     private readonly ILogger<ClipEmbeddingService> logger;
 
     public ClipEmbeddingService(
@@ -27,28 +29,35 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
     {
         this.logger = logger;
 
-        string? modelPath = configuration["Clip:ModelPath"];
-        if (string.IsNullOrEmpty(modelPath))
-        {
-            logger.LogWarning("CLIP model path is not configured; image-search features will be unavailable.");
-            return;
-        }
+        string? container = configuration["Clip:ModelBlobContainer"];
 
-        try
+        this.session = TryLoadSession(
+            configuration["Clip:ModelPath"],
+            container,
+            configuration["Clip:ModelBlobName"],
+            blobServiceClient,
+            logger,
+            "vision model");
+
+        // The text encoder + tokenizer power text-to-image search. They are
+        // optional: if unconfigured, image search still works and text search
+        // surfaces a 503 instead of failing the whole service.
+        this.textSession = TryLoadSession(
+            configuration["Clip:TextModelPath"],
+            container,
+            configuration["Clip:TextModelBlobName"],
+            blobServiceClient,
+            logger,
+            "text model");
+
+        if (this.textSession is not null)
         {
-            if (!File.Exists(modelPath) && !TryDownloadModel(configuration, blobServiceClient, modelPath, logger))
+            this.tokenizer = TryLoadTokenizer(configuration, container, blobServiceClient, logger);
+            if (this.tokenizer is null)
             {
-                return;
+                this.logger.LogWarning(
+                    "CLIP text encoder loaded but tokenizer assets are missing; text search will be unavailable.");
             }
-
-            var options = new Microsoft.ML.OnnxRuntime.SessionOptions();
-            options.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
-            this.session = new InferenceSession(modelPath, options);
-            this.logger.LogInformation("CLIP model loaded from {ModelPath}", modelPath);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to initialize CLIP model; image-search features will be unavailable.");
         }
     }
 
@@ -77,39 +86,156 @@ public sealed class ClipEmbeddingService : IClipEmbeddingService, IDisposable
         return new Vector(normalized);
     }
 
-    public void Dispose() => this.session?.Dispose();
+    public Vector EmbedText(string text)
+    {
+        if (this.textSession is null || this.tokenizer is null)
+        {
+            throw new ClipServiceUnavailableException();
+        }
 
-    private static bool TryDownloadModel(
-        IConfiguration configuration,
+        IReadOnlyList<int> ids = this.tokenizer.Encode(text);
+        long[] inputIds = new long[ClipTokenizer.ContextLength];
+        long[] attentionMask = new long[ClipTokenizer.ContextLength];
+        for (int i = 0; i < ids.Count; i++)
+        {
+            inputIds[i] = ids[i];
+            attentionMask[i] = 1;
+        }
+
+        var idsTensor = new DenseTensor<long>(inputIds, [1, ClipTokenizer.ContextLength]);
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor("input_ids", idsTensor),
+        };
+
+        // Some CLIP text exports take only input_ids; only pass the mask if the model declares it.
+        if (this.textSession.InputMetadata.ContainsKey("attention_mask"))
+        {
+            var maskTensor = new DenseTensor<long>(attentionMask, [1, ClipTokenizer.ContextLength]);
+            inputs.Add(NamedOnnxValue.CreateFromTensor("attention_mask", maskTensor));
+        }
+
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = this.textSession.Run(inputs);
+
+        DisposableNamedOnnxValue embedOutput = outputs.FirstOrDefault(o => o.Name == "text_embeds")
+            ?? outputs.First();
+
+        float[] raw = embedOutput.AsEnumerable<float>().ToArray();
+        float[] normalized = L2Normalize(raw);
+        return new Vector(normalized);
+    }
+
+    public void Dispose()
+    {
+        this.session?.Dispose();
+        this.textSession?.Dispose();
+    }
+
+    private static InferenceSession? TryLoadSession(
+        string? modelPath,
+        string? container,
+        string? blobName,
         BlobServiceClient blobServiceClient,
-        string modelPath,
+        ILogger logger,
+        string label)
+    {
+        if (string.IsNullOrEmpty(modelPath))
+        {
+            logger.LogWarning("CLIP {Label} path is not configured; the related search feature will be unavailable.", label);
+            return null;
+        }
+
+        try
+        {
+            if (!EnsureAsset(modelPath, container, blobName, blobServiceClient, logger, label))
+            {
+                return null;
+            }
+
+            var options = new Microsoft.ML.OnnxRuntime.SessionOptions();
+            options.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+            var session = new InferenceSession(modelPath, options);
+            logger.LogInformation("CLIP {Label} loaded from {ModelPath}", label, modelPath);
+            return session;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to initialize CLIP {Label}; the related search feature will be unavailable.", label);
+            return null;
+        }
+    }
+
+    private static ClipTokenizer? TryLoadTokenizer(
+        IConfiguration configuration,
+        string? container,
+        BlobServiceClient blobServiceClient,
         ILogger logger)
     {
-        string? container = configuration["Clip:ModelBlobContainer"];
-        string? blobName = configuration["Clip:ModelBlobName"];
+        string? vocabPath = configuration["Clip:VocabPath"];
+        string? mergesPath = configuration["Clip:MergesPath"];
+
+        if (string.IsNullOrEmpty(vocabPath) || string.IsNullOrEmpty(mergesPath))
+        {
+            logger.LogWarning(
+                "CLIP tokenizer paths (Clip:VocabPath / Clip:MergesPath) are not configured; text search will be unavailable.");
+            return null;
+        }
+
+        if (!EnsureAsset(vocabPath, container, configuration["Clip:VocabBlobName"], blobServiceClient, logger, "tokenizer vocab")
+            || !EnsureAsset(mergesPath, container, configuration["Clip:MergesBlobName"], blobServiceClient, logger, "tokenizer merges"))
+        {
+            return null;
+        }
+
+        try
+        {
+            return new ClipTokenizer(vocabPath, mergesPath);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to load CLIP tokenizer assets; text search will be unavailable.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Ensures a local asset exists, downloading it from blob storage when missing
+    /// and download is configured. Returns false (with a warning) when unavailable.
+    /// </summary>
+    private static bool EnsureAsset(
+        string localPath,
+        string? container,
+        string? blobName,
+        BlobServiceClient blobServiceClient,
+        ILogger logger,
+        string label)
+    {
+        if (File.Exists(localPath))
+        {
+            return true;
+        }
 
         if (string.IsNullOrEmpty(container) || string.IsNullOrEmpty(blobName))
         {
             logger.LogWarning(
-                "CLIP model not found at '{ModelPath}' and blob download is not configured " +
-                "(set Clip:ModelBlobContainer and Clip:ModelBlobName). " +
-                "Image-search features will be unavailable.",
-                modelPath);
+                "CLIP {Label} not found at '{Path}' and blob download is not configured. The related feature will be unavailable.",
+                label,
+                localPath);
             return false;
         }
 
         try
         {
-            logger.LogInformation("Downloading CLIP model from blob {Container}/{Blob} to {Path}", container, blobName, modelPath);
-            Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
+            logger.LogInformation("Downloading CLIP {Label} from blob {Container}/{Blob} to {Path}", label, container, blobName, localPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);
             BlobClient blobClient = blobServiceClient.GetBlobContainerClient(container).GetBlobClient(blobName);
-            blobClient.DownloadTo(modelPath);
-            logger.LogInformation("CLIP model downloaded ({Size} bytes)", new FileInfo(modelPath).Length);
+            blobClient.DownloadTo(localPath);
+            logger.LogInformation("CLIP {Label} downloaded ({Size} bytes)", label, new FileInfo(localPath).Length);
             return true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to download CLIP model from blob storage.");
+            logger.LogError(ex, "Failed to download CLIP {Label} from blob storage.", label);
             return false;
         }
     }

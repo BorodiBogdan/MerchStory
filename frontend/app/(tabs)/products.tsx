@@ -40,6 +40,7 @@ import {
   type Currency,
   currencySymbol,
   deleteProduct,
+  fetchReferenceImageData,
   formatPrice,
   type ProductDetail,
   type ProductFilters,
@@ -47,6 +48,7 @@ import {
   type ReferenceImage,
   removeBackground,
   searchReferenceImages,
+  searchReferenceImagesByText,
   updateProduct,
 } from '@/utils/api';
 import * as productImageCache from '@/utils/productImageCache';
@@ -159,7 +161,20 @@ export default function ProductsScreen() {
   const [similarError, setSimilarError] = useState<string | null>(null);
   const [showSimilarModal, setShowSimilarModal] = useState(false);
   const [similarPage, setSimilarPage] = useState(0);
+  // Photo search shows fewer, tighter results; text search casts a wider net.
   const SIMILAR_PAGE_SIZE = 4;
+  const SIMILAR_TEXT_PAGE_SIZE = 12;
+  const SIMILAR_TEXT_TOP_K = 24;
+  // Page size for the currently displayed results, set by whichever search ran.
+  const [similarPageSize, setSimilarPageSize] = useState(SIMILAR_PAGE_SIZE);
+  // Which search produced the current results. Photo results show a match %;
+  // text (semantic) results don't, since the similarity scale isn't meaningful there.
+  const [similarSource, setSimilarSource] = useState<'photo' | 'text'>('photo');
+
+  // Reference image search by text (CLIP text encoder) — no photo needed
+  const [refSearchText, setRefSearchText] = useState('');
+  const [isSearchingByText, setIsSearchingByText] = useState(false);
+  const [refTextError, setRefTextError] = useState<string | null>(null);
 
   const useSidebar = isWeb && screenWidth >= 900;
   const SIDEBAR_WIDTH = 272;
@@ -336,6 +351,8 @@ export default function ProductsScreen() {
       if (!previewOriginalB64) setPreviewOriginalB64(b64);
       const results = await searchReferenceImages(b64);
       setSimilarResults(results);
+      setSimilarSource('photo');
+      setSimilarPageSize(SIMILAR_PAGE_SIZE);
       setSimilarPage(0);
       setShowSimilarModal(true);
     } catch (err: unknown) {
@@ -345,16 +362,39 @@ export default function ProductsScreen() {
     }
   }
 
+  async function handleFindSimilarByText() {
+    const query = refSearchText.trim();
+    if (!query) return;
+    setIsSearchingByText(true);
+    setRefTextError(null);
+    try {
+      const results = await searchReferenceImagesByText(query, SIMILAR_TEXT_TOP_K);
+      setSimilarResults(results);
+      setSimilarSource('text');
+      setSimilarPageSize(SIMILAR_TEXT_PAGE_SIZE);
+      setSimilarPage(0);
+      setShowSimilarModal(true);
+    } catch (err: unknown) {
+      setRefTextError(err instanceof Error ? err.message : 'Text search failed.');
+    } finally {
+      setIsSearchingByText(false);
+    }
+  }
+
   async function selectReferenceImage(ref: ReferenceImage) {
     if (!ref.imageUrl) return;
-    setDraftImageUri(ref.imageUrl);
-    // Reference search now returns blob URLs. We need base64 to send the bytes
-    // back as a product image — fetch+encode lazily, only when the user actually
-    // picks a reference (search result selection is rare).
+    // The search result only carries a blob SAS URL. Fetching that directly from
+    // the browser fails CORS (Azure storage doesn't allow this origin), so we pull
+    // the bytes through our own API instead and use the returned base64 both to
+    // display the image and to save it onto the product.
     try {
-      const base64 = await uriToBase64(ref.imageUrl);
-      setDraftImageBase64(base64);
+      const { imageBase64, mimeType } = await fetchReferenceImageData(ref.id);
+      setDraftImageBase64(imageBase64);
+      setDraftImageUri(`data:${mimeType};base64,${imageBase64}`);
     } catch {
+      // Couldn't load the bytes — show the blob URL so the user sees something,
+      // but leave base64 null (the product can't be saved with this image).
+      setDraftImageUri(ref.imageUrl);
       setDraftImageBase64(null);
     }
     setShowSimilarModal(false);
@@ -801,9 +841,16 @@ export default function ProductsScreen() {
                 {showSimilarModal ? (
                   <>
                     <View style={styles.modalHeaderRow}>
-                      <View style={styles.modalHeaderIcon}>
-                        <Ionicons name="sparkles-outline" size={18} color={colors.accent.primary} />
-                      </View>
+                      <Pressable
+                        style={({ pressed }) => [styles.modalBackBtn, pressed && { opacity: 0.6 }]}
+                        onPress={() => setShowSimilarModal(false)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Back to search"
+                        hitSlop={8}
+                      >
+                        <Ionicons name="chevron-back" size={16} color={colors.accent.primary} />
+                        <Text style={styles.modalBackText}>Back</Text>
+                      </Pressable>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.modalTitle}>Professional References</Text>
                         <Text style={styles.modalSubtitle}>
@@ -840,11 +887,11 @@ export default function ProductsScreen() {
                     ) : (
                       (() => {
                         const all = similarResults ?? [];
-                        const totalPages = Math.max(1, Math.ceil(all.length / SIMILAR_PAGE_SIZE));
+                        const totalPages = Math.max(1, Math.ceil(all.length / similarPageSize));
                         const page = Math.min(similarPage, totalPages - 1);
                         const pageItems = all.slice(
-                          page * SIMILAR_PAGE_SIZE,
-                          page * SIMILAR_PAGE_SIZE + SIMILAR_PAGE_SIZE
+                          page * similarPageSize,
+                          page * similarPageSize + similarPageSize
                         );
                         const numCols = isWeb ? 4 : 2;
                         return (
@@ -872,17 +919,19 @@ export default function ProductsScreen() {
                                         style={styles.similarImage}
                                         resizeMode="contain"
                                       />
-                                      <View style={styles.similarMatchBadge}>
-                                        <Ionicons
-                                          name="flash"
-                                          size={10}
-                                          color="#fff"
-                                          style={{ marginRight: 3 }}
-                                        />
-                                        <Text style={styles.similarMatchText}>
-                                          {Math.round(item.similarity * 100)}%
-                                        </Text>
-                                      </View>
+                                      {similarSource === 'photo' && (
+                                        <View style={styles.similarMatchBadge}>
+                                          <Ionicons
+                                            name="flash"
+                                            size={10}
+                                            color="#fff"
+                                            style={{ marginRight: 3 }}
+                                          />
+                                          <Text style={styles.similarMatchText}>
+                                            {Math.round(item.similarity * 100)}%
+                                          </Text>
+                                        </View>
+                                      )}
                                     </View>
                                     <View style={styles.similarCardBody}>
                                       <Text style={styles.similarCardName} numberOfLines={2}>
@@ -1207,6 +1256,64 @@ export default function ProductsScreen() {
                         </View>
                       )}
                     </Pressable>
+
+                    {/* Search the curated library by name (no photo required) */}
+                    <View style={styles.fieldGroup}>
+                      <SectionLabel
+                        icon="search-outline"
+                        text="Search the library"
+                        color={colors.accent.secondary}
+                        mutedColor={colors.text.muted}
+                      />
+                      <View style={styles.refSearchRow}>
+                        <TextInput
+                          style={styles.textInput}
+                          placeholder="e.g. chips, coffee, sneakers"
+                          placeholderTextColor={colors.text.muted}
+                          value={refSearchText}
+                          onChangeText={(txt) => {
+                            setRefSearchText(txt);
+                            if (refTextError) setRefTextError(null);
+                          }}
+                          autoCorrect={false}
+                          autoCapitalize="none"
+                          returnKeyType="search"
+                          onSubmitEditing={() => void handleFindSimilarByText()}
+                          editable={!isSearchingByText}
+                        />
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.refSearchButton,
+                            (isSearchingByText || !refSearchText.trim()) &&
+                              styles.refSearchButtonDisabled,
+                            pressed && !isSearchingByText && { opacity: 0.85 },
+                          ]}
+                          onPress={() => void handleFindSimilarByText()}
+                          disabled={isSearchingByText || !refSearchText.trim()}
+                          accessibilityRole="button"
+                          accessibilityLabel="Search the professional library by name"
+                        >
+                          {isSearchingByText ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Ionicons name="search" size={18} color="#fff" />
+                          )}
+                        </Pressable>
+                      </View>
+                      <Text style={styles.refSearchHint}>
+                        Find a professional reference by name instead of a photo.
+                      </Text>
+                      {refTextError ? (
+                        <View style={styles.inlineErrorBanner}>
+                          <Ionicons
+                            name="alert-circle-outline"
+                            size={13}
+                            color={colors.text.error}
+                          />
+                          <Text style={styles.inlineErrorText}>{refTextError}</Text>
+                        </View>
+                      ) : null}
+                    </View>
 
                     {/* Name */}
                     <View style={styles.fieldGroup}>
@@ -2003,6 +2110,23 @@ function makeStyles(
       lineHeight: 19,
       marginTop: 2,
     },
+    modalBackBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      height: 34,
+      paddingLeft: 6,
+      paddingRight: D.spacing.sm,
+      borderRadius: D.radius.pill,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    modalBackText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
+    },
     modalCloseBtn: {
       width: 34,
       height: 34,
@@ -2097,6 +2221,27 @@ function makeStyles(
     },
     textInputError: {
       borderColor: colors.border.error,
+    },
+    refSearchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+    },
+    refSearchButton: {
+      width: 44,
+      height: 44,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.secondary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    refSearchButtonDisabled: {
+      opacity: 0.5,
+    },
+    refSearchHint: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      marginTop: 6,
     },
     inlineErrorBanner: {
       flexDirection: 'row',
