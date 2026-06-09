@@ -395,7 +395,18 @@ export default function ProductsScreen() {
     setIsSaving(true);
     try {
       let imageBase64 = draftImageBase64;
-      if (!imageBase64 && draftImageUri && !draftImageUri.startsWith('data:')) {
+      // Encode a newly picked local image (file:// on native, blob: on web) that
+      // the picker left without base64. Skip remote http(s) URLs: those are the
+      // unchanged existing image (a SAS URL from the cache). Re-fetching one
+      // would needlessly re-upload it and, on web, fail with a CORS error when
+      // the storage account doesn't allow this origin — sending null tells the
+      // backend to keep the existing blob.
+      if (
+        !imageBase64 &&
+        draftImageUri &&
+        !draftImageUri.startsWith('data:') &&
+        !/^https?:\/\//i.test(draftImageUri)
+      ) {
         imageBase64 = await uriToBase64(draftImageUri);
       }
       const trimmedCategory = draftCategory.trim();

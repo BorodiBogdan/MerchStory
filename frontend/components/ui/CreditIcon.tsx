@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { type ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
@@ -8,23 +8,20 @@ interface CreditIconProps {
 }
 
 export function CreditIcon({ size = 18, style }: CreditIconProps) {
+  // Unique gradient id per instance — on web, react-native-svg emits these as
+  // literal DOM ids, so a shared id makes multiple icons reference the same (or
+  // an unmounted) <linearGradient>, leaving the fill blank/washed out.
+  const gradId = `creditGrad-${useId().replace(/:/g, '')}`;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" style={style} fill="none">
       <Defs>
-        <LinearGradient
-          id="creditGrad"
-          x1="0"
-          y1="0"
-          x2="24"
-          y2="24"
-          gradientUnits="userSpaceOnUse"
-        >
+        <LinearGradient id={gradId} x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
           <Stop offset="0" stopColor="#A5B4FC" />
           <Stop offset="1" stopColor="#6366F1" />
         </LinearGradient>
       </Defs>
       {/* squircle token */}
-      <Rect x="1.5" y="1.5" width="21" height="21" rx="7" fill="url(#creditGrad)" />
+      <Rect x="1.5" y="1.5" width="21" height="21" rx="7" fill={`url(#${gradId})`} />
       {/* main 4-point spark */}
       <Path
         d="M12 5.5c.55 4.2 1.8 5.45 6.5 6.5-4.7 1.05-5.95 2.3-6.5 6.5-.55-4.2-1.8-5.45-6.5-6.5 4.7-1.05 5.95-2.3 6.5-6.5Z"

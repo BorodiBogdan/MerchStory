@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
@@ -58,6 +59,14 @@ export function BrandLogo({
   const { colors } = useTheme();
   const s = SIZES[size];
 
+  // Unique gradient ids per instance. On web, react-native-svg emits these as
+  // literal DOM ids; a shared id makes a second logo on the same page (e.g. the
+  // navbar mark + a card mark) reference the wrong/unmounted <linearGradient>,
+  // so the tile fill collapses to dark/blank instead of the brand gradient.
+  const uid = useId().replace(/:/g, '');
+  const fillId = `brandFill-${uid}`;
+  const sheenId = `brandSheen-${uid}`;
+
   // Wordmark face: use the loaded Montserrat-Bold on native (the TTF is already
   // bold, so no fontWeight) and a Montserrat-led stack on web. Keeps the
   // wordmark on-brand and geometric instead of falling back to the system font.
@@ -116,12 +125,12 @@ export function BrandLogo({
       <Svg width={s.mark} height={s.mark} viewBox="0 0 100 100">
         <Defs>
           {/* Real diagonal brand gradient: light top-left to deep bottom-right */}
-          <LinearGradient id="brandFill" x1="0" y1="0" x2="0.55" y2="1">
+          <LinearGradient id={fillId} x1="0" y1="0" x2="0.55" y2="1">
             <Stop offset="0" stopColor={secondary} />
             <Stop offset="1" stopColor={primary} />
           </LinearGradient>
           {/* Soft glassy sheen: bright top, fading to a faint dark base */}
-          <LinearGradient id="brandSheen" x1="0" y1="0" x2="0" y2="1">
+          <LinearGradient id={sheenId} x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.34} />
             <Stop offset="0.46" stopColor="#FFFFFF" stopOpacity={0} />
             <Stop offset="1" stopColor="#000000" stopOpacity={0.14} />
@@ -135,10 +144,10 @@ export function BrandLogo({
           width="100"
           height="100"
           rx={RX}
-          fill={squareSolid ?? 'url(#brandFill)'}
+          fill={squareSolid ?? `url(#${fillId})`}
         />
         {!monochrome && (
-          <Rect x="0" y="0" width="100" height="100" rx={RX} fill="url(#brandSheen)" />
+          <Rect x="0" y="0" width="100" height="100" rx={RX} fill={`url(#${sheenId})`} />
         )}
 
         {/* Faint cast shadow under the glyph for a hint of depth */}

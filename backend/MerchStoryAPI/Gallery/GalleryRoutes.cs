@@ -203,6 +203,43 @@ public static class GalleryRoutes
             return Results.Ok(new GalleryImageBytes(url, image.MimeType));
         });
 
+        // Returns the raw image as base64, fetched server-side from blob storage.
+        // Display paths use the SAS URL from /image, but callers that need the
+        // bytes in-process (e.g. inlining a saved wallpaper into a catalog request)
+        // can't fetch the SAS URL from a browser without CORS on the storage
+        // account. This proxies the bytes through our own authenticated API.
+        group.MapGet("/{id:guid}/image/raw", async (
+            Guid id,
+            ClaimsPrincipal principal,
+            AppDbContext db,
+            IBlobStorage blobs,
+            CancellationToken ct) =>
+        {
+            string? userId = GetUserId(principal);
+            if (userId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var image = await db.GeneratedImages
+                .Where(g => g.Id == id && g.UserId == userId)
+                .Select(g => new { g.ImageBlobKey, g.MimeType })
+                .SingleOrDefaultAsync(ct);
+
+            if (image is null)
+            {
+                return Results.NotFound();
+            }
+
+            if (string.IsNullOrEmpty(image.ImageBlobKey))
+            {
+                return Results.NotFound();
+            }
+
+            byte[] bytes = await blobs.DownloadAsync(image.ImageBlobKey, ct);
+            return Results.Ok(new GalleryImageRaw(Convert.ToBase64String(bytes), image.MimeType));
+        });
+
         group.MapPatch("/{id:guid}", async (
             Guid id,
             UpdateGalleryItemRequest req,
@@ -328,6 +365,8 @@ internal sealed record GalleryItemMetadata(
     string? PaperSize);
 
 internal sealed record GalleryImageBytes(string? ImageUrl, string MimeType);
+
+internal sealed record GalleryImageRaw(string ImageBase64, string MimeType);
 
 internal sealed record SaveImageRequest(
     string ImageBase64,

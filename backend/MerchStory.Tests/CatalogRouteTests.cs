@@ -155,7 +155,6 @@ public class CatalogRouteTests : IDisposable
                     ProductJson(b, "Product B"),
                     ProductJson(c, "Product C"),
                 },
-                layout = "Grid",
                 colorTheme = "Brand Colors",
                 format = "Square 1:1",
                 showPrices = true,
@@ -203,7 +202,6 @@ public class CatalogRouteTests : IDisposable
                     ProductJson(bravo, "Bravo"),
                     ProductJson(charlie, "Charlie"),
                 },
-                layout = "Grid",
                 colorTheme = "Brand Colors",
                 format = "Square 1:1",
                 showPrices = false,
@@ -245,7 +243,6 @@ public class CatalogRouteTests : IDisposable
             new
             {
                 products = new[] { ProductJson(alpha, "Alpha"), ProductJson(bravo, "Bravo") },
-                layout = "Grid",
                 colorTheme = "Brand Colors",
                 format = "Square 1:1",
                 showPrices = false,
@@ -279,7 +276,6 @@ public class CatalogRouteTests : IDisposable
                     ProductJson(good, "Good"),
                     ProductJson(bad, "Bad"),
                 },
-                layout = "Grid",
                 colorTheme = "Brand Colors",
                 format = "Square 1:1",
                 showPrices = true,
@@ -330,7 +326,6 @@ public class CatalogRouteTests : IDisposable
             new
             {
                 products = new[] { ProductJson(mine, "Mine"), ProductJson(foreign, "Foreign") },
-                layout = "Grid",
                 colorTheme = "Brand Colors",
                 format = "Square 1:1",
                 showPrices = true,
@@ -359,7 +354,6 @@ public class CatalogRouteTests : IDisposable
             new
             {
                 products,
-                layout = "Grid",
                 colorTheme = "Brand Colors",
                 format = "Square 1:1",
                 showPrices = true,

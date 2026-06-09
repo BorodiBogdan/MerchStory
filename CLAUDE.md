@@ -91,7 +91,7 @@ This file gives Claude Code the context needed to make good decisions across all
 ### Backend (.NET)
 - Minimal API style. Each feature area has its own folder with a `*Routes.cs` file and a `Map<Feature>Endpoints()` extension method wired up in `Program.cs`.
 - Use `ILogger<T>` for logging; no `Console.WriteLine` in production code
-- All secrets (API keys, JWT key, DB connection) go in `appsettings.Development.json` or environment variables — never hardcoded
+- Secrets (API keys, JWT key, DB connection) are sourced from **Azure Key Vault** in production (wired in `Program.cs` via `AddAzureKeyVault` + `DefaultAzureCredential`; the Container App's managed identity authenticates, devs use `az login` locally). Key Vault provides production defaults; `appsettings.Development.json`, user-secrets, and env vars are re-layered on top so they override KV for local dev. Never hardcode secrets in source.
 - Tests live in `MerchStory.Tests` (xUnit, integration-style against a real DB; no Moq)
 
 ### Frontend (React Native / Expo)

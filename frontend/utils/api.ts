@@ -314,9 +314,66 @@ export interface CatalogImageProduct {
   currency?: Currency;
 }
 
+// ── Catalog offers ───────────────────────────────────────────────────────────
+// Shared offer contract used by the offer modal, StudioCanvas, and the backend
+// request. Lives here (not in the modal) so utils stays the single source of the
+// API shape and the modal can import it without a circular dependency.
+
+/**
+ * 'group'  = category-style discount: each product is sold separately at the
+ *            same percentage off (e.g. any Lays at 30%).
+ * 'bundle' = buy-all deal: the customer takes every product together; some can
+ *            be marked free (e.g. buy 2 get 1 free).
+ */
+export type CatalogOfferKind = 'group' | 'bundle';
+
+/**
+ * 'item'  = a specific known product is the freebie (e.g. buy glasses + shorts,
+ *           get THIS t-shirt free).
+ * 'range' = the freebie comes from a product range / same item (e.g. buy 2 of
+ *           these chips, get one more free).
+ */
+export type FreeItemType = 'item' | 'range';
+
+export interface BundleFreebie {
+  productId: string;
+  type: FreeItemType;
+}
+
+export interface CatalogOfferGroup {
+  kind: CatalogOfferKind;
+  productIds: string[];
+  percent: number;
+  /** Bundle only: products given away free within the bundle, each tagged by type. */
+  freebies: BundleFreebie[];
+  /**
+   * Bundle only, computed by the frontend when the config is submitted: the price
+   * the customer pays = sum of the PAID (non-free) items, each after `percent`.
+   * A free item is a bonus and is NOT subtracted from this, so it is never framed
+   * as a discount. `bundleOriginalPrice` is the same paid items at full price
+   * (differs only when `percent > 0`).
+   */
+  bundlePrice?: number;
+  bundleOriginalPrice?: number;
+}
+
+export interface CatalogOfferConfig {
+  isOffer: boolean;
+  groups: CatalogOfferGroup[];
+}
+
+/**
+ * True when the offer contains a real group (2+ products) or any bundle — the
+ * cases where per-product name labels are hidden for the whole catalog.
+ */
+export function offerHasGrouping(groups: CatalogOfferGroup[]): boolean {
+  return groups.some(
+    (g) => g.kind === 'bundle' || (g.kind === 'group' && g.productIds.length >= 2)
+  );
+}
+
 export interface GenerateCatalogImageParams {
   products: CatalogImageProduct[];
-  layout: string;
   colorTheme: string;
   format: string;
   showPrices: boolean;
@@ -326,6 +383,7 @@ export interface GenerateCatalogImageParams {
   brandContextFields?: string[];
   currency?: Currency;
   language?: AppLanguage;
+  offer?: CatalogOfferConfig;
 }
 
 export interface GenerateAnnouncementImageParams {
@@ -464,6 +522,11 @@ export interface GalleryImageBytes {
   mimeType: string;
 }
 
+export interface GalleryImageRaw {
+  imageBase64: string;
+  mimeType: string;
+}
+
 export interface GalleryFilters {
   types?: GenerationType[];
   assetType?: GalleryAssetType;
@@ -587,6 +650,18 @@ export async function fetchGalleryImage(id: string): Promise<GalleryImageBytes> 
     throw new Error(`Failed to load image (${response.status})`);
   }
   return response.json() as Promise<GalleryImageBytes>;
+}
+
+// Fetches the raw image bytes as base64 through our own API rather than the blob
+// SAS URL. Used when the caller needs the bytes in-process (e.g. inlining a saved
+// wallpaper into a catalog request): a direct browser fetch of the SAS URL is
+// CORS-blocked, but this authenticated endpoint reads the blob server-side.
+export async function fetchGalleryImageBase64(id: string): Promise<GalleryImageRaw> {
+  const response = await fetchWithAuth(`${API_URL}/gallery/${id}/image/raw`, {});
+  if (!response.ok) {
+    throw new Error(`Failed to load image (${response.status})`);
+  }
+  return response.json() as Promise<GalleryImageRaw>;
 }
 
 export async function deleteGalleryItem(id: string): Promise<void> {
