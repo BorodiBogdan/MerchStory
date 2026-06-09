@@ -814,6 +814,19 @@ public static class ImageGenerationRoutes
 // server-side (see FetchProductImagesAsync), so image bytes never travel on the wire.
 internal sealed record CatalogProductApiItem(Guid Id, string Name, decimal Price, string Currency = "USD");
 
+// Offer payload mirrors the frontend's CatalogOfferConfig (productIds are product GUIDs).
+internal sealed record CatalogFreebieApi(Guid ProductId, string Type = "item");
+
+internal sealed record CatalogOfferGroupApi(
+    string Kind,
+    List<Guid>? ProductIds,
+    decimal Percent,
+    List<CatalogFreebieApi>? Freebies,
+    decimal? BundlePrice = null,
+    decimal? BundleOriginalPrice = null);
+
+internal sealed record CatalogOfferApi(bool IsOffer, List<CatalogOfferGroupApi>? Groups);
+
 internal sealed record CatalogImageApiRequest(
     List<CatalogProductApiItem>? Products,
     string ColorTheme,
@@ -824,7 +837,8 @@ internal sealed record CatalogImageApiRequest(
     string? Language = null,
     bool PreserveProductImages = false,
     string BackgroundStyle = "SocialPost",
-    bool ShowProductNames = false)
+    bool ShowProductNames = false,
+    CatalogOfferApi? Offer = null)
 {
     public CatalogImageRequest ToServiceRequest(
         BrandContext? brandContext,
@@ -833,12 +847,19 @@ internal sealed record CatalogImageApiRequest(
         string language,
         IReadOnlyDictionary<Guid, string> productImages,
         IReadOnlyList<ProductMarkerAssignment>? markerAssignments = null,
-        string? brandColors = null) =>
-        new(
-            this.Products!.Select(p => new CatalogProductItem(
-                p.Name,
-                p.Price,
-                productImages.GetValueOrDefault(p.Id))).ToList(),
+        string? brandColors = null)
+    {
+        var resolved = this.Products!
+            .Select(p => (p.Id, Item: new CatalogProductItem(p.Name, p.Price, productImages.GetValueOrDefault(p.Id))))
+            .ToList();
+        var itemById = new Dictionary<Guid, CatalogProductItem>();
+        foreach (var (id, item) in resolved)
+        {
+            itemById[id] = item;
+        }
+
+        return new(
+            resolved.Select(x => x.Item).ToList(),
             this.ColorTheme,
             this.Format,
             this.ShowPrices,
@@ -850,7 +871,52 @@ internal sealed record CatalogImageApiRequest(
             markerAssignments,
             this.BackgroundStyle,
             this.ShowProductNames,
-            brandColors);
+            brandColors,
+            this.BuildOffer(itemById));
+    }
+
+    // Resolve the wire offer (product GUIDs) into a service offer that carries the
+    // resolved product line-items. Offers are ignored in preserve mode and unknown
+    // product ids / empty groups are dropped.
+    private CatalogOffer? BuildOffer(IReadOnlyDictionary<Guid, CatalogProductItem> itemById)
+    {
+        if (this.PreserveProductImages || this.Offer is null || !this.Offer.IsOffer || this.Offer.Groups is null)
+        {
+            return null;
+        }
+
+        var groups = new List<CatalogOfferGroupItem>();
+        foreach (CatalogOfferGroupApi g in this.Offer.Groups)
+        {
+            List<CatalogProductItem> items = (g.ProductIds ?? new List<Guid>())
+                .Where(itemById.ContainsKey)
+                .Select(id => itemById[id])
+                .ToList();
+            if (items.Count == 0)
+            {
+                continue;
+            }
+
+            CatalogOfferKind kind = string.Equals(g.Kind, "bundle", StringComparison.OrdinalIgnoreCase)
+                ? CatalogOfferKind.Bundle
+                : CatalogOfferKind.Group;
+
+            List<CatalogOfferFreebie> freebies = (g.Freebies ?? new List<CatalogFreebieApi>())
+                .Where(f => itemById.ContainsKey(f.ProductId))
+                .Select(f =>
+                {
+                    FreeItemKind freeKind = string.Equals(f.Type, "range", StringComparison.OrdinalIgnoreCase)
+                        ? FreeItemKind.Range
+                        : FreeItemKind.Item;
+                    return new CatalogOfferFreebie(itemById[f.ProductId].Name, freeKind);
+                })
+                .ToList();
+
+            groups.Add(new CatalogOfferGroupItem(kind, items, g.Percent, freebies, g.BundlePrice, g.BundleOriginalPrice));
+        }
+
+        return groups.Count > 0 ? new CatalogOffer(groups) : null;
+    }
 }
 
 internal sealed record WallpaperApiRequest(string Prompt, string Format, bool IncludeLogo, List<string>? BrandContextFields, string? Language = null)

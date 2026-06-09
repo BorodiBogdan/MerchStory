@@ -884,6 +884,7 @@ const en = {
   'studio.offer.optNames': 'Show product names',
   'studio.offer.optPreserve': 'Preserve product images',
   'studio.offer.optLayout': 'Layout',
+  'studio.offer.namesDisabledNote': 'Product names are hidden for groups and bundles.',
 };
 
 export default en;

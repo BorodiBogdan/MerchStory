@@ -1,3 +1,5 @@
+using System.Text;
+
 using MerchStoryImageGeneration.Models;
 
 namespace MerchStoryImageGeneration.Services;
@@ -70,7 +72,9 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
         "If no slogan was provided, there is NO headline — let the products and layout carry the design with empty space instead. " +
         "When text does appear, use tight deliberate kerning, a modern geometric sans-serif (Helvetica / Inter / Aktiv-Grotesk feel). " +
         "Flat typography only — no decorative outlines, no gradients on text, no drop shadows on text, no chrome / metallic effects, " +
-        "no clipart letterforms, no comic-book bubbles. Letters are crisp and confidently placed.\n\n" +
+        "no clipart letterforms, no comic-book bubbles. Flat constrains EFFECTS, not color: text and the chip or tag it sits on " +
+        "may carry tasteful, well-judged color that harmonizes with the scene (the price and offer lockups in particular should look designed and considered, not a plain black-on-white default), " +
+        "as long as the letters themselves stay flat. Letters are crisp and confidently placed.\n\n" +
         "LIGHTING & DEPTH: soft, directional, sculpted illumination — magazine-quality. A subtle gradient of light across the scene " +
         "for depth. Never flat fluorescent lighting, never harsh on-camera flash look, never the over-evenly-lit AI-render look.\n\n" +
         "COLOR DISCIPLINE: use whatever colors make the design look coolest — there is no fixed color count. " +
@@ -188,6 +192,72 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
                "and one signal-color accent drawn from the brand or the product itself. Restrained, magazine-quality, confidently quiet.\n\n";
     }
 
+    // Theme-aware direction for how the PRICE TAGS, OFFER CALLOUTS, and HEADLINE PRICE lockups look.
+    // Two failure modes to avoid: (a) a plain black-on-white default that looks basic and blends in, and
+    // (b) a loud, saturated color block (e.g. a product's brightest hue) that clashes with the scene.
+    // Default behaviour (auto/None, editorial, Brand Colors) aims for a TASTEFUL lockup whose tone
+    // harmonizes with the scene and background, pleasing to the eye. Vibrant and Pop Art stay bold
+    // within their own palettes. Monochrome and Dark return restrained on-theme text so their looks
+    // are preserved. The color lives in a flat chip/tag/panel (or the flat figures); type stays flat.
+    private static string PromoColorGuidance(string theme, string? brandColors, string backgroundStyle)
+    {
+        const string bans =
+            "Keep this colorful WITHOUT any banned decoration: a solid flat color chip, tag, or panel with crisp flat type on top, " +
+            "color and contrast only, never effects; no glows, halos, or auras; no gradients on the text or the fill; no chrome or " +
+            "metallic; no starbursts, SALE or NEW bursts, or splash badges; no ribbon, scroll, or pennant banners; no sparkles. ";
+
+        if (string.Equals(theme, "Monochrome", StringComparison.OrdinalIgnoreCase))
+        {
+            return "PROMO LOCKUP COLOR (Monochrome): keep the price tags, the offer callout, and any headline price tonal grayscale, " +
+                   "matching the monochrome scheme (rich black or deep charcoal type on paper-white, or paper-white type on a near-black tag). " +
+                   "Drive impact through weight, scale, and high contrast, not through color. At most the single tiny restrained color " +
+                   "accent the theme already allows (for example one small price chip, or a brand logo accent) may carry color; everything " +
+                   "else stays grayscale. Keep the lockups solid and flat: " + bans + "\n\n";
+        }
+
+        if (string.Equals(theme, "Dark", StringComparison.OrdinalIgnoreCase))
+        {
+            return "PROMO LOCKUP COLOR (Dark): keep the price tags, the offer callout, and any headline price in the dark scheme; " +
+                   "set the figures in the theme's warm off-white or muted gold against a deep tonal chip or panel (charcoal, espresso, " +
+                   "oxblood, near-black), exactly like the rest of the dark typography. Do NOT introduce bright or random accent colors; " +
+                   "the warm off-white or gold on dark IS the accent. Get the pop from strong light-on-dark contrast and confident scale. " + bans + "\n\n";
+        }
+
+        string accentSource;
+        if (string.Equals(theme, "Brand Colors", StringComparison.OrdinalIgnoreCase))
+        {
+            accentSource = string.IsNullOrWhiteSpace(brandColors)
+                ? "a refined tone drawn from the brand palette, used tastefully so it harmonizes with the scene"
+                : $"a refined tone drawn from the brand palette ({brandColors}), used tastefully so it harmonizes with the scene";
+        }
+        else if (string.Equals(theme, "Vibrant", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(theme, "Pop Art", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(theme, "Pop-Art", StringComparison.OrdinalIgnoreCase))
+        {
+            accentSource = "a bold color from this theme's own limited palette (these themes are meant to be vivid), kept harmonious within that palette so it never clashes";
+        }
+        else
+        {
+            accentSource = "a tone that harmonizes with the scene and its background: a soft, sophisticated neutral (cream, off-white, warm stone, kraft, soft charcoal) " +
+                           "or a gently muted, desaturated accent pulled from the scene's own palette, NOT the loudest or most saturated color of a product";
+        }
+
+        bool realistic = string.Equals(backgroundStyle, "Realistic", StringComparison.OrdinalIgnoreCase);
+        string sceneNote = realistic
+            ? "On the realistic, photographic background the lockup must look like a tasteful retail price tag that belongs in the scene and " +
+              "complements its natural materials and light. Do NOT drop a loud, saturated, clashing color block onto the photo, and do NOT leave " +
+              "a plain black or brown numeral on a white tag either. Aim for a refined, well-integrated tag that simply looks good to the eye. "
+            : "Let the lockup feel like a deliberate part of the layout, its tone pulled from the same palette as the backdrop so it harmonizes rather than competes. ";
+
+        return "PROMO LOCKUP COLOR: the price tags, the offer or discount callout (for example a buy-X-get-Y-free message), and " +
+               "any headline price should look TASTEFUL, well-designed, and harmonized with the rest of the image, easy and pleasant on the eye. " +
+               "They do NOT have to be brightly colored; what matters is that they look good and fit the scene, never a plain black-on-white " +
+               "default and never a loud color block that fights the background. " +
+               sceneNote +
+               $"Build each lockup on {accentSource}, with the figures set in a clean, legible, high-contrast flat color, and keep the whole " +
+               "lockup understated and confident. The type itself stays FLAT and crisp. " + bans + "\n\n";
+    }
+
     private static string FinalQualityBar() =>
         "FINAL BAR: this image must look like the lead post of a cool, well-designed brand with broad mainstream appeal — " +
         "genuinely good-looking, confidently restrained, attractive to ordinary people of every kind, and instantly more polished " +
@@ -217,17 +287,23 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             ? "Use the provided product photos as the basis for the visuals. "
             : string.Empty;
 
-        string productsClause = (r.ShowProductNames, r.ShowPrices) switch
-        {
-            (true, true) => $"Products: {namedWithPrices}. Render each product's name as flat typography near its product. ",
-            (true, false) => $"Products: {nameList}. Render each product's name as flat typography near its product. ",
-            (false, true) => $"Products (in order): {nameList}. Show only the prices ({priceList}) — one price per product, in the same order — and do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
-            (false, false) => $"Products (in order, for context only): {nameList}. Do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
-        };
+        bool hasOffer = r.Offer is not null && r.Offer.Groups.Count > 0;
+
+        string productsClause = hasOffer
+            ? BuildOfferClause(r)
+            : (r.ShowProductNames, r.ShowPrices) switch
+            {
+                (true, true) => $"Products: {namedWithPrices}. Render each product's name as flat typography near its product. ",
+                (true, false) => $"Products: {nameList}. Render each product's name as flat typography near its product. ",
+                (false, true) => $"Products (in order): {nameList}. Show only the prices ({priceList}) — one price per product, in the same order — and do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
+                (false, false) => $"Products (in order, for context only): {nameList}. Do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
+            };
 
         string priceClause = r.ShowPrices
             ? $"Display prices prominently using the {r.Currency} currency (symbol: {symbol})."
-            : "Do not show prices.";
+            : hasOffer
+                ? "Do not render any currency amounts or prices; still make the offers above (the discounts, bundles, and free items) clearly visible — how to present them is up to you."
+                : "Do not show prices.";
 
         return
             $"{SystemContext}\n\n" +
@@ -242,9 +318,160 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             productsClause +
             imageNote +
             priceClause + " " +
+            PromoColorGuidance(r.ColorTheme, r.BrandColors, r.BackgroundStyle) +
             BackgroundStyleHint(r.BackgroundStyle) + "\n\n" +
             FinalQualityBar();
     }
+
+    // Builds the products/offer description when the catalog carries discounts,
+    // groups, or bundles. Monetary amounts are gated on ShowPrices; the offer
+    // itself (discount %, that it's a bundle, that an item is free) is always
+    // conveyed, but HOW to present it is left to the model. Product-name labels
+    // are suppressed because the frontend disables them whenever an offer groups items.
+    private static string BuildOfferClause(CatalogImageRequest r)
+    {
+        CatalogOffer offer = r.Offer!;
+        bool showPrices = r.ShowPrices;
+        var grouped = new HashSet<CatalogProductItem>(offer.Groups.SelectMany(g => g.Items));
+        var loose = r.Products.Where(p => !grouped.Contains(p)).ToList();
+
+        var sb = new StringBuilder();
+        sb.Append(
+            "This catalog advertises promotional offers. Do NOT render any product-name labels, " +
+            "captions, or product-name typography anywhere in the image. Present each offer below as " +
+            "its own clear deal. Make the pricing and discount treatment look polished, modern, and " +
+            "genuinely eye-catching — a confident, well-composed price/discount lockup (for example a " +
+            "tasteful price tag, a clean chip or panel, or a confident typographic block) integrated into the " +
+            "design, NOT a plain number floating in a corner. ");
+        if (offer.Groups.Any(g => g.Percent > 0))
+        {
+            sb.Append(
+                "Where an offer has a percentage discount, show that discount percentage prominently, " +
+                "the original price clearly crossed out, and the new discounted price as the hero. ");
+        }
+
+        int idx = 1;
+        foreach (CatalogOfferGroupItem g in offer.Groups)
+        {
+            string names = string.Join(", ", g.Items.Select(p => p.Name));
+
+            if (g.Kind == CatalogOfferKind.Bundle)
+            {
+                bool allEqual = g.Items.Select(p => p.Price).Distinct().Count() == 1;
+                sb.Append($"Offer {idx} — a BUNDLE the customer buys all together as one deal: {names}. ");
+                sb.Append("Show these products as a single cohesive bundle, placed right next to each other, never scattered to different corners. ");
+
+                // Same-priced bundles surface one shared per-item price, so only forbid
+                // per-product prices when the prices differ and a combined total is the
+                // only sensible figure to show.
+                if (!allEqual)
+                {
+                    sb.Append("Treat them as one combined offer, so do NOT show individual per-product prices for bundle items. ");
+                }
+
+                if (g.Freebies.Count > 0)
+                {
+                    int freeCount = g.Freebies.Count;
+                    int paidCount = Math.Max(1, g.Items.Count - freeCount);
+                    bool allRange = g.Freebies.All(f => f.Kind == FreeItemKind.Range);
+                    string freeNames = string.Join(", ", g.Freebies.Select(f => f.ProductName));
+                    sb.Append(allRange
+                        ? $"Promote this as a \"buy {paidCount}, get {freeCount} free\" deal (write the wording in the catalog's language). "
+                        : $"Promote this as a \"buy {paidCount}, get {freeCount} free\" deal where the free item is {freeNames} (write the wording in the catalog's language). ");
+                    sb.Append("Do NOT place a \"FREE\" sticker, badge, or label on any individual product; communicate it only as that buy-X-get-Y-free message. ");
+                }
+
+                if (showPrices && allEqual)
+                {
+                    // Every item costs the same, so a single per-item price ("2.99 each")
+                    // is clearer than a summed total; the buy-X-get-Y wording already
+                    // carries the deal, e.g. "buy 2 at 2.99 each, get 1 free".
+                    decimal price = g.Items[0].Price;
+                    sb.Append($"Every item is the same price: {CurrencyFormatter.Format(price, r.Currency)} each");
+                    sb.Append(g.Percent > 0
+                        ? $", now {CurrencyFormatter.Format(Discount(price, g.Percent), r.Currency)} each after the discount. "
+                        : ". ");
+                    sb.Append("Show that single per-item price, NOT a summed-up bundle total. ");
+                    if (g.Freebies.Count > 0)
+                    {
+                        sb.Append("The free item is a bonus on top, not folded into that price. ");
+                    }
+                }
+                else if (showPrices && g.BundlePrice is decimal bundlePrice)
+                {
+                    // Mixed prices: only a combined total makes sense, so label it so the
+                    // customer knows the figure covers the whole bundle, not one item.
+                    string bundleLabel = string.Equals(r.Language, "RO", StringComparison.OrdinalIgnoreCase)
+                        ? "Preț pachet"
+                        : "Bundle price";
+                    sb.Append($"The price for the whole bundle is {CurrencyFormatter.Format(bundlePrice, r.Currency)}; label it with a short \"{bundleLabel}\" tag right next to the amount so it is clear this price covers the entire bundle, not a single item. ");
+                    sb.Append("This total is only for the items the customer pays for. The free item is a bonus on top: do NOT add it into or subtract it from this price, and do NOT present the free item as a price reduction or a crossed-out total. ");
+                    if (g.Percent > 0 && g.BundleOriginalPrice is decimal originalPrice && originalPrice != bundlePrice)
+                    {
+                        sb.Append($"This price is {FormatPercent(g.Percent)} off the usual {CurrencyFormatter.Format(originalPrice, r.Currency)}; show that discount with the original crossed out. ");
+                    }
+                }
+                else if (g.Percent > 0)
+                {
+                    sb.Append($"The bundle is {FormatPercent(g.Percent)} off; make the discount obvious without showing any prices. ");
+                }
+            }
+            else
+            {
+                bool allEqual = g.Items.Select(p => p.Price).Distinct().Count() == 1;
+                string discountPhrase = g.Percent > 0 ? $", each {FormatPercent(g.Percent)} off" : string.Empty;
+                sb.Append($"Offer {idx} — a GROUP of {g.Items.Count} products sold separately{discountPhrase}: {names}. ");
+                sb.Append("Show these products right next to each other as one cluster, never scattered to different corners. ");
+
+                if (showPrices)
+                {
+                    if (allEqual)
+                    {
+                        decimal price = g.Items[0].Price;
+                        sb.Append($"They are ALL the same price: {CurrencyFormatter.Format(price, r.Currency)}");
+                        sb.Append(g.Percent > 0
+                            ? $" each, now {CurrencyFormatter.Format(Discount(price, g.Percent), r.Currency)} each after the discount. "
+                            : " each. ");
+                    }
+                    else
+                    {
+                        string per = string.Join("; ", g.Items.Select(p => g.Percent > 0
+                            ? $"{p.Name}: {CurrencyFormatter.Format(p.Price, r.Currency)} now {CurrencyFormatter.Format(Discount(p.Price, g.Percent), r.Currency)}"
+                            : $"{p.Name}: {CurrencyFormatter.Format(p.Price, r.Currency)}"));
+                        sb.Append($"Prices — {per}. ");
+                    }
+                }
+                else if (g.Percent > 0)
+                {
+                    sb.Append($"They are {FormatPercent(g.Percent)} off; make the discount obvious without showing any prices. ");
+                }
+            }
+
+            idx++;
+        }
+
+        if (loose.Count > 0)
+        {
+            string looseNames = string.Join(", ", loose.Select(p => p.Name));
+            if (showPrices)
+            {
+                string looseList = string.Join(", ", loose.Select(p => CurrencyFormatter.Format(p.Price, r.Currency)));
+                sb.Append($"Also show these individual products (in order): {looseNames} — with their prices ({looseList}), one price per product. ");
+            }
+            else
+            {
+                sb.Append($"Also show these individual products (in order, for context): {looseNames}. ");
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private static decimal Discount(decimal price, decimal percent) =>
+        Math.Round(price * (1 - (percent / 100m)), 2);
+
+    private static string FormatPercent(decimal percent) =>
+        (percent == Math.Truncate(percent) ? ((int)percent).ToString() : percent.ToString("0.##")) + "%";
 
     private static string BuildOutlinePrompt(CatalogImageRequest r)
     {

@@ -899,6 +899,7 @@ const ro: Dictionary = {
   'studio.offer.optNames': 'Afișează nume produse',
   'studio.offer.optPreserve': 'Păstrează imaginile produselor',
   'studio.offer.optLayout': 'Aranjament',
+  'studio.offer.namesDisabledNote': 'Numele produselor sunt ascunse pentru grupuri și pachete.',
 };
 
 export default ro;

@@ -46,6 +46,7 @@ import { useShop } from '@/context/shop';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 import {
+  type CatalogOfferConfig,
   fetchGallery,
   fetchGalleryImageBase64,
   formatPrice,
@@ -56,6 +57,7 @@ import {
   type GenerateImageResponse,
   generateWallpaper,
   InsufficientCreditsError,
+  offerHasGrouping,
   type PlacementZone,
   type ProductItem,
   saveToGallery,
@@ -1529,6 +1531,8 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [reviewMode, setReviewMode] = useState<null | 'catalog' | 'wallpaperOn'>(null);
   // In-modal base-price overrides (productId -> price), applied to the next generation only.
   const priceOverridesRef = useRef<Record<string, number>>({});
+  // Offer config from the review modal, applied to the next catalog generation only.
+  const catalogOfferRef = useRef<CatalogOfferConfig | null>(null);
   const [catalogGenerating, setCatalogGenerating] = useState(false);
   const [catalogResult, setCatalogResult] = useState<GenerateImageResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -1597,11 +1601,12 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     mode: 'catalog' | 'wallpaperOn'
   ): { label: string; value: string }[] {
     const onOff = (v: boolean) => (v ? t('studio.offer.optOn') : t('studio.offer.optOff'));
+    // Product-name row is rendered by the modal itself (it forces it off and
+    // annotates when the offer has a group/bundle), so it is omitted here.
     if (mode === 'wallpaperOn') {
       return [
         { label: t('studio.offer.optLayout'), value: layout },
         { label: t('studio.offer.optPrices'), value: onOff(showPrices) },
-        { label: t('studio.offer.optNames'), value: onOff(showProductNames) },
       ];
     }
     return [
@@ -1609,7 +1614,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
       { label: t('studio.offer.optTheme'), value: colorTheme },
       { label: t('studio.offer.optBackground'), value: backgroundStyle },
       { label: t('studio.offer.optPrices'), value: onOff(showPrices) },
-      { label: t('studio.offer.optNames'), value: onOff(showCatalogProductNames) },
       { label: t('studio.offer.optPreserve'), value: onOff(preserveProductImages) },
     ];
   }
@@ -1642,16 +1646,20 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
       // Brand colors are driven by the "Brand Colors" color theme, not the context
       // chips, so they are excluded from the catalog's brand-context fields.
       const catalogFields = catalogContextFields.filter((k) => k !== 'brandColors');
+      const offer = catalogOfferRef.current ?? undefined;
+      // Product-name labels are hidden whenever the offer has a group or bundle.
+      const namesForcedOff = offer?.isOffer ? offerHasGrouping(offer.groups) : false;
       const result = await generateCatalogImage({
         products: productsWithImages,
         colorTheme,
         format: catalogFormat,
         showPrices,
-        showProductNames: showCatalogProductNames,
+        showProductNames: namesForcedOff ? false : showCatalogProductNames,
         backgroundStyle,
         preserveProductImages,
         brandContextFields: catalogFields.length > 0 ? catalogFields : undefined,
         currency: catalogCurrency,
+        offer,
       });
       setCatalogResult(result);
       handleAfterPaidGenerate(result);
@@ -3240,11 +3248,15 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           title={reviewMode === 'wallpaperOn' ? t('studio.placeOnWallpaper') : undefined}
           allowOffer={reviewMode === 'catalog' && !preserveProductImages}
           optionsSummary={reviewMode ? buildOptionsSummary(reviewMode) : []}
+          showProductNames={
+            reviewMode === 'wallpaperOn' ? showProductNames : showCatalogProductNames
+          }
           generating={reviewMode === 'wallpaperOn' ? wallpaperOnGenerating : catalogGenerating}
           cost={reviewMode === 'wallpaperOn' ? undefined : 1}
           onCancel={() => setReviewMode(null)}
-          onContinue={(_offer, overrides) => {
+          onContinue={(offer, overrides) => {
             priceOverridesRef.current = overrides;
+            catalogOfferRef.current = offer;
             runReviewGeneration(reviewMode);
           }}
         />
@@ -4534,11 +4546,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         title={reviewMode === 'wallpaperOn' ? t('studio.placeOnWallpaper') : undefined}
         allowOffer={reviewMode === 'catalog' && !preserveProductImages}
         optionsSummary={reviewMode ? buildOptionsSummary(reviewMode) : []}
+        showProductNames={reviewMode === 'wallpaperOn' ? showProductNames : showCatalogProductNames}
         generating={reviewMode === 'wallpaperOn' ? wallpaperOnGenerating : catalogGenerating}
         cost={reviewMode === 'wallpaperOn' ? undefined : 1}
         onCancel={() => setReviewMode(null)}
-        onContinue={(_offer, overrides) => {
+        onContinue={(offer, overrides) => {
           priceOverridesRef.current = overrides;
+          catalogOfferRef.current = offer;
           runReviewGeneration(reviewMode);
         }}
       />

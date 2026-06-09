@@ -18,7 +18,16 @@ import { ProductImage } from '@/components/ui/ProductImage';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
-import { type Currency, formatPrice } from '@/utils/api';
+import {
+  type BundleFreebie,
+  type CatalogOfferConfig,
+  type CatalogOfferGroup,
+  type CatalogOfferKind,
+  type Currency,
+  formatPrice,
+  type FreeItemType,
+  offerHasGrouping,
+} from '@/utils/api';
 
 const PRESET_PERCENTS = [10, 20, 30, 50];
 const DEFAULT_OFFER_PERCENT = 10;
@@ -28,40 +37,6 @@ export interface OfferProduct {
   name: string;
   price: number;
   currency?: Currency;
-}
-
-/**
- * 'group'  = category-style discount: each product is sold separately at the
- *            same percentage off (e.g. any Lays at 30%).
- * 'bundle' = buy-all deal: the customer takes every product together; some can
- *            be marked free (e.g. buy 2 get 1 free).
- */
-export type CatalogOfferKind = 'group' | 'bundle';
-
-/**
- * 'item'  = a specific known product is the freebie (e.g. buy glasses + shorts,
- *           get THIS t-shirt free).
- * 'range' = the freebie comes from a product range / same item (e.g. buy 2 of
- *           these chips, get one more free).
- */
-export type FreeItemType = 'item' | 'range';
-
-export interface BundleFreebie {
-  productId: string;
-  type: FreeItemType;
-}
-
-export interface CatalogOfferGroup {
-  kind: CatalogOfferKind;
-  productIds: string[];
-  percent: number;
-  /** Bundle only: products given away free within the bundle, each tagged by type. */
-  freebies: BundleFreebie[];
-}
-
-export interface CatalogOfferConfig {
-  isOffer: boolean;
-  groups: CatalogOfferGroup[];
 }
 
 /** A single setting shown on the generation-options review step. */
@@ -80,6 +55,9 @@ interface CatalogOfferModalProps {
   allowOffer?: boolean;
   /** Settings recap shown on the final "generation options" step. */
   optionsSummary?: OfferOptionSummary[];
+  /** Current "show product names" toggle; the review step renders it (and forces
+   *  it off when the offer has a group/bundle). */
+  showProductNames?: boolean;
   generating?: boolean;
   cost?: number;
   onCancel: () => void;
@@ -103,6 +81,7 @@ export function CatalogOfferModal({
   subtitle,
   allowOffer = true,
   optionsSummary = [],
+  showProductNames = false,
   generating = false,
   cost,
   onCancel,
@@ -321,13 +300,34 @@ export function CatalogOfferModal({
     setStep('products');
   }
 
+  // Build the outgoing offer config, enriching bundles with their computed price
+  // (paid items only, after percent) so the backend uses the frontend's number.
+  function buildOfferConfig(): CatalogOfferConfig {
+    if (!allowOffer || !offerEnabled) {
+      return { isOffer: false, groups: [] };
+    }
+    const enriched = groups.map((g) => {
+      if (g.kind !== 'bundle') {
+        return g;
+      }
+      const paid = g.productIds
+        .filter((id) => !g.freebies.some((f) => f.productId === id))
+        .map((id) => productById.get(id))
+        .filter((p): p is OfferProduct => Boolean(p));
+      const round2 = (n: number) => Math.round(n * 100) / 100;
+      const bundleOriginalPrice = round2(paid.reduce((sum, p) => sum + effectivePrice(p), 0));
+      const bundlePrice = round2(
+        paid.reduce((sum, p) => sum + discountedPrice(effectivePrice(p), g.percent), 0)
+      );
+      return { ...g, bundlePrice, bundleOriginalPrice };
+    });
+    return { isOffer: true, groups: enriched };
+  }
+
   // Step 2 → run the generation.
   function handleGenerate() {
     haptic(Haptics.ImpactFeedbackStyle.Medium);
-    onContinue(
-      { isOffer: allowOffer && offerEnabled, groups: allowOffer && offerEnabled ? groups : [] },
-      priceOverrides
-    );
+    onContinue(buildOfferConfig(), priceOverrides);
   }
 
   function handleCancel() {
@@ -473,8 +473,11 @@ export function CatalogOfferModal({
     const isBundle = group.kind === 'bundle';
     const multi = items.length > 1;
     const currency = items[0].currency;
-    const originalTotal = items.reduce((sum, p) => sum + effectivePrice(p), 0);
-    const finalTotal = items.reduce((sum, p) => sum + itemFinalPrice(group, p), 0);
+    // A free item is a bonus, not a discount, so it is excluded from the bundle
+    // total entirely — the total is just the items the customer pays for.
+    const paidItems = items.filter((p) => !freebieFor(group, p.id));
+    const originalTotal = paidItems.reduce((sum, p) => sum + effectivePrice(p), 0);
+    const finalTotal = paidItems.reduce((sum, p) => sum + itemFinalPrice(group, p), 0);
 
     const headerLabel = isBundle
       ? t('studio.offer.bundleLabel').replace('{count}', String(items.length))
@@ -732,6 +735,25 @@ export function CatalogOfferModal({
                     <Text style={styles.optionValue}>{opt.value}</Text>
                   </View>
                 ))}
+                {(() => {
+                  const namesForced = allowOffer && offerHasGrouping(groups);
+                  const namesValue = namesForced
+                    ? t('studio.offer.optOff')
+                    : showProductNames
+                      ? t('studio.offer.optOn')
+                      : t('studio.offer.optOff');
+                  return (
+                    <>
+                      <View style={styles.optionRow}>
+                        <Text style={styles.optionLabel}>{t('studio.offer.optNames')}</Text>
+                        <Text style={styles.optionValue}>{namesValue}</Text>
+                      </View>
+                      {namesForced && (
+                        <Text style={styles.offerHint}>{t('studio.offer.namesDisabledNote')}</Text>
+                      )}
+                    </>
+                  );
+                })()}
               </ScrollView>
 
               <View style={styles.actions}>
