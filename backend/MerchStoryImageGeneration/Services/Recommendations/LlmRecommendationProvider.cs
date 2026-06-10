@@ -206,6 +206,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("- Preserve brand names, product names, place names — don't translate them.");
         sb.AppendLine("- Preserve numbers, dates, percentages exactly.");
         sb.AppendLine("- Keep the casual tone — short sentences, everyday words.");
+        sb.AppendLine("- NEVER use em dashes (—) in the translation. Use commas, colons, or periods instead.");
         sb.AppendLine("- Translate suggestedPost as something a real shop owner would actually type — not a slogan.");
         sb.AppendLine("- Translate imagePrompt as a plain visual description in " + targetLangName + ". Keep any quoted on-image text in " + targetLangName + " too.");
         sb.AppendLine();
@@ -497,6 +498,8 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("Your job: read the shop profile and today's environmental signals, then pick distinct PROMO ANGLES worth turning into ads.");
         sb.AppendLine("Don't write the ads themselves yet — the next stage handles that. Just identify the angles.");
         sb.AppendLine();
+        sb.AppendLine($"TODAY'S DATE: {DateTime.UtcNow.ToString("dddd, d MMMM yyyy", CultureInfo.InvariantCulture)}.");
+        sb.AppendLine();
         sb.AppendLine("== SHOP ==");
         AppendShop(sb, ctx);
         sb.AppendLine();
@@ -504,9 +507,17 @@ public class LlmRecommendationProvider : IRecommendationProvider
         AppendSignals(sb, ctx);
         sb.AppendLine();
         AppendPlaybookHits(sb, ctx);
+        sb.AppendLine("== WHAT THIS SHOP CAN SELL ==");
+        AppendDomainGuidance(sb, ctx);
+        sb.AppendLine();
         sb.AppendLine("== TASK ==");
         sb.AppendLine($"Pick exactly {ctx.IdeasPerDay} distinct angles. Vary the tones — don't return 5 weather angles.");
         sb.AppendLine("Each angle must be grounded in either a specific signal above or a clear seasonal opportunity for this domain.");
+        sb.AppendLine("Each angle must be SELLABLE: name the products or product ranges to push, and only ones this shop already stocks.");
+        sb.AppendLine("Mix the angle kinds: some should become product deals (promotions), some shop happenings (announcements).");
+        sb.AppendLine("Sanity-check every angle against TODAY'S DATE above: never pitch a holiday or season that is");
+        sb.AppendLine("months away (no Christmas angles in August). If a signal or playbook entry references something");
+        sb.AppendLine("out of season, ignore it and improvise an angle that fits the actual date instead.");
         sb.AppendLine();
         sb.AppendLine("Themes should be plain and concrete. The next stage will turn them into copy.");
         sb.AppendLine("Avoid marketing-speak (no 'unlock', 'curated', 'premium', 'authentic', 'discover', 'embrace').");
@@ -530,8 +541,20 @@ public class LlmRecommendationProvider : IRecommendationProvider
     private static string BuildWriterPrompt(Angle angle, RecommendationContext ctx)
     {
         StringBuilder sb = new();
-        sb.AppendLine("You are helping a small shop owner write a promo idea they'd actually post on their own Facebook page.");
+        sb.AppendLine("You are advising a small shop owner on a promo opportunity for today.");
+        sb.AppendLine();
+        sb.AppendLine("== WHO READS WHAT — get this right ==");
+        sb.AppendLine("The idea card (title, meta, body) is read by the SHOP OWNER. It is ADVICE that convinces");
+        sb.AppendLine("them to act on the opportunity. It is NOT the ad itself.");
+        sb.AppendLine("  GOOD title: \"Storm coming Thursday: time to push umbrellas\"");
+        sb.AppendLine("  BAD title:  \"Umbrellas 20% off, Thursday only!\" (that's an ad aimed at customers, wrong audience)");
+        sb.AppendLine("Only suggestedPost and imagePrompt are customer-facing. Those speak to shoppers.");
+        sb.AppendLine();
         sb.AppendLine("The shop owner is a real person, not a marketing agency. Match their voice.");
+        sb.AppendLine();
+        sb.AppendLine("TODAY'S DATE: " + DateTime.UtcNow.ToString("dddd, d MMMM yyyy", CultureInfo.InvariantCulture) + ".");
+        sb.AppendLine("If the angle references a holiday or season that doesn't fit today's date (a December holiday in August),");
+        sb.AppendLine("don't write it as given: improvise and adapt it into something that fits the actual date.");
         sb.AppendLine();
         sb.AppendLine("== THE ANGLE ==");
         sb.AppendLine("Theme: " + angle.Theme);
@@ -542,11 +565,30 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("== THE SHOP ==");
         AppendShop(sb, ctx);
         sb.AppendLine();
+        sb.AppendLine("== WHAT THIS SHOP CAN SELL ==");
+        AppendDomainGuidance(sb, ctx);
+        sb.AppendLine();
         AppendPreviousIdeas(sb, ctx);
+        sb.AppendLine("== THE TWO IDEA SHAPES ==");
+        sb.AppendLine("Every idea is exactly ONE of these. Pick the shape that fits the angle and write in that style:");
+        sb.AppendLine();
+        sb.AppendLine("promotion — a concrete deal on a product or a range of products. Always name what's on offer");
+        sb.AppendLine("(a product, a category like 'all beef' or 'all dairy') AND the mechanic (percent off, bundle, buy-X-get-Y). Examples:");
+        sb.AppendLine("  \"20% off all beef this weekend, barbecue weather is coming\"");
+        sb.AppendLine("  \"Buy 3 bags of chips, get 1 free\"");
+        sb.AppendLine();
+        sb.AppendLine("announcement — something happening at the shop: an event, special opening hours, kids' activities,");
+        sb.AppendLine("a tombola. Examples:");
+        sb.AppendLine("  \"June 1st: activities for kids in front of the market\"");
+        sb.AppendLine("  \"We're open on Easter\"");
+        sb.AppendLine("  \"Spend over 100 lei and you're in our tombola\"");
+        sb.AppendLine();
         sb.AppendLine("== HOW TO WRITE ==");
         sb.AppendLine("Plain, human, like a neighbor texting friends. Short sentences, specific items, no marketing-speak.");
+        sb.AppendLine("Only push products or ranges this shop actually stocks — never invent services or product lines it can't sell.");
+        sb.AppendLine("NEVER use em dashes (—) in any field. Use commas, colons, or periods instead.");
         sb.AppendLine("Avoid: 'unlock', 'elevate', 'discover', 'curated', 'premium', 'authentic', 'don't miss out', emojis, title-case.");
-        sb.AppendLine("GOOD: \"Cold rain Saturday — Sunday-soup kit, three ingredients\"");
+        sb.AppendLine("GOOD: \"Cold rain Saturday: Sunday-soup kit, three ingredients\"");
         sb.AppendLine("BAD:  \"Embrace the rainy weekend with our curated comfort food experience\"");
         sb.AppendLine();
         sb.AppendLine("== OUTPUT ==");
@@ -554,16 +596,36 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("{");
         sb.AppendLine("  \"id\": \"short-kebab-case-id\",");
         sb.AppendLine($"  \"tone\": \"{angle.Tone}\",");
-        sb.AppendLine("  \"title\": \"4-8 words, plain language\",");
+        sb.AppendLine("  \"title\": \"4-8 words of advice TO THE OWNER: the moment + what to sell (e.g. 'Storm coming Thursday: time to push umbrellas')\",");
         sb.AppendLine("  \"meta\": \"short factual context (a date, a number)\",");
-        sb.AppendLine("  \"body\": \"1-2 sentences explaining the idea\",");
+        sb.AppendLine("  \"body\": \"1-2 sentences telling the owner why this works now and how to run it\",");
         sb.AppendLine("  \"suggestedPost\": \"5-9 words a real shop owner would type. Not a slogan.\",");
         sb.AppendLine("  \"type\": \"promotion\" if there's a concrete discount/sale/bundle, else \"announcement\",");
-        sb.AppendLine("  \"imagePrompt\": \"1-2 sentences: subject, optional on-image text, mood. Visual description, not a slogan.\"");
+        sb.AppendLine($"  \"imagePrompt\": \"2-3 sentences: the scene (subject, setting, mood) PLUS the on-image text in single quotes — a short call-to-action that names the shop ({ctx.BrandName}) and what to come get. Example: 'Come to {ctx.BrandName}: charcoal, meat, everything for the barbecue'.\"");
         sb.AppendLine("}");
         sb.AppendLine();
         sb.AppendLine("Write title / meta / body / suggestedPost / imagePrompt in English. A separate translator handles other languages.");
         return sb.ToString();
+    }
+
+    // Domain-scoped grounding. The BusinessDomain name alone (in == SHOP ==)
+    // isn't enough for small models — they'll happily suggest selling things
+    // the shop can't stock (a market being told to "sell oil"). Spell out what
+    // this kind of shop sells and what's off-limits. Add a case per domain as
+    // playbooks for them get seeded.
+    private static void AppendDomainGuidance(StringBuilder sb, RecommendationContext ctx)
+    {
+        if (string.Equals(ctx.BusinessDomain, "Market", StringComparison.OrdinalIgnoreCase))
+        {
+            sb.AppendLine("This shop is a MARKET (a local grocery / convenience store). It sells what's on its shelves:");
+            sb.AppendLine("food (meat, dairy, produce, bread, snacks, sweets), drinks, and everyday household items.");
+            sb.AppendLine("Push shelf products or ranges of them: beef for a barbecue weekend, chips, watermelon, soup vegetables, all dairy.");
+            sb.AppendLine("Do NOT suggest services, equipment, fuel, or any product line a grocery store doesn't stock.");
+            return;
+        }
+
+        sb.AppendLine($"This shop's domain is {ctx.BusinessDomain}. Only suggest products it can realistically");
+        sb.AppendLine("stock and sell today — never services, equipment, or product lines outside that domain.");
     }
 
     private static void AppendShop(StringBuilder sb, RecommendationContext ctx)
