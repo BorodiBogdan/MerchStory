@@ -488,7 +488,8 @@ const ro: Dictionary = {
   'studio.postTypeAnnouncement': 'Anunț',
   'studio.postTypeJobPost': 'Anunț angajare',
   'studio.postTypePromotion': 'Promoție',
-  'studio.announcement.describe': 'Descrie ce vrei să comunici',
+  'studio.announcement.describe':
+    'Descrie ce vrei să comunici. Fii cât mai specific (produs, ofertă, detalii) pentru o imagine generată cât mai bună.',
   'studio.videoAdsTitle': 'Anunțuri video',
   'studio.comingSoon': 'În curând',
   'studio.back': 'Înapoi',

@@ -73,6 +73,10 @@ export function ChipSelector({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      // A horizontal ScrollView has no intrinsic height; on iOS, nested inside
+      // a vertical ScrollView it expands to fill the column's vertical slack and
+      // pushes sibling content off-screen. Pin it to its content height.
+      style={styles.scroll}
       contentContainerStyle={styles.row}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="radiogroup"
@@ -97,6 +101,10 @@ export function ChipSelector({
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
+    scroll: {
+      flexGrow: 0,
+      flexShrink: 0,
+    },
     row: {
       flexDirection: 'row',
       gap: D.spacing.sm,

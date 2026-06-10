@@ -152,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function signOut() {
+  const clearSession = useCallback(async () => {
     await storage.deleteItem(TOKEN_KEY);
     await storage.deleteItem(REFRESH_TOKEN_KEY);
     await storage.deleteItem(USER_KEY);
@@ -165,7 +165,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       creditBalance: 0,
       isLoading: false,
     });
+  }, []);
+
+  async function signOut() {
+    await clearSession();
   }
+
+  // When a token refresh definitively fails (refresh token expired/revoked), the
+  // API layer calls this so we clear the dead session. Setting token to null makes
+  // the route guards redirect to login automatically.
+  useEffect(() => {
+    let active = true;
+    import('@/utils/api').then(({ setSessionExpiredHandler }) => {
+      if (!active) return;
+      setSessionExpiredHandler(() => {
+        void clearSession();
+      });
+    });
+    return () => {
+      active = false;
+      import('@/utils/api').then(({ setSessionExpiredHandler }) => {
+        setSessionExpiredHandler(null);
+      });
+    };
+  }, [clearSession]);
 
   async function completeShopSetup() {
     const userJson = await storage.getItem(USER_KEY);

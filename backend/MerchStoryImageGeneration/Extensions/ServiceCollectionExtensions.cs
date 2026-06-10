@@ -1,5 +1,6 @@
 using MerchStoryImageGeneration.Services;
 using MerchStoryImageGeneration.Services.Recommendations;
+using MerchStoryImageGeneration.Services.Recommendations.Chat;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -43,8 +44,8 @@ public static class ServiceCollectionExtensions
         IConfiguration? configuration = null)
     {
         // Default to Mock so dev/test environments don't depend on a running LLM.
-        // "Llm" routes through any OpenAI-compatible endpoint configured under
-        // Recommendations:Llm:* (LM Studio by default, but Ollama/vLLM/etc work too).
+        // "Llm" runs the Strategist/Writer/Translator pipeline against the chat
+        // backend picked by Recommendations:Llm:Backend (see below).
         string providerType = configuration?["Recommendations:ProviderType"] ?? "Mock";
 
         if (string.Equals(providerType, "Mock", StringComparison.OrdinalIgnoreCase))
@@ -54,6 +55,31 @@ public static class ServiceCollectionExtensions
         else if (string.Equals(providerType, "Llm", StringComparison.OrdinalIgnoreCase))
         {
             services.AddScoped<IRecommendationProvider, LlmRecommendationProvider>();
+
+            // Chat backend — which model family answers the Strategist/Writer
+            // prompts. Singleton: each service owns its HttpClient/kernels.
+            //   Local    → LM Studio / Ollama / vLLM via Recommendations:Llm:* (default)
+            //   DeepSeek → hosted DeepSeek API via Recommendations:Llm:DeepSeek:*
+            //   Claude   → Anthropic Messages API via Recommendations:Llm:Claude:*
+            string backend = configuration?["Recommendations:Llm:Backend"] ?? "Local";
+            if (string.Equals(backend, "Local", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(backend, "LmStudio", StringComparison.OrdinalIgnoreCase))
+            {
+                services.AddSingleton<IRecommendationChatService, LmStudioChatService>();
+            }
+            else if (string.Equals(backend, "DeepSeek", StringComparison.OrdinalIgnoreCase))
+            {
+                services.AddSingleton<IRecommendationChatService, DeepSeekChatService>();
+            }
+            else if (string.Equals(backend, "Claude", StringComparison.OrdinalIgnoreCase))
+            {
+                services.AddSingleton<IRecommendationChatService, ClaudeChatService>();
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Unknown Recommendations:Llm:Backend '{backend}'. Supported: Local, DeepSeek, Claude.");
+            }
         }
         else
         {

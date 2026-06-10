@@ -64,7 +64,7 @@ public class RecommendationOrchestrator
             shop.CountryCode,
             shop.GenerationLanguage);
 
-        int ideasPerDay = this.configuration.GetValue("Recommendations:IdeasPerDay", 5);
+        int ideasPerDay = this.configuration.GetValue("Recommendations:IdeasPerDay", 4);
 
         // Stage 1 — context signals
         Stopwatch stageSw = Stopwatch.StartNew();

@@ -156,6 +156,17 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
     {
         bool hasProductPhotos = r.ProductImages is { Count: > 0 };
 
+        // STRICT: discounts come from the user's text only. Image models love
+        // inventing "20% OFF" given half a chance (especially when the prompt
+        // shows one as an example) — and an invented discount on a published
+        // ad is a real liability for the shop owner.
+        const string offerRule =
+            "Offer policy: NEVER invent a discount, percentage, price, or special offer. " +
+            "Only render a discount/offer if it is explicitly stated in the promotion details above — " +
+            "and then render exactly that offer, same numbers, same wording. " +
+            "If the details contain no explicit discount or offer, build the graphic around the products " +
+            "and the headline instead — no percent signs, no 'SALE' badges, no invented prices. ";
+
         return "You are a professional social media graphic designer for small retail businesses. " +
                "Produce high-impact promotional sale graphics that drive immediate purchases. " +
                "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
@@ -163,9 +174,11 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
                LogoBlock(r.LogoBase64) +
                $"Create a {r.Tone.ToLowerInvariant()} promotional sale graphic in {FormatPhrase(r.Format)} format. " +
                $"Promotion details: \"{r.Content}\". " +
-               "Design requirements: the discount or offer (e.g. \"20% OFF\") must be the largest, " +
+               offerRule +
+               "Design requirements: if the promotion details state a discount or offer, it must be the largest, " +
                "most eye-catching element on the graphic — treat it as the hero; " +
-               "urgency language (\"Limited Time\", \"This Weekend Only\", \"While Stocks Last\") if relevant; " +
+               "otherwise the product(s) and the headline are the hero; " +
+               "urgency language (\"Limited Time\", \"This Weekend Only\", \"While Stocks Last\") ONLY if the details mention a time window; " +
                "a clear CTA (\"Shop Now\", \"Visit Us Today\"); " +
                (hasProductPhotos
                    ? $"{r.ProductImages!.Count} product reference photo(s) are attached — " +
