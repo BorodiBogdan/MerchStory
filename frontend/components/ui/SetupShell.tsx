@@ -6,10 +6,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GlassNavbar } from '@/components/ui/GlassNavbar';
+import { AuthPalette, useAuthPalette, webAttrs } from '@/constants/authTheme';
 import { D } from '@/constants/design';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
@@ -25,108 +28,52 @@ export function SetupShell({ children }: SetupShellProps) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const t = useT();
 
+  const isDark = colorScheme === 'dark';
+  const P = useAuthPalette();
+  const { width } = useWindowDimensions();
+  const isMobile = width < 560;
+  const webStyles = useMemo(() => makeWebStyles(P, isMobile), [P, isMobile]);
+
   if (Platform.OS === 'web') {
-    const isDark = colorScheme === 'dark';
-
-    const pageStyle: React.CSSProperties = {
-      display: 'flex',
-      flexDirection: 'column',
-      minHeight: '100vh',
-      backgroundColor: isDark ? '#080B12' : '#F0F2F8',
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    };
-
-    const topBarStyle: React.CSSProperties = {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      height: 60,
-      padding: '0 40px',
-      backgroundColor: isDark ? '#0F1117' : '#FFFFFF',
-      borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)'}`,
-      position: 'sticky' as const,
-      top: 0,
-      zIndex: 10,
-    };
-
-    const brandStyle: React.CSSProperties = {
-      fontSize: 18,
-      fontWeight: '700',
-      letterSpacing: '-0.5px',
-      color: colors.accent.primary,
-      textDecoration: 'none',
-    };
-
-    const actionsStyle: React.CSSProperties = {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-    };
-
-    const iconButtonStyle: React.CSSProperties = {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      cursor: 'pointer',
-      background: 'none',
-      border: 'none',
-      padding: 0,
-      color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
-    };
-
-    const scrollerStyle: React.CSSProperties = {
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      overflowY: 'auto',
-      padding: '52px 20px 80px',
-    };
-
-    const cardStyle: React.CSSProperties = {
-      width: '100%',
-      maxWidth: 540,
-      backgroundColor: isDark ? '#161B27' : '#FFFFFF',
-      border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'}`,
-      borderRadius: 20,
-      padding: '40px 44px',
-      boxShadow: isDark
-        ? '0 8px 48px rgba(0,0,0,0.5)'
-        : '0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.06)',
-    };
-
     return (
-      <div style={pageStyle}>
-        <div style={topBarStyle}>
-          <span style={brandStyle}>MerchStory</span>
-          <div style={actionsStyle}>
-            <button
-              style={iconButtonStyle}
-              onClick={toggleTheme}
-              aria-label={colorScheme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
-            >
-              <Ionicons
-                name={colorScheme === 'dark' ? 'sunny-outline' : 'moon-outline'}
-                size={18}
-                color={isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)'}
-              />
-            </button>
-            <button
-              style={iconButtonStyle}
-              onClick={() => signOut()}
-              aria-label={t('common.signOut')}
-            >
-              <Ionicons name="log-out-outline" size={18} color="#EF4444" />
-            </button>
-          </div>
-        </div>
-        <div style={scrollerStyle}>
-          <div style={cardStyle}>{children}</div>
-        </div>
-      </div>
+      <View style={webStyles.page}>
+        {/* Shared glass navbar, same design as landing/auth/app */}
+        <GlassNavbar
+          right={
+            <>
+              <Pressable
+                onPress={toggleTheme}
+                {...webAttrs({ msTap: '1' })}
+                style={({ pressed }) => [webStyles.iconBtn, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel={isDark ? t('common.lightMode') : t('common.darkMode')}
+              >
+                <Ionicons
+                  name={isDark ? 'sunny-outline' : 'moon-outline'}
+                  size={18}
+                  color={P.body}
+                />
+              </Pressable>
+              <Pressable
+                onPress={() => signOut()}
+                {...webAttrs({ msTap: '1' })}
+                style={({ pressed }) => [webStyles.iconBtn, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel={t('common.signOut')}
+              >
+                <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+              </Pressable>
+            </>
+          }
+        />
+        <ScrollView
+          style={webStyles.flex}
+          contentContainerStyle={webStyles.scroll}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={webStyles.card}>{children}</View>
+        </ScrollView>
+      </View>
     );
   }
 
@@ -166,6 +113,40 @@ export function SetupShell({ children }: SetupShellProps) {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+function makeWebStyles(P: AuthPalette, isMobile: boolean) {
+  return StyleSheet.create({
+    page: { flex: 1, backgroundColor: P.canvas },
+    flex: { flex: 1 },
+    iconBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent: 'center',
+      outlineWidth: 0,
+    },
+    scroll: {
+      flexGrow: 1,
+      alignItems: 'center',
+      paddingHorizontal: isMobile ? 20 : 28,
+      paddingTop: isMobile ? 28 : 44,
+      paddingBottom: 80,
+    },
+    card: {
+      width: '100%',
+      maxWidth: 540,
+      backgroundColor: P.card,
+      borderRadius: 28,
+      borderWidth: 1,
+      borderColor: P.hairline,
+      paddingHorizontal: isMobile ? 24 : 44,
+      paddingVertical: isMobile ? 28 : 40,
+      // @ts-ignore web-only
+      boxShadow: P.shadowCard,
+    },
+  });
 }
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {

@@ -66,10 +66,12 @@ export const darkColors: DesignColors = {
 
 export const lightColors: DesignColors = {
   bg: {
-    base: '#F8FAFC',
+    // Soft indigo-gray canvas instead of near-white: cards read as distinct
+    // surfaces and the page is easier on the eyes in light mode.
+    base: '#EFF0F8',
     surface: '#FFFFFF',
-    elevated: '#F1F5F9',
-    input: 'rgba(0,0,0,0.04)',
+    elevated: '#F3F4FB',
+    input: 'rgba(22,21,30,0.04)',
     inputFocus: 'rgba(99,102,241,0.06)',
   },
   border: {

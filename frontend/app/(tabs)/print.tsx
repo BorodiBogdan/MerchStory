@@ -92,8 +92,10 @@ export default function PrintScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
+  // Align the content rail with the glass navbar's wide pill so page edges line up.
+  const hPad = !isDesktop ? D.spacing.md : width < 1100 ? D.spacing.xl : 80;
 
-  const styles = useMemo(() => makeStyles(colors, isDesktop), [colors, isDesktop]);
+  const styles = useMemo(() => makeStyles(colors, isDesktop, hPad), [colors, isDesktop, hPad]);
 
   const cache = galleryCache.useGalleryCache();
   // Defensive filter: if Gallery currently has the cache pinned to Pdf/Video,
@@ -250,6 +252,7 @@ export default function PrintScreen() {
   const configColumn = (
     <View style={styles.configColumn}>
       <SectionHeader
+        step={1}
         eyebrow={t('print.section.assetEyebrow')}
         title={t('print.section.assetTitle')}
         helper={t('print.section.assetHelper')}
@@ -271,15 +274,20 @@ export default function PrintScreen() {
 
       <View style={styles.sectionGap} />
       <SectionHeader
+        step={2}
         eyebrow={t('print.section.sizeEyebrow')}
         title={t('print.section.sizeTitle')}
       />
-      <ChipSelector
-        options={PAPER_SIZE_OPTIONS}
-        selected={paperSize}
-        onSelect={(v) => setPaperSize(v as PaperSize)}
-        accessibilityLabel={t('print.section.sizeTitle')}
-      />
+      {/* Wrap the horizontal ScrollView so it can't flex-grow and swallow the
+          column's vertical slack (react-native-web gives ScrollView flexGrow:1). */}
+      <View style={styles.chipRowWrap}>
+        <ChipSelector
+          options={PAPER_SIZE_OPTIONS}
+          selected={paperSize}
+          onSelect={(v) => setPaperSize(v as PaperSize)}
+          accessibilityLabel={t('print.section.sizeTitle')}
+        />
+      </View>
 
       <CostInfo
         cost={estimatedCost}
@@ -289,7 +297,11 @@ export default function PrintScreen() {
       />
 
       <View style={styles.sectionGap} />
-      <SectionHeader eyebrow={t('print.section.qrEyebrow')} title={t('print.section.qrTitle')} />
+      <SectionHeader
+        step={3}
+        eyebrow={t('print.section.qrEyebrow')}
+        title={t('print.section.qrTitle')}
+      />
       <QrToggleCard
         includeQr={includeQr}
         onToggle={setIncludeQr}
@@ -379,29 +391,28 @@ export default function PrintScreen() {
     <View style={styles.previewColumn}>
       <View style={styles.previewCard}>
         <View style={styles.previewHeader}>
-          <View style={styles.eyebrow}>
-            <View style={styles.eyebrowDot} />
-            <Text style={styles.eyebrowText}>{t('print.preview.eyebrow')}</Text>
-          </View>
+          <Text style={styles.previewEyebrow}>{t('print.preview.eyebrow')}</Text>
           <Text style={styles.previewTitle}>{t('print.preview.title')}</Text>
         </View>
-        <PaperPreview
-          imageUri={previewImage?.uri ?? null}
-          paperSize={paperSize}
-          orientation="portrait"
-          showQrBadge={showQrBadge}
-          qrTargetUrl={qrTargetUrl.trim() || null}
-          qrX={qrX}
-          qrY={qrY}
-          qrSize={qrSize}
-          qrBackground={qrBackground}
-          onQrPositionChange={(x, y) => {
-            setQrX(x);
-            setQrY(y);
-          }}
-          maxWidth={isDesktop ? 320 : 300}
-          caption={previewCaption}
-        />
+        <View style={styles.previewStage}>
+          <PaperPreview
+            imageUri={previewImage?.uri ?? null}
+            paperSize={paperSize}
+            orientation="portrait"
+            showQrBadge={showQrBadge}
+            qrTargetUrl={qrTargetUrl.trim() || null}
+            qrX={qrX}
+            qrY={qrY}
+            qrSize={qrSize}
+            qrBackground={qrBackground}
+            onQrPositionChange={(x, y) => {
+              setQrX(x);
+              setQrY(y);
+            }}
+            maxWidth={isDesktop ? 280 : Math.min(width - 120, 280)}
+            caption={previewCaption}
+          />
+        </View>
         <View style={styles.summaryRow}>
           <SummaryChip icon="resize-outline" label={paperSize} />
           <SummaryChip
@@ -425,11 +436,6 @@ export default function PrintScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
-          <View style={styles.heroRow}>
-            <Text style={styles.heroTitle}>{t('print.title')}</Text>
-            <Text style={styles.heroSubtitle}>{t('print.subtitle')}</Text>
-          </View>
-
           {isDesktop ? (
             <View style={styles.twoCol}>
               {configColumn}
@@ -467,12 +473,16 @@ export default function PrintScreen() {
 }
 
 // ─── Section header ──────────────────────────────────────────────────────
+// Guided, numbered step header: an accent step badge + eyebrow label sit above
+// the title, matching the editorial card style used across Studio.
 function SectionHeader({
+  step,
   eyebrow,
   title,
   helper,
 }: {
-  eyebrow: string;
+  step?: number;
+  eyebrow?: string;
   title: string;
   helper?: string;
 }) {
@@ -480,9 +490,13 @@ function SectionHeader({
   const styles = useMemo(() => makeSectionHeaderStyles(colors), [colors]);
   return (
     <View style={styles.wrap}>
-      <View style={styles.eyebrow}>
-        <View style={styles.eyebrowDot} />
-        <Text style={styles.eyebrowText}>{eyebrow}</Text>
+      <View style={styles.topRow}>
+        {typeof step === 'number' && (
+          <View style={styles.stepBadge}>
+            <Text style={styles.stepText}>{String(step).padStart(2, '0')}</Text>
+          </View>
+        )}
+        {eyebrow && <Text style={styles.eyebrow}>{eyebrow}</Text>}
       </View>
       <Text style={styles.title}>{title}</Text>
       {helper && <Text style={styles.helper}>{helper}</Text>}
@@ -1004,43 +1018,29 @@ function slugify(input: string): string {
 }
 
 // ─── Styles ──────────────────────────────────────────────────────────────
-function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
+function makeStyles(
+  colors: ReturnType<typeof useTheme>['colors'],
+  isDesktop: boolean,
+  hPad: number
+) {
+  const isDark = colors.bg.base === '#0B0E14';
   return StyleSheet.create({
     scrollContent: {
       flexGrow: 1,
       alignItems: 'center',
-      paddingHorizontal: isDesktop ? D.spacing.xl : D.spacing.md,
-      paddingTop: isDesktop ? D.spacing.lg : D.spacing.md,
+      paddingHorizontal: hPad,
+      paddingTop: isDesktop ? D.spacing.xl : D.spacing.lg,
       paddingBottom: isDesktop ? D.spacing.xl : D.spacing.lg,
     },
     container: {
       width: '100%',
-      maxWidth: 1120,
+      maxWidth: 1280,
       position: 'relative',
-    },
-    heroRow: {
-      flexDirection: isDesktop ? 'row' : 'column',
-      alignItems: isDesktop ? 'baseline' : 'flex-start',
-      gap: isDesktop ? D.spacing.md : 4,
-      paddingBottom: D.spacing.xs,
-    },
-    heroTitle: {
-      fontSize: isDesktop ? D.fontSize.xl : D.fontSize['2xl'],
-      fontWeight: D.fontWeight.bold,
-      color: colors.text.primary,
-      letterSpacing: -0.6,
-      lineHeight: isDesktop ? 28 : 36,
-    },
-    heroSubtitle: {
-      flex: isDesktop ? 1 : undefined,
-      fontSize: D.fontSize.sm,
-      color: colors.text.secondary,
-      lineHeight: 20,
     },
     twoCol: {
       flexDirection: 'row',
       gap: D.spacing.xl,
-      alignItems: 'flex-start',
+      alignItems: 'stretch',
       marginTop: D.spacing.md,
     },
     oneCol: {
@@ -1054,36 +1054,34 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       width: isDesktop ? undefined : '100%',
     },
     previewColumn: {
-      width: isDesktop ? 400 : '100%',
+      width: isDesktop ? 420 : '100%',
       ...(isDesktop && Platform.OS === 'web' ? ({ position: 'sticky', top: 24 } as object) : {}),
     },
     previewCard: {
+      flex: isDesktop ? 1 : undefined,
       backgroundColor: colors.bg.surface,
       borderRadius: D.radius.xl,
       borderWidth: 1,
       borderColor: colors.border.subtle,
       padding: isDesktop ? D.spacing.lg : D.spacing.md,
       gap: D.spacing.md,
+      overflow: 'hidden',
+      ...(Platform.OS === 'web'
+        ? ({
+            ...(isDark
+              ? {}
+              : { boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 24px 50px -34px rgba(0,0,0,0.24)' }),
+          } as object)
+        : {}),
     },
     previewHeader: {
       gap: 4,
     },
-    eyebrow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    eyebrowDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.accent.primary,
-    },
-    eyebrowText: {
-      fontSize: D.fontSize.xs,
+    previewEyebrow: {
+      fontSize: 11,
       fontWeight: D.fontWeight.bold,
-      color: colors.accent.primary,
-      letterSpacing: 1,
+      color: colors.text.muted,
+      letterSpacing: 1.4,
       textTransform: 'uppercase',
     },
     previewTitle: {
@@ -1092,14 +1090,30 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       color: colors.text.primary,
       letterSpacing: -0.3,
     },
+    // Soft inset stage that floats the paper preview off the card surface.
+    // On desktop it grows to fill the card so the panel ends level with the
+    // config column's button; the paper stays vertically centered inside it.
+    previewStage: {
+      flex: isDesktop ? 1 : undefined,
+      borderRadius: D.radius.lg,
+      backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      paddingVertical: D.spacing.md,
+      paddingHorizontal: D.spacing.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     summaryRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: D.spacing.xs,
-      marginTop: D.spacing.xs,
     },
     sectionGap: {
       height: D.spacing.lg,
+    },
+    chipRowWrap: {
+      alignSelf: 'flex-start',
     },
     assetRow: {
       gap: D.spacing.sm,
@@ -1166,14 +1180,18 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       alignItems: 'center',
       justifyContent: 'center',
       gap: D.spacing.sm,
-      height: 52,
+      height: 54,
       backgroundColor: colors.accent.primary,
-      borderRadius: D.radius.md,
+      borderRadius: D.radius.pill,
       marginTop: D.spacing.lg,
-      ...D.shadow.glow,
       ...(Platform.OS === 'web'
-        ? ({ cursor: 'pointer', transitionDuration: '180ms' } as object)
-        : {}),
+        ? ({
+            cursor: 'pointer',
+            transitionProperty: 'transform, box-shadow, opacity',
+            transitionDuration: '180ms',
+            boxShadow: '0 14px 30px -12px rgba(99,102,241,0.55)',
+          } as object)
+        : D.shadow.glow),
     },
     renderButtonDisabled: {
       opacity: 0.55,
@@ -1204,23 +1222,34 @@ function makeSectionHeaderStyles(colors: ReturnType<typeof useTheme>['colors']) 
     wrap: {
       marginBottom: D.spacing.sm,
     },
-    eyebrow: {
+    topRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: D.spacing.sm,
       marginBottom: 6,
     },
-    eyebrowDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.accent.primary,
+    stepBadge: {
+      minWidth: 26,
+      height: 22,
+      paddingHorizontal: 6,
+      borderRadius: D.radius.sm,
+      backgroundColor: colors.accent.dim,
+      borderWidth: 1,
+      borderColor: colors.border.focus,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    eyebrowText: {
-      fontSize: D.fontSize.xs,
+    stepText: {
+      fontSize: 11,
       fontWeight: D.fontWeight.bold,
       color: colors.accent.primary,
-      letterSpacing: 1,
+      letterSpacing: 0.5,
+    },
+    eyebrow: {
+      fontSize: 11,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.muted,
+      letterSpacing: 1.4,
       textTransform: 'uppercase',
     },
     title: {
@@ -1547,7 +1576,7 @@ function makeCostStyles(colors: ReturnType<typeof useTheme>['colors'], insuffici
       borderWidth: 1,
       borderColor: insufficient ? colors.border.error : colors.border.subtle,
       padding: D.spacing.md,
-      marginTop: D.spacing.sm,
+      marginTop: D.spacing.xs,
     },
     iconTile: {
       width: 32,

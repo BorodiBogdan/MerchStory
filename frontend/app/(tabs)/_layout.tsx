@@ -13,8 +13,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { BrandLogo } from '@/components/ui/BrandLogo';
 import { CreditIcon } from '@/components/ui/CreditIcon';
+import { GlassNavbar, glassNavRail } from '@/components/ui/GlassNavbar';
 import { NavMenuDropdown, type NavMenuItem } from '@/components/ui/NavMenuDropdown';
 import { ProfileWalletChoiceModal } from '@/components/ui/ProfileWalletChoiceModal';
 import { ProfileWalletDropdown } from '@/components/ui/ProfileWalletDropdown';
@@ -38,6 +38,8 @@ export default function TabLayout() {
   const isVeryNarrow = useTopNav && width < 480;
   const insets = useSafeAreaInsets();
   const mobileTopPad = !useTopNav ? insets.top : 0;
+  // Anchor the nav popovers to the pill's inner edges (12 = pill side padding)
+  const navAnchor = glassNavRail(width, true).inset + 12;
 
   const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
   const router = useRouter();
@@ -69,16 +71,20 @@ export default function TabLayout() {
         isActive: pathname.startsWith('/products'),
         onPress: () => router.navigate('/(tabs)/products'),
       },
-      {
-        key: 'print',
-        label: t('tabs.print'),
-        icon: 'print',
-        iconOutline: 'print-outline',
-        isActive: pathname.startsWith('/print'),
-        onPress: () => router.navigate('/(tabs)/print'),
-      },
+      ...(isAdmin
+        ? [
+            {
+              key: 'print',
+              label: t('tabs.print'),
+              icon: 'print',
+              iconOutline: 'print-outline',
+              isActive: pathname.startsWith('/print'),
+              onPress: () => router.navigate('/(tabs)/print'),
+            } as NavMenuItem,
+          ]
+        : []),
     ],
-    [pathname, t, router]
+    [pathname, t, router, isAdmin]
   );
 
   const menuNavItems: NavMenuItem[] = useMemo(
@@ -105,37 +111,21 @@ export default function TabLayout() {
     return <Redirect href="/(setup)/step1" />;
   }
 
-  const headerLeft = () => (
-    <View style={styles.headerLeftGroup}>
-      {useHamburger && (
-        <Pressable
-          onPress={() => setShowNavMenu(true)}
-          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-            styles.iconButton,
-            (pressed || hovered) && { backgroundColor: colors.bg.input },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={t('tabs.home')}
-        >
-          <Ionicons name="menu" size={24} color={colors.text.primary} />
-        </Pressable>
-      )}
-      <Pressable
-        onPress={() => router.navigate('/(tabs)')}
-        style={styles.logoButton}
-        accessibilityRole="button"
-        accessibilityLabel={t('tabs.home')}
-      >
-        <BrandLogo size={isVeryNarrow ? 'xs' : 'sm'} variant="horizontal" />
-      </Pressable>
-    </View>
-  );
+  const hamburger = useHamburger ? (
+    <Pressable
+      onPress={() => setShowNavMenu(true)}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+        styles.iconButton,
+        (pressed || hovered) && { backgroundColor: colors.bg.input },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={t('tabs.home')}
+    >
+      <Ionicons name="menu" size={24} color={colors.text.primary} />
+    </Pressable>
+  ) : undefined;
 
-  const headerTitle = () => (
-    <DesktopNavTabs colors={colors} items={navItems} compact={isCompactNav} />
-  );
-
-  const headerRight = () => (
+  const navActions = (
     <View style={styles.headerActions}>
       <Pressable
         onPress={() => router.push('/wallet')}
@@ -177,24 +167,32 @@ export default function TabLayout() {
   );
 
   return (
-    <View style={{ flex: 1, paddingTop: mobileTopPad, backgroundColor: colors.bg.surface }}>
+    <View style={{ flex: 1, paddingTop: mobileTopPad, backgroundColor: colors.bg.base }}>
+      {/* Shared glass navbar (same design as landing/auth) replaces the
+          navigation header on web */}
+      {useTopNav && (
+        <GlassNavbar
+          wide
+          logoSize={isVeryNarrow ? 'xs' : 'sm'}
+          onLogoPress={() => router.navigate('/(tabs)')}
+          leftExtra={hamburger}
+          center={
+            !useHamburger ? (
+              <DesktopNavTabs colors={colors} items={navItems} compact={isCompactNav} />
+            ) : undefined
+          }
+          right={navActions}
+        />
+      )}
       <Tabs
         tabBar={useTopNav ? () => null : undefined}
         screenOptions={{
           tabBarActiveTintColor: colors.accent.primary,
           tabBarInactiveTintColor: colors.text.muted,
-          headerShown: useTopNav,
-          headerStyle: styles.header,
-          headerTintColor: colors.text.primary,
-          headerShadowVisible: false,
-          headerTitleAlign: 'center',
-          headerTitleContainerStyle: styles.headerTitleContainer,
+          headerShown: false,
           tabBarStyle: styles.tabBar,
           tabBarButton: HapticTab,
           tabBarLabelStyle: styles.tabBarLabel,
-          headerLeft,
-          headerRight,
-          headerTitle: useTopNav && !useHamburger ? headerTitle : () => null,
         }}
       >
         <Tabs.Screen
@@ -244,12 +242,16 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="print"
-          options={{
-            tabBarLabel: t('tabs.print'),
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? 'print' : 'print-outline'} size={22} color={color} />
-            ),
-          }}
+          options={
+            isAdmin
+              ? {
+                  tabBarLabel: t('tabs.print'),
+                  tabBarIcon: ({ color, focused }) => (
+                    <Ionicons name={focused ? 'print' : 'print-outline'} size={22} color={color} />
+                  ),
+                }
+              : { tabBarItemStyle: { display: 'none' } }
+          }
         />
         <Tabs.Screen
           name="admin"
@@ -297,6 +299,7 @@ export default function TabLayout() {
         <NavMenuDropdown
           visible={showNavMenu}
           items={menuNavItems}
+          anchorLeft={navAnchor}
           onDismiss={() => setShowNavMenu(false)}
         />
       )}
@@ -306,6 +309,7 @@ export default function TabLayout() {
           email={email}
           creditBalance={creditBalance}
           isAdmin={isAdmin}
+          anchorRight={navAnchor}
           onChooseProfile={() => {
             setShowChoice(false);
             router.navigate('/(tabs)/profile');
@@ -349,34 +353,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], bottomInset: 
       flex: 1,
       backgroundColor: colors.bg.base,
     },
-    header: {
-      backgroundColor: colors.bg.surface,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border.subtle,
-      height: 64,
-    },
-    headerTitleContainer: {
-      flex: 1,
-      flexShrink: 1,
-      minWidth: 0,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    headerLeftGroup: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: D.spacing.xs,
-      marginLeft: D.spacing.md,
-      flexShrink: 0,
-    },
-    logoButton: {
-      outlineWidth: 0,
-      flexShrink: 0,
-    },
     headerActions: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginRight: D.spacing.md,
       gap: D.spacing.xs,
       flexShrink: 0,
     },

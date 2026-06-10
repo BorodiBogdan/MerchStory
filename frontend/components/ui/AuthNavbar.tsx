@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { BrandLogo } from '@/components/ui/BrandLogo';
-import { D } from '@/constants/design';
+import { GlassNavbar } from '@/components/ui/GlassNavbar';
+import { AUTH_SANS, AuthPalette, useAuthPalette, webAttrs } from '@/constants/authTheme';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 
@@ -14,112 +15,76 @@ interface AuthNavbarProps {
   ctaHref: '/(auth)/login' | '/(auth)/register' | '/';
 }
 
+/**
+ * Auth flavor of the shared GlassNavbar: floating overlay with a theme toggle
+ * and an indigo CTA pill (sign in / create account).
+ */
 export function AuthNavbar({ ctaLabel, ctaHref }: AuthNavbarProps) {
-  const { colors, colorScheme, toggleTheme } = useTheme();
+  const { colorScheme, toggleTheme } = useTheme();
   const router = useRouter();
   const t = useT();
+
   const isDark = colorScheme === 'dark';
-  const s = makeStyles(colors, isDark);
+  const P = useAuthPalette();
+  const s = useMemo(() => makeStyles(P), [P]);
 
   return (
-    <View style={s.outer}>
-      <View style={s.inner}>
-        {/* Logo — matches post-login header */}
-        <Pressable
-          style={({ pressed }) => [s.logoBtn, pressed && { opacity: 0.75 }]}
-          onPress={() => router.push('/')}
-          accessibilityRole="button"
-          accessibilityLabel={t('tabs.home')}
-        >
-          <BrandLogo size="sm" variant="horizontal" />
-        </Pressable>
-
-        <View style={s.right}>
+    <GlassNavbar
+      floating
+      onLogoPress={() => router.push('/')}
+      right={
+        <>
           {/* Theme toggle */}
           <Pressable
             onPress={toggleTheme}
+            {...webAttrs({ msTap: '1' })}
             style={({ pressed }) => [s.iconBtn, pressed && { opacity: 0.6 }]}
-            accessibilityLabel={isDark ? t('common.lightMode') : t('common.darkMode')}
             accessibilityRole="button"
+            accessibilityLabel={isDark ? t('common.lightMode') : t('common.darkMode')}
           >
-            <Ionicons
-              name={isDark ? 'sunny-outline' : 'moon-outline'}
-              size={19}
-              color={colors.text.secondary}
-            />
+            <Ionicons name={isDark ? 'sunny-outline' : 'moon-outline'} size={18} color={P.body} />
           </Pressable>
 
           {/* CTA */}
           <Pressable
-            style={({ pressed }) => [s.ctaBtn, pressed && { opacity: 0.7 }]}
             onPress={() => router.push(ctaHref)}
+            {...webAttrs({ msBtn: '1' })}
+            style={({ pressed }) => [s.cta, pressed && { opacity: 0.9 }]}
+            accessibilityRole="button"
+            accessibilityLabel={ctaLabel}
           >
             <Text style={s.ctaText}>{ctaLabel}</Text>
           </Pressable>
-        </View>
-      </View>
-    </View>
+        </>
+      }
+    />
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDark: boolean) {
+function makeStyles(P: AuthPalette) {
   return StyleSheet.create({
-    outer: {
-      // @ts-ignore — web-only
-      position: 'sticky',
-      top: 0,
-      zIndex: 100,
-      backgroundColor: isDark ? 'rgba(15,17,23,0.85)' : 'rgba(248,250,252,0.88)',
-      // @ts-ignore
-      backdropFilter: 'blur(12px)',
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border.subtle,
-    },
-    inner: {
-      maxWidth: 1100,
-      // @ts-ignore
-      marginHorizontal: 'auto',
-      width: '100%',
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: D.spacing.xl,
-      paddingVertical: D.spacing.md,
-    },
-    logoBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: D.spacing.xs,
-      // @ts-ignore
-      outlineWidth: 0,
-    },
-    right: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: D.spacing.sm,
-    },
     iconBtn: {
-      width: 34,
-      height: 34,
-      borderRadius: D.radius.pill,
+      width: 38,
+      height: 38,
+      borderRadius: 999,
       alignItems: 'center',
       justifyContent: 'center',
-      // @ts-ignore
       outlineWidth: 0,
     },
-    ctaBtn: {
-      paddingHorizontal: D.spacing.md,
-      paddingVertical: D.spacing.sm - 2,
-      borderRadius: D.radius.pill,
-      borderWidth: 1,
-      borderColor: colors.border.default,
-      // @ts-ignore
+    cta: {
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      borderRadius: 999,
+      backgroundColor: P.btnPrimaryBg,
       outlineWidth: 0,
+      // @ts-ignore web-only
+      boxShadow: P.shadowBtn,
     },
     ctaText: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.medium,
-      color: colors.text.primary,
+      fontFamily: AUTH_SANS,
+      fontSize: 14,
+      fontWeight: '600',
+      color: P.btnPrimaryText,
     },
   });
 }
