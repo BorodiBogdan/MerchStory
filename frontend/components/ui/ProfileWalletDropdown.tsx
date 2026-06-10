@@ -10,8 +10,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { CreditIcon } from '@/components/ui/CreditIcon';
+import { AuthPalette, useAuthPalette } from '@/constants/authTheme';
 import { D } from '@/constants/design';
-import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 
 interface ProfileWalletDropdownProps {
@@ -41,15 +41,12 @@ export function ProfileWalletDropdown({
   onSignOut,
   onDismiss,
 }: ProfileWalletDropdownProps) {
-  const { colors } = useTheme();
+  const P = useAuthPalette();
   const t = useT();
   const [internalVisible, setInternalVisible] = useState(false);
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(-8);
-  const styles = useMemo(
-    () => makeStyles(colors, anchorRight ?? D.spacing.md),
-    [colors, anchorRight]
-  );
+  const styles = useMemo(() => makeStyles(P, anchorRight ?? D.spacing.md), [P, anchorRight]);
 
   useEffect(() => {
     if (visible) {
@@ -94,7 +91,7 @@ export function ProfileWalletDropdown({
               icon="person-outline"
               label={t('wallet.choice.profile')}
               onPress={onChooseProfile}
-              colors={colors}
+              palette={P}
             />
 
             <DropdownItem
@@ -107,7 +104,7 @@ export function ProfileWalletDropdown({
                 </View>
               }
               onPress={onChooseWallet}
-              colors={colors}
+              palette={P}
             />
 
             {isAdmin && onChooseAdmin && (
@@ -115,7 +112,7 @@ export function ProfileWalletDropdown({
                 icon="shield-checkmark-outline"
                 label={t('admin.openButton')}
                 onPress={onChooseAdmin}
-                colors={colors}
+                palette={P}
               />
             )}
 
@@ -126,7 +123,7 @@ export function ProfileWalletDropdown({
               label={t('logout.confirm')}
               onPress={onSignOut}
               destructive
-              colors={colors}
+              palette={P}
             />
           </Pressable>
         </Animated.View>
@@ -142,7 +139,7 @@ interface DropdownItemProps {
   trailing?: React.ReactNode;
   destructive?: boolean;
   onPress: () => void;
-  colors: ReturnType<typeof useTheme>['colors'];
+  palette: AuthPalette;
 }
 
 function DropdownItem({
@@ -152,18 +149,18 @@ function DropdownItem({
   trailing,
   destructive,
   onPress,
-  colors,
+  palette,
 }: DropdownItemProps) {
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const labelColor = destructive ? colors.destructive : colors.text.primary;
-  const resolvedIconColor = iconColor ?? (destructive ? colors.destructive : colors.text.secondary);
+  const styles = useMemo(() => makeStyles(palette), [palette]);
+  const labelColor = destructive ? palette.dangerText : palette.ink;
+  const resolvedIconColor = iconColor ?? (destructive ? palette.dangerText : palette.body);
   return (
     <Pressable
       onPress={onPress}
       style={({ hovered, pressed }) => [
         styles.item,
         (hovered || pressed) && {
-          backgroundColor: destructive ? 'rgba(239,68,68,0.08)' : colors.bg.input,
+          backgroundColor: destructive ? palette.dangerBg : hoverFill(palette),
         },
       ]}
       accessibilityRole="button"
@@ -176,10 +173,12 @@ function DropdownItem({
   );
 }
 
-function makeStyles(
-  colors: ReturnType<typeof useTheme>['colors'],
-  anchorRight: number = D.spacing.md
-) {
+/** Subtle neutral hover tint that reads against the glass card in both modes. */
+function hoverFill(P: AuthPalette) {
+  return P.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(22,21,30,0.04)';
+}
+
+function makeStyles(P: AuthPalette, anchorRight: number = D.spacing.md) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
@@ -190,14 +189,17 @@ function makeStyles(
       top: 74,
       right: anchorRight,
       width: 280,
-      backgroundColor: colors.bg.surface,
+      // Match the glass navbar pill: translucent surface, light highlight
+      // border, blur and the same layered nav shadow.
+      backgroundColor: P.glassBg,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: colors.border.subtle,
+      borderColor: P.glassBorder,
       paddingVertical: D.spacing.xs,
       ...(Platform.OS === 'web'
         ? ({
-            boxShadow: '0 1px 2px rgba(0,0,0,0.05), 0 24px 50px -24px rgba(0,0,0,0.30)',
+            backdropFilter: 'blur(18px)',
+            boxShadow: P.shadowNav,
           } as object)
         : D.shadow.modal),
     },
@@ -206,20 +208,20 @@ function makeStyles(
       paddingTop: D.spacing.sm,
       paddingBottom: D.spacing.sm + 2,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border.subtle,
+      borderBottomColor: P.hairline,
       marginBottom: D.spacing.xs,
     },
     signedInLabel: {
       fontSize: D.fontSize.xs,
       fontWeight: D.fontWeight.semibold,
-      color: colors.text.muted,
+      color: P.muted,
       textTransform: 'uppercase',
       letterSpacing: 0.8,
       marginBottom: 2,
     },
     email: {
       fontSize: D.fontSize.sm,
-      color: colors.text.primary,
+      color: P.ink,
       fontWeight: D.fontWeight.medium,
     },
     item: {
@@ -246,18 +248,18 @@ function makeStyles(
       paddingHorizontal: D.spacing.sm,
       paddingVertical: 3,
       borderRadius: D.radius.pill,
-      backgroundColor: colors.accent.dim,
+      backgroundColor: P.accentSoft,
       borderWidth: 1,
-      borderColor: colors.border.focus,
+      borderColor: P.accentRing,
     },
     balancePillText: {
       fontSize: D.fontSize.xs,
       fontWeight: D.fontWeight.bold,
-      color: colors.accent.primary,
+      color: P.accentText,
     },
     divider: {
       height: StyleSheet.hairlineWidth,
-      backgroundColor: colors.border.subtle,
+      backgroundColor: P.hairline,
       marginVertical: D.spacing.xs,
       marginHorizontal: D.spacing.sm,
     },

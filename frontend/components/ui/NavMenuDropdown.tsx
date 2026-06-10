@@ -9,8 +9,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { AuthPalette, useAuthPalette } from '@/constants/authTheme';
 import { D } from '@/constants/design';
-import { useTheme } from '@/context/theme';
 
 export interface NavMenuItem {
   key: string;
@@ -31,14 +31,11 @@ interface NavMenuDropdownProps {
 }
 
 export function NavMenuDropdown({ visible, items, anchorLeft, onDismiss }: NavMenuDropdownProps) {
-  const { colors } = useTheme();
+  const P = useAuthPalette();
   const [internalVisible, setInternalVisible] = useState(false);
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(-8);
-  const styles = useMemo(
-    () => makeStyles(colors, anchorLeft ?? D.spacing.md),
-    [colors, anchorLeft]
-  );
+  const styles = useMemo(() => makeStyles(P, anchorLeft ?? D.spacing.md), [P, anchorLeft]);
 
   useEffect(() => {
     if (visible) {
@@ -73,7 +70,7 @@ export function NavMenuDropdown({ visible, items, anchorLeft, onDismiss }: NavMe
               <Text style={styles.headerLabel}>Menu</Text>
             </View>
             {items.map((item) => (
-              <NavMenuRow key={item.key} item={item} colors={colors} />
+              <NavMenuRow key={item.key} item={item} palette={P} />
             ))}
           </Pressable>
         </Animated.View>
@@ -84,11 +81,11 @@ export function NavMenuDropdown({ visible, items, anchorLeft, onDismiss }: NavMe
 
 interface NavMenuRowProps {
   item: NavMenuItem;
-  colors: ReturnType<typeof useTheme>['colors'];
+  palette: AuthPalette;
 }
 
-function NavMenuRow({ item, colors }: NavMenuRowProps) {
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+function NavMenuRow({ item, palette }: NavMenuRowProps) {
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   return (
     <Pressable
       onPress={item.onPress}
@@ -104,7 +101,7 @@ function NavMenuRow({ item, colors }: NavMenuRowProps) {
       <Ionicons
         name={item.isActive ? item.icon : item.iconOutline}
         size={18}
-        color={item.isActive ? colors.accent.primary : colors.text.secondary}
+        color={item.isActive ? palette.accent : palette.body}
       />
       <Text style={[styles.itemLabel, item.isActive && styles.itemLabelActive]}>{item.label}</Text>
       {item.isActive && <View style={styles.activeDot} />}
@@ -112,10 +109,7 @@ function NavMenuRow({ item, colors }: NavMenuRowProps) {
   );
 }
 
-function makeStyles(
-  colors: ReturnType<typeof useTheme>['colors'],
-  anchorLeft: number = D.spacing.md
-) {
+function makeStyles(P: AuthPalette, anchorLeft: number = D.spacing.md) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
@@ -126,14 +120,17 @@ function makeStyles(
       top: 74,
       left: anchorLeft,
       width: 240,
-      backgroundColor: colors.bg.surface,
+      // Match the glass navbar pill: translucent surface, light highlight
+      // border, blur and the same layered nav shadow.
+      backgroundColor: P.glassBg,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: colors.border.subtle,
+      borderColor: P.glassBorder,
       paddingVertical: D.spacing.xs,
       ...(Platform.OS === 'web'
         ? ({
-            boxShadow: '0 1px 2px rgba(0,0,0,0.05), 0 24px 50px -24px rgba(0,0,0,0.30)',
+            backdropFilter: 'blur(18px)',
+            boxShadow: P.shadowNav,
           } as object)
         : D.shadow.modal),
     },
@@ -142,13 +139,13 @@ function makeStyles(
       paddingTop: D.spacing.sm,
       paddingBottom: D.spacing.sm + 2,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border.subtle,
+      borderBottomColor: P.hairline,
       marginBottom: D.spacing.xs,
     },
     headerLabel: {
       fontSize: D.fontSize.xs,
       fontWeight: D.fontWeight.semibold,
-      color: colors.text.muted,
+      color: P.muted,
       textTransform: 'uppercase',
       letterSpacing: 0.8,
     },
@@ -165,26 +162,26 @@ function makeStyles(
         : {}),
     },
     itemActive: {
-      backgroundColor: colors.accent.dim,
+      backgroundColor: P.accentSoft,
     },
     itemHover: {
-      backgroundColor: colors.bg.input,
+      backgroundColor: P.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(22,21,30,0.04)',
     },
     itemLabel: {
       flex: 1,
       fontSize: D.fontSize.base,
       fontWeight: D.fontWeight.medium,
-      color: colors.text.primary,
+      color: P.ink,
     },
     itemLabelActive: {
-      color: colors.accent.primary,
+      color: P.accentText,
       fontWeight: D.fontWeight.semibold,
     },
     activeDot: {
       width: 6,
       height: 6,
       borderRadius: 3,
-      backgroundColor: colors.accent.primary,
+      backgroundColor: P.accent,
     },
   });
 }

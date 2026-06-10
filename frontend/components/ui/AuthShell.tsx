@@ -6,7 +6,9 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   useWindowDimensions,
+  View,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -17,7 +19,13 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AuthNavbar } from '@/components/ui/AuthNavbar';
-import { AUTH_SANS, AUTH_SERIF, AuthPalette, useAuthPalette } from '@/constants/authTheme';
+import {
+  AUTH_SANS,
+  AUTH_SERIF,
+  AuthPalette,
+  useAuthPalette,
+  webAttrs,
+} from '@/constants/authTheme';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
@@ -34,6 +42,12 @@ export { useAuthPalette, webAttrs } from '@/constants/authTheme';
  * ────────────────────────────────────────────────────────────────────────── */
 
 const isWebPlatform = Platform.OS === 'web';
+
+const PANEL_ICONS: (keyof typeof Ionicons.glyphMap)[] = [
+  'camera-outline',
+  'sparkles-outline',
+  'rocket-outline',
+];
 
 /** Web-only polish: reuse the landing font payload (same element id, so the
  *  stylesheet is fetched once per page) and add entrance/hover CSS. */
@@ -67,10 +81,16 @@ function useAuthWebPolish(accent: string) {
     style.textContent = `
       body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
       ::selection { background: ${accent}; color: #fff; }
+      @keyframes msUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+      [data-ms-up] { animation: msUp .9s cubic-bezier(.2,.7,.3,1) both; }
+      [data-ms-d="1"] { animation-delay: .05s } [data-ms-d="2"] { animation-delay: .13s }
+      [data-ms-d="3"] { animation-delay: .21s } [data-ms-d="4"] { animation-delay: .30s }
+      [data-ms-d="5"] { animation-delay: .40s }
       [data-ms-btn] { transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease, background-color .2s ease; cursor: pointer; }
       [data-ms-btn]:hover { transform: translateY(-2px); }
       [data-ms-tap] { cursor: pointer; transition: opacity .2s ease, background-color .2s ease, border-color .2s ease; }
       @media (prefers-reduced-motion: reduce) {
+        [data-ms-up] { animation: none !important; }
         [data-ms-btn]:hover { transform: none; }
       }
     `;
@@ -97,8 +117,9 @@ export function AuthShell({ ctaLabel, ctaHref, children }: AuthShellProps) {
   useAuthWebPolish(P.accent);
 
   const isMobile = width < 560;
+  const isWide = isWebPlatform && width >= 1024;
   const hPad = isMobile ? 20 : width < 900 ? 28 : 40;
-  const s = useMemo(() => makeShellStyles(P, isMobile, hPad), [P, isMobile, hPad]);
+  const s = useMemo(() => makeShellStyles(P, isMobile, isWide, hPad), [P, isMobile, isWide, hPad]);
 
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(24);
@@ -137,14 +158,52 @@ export function AuthShell({ ctaLabel, ctaHref, children }: AuthShellProps) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View style={[animStyle, s.card]}>{children}</Animated.View>
+          <View style={s.shellRow}>
+            {/* Editorial brand panel (wide web only) */}
+            {isWide && (
+              <View style={s.panel}>
+                <View style={s.eyebrow} {...webAttrs({ msUp: '1', msD: '1' })}>
+                  <Ionicons name="sparkles" size={12} color={P.accent} style={{ marginRight: 7 }} />
+                  <Text style={s.eyebrowText}>{t('landing.hero.eyebrow')}</Text>
+                </View>
+
+                <Text style={s.panelTitle} {...webAttrs({ msUp: '1', msD: '2' })}>
+                  {t('landing.hero.heading').replace(/\n\s*/g, '\n')}
+                </Text>
+
+                <Text style={s.panelSub} {...webAttrs({ msUp: '1', msD: '3' })}>
+                  {t('landing.hero.subheading')}
+                </Text>
+
+                <View style={s.panelSteps} {...webAttrs({ msUp: '1', msD: '4' })}>
+                  {[0, 1, 2].map((i) => (
+                    <View key={PANEL_ICONS[i]} style={s.stepRow}>
+                      <View style={s.stepIcon}>
+                        <Ionicons name={PANEL_ICONS[i]} size={16} color={P.accent} />
+                      </View>
+                      <Text style={s.stepTitle}>
+                        {t(`landing.how.step${i + 1}Title` as Parameters<typeof t>[0])}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={s.trust} {...webAttrs({ msUp: '1', msD: '5' })}>
+                  <Ionicons name="shield-checkmark-outline" size={14} color={P.muted} />
+                  <Text style={s.trustText}>{t('landing.hero.trust')}</Text>
+                </View>
+              </View>
+            )}
+
+            <Animated.View style={[animStyle, s.card]}>{children}</Animated.View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function makeShellStyles(P: AuthPalette, isMobile: boolean, hPad: number) {
+function makeShellStyles(P: AuthPalette, isMobile: boolean, isWide: boolean, hPad: number) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: P.canvas },
     flex: { flex: 1 },
@@ -164,6 +223,80 @@ function makeShellStyles(P: AuthPalette, isMobile: boolean, hPad: number) {
       justifyContent: 'center',
       alignItems: 'center',
     },
+    shellRow: {
+      width: '100%',
+      maxWidth: 1140,
+      flexDirection: isWide ? 'row' : 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: isWide ? 72 : 0,
+    },
+
+    // ── Editorial panel (wide web) ───────────────────────────────────────
+    panel: { flex: 1, maxWidth: 560, minWidth: 0 },
+    eyebrow: {
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: P.chipBg,
+      borderWidth: 1,
+      borderColor: P.glassBorder,
+      borderRadius: 999,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      marginBottom: 26,
+      // @ts-ignore web-only
+      backdropFilter: 'blur(10px)',
+      // @ts-ignore web-only
+      boxShadow: P.isDark ? 'none' : '0 4px 14px -6px rgba(22,21,30,0.18)',
+    },
+    eyebrowText: {
+      fontFamily: AUTH_SANS,
+      fontSize: 12,
+      fontWeight: '600',
+      letterSpacing: 1.2,
+      color: P.accentText,
+    },
+    panelTitle: {
+      fontFamily: AUTH_SERIF,
+      fontWeight: '600',
+      fontSize: 46,
+      lineHeight: 46 * 1.06,
+      letterSpacing: -1,
+      color: P.ink,
+      marginBottom: 16,
+      // @ts-ignore web-only
+      fontOpticalSizing: 'auto',
+    },
+    panelSub: {
+      fontFamily: AUTH_SANS,
+      fontSize: 16,
+      lineHeight: 26,
+      color: P.body,
+      marginBottom: 28,
+      maxWidth: 480,
+    },
+    panelSteps: { gap: 12, marginBottom: 28 },
+    stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    stepIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: P.accentSoft,
+      borderWidth: 1,
+      borderColor: P.accentRing,
+    },
+    stepTitle: {
+      fontFamily: AUTH_SANS,
+      fontSize: 15,
+      fontWeight: '600',
+      color: P.ink,
+    },
+    trust: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+    trustText: { fontFamily: AUTH_SANS, fontSize: 13, color: P.muted },
+
     card: {
       width: '100%',
       ...(isWebPlatform

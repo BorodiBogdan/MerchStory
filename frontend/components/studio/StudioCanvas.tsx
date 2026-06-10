@@ -34,6 +34,7 @@ import { ChipSelector } from '@/components/ui/ChipSelector';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { CreditIcon } from '@/components/ui/CreditIcon';
 import { GalleryImage } from '@/components/ui/GalleryImage';
+import { glassNavRail } from '@/components/ui/GlassNavbar';
 import { InsufficientCreditsModal } from '@/components/ui/InsufficientCreditsModal';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
@@ -1108,12 +1109,13 @@ function ChooseProductsSection({
   };
 
   // Desktop inline card width: 4 cards fit inside the right panel's section card.
-  // Layout: right panel fills `screenWidth - SIDEBAR_WIDTH` (capped at 1280), minus
-  // rightPanelContent horizontal padding (80 * 2), minus desktopSection
-  // inner padding (D.spacing.lg * 2), minus the section's 1px border on each side.
-  const rightPanelMax = 1280;
-  const rightPanelWidth = Math.min(screenWidth - SIDEBAR_WIDTH, rightPanelMax);
-  const panelInner = rightPanelWidth - 80 * 2 - D.spacing.lg * 2 - 2;
+  // Layout: the workspace sits on the navbar rail (railInset each side), then
+  // sidebar + root gap; inside the right panel subtract rightPanelContent
+  // horizontal padding (lg * 2), desktopSection inner padding (lg * 2), and
+  // the section's 1px border on each side.
+  const railInset = glassNavRail(screenWidth, true).inset;
+  const rightPanelWidth = screenWidth - railInset * 2 - SIDEBAR_WIDTH - D.spacing.md;
+  const panelInner = rightPanelWidth - D.spacing.lg * 2 - D.spacing.lg * 2 - 2;
   const inlineCardWidth = Math.max(
     96,
     Math.floor((panelInner - D.spacing.sm * (DESKTOP_INLINE_LIMIT - 1)) / DESKTOP_INLINE_LIMIT)
@@ -4562,6 +4564,10 @@ function makeStyles(
   isDesktop: boolean,
   screenWidth: number
 ) {
+  // Align the workspace with the glass navbar pill: same side insets, so the
+  // sidebar's left edge and the pill's left edge share one rail.
+  const railInset = glassNavRail(screenWidth, true).inset;
+
   return StyleSheet.create({
     // ── Desktop root ───────────────────────────────────────────────────────────
     desktopRoot: {
@@ -4570,17 +4576,28 @@ function makeStyles(
       backgroundColor: colors.bg.base,
       position: 'relative',
       overflow: 'hidden',
+      paddingLeft: railInset,
+      paddingRight: railInset,
+      paddingBottom: D.spacing.md,
+      paddingTop: D.spacing.xs,
+      gap: D.spacing.md,
     },
 
     // ── Sidebar ────────────────────────────────────────────────────────────────
+    // Floating rounded card (same language as the navbar pill) instead of a
+    // full-bleed slab, so the gap between navbar and sidebar reads as intended.
     sidebar: {
       width: SIDEBAR_WIDTH,
       backgroundColor: colors.bg.surface,
       flexDirection: 'column',
-      borderRightWidth: 1,
-      borderRightColor: colors.border.subtle,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      overflow: 'hidden',
       ...(Platform.OS === 'web'
-        ? ({ boxShadow: `2px 0 24px -16px ${colors.accent.primary}33` } as any)
+        ? ({
+            boxShadow: `0 1px 2px rgba(0,0,0,0.04), 0 20px 44px -28px ${colors.accent.primary}40`,
+          } as any)
         : {}),
     } as any,
     sidebarScroll: { flex: 1 },
@@ -4720,14 +4737,14 @@ function makeStyles(
       backgroundColor: colors.bg.base,
     },
     rightPanelContent: {
-      paddingHorizontal: 80,
+      // The workspace already sits on the navbar rail; keep the preview close
+      // to the sidebar instead of re-centering it with big gutters.
+      paddingHorizontal: D.spacing.lg,
       paddingTop: D.spacing.lg,
       paddingBottom: D.spacing['2xl'],
       gap: D.spacing.lg,
       flexGrow: 1,
-      maxWidth: 1280,
       width: '100%',
-      alignSelf: 'center',
     },
 
     // ── Desktop hero header (top of right panel) ───────────────────────────────
