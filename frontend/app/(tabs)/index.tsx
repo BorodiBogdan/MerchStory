@@ -18,6 +18,7 @@ import {
 
 import { StudioPageHero } from '@/components/ui/studio/StudioPageHero';
 import { D } from '@/constants/design';
+import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import { useIdeas } from '@/hooks/useIdeas';
 import { useT } from '@/i18n';
@@ -162,6 +163,7 @@ function IdeasForYouSection({
   router: ReturnType<typeof useRouter>;
 }) {
   const styles = useMemo(() => makeIdeasStyles(colors, isDesktop), [colors, isDesktop]);
+  const { isAdmin } = useAuth();
   const { ideas: rawIdeas, recommendationId, isLoading, isRefreshing, error, refresh } = useIdeas();
 
   const promoIdeas = useMemo<PromoIdea[]>(
@@ -228,21 +230,25 @@ function IdeasForYouSection({
           <Text style={styles.title}>{t('ideas.sectionTitle')}</Text>
           <Text style={styles.subtitle}>{t('ideas.sectionSubtitle')}</Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('ideas.refresh')}
-          accessibilityState={{ busy: isRefreshing, disabled: refreshDisabled }}
-          disabled={refreshDisabled}
-          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-            styles.refreshButton,
-            (pressed || hovered) && !refreshDisabled && { borderColor: colors.accent.primary },
-            refreshDisabled && { opacity: 0.5 },
-          ]}
-          onPress={handleRefresh}
-        >
-          <Ionicons name="refresh" size={14} color={colors.text.secondary} />
-          <Text style={styles.refreshText}>{t('ideas.refresh')}</Text>
-        </Pressable>
+        {/* Force-refresh is admin-only — the backend endpoint requires the
+            AdminOnly policy; regular users rely on the daily cache. */}
+        {isAdmin && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('ideas.refresh')}
+            accessibilityState={{ busy: isRefreshing, disabled: refreshDisabled }}
+            disabled={refreshDisabled}
+            style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+              styles.refreshButton,
+              (pressed || hovered) && !refreshDisabled && { borderColor: colors.accent.primary },
+              refreshDisabled && { opacity: 0.5 },
+            ]}
+            onPress={handleRefresh}
+          >
+            <Ionicons name="refresh" size={14} color={colors.text.secondary} />
+            <Text style={styles.refreshText}>{t('ideas.refresh')}</Text>
+          </Pressable>
+        )}
       </View>
 
       {isLoading && <Text style={styles.statusText}>{t('ideas.loading')}</Text>}

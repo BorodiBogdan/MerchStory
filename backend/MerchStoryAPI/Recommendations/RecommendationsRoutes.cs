@@ -24,7 +24,7 @@ public static class RecommendationsRoutes
         RouteGroupBuilder group = app.MapGroup("/recommendations").RequireAuthorization();
 
         group.MapGet("/today", GetToday);
-        group.MapPost("/refresh", RefreshToday);
+        group.MapPost("/refresh", RefreshToday).RequireAuthorization("AdminOnly");
         group.MapGet("/jobs/{jobId:guid}", GetJob);
         group.MapPost("/{recId:guid}/feedback", PostFeedback);
     }
@@ -68,6 +68,8 @@ public static class RecommendationsRoutes
     }
 
     // POST /recommendations/refresh — always kicks off a new job; cache hit is ignored.
+    // Admin-only: forcing regeneration burns AI credits, so regular users go through
+    // the once-per-day cache in GET /today instead.
     private static IResult RefreshToday(
         ClaimsPrincipal principal,
         RecommendationJobRunner runner)

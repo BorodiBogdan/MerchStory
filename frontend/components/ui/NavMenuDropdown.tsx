@@ -24,15 +24,21 @@ export interface NavMenuItem {
 interface NavMenuDropdownProps {
   visible: boolean;
   items: NavMenuItem[];
+  /** Distance from the left viewport edge, so the card anchors under the
+   *  hamburger button inside the navbar pill instead of the screen corner. */
+  anchorLeft?: number;
   onDismiss: () => void;
 }
 
-export function NavMenuDropdown({ visible, items, onDismiss }: NavMenuDropdownProps) {
+export function NavMenuDropdown({ visible, items, anchorLeft, onDismiss }: NavMenuDropdownProps) {
   const { colors } = useTheme();
   const [internalVisible, setInternalVisible] = useState(false);
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(-8);
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(
+    () => makeStyles(colors, anchorLeft ?? D.spacing.md),
+    [colors, anchorLeft]
+  );
 
   useEffect(() => {
     if (visible) {
@@ -106,7 +112,10 @@ function NavMenuRow({ item, colors }: NavMenuRowProps) {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+function makeStyles(
+  colors: ReturnType<typeof useTheme>['colors'],
+  anchorLeft: number = D.spacing.md
+) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
@@ -114,15 +123,19 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     card: {
       position: 'absolute',
-      top: 56,
-      left: D.spacing.md,
+      top: 74,
+      left: anchorLeft,
       width: 240,
-      backgroundColor: colors.bg.elevated,
-      borderRadius: D.radius.lg,
+      backgroundColor: colors.bg.surface,
+      borderRadius: 20,
       borderWidth: 1,
-      borderColor: colors.border.default,
+      borderColor: colors.border.subtle,
       paddingVertical: D.spacing.xs,
-      ...D.shadow.modal,
+      ...(Platform.OS === 'web'
+        ? ({
+            boxShadow: '0 1px 2px rgba(0,0,0,0.05), 0 24px 50px -24px rgba(0,0,0,0.30)',
+          } as object)
+        : D.shadow.modal),
     },
     header: {
       paddingHorizontal: D.spacing.md,
@@ -145,7 +158,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       gap: D.spacing.sm,
       paddingHorizontal: D.spacing.md,
       paddingVertical: D.spacing.sm + 2,
-      borderRadius: D.radius.sm,
+      borderRadius: D.radius.md,
       marginHorizontal: D.spacing.xs,
       ...(Platform.OS === 'web'
         ? ({ transitionDuration: '120ms', transitionProperty: 'background-color' } as object)

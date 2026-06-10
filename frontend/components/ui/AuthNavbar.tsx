@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { BrandLogo } from '@/components/ui/BrandLogo';
-import { AUTH_MAXW, AUTH_SANS, AuthPalette, useAuthPalette, webAttrs } from '@/constants/authTheme';
+import { GlassNavbar } from '@/components/ui/GlassNavbar';
+import { AUTH_SANS, AuthPalette, useAuthPalette, webAttrs } from '@/constants/authTheme';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
 
@@ -16,36 +16,24 @@ interface AuthNavbarProps {
 }
 
 /**
- * Floating glass pill navbar for the auth screens (web), matching the landing
- * page's nav: glass surface, hairline border, theme toggle and an indigo CTA.
+ * Auth flavor of the shared GlassNavbar: floating overlay with a theme toggle
+ * and an indigo CTA pill (sign in / create account).
  */
 export function AuthNavbar({ ctaLabel, ctaHref }: AuthNavbarProps) {
   const { colorScheme, toggleTheme } = useTheme();
   const router = useRouter();
   const t = useT();
-  const { width } = useWindowDimensions();
 
   const isDark = colorScheme === 'dark';
-  const isMobile = width < 560;
-  const hPad = isMobile ? 20 : width < 900 ? 28 : 40;
   const P = useAuthPalette();
-  const s = useMemo(() => makeStyles(P, isMobile, hPad), [P, isMobile, hPad]);
+  const s = useMemo(() => makeStyles(P), [P]);
 
   return (
-    <View style={s.navWrap}>
-      <View style={s.nav}>
-        {/* Logo, back to the landing page */}
-        <Pressable
-          onPress={() => router.push('/')}
-          {...webAttrs({ msTap: '1' })}
-          style={({ pressed }) => [s.navLogo, pressed && { opacity: 0.75 }]}
-          accessibilityRole="button"
-          accessibilityLabel="MerchStory"
-        >
-          <BrandLogo size="sm" variant="horizontal" />
-        </Pressable>
-
-        <View style={s.navRight}>
+    <GlassNavbar
+      floating
+      onLogoPress={() => router.push('/')}
+      right={
+        <>
           {/* Theme toggle */}
           <Pressable
             onPress={toggleTheme}
@@ -61,50 +49,20 @@ export function AuthNavbar({ ctaLabel, ctaHref }: AuthNavbarProps) {
           <Pressable
             onPress={() => router.push(ctaHref)}
             {...webAttrs({ msBtn: '1' })}
-            style={({ pressed }) => [s.navCta, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [s.cta, pressed && { opacity: 0.9 }]}
             accessibilityRole="button"
             accessibilityLabel={ctaLabel}
           >
-            <Text style={s.navCtaText}>{ctaLabel}</Text>
+            <Text style={s.ctaText}>{ctaLabel}</Text>
           </Pressable>
-        </View>
-      </View>
-    </View>
+        </>
+      }
+    />
   );
 }
 
-function makeStyles(P: AuthPalette, isMobile: boolean, hPad: number) {
+function makeStyles(P: AuthPalette) {
   return StyleSheet.create({
-    navWrap: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 100,
-      paddingHorizontal: hPad,
-      paddingTop: isMobile ? 8 : 12,
-      alignItems: 'center',
-    },
-    nav: {
-      maxWidth: AUTH_MAXW,
-      width: '100%',
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: 10,
-      paddingLeft: 18,
-      paddingRight: 12,
-      borderRadius: 20,
-      backgroundColor: P.glassBg,
-      borderWidth: 1,
-      borderColor: P.glassBorder,
-      // @ts-ignore web-only
-      backdropFilter: 'blur(18px)',
-      // @ts-ignore web-only
-      boxShadow: P.shadowNav,
-    },
-    navLogo: { flexDirection: 'row', alignItems: 'center', outlineWidth: 0 },
-    navRight: { flexDirection: 'row', alignItems: 'center', gap: isMobile ? 4 : 8 },
     iconBtn: {
       width: 38,
       height: 38,
@@ -113,7 +71,7 @@ function makeStyles(P: AuthPalette, isMobile: boolean, hPad: number) {
       justifyContent: 'center',
       outlineWidth: 0,
     },
-    navCta: {
+    cta: {
       paddingHorizontal: 18,
       paddingVertical: 10,
       borderRadius: 999,
@@ -122,7 +80,7 @@ function makeStyles(P: AuthPalette, isMobile: boolean, hPad: number) {
       // @ts-ignore web-only
       boxShadow: P.shadowBtn,
     },
-    navCtaText: {
+    ctaText: {
       fontFamily: AUTH_SANS,
       fontSize: 14,
       fontWeight: '600',
