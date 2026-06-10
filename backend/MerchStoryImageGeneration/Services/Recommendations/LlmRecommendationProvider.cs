@@ -3,14 +3,12 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using MerchStoryImageGeneration.Models.Recommendations;
-using Microsoft.Extensions.Configuration;
+using MerchStoryImageGeneration.Services.Recommendations.Chat;
 using Microsoft.Extensions.Logging;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 namespace MerchStoryImageGeneration.Services.Recommendations;
 
-// Multi-agent recommendation provider via Semantic Kernel.
+// Multi-agent recommendation provider.
 //
 // Pipeline (Phase 4):
 //   1. Strategist (1 LLM call, lower temperature) picks N angles from the
@@ -21,12 +19,10 @@ namespace MerchStoryImageGeneration.Services.Recommendations;
 //      slowest writer rather than the sum.
 //   3. // Critic deferred to v2 — see plan
 //
-// Per-role models supported via separate config keys. Defaulting both to the
-// same model is fine; using a stronger model for Strategist + a faster model
-// for Writers is a common upgrade path.
-//
-// Speaks the OpenAI Chat Completions wire format — works against LM Studio
-// (default), Ollama, vLLM, llama.cpp server, LocalAI, hosted services, etc.
+// This class owns the prompts and the defensive JSON parsing; the actual
+// chat-completion call goes through IRecommendationChatService, so the model
+// backend (LM Studio / DeepSeek / Claude) is a pure config decision —
+// see Recommendations:Llm:Backend and the Chat/ folder.
 public class LlmRecommendationProvider : IRecommendationProvider
 {
     private const string RetryAddendum =
@@ -42,49 +38,14 @@ public class LlmRecommendationProvider : IRecommendationProvider
         CommentHandling = JsonCommentHandling.Skip,
     };
 
-    private readonly Kernel strategistKernel;
-    private readonly Kernel writerKernel;
-    private readonly OpenAIPromptExecutionSettings strategistSettings;
-    private readonly OpenAIPromptExecutionSettings writerSettings;
+    private readonly IRecommendationChatService chat;
     private readonly ILogger<LlmRecommendationProvider> logger;
-    private readonly string strategistModel;
-    private readonly string writerModel;
 
     public LlmRecommendationProvider(
-        IConfiguration configuration,
+        IRecommendationChatService chat,
         ILogger<LlmRecommendationProvider> logger)
     {
-        string baseUrl = configuration["Recommendations:Llm:BaseUrl"]
-            ?? "http://localhost:1234/v1";
-        string defaultModel = configuration["Recommendations:Llm:ChatModel"] ?? "qwen2.5-7b-instruct";
-        this.strategistModel = configuration["Recommendations:Llm:StrategistModel"] ?? defaultModel;
-        this.writerModel = configuration["Recommendations:Llm:WriterModel"] ?? defaultModel;
-        int timeoutSec = configuration.GetValue("Recommendations:Llm:RequestTimeoutSeconds", 90);
-
-        // Many local open-weight models (Gemma 3, Llama 3.1, etc.) — and the
-        // LM Studio runtime for them — reject OpenAI's `response_format: json_object`
-        // flag with a 400. Toggle this off when running smaller models; the
-        // prompt itself still demands JSON-only output and the parser strips
-        // code fences as a safety net.
-        bool useJsonMode = configuration.GetValue("Recommendations:Llm:UseJsonMode", true);
-
-        this.strategistKernel = BuildKernel(this.strategistModel, baseUrl, timeoutSec);
-        this.writerKernel = BuildKernel(this.writerModel, baseUrl, timeoutSec);
-
-        this.strategistSettings = new OpenAIPromptExecutionSettings
-        {
-            ResponseFormat = useJsonMode ? "json_object" : null,
-            MaxTokens = 1200,
-            Temperature = 0.4, // planning likes lower temperature
-        };
-
-        this.writerSettings = new OpenAIPromptExecutionSettings
-        {
-            ResponseFormat = useJsonMode ? "json_object" : null,
-            MaxTokens = 600,
-            Temperature = 0.8, // writing benefits from variation
-        };
-
+        this.chat = chat;
         this.logger = logger;
     }
 
@@ -98,9 +59,8 @@ public class LlmRecommendationProvider : IRecommendationProvider
         Stopwatch sw = Stopwatch.StartNew();
 
         this.logger.LogInformation(
-            "[LLM] Generate start strategist={Strategist} writer={Writer} signals={SignalCount} playbookHits={PlaybookCount} previousIdeas={PreviousCount} ideasPerDay={N}",
-            this.strategistModel,
-            this.writerModel,
+            "[LLM] Generate start backend={Backend} signals={SignalCount} playbookHits={PlaybookCount} previousIdeas={PreviousCount} ideasPerDay={N}",
+            this.chat.Description,
             context.Signals.Count,
             context.PlaybookHits.Count,
             context.PreviousIdeas.Count,
@@ -165,8 +125,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
 
         ProviderRunSnapshot snapshotShape = new(
             Provider: "llm",
-            StrategistModel: this.strategistModel,
-            WriterModel: this.writerModel,
+            Backend: this.chat.Description,
             StrategistMs: strategistMs,
             WriterMs: writerMs,
             AngleCount: angles.Length,
@@ -247,6 +206,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("- Preserve brand names, product names, place names — don't translate them.");
         sb.AppendLine("- Preserve numbers, dates, percentages exactly.");
         sb.AppendLine("- Keep the casual tone — short sentences, everyday words.");
+        sb.AppendLine("- NEVER use em dashes (—) in the translation. Use commas, colons, or periods instead.");
         sb.AppendLine("- Translate suggestedPost as something a real shop owner would actually type — not a slogan.");
         sb.AppendLine("- Translate imagePrompt as a plain visual description in " + targetLangName + ". Keep any quoted on-image text in " + targetLangName + " too.");
         sb.AppendLine();
@@ -459,18 +419,6 @@ public class LlmRecommendationProvider : IRecommendationProvider
         }
     }
 
-    private static Kernel BuildKernel(string model, string baseUrl, int timeoutSec)
-    {
-        HttpClient http = new() { Timeout = TimeSpan.FromSeconds(timeoutSec) };
-        return Kernel.CreateBuilder()
-            .AddOpenAIChatCompletion(
-                modelId: model,
-                endpoint: new Uri(baseUrl),
-                apiKey: "not-required",
-                httpClient: http)
-            .Build();
-    }
-
     private static string StripCodeFences(string raw)
     {
         string cleaned = raw.Trim();
@@ -550,6 +498,8 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("Your job: read the shop profile and today's environmental signals, then pick distinct PROMO ANGLES worth turning into ads.");
         sb.AppendLine("Don't write the ads themselves yet — the next stage handles that. Just identify the angles.");
         sb.AppendLine();
+        sb.AppendLine($"TODAY'S DATE: {DateTime.UtcNow.ToString("dddd, d MMMM yyyy", CultureInfo.InvariantCulture)}.");
+        sb.AppendLine();
         sb.AppendLine("== SHOP ==");
         AppendShop(sb, ctx);
         sb.AppendLine();
@@ -557,9 +507,17 @@ public class LlmRecommendationProvider : IRecommendationProvider
         AppendSignals(sb, ctx);
         sb.AppendLine();
         AppendPlaybookHits(sb, ctx);
+        sb.AppendLine("== WHAT THIS SHOP CAN SELL ==");
+        AppendDomainGuidance(sb, ctx);
+        sb.AppendLine();
         sb.AppendLine("== TASK ==");
         sb.AppendLine($"Pick exactly {ctx.IdeasPerDay} distinct angles. Vary the tones — don't return 5 weather angles.");
         sb.AppendLine("Each angle must be grounded in either a specific signal above or a clear seasonal opportunity for this domain.");
+        sb.AppendLine("Each angle must be SELLABLE: name the products or product ranges to push, and only ones this shop already stocks.");
+        sb.AppendLine("Mix the angle kinds: some should become product deals (promotions), some shop happenings (announcements).");
+        sb.AppendLine("Sanity-check every angle against TODAY'S DATE above: never pitch a holiday or season that is");
+        sb.AppendLine("months away (no Christmas angles in August). If a signal or playbook entry references something");
+        sb.AppendLine("out of season, ignore it and improvise an angle that fits the actual date instead.");
         sb.AppendLine();
         sb.AppendLine("Themes should be plain and concrete. The next stage will turn them into copy.");
         sb.AppendLine("Avoid marketing-speak (no 'unlock', 'curated', 'premium', 'authentic', 'discover', 'embrace').");
@@ -583,8 +541,20 @@ public class LlmRecommendationProvider : IRecommendationProvider
     private static string BuildWriterPrompt(Angle angle, RecommendationContext ctx)
     {
         StringBuilder sb = new();
-        sb.AppendLine("You are helping a small shop owner write a promo idea they'd actually post on their own Facebook page.");
+        sb.AppendLine("You are advising a small shop owner on a promo opportunity for today.");
+        sb.AppendLine();
+        sb.AppendLine("== WHO READS WHAT — get this right ==");
+        sb.AppendLine("The idea card (title, meta, body) is read by the SHOP OWNER. It is ADVICE that convinces");
+        sb.AppendLine("them to act on the opportunity. It is NOT the ad itself.");
+        sb.AppendLine("  GOOD title: \"Storm coming Thursday: time to push umbrellas\"");
+        sb.AppendLine("  BAD title:  \"Umbrellas 20% off, Thursday only!\" (that's an ad aimed at customers, wrong audience)");
+        sb.AppendLine("Only suggestedPost and imagePrompt are customer-facing. Those speak to shoppers.");
+        sb.AppendLine();
         sb.AppendLine("The shop owner is a real person, not a marketing agency. Match their voice.");
+        sb.AppendLine();
+        sb.AppendLine("TODAY'S DATE: " + DateTime.UtcNow.ToString("dddd, d MMMM yyyy", CultureInfo.InvariantCulture) + ".");
+        sb.AppendLine("If the angle references a holiday or season that doesn't fit today's date (a December holiday in August),");
+        sb.AppendLine("don't write it as given: improvise and adapt it into something that fits the actual date.");
         sb.AppendLine();
         sb.AppendLine("== THE ANGLE ==");
         sb.AppendLine("Theme: " + angle.Theme);
@@ -595,11 +565,30 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("== THE SHOP ==");
         AppendShop(sb, ctx);
         sb.AppendLine();
+        sb.AppendLine("== WHAT THIS SHOP CAN SELL ==");
+        AppendDomainGuidance(sb, ctx);
+        sb.AppendLine();
         AppendPreviousIdeas(sb, ctx);
+        sb.AppendLine("== THE TWO IDEA SHAPES ==");
+        sb.AppendLine("Every idea is exactly ONE of these. Pick the shape that fits the angle and write in that style:");
+        sb.AppendLine();
+        sb.AppendLine("promotion — a concrete deal on a product or a range of products. Always name what's on offer");
+        sb.AppendLine("(a product, a category like 'all beef' or 'all dairy') AND the mechanic (percent off, bundle, buy-X-get-Y). Examples:");
+        sb.AppendLine("  \"20% off all beef this weekend, barbecue weather is coming\"");
+        sb.AppendLine("  \"Buy 3 bags of chips, get 1 free\"");
+        sb.AppendLine();
+        sb.AppendLine("announcement — something happening at the shop: an event, special opening hours, kids' activities,");
+        sb.AppendLine("a tombola. Examples:");
+        sb.AppendLine("  \"June 1st: activities for kids in front of the market\"");
+        sb.AppendLine("  \"We're open on Easter\"");
+        sb.AppendLine("  \"Spend over 100 lei and you're in our tombola\"");
+        sb.AppendLine();
         sb.AppendLine("== HOW TO WRITE ==");
         sb.AppendLine("Plain, human, like a neighbor texting friends. Short sentences, specific items, no marketing-speak.");
+        sb.AppendLine("Only push products or ranges this shop actually stocks — never invent services or product lines it can't sell.");
+        sb.AppendLine("NEVER use em dashes (—) in any field. Use commas, colons, or periods instead.");
         sb.AppendLine("Avoid: 'unlock', 'elevate', 'discover', 'curated', 'premium', 'authentic', 'don't miss out', emojis, title-case.");
-        sb.AppendLine("GOOD: \"Cold rain Saturday — Sunday-soup kit, three ingredients\"");
+        sb.AppendLine("GOOD: \"Cold rain Saturday: Sunday-soup kit, three ingredients\"");
         sb.AppendLine("BAD:  \"Embrace the rainy weekend with our curated comfort food experience\"");
         sb.AppendLine();
         sb.AppendLine("== OUTPUT ==");
@@ -607,16 +596,36 @@ public class LlmRecommendationProvider : IRecommendationProvider
         sb.AppendLine("{");
         sb.AppendLine("  \"id\": \"short-kebab-case-id\",");
         sb.AppendLine($"  \"tone\": \"{angle.Tone}\",");
-        sb.AppendLine("  \"title\": \"4-8 words, plain language\",");
+        sb.AppendLine("  \"title\": \"4-8 words of advice TO THE OWNER: the moment + what to sell (e.g. 'Storm coming Thursday: time to push umbrellas')\",");
         sb.AppendLine("  \"meta\": \"short factual context (a date, a number)\",");
-        sb.AppendLine("  \"body\": \"1-2 sentences explaining the idea\",");
+        sb.AppendLine("  \"body\": \"1-2 sentences telling the owner why this works now and how to run it\",");
         sb.AppendLine("  \"suggestedPost\": \"5-9 words a real shop owner would type. Not a slogan.\",");
         sb.AppendLine("  \"type\": \"promotion\" if there's a concrete discount/sale/bundle, else \"announcement\",");
-        sb.AppendLine("  \"imagePrompt\": \"1-2 sentences: subject, optional on-image text, mood. Visual description, not a slogan.\"");
+        sb.AppendLine($"  \"imagePrompt\": \"2-3 sentences: the scene (subject, setting, mood) PLUS the on-image text in single quotes — a short call-to-action that names the shop ({ctx.BrandName}) and what to come get. Example: 'Come to {ctx.BrandName}: charcoal, meat, everything for the barbecue'.\"");
         sb.AppendLine("}");
         sb.AppendLine();
         sb.AppendLine("Write title / meta / body / suggestedPost / imagePrompt in English. A separate translator handles other languages.");
         return sb.ToString();
+    }
+
+    // Domain-scoped grounding. The BusinessDomain name alone (in == SHOP ==)
+    // isn't enough for small models — they'll happily suggest selling things
+    // the shop can't stock (a market being told to "sell oil"). Spell out what
+    // this kind of shop sells and what's off-limits. Add a case per domain as
+    // playbooks for them get seeded.
+    private static void AppendDomainGuidance(StringBuilder sb, RecommendationContext ctx)
+    {
+        if (string.Equals(ctx.BusinessDomain, "Market", StringComparison.OrdinalIgnoreCase))
+        {
+            sb.AppendLine("This shop is a MARKET (a local grocery / convenience store). It sells what's on its shelves:");
+            sb.AppendLine("food (meat, dairy, produce, bread, snacks, sweets), drinks, and everyday household items.");
+            sb.AppendLine("Push shelf products or ranges of them: beef for a barbecue weekend, chips, watermelon, soup vegetables, all dairy.");
+            sb.AppendLine("Do NOT suggest services, equipment, fuel, or any product line a grocery store doesn't stock.");
+            return;
+        }
+
+        sb.AppendLine($"This shop's domain is {ctx.BusinessDomain}. Only suggest products it can realistically");
+        sb.AppendLine("stock and sell today — never services, equipment, or product lines outside that domain.");
     }
 
     private static void AppendShop(StringBuilder sb, RecommendationContext ctx)
@@ -720,7 +729,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
         string raw;
         try
         {
-            raw = await this.InvokeAsync(this.writerKernel, prompt, this.writerSettings, ct);
+            raw = await this.chat.CompleteAsync(prompt, ChatRole.Writer, ct);
         }
         catch (Exception ex)
         {
@@ -756,11 +765,11 @@ public class LlmRecommendationProvider : IRecommendationProvider
         Stopwatch sw = Stopwatch.StartNew();
         string prompt = BuildStrategistPrompt(ctx);
         this.logger.LogInformation(
-            "[LLM] Strategist start promptChars={Chars} model={Model}",
+            "[LLM] Strategist start promptChars={Chars} backend={Backend}",
             prompt.Length,
-            this.strategistModel);
+            this.chat.Description);
 
-        string raw = await this.InvokeAsync(this.strategistKernel, prompt, this.strategistSettings, ct);
+        string raw = await this.chat.CompleteAsync(prompt, ChatRole.Strategist, ct);
         this.logger.LogInformation(
             "[LLM] Strategist response after {Ms}ms responseChars={Chars}",
             sw.ElapsedMilliseconds,
@@ -774,7 +783,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
                 Truncate(raw, 4000));
 
             string retryPrompt = prompt + RetryAddendum;
-            string retryRaw = await this.InvokeAsync(this.strategistKernel, retryPrompt, this.strategistSettings, ct);
+            string retryRaw = await this.chat.CompleteAsync(retryPrompt, ChatRole.Strategist, ct);
             parsed = TryParseAngles(retryRaw, ctx.IdeasPerDay);
             if (parsed is null)
             {
@@ -804,7 +813,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
             angle.Tone,
             prompt.Length);
 
-        string raw = await this.InvokeAsync(this.writerKernel, prompt, this.writerSettings, ct);
+        string raw = await this.chat.CompleteAsync(prompt, ChatRole.Writer, ct);
 
         IdeaDto? parsed = TryParseIdea(raw, angle, index);
         if (parsed is not null)
@@ -823,7 +832,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
             Truncate(raw, 4000));
 
         string retryPrompt = prompt + RetryAddendum;
-        string retryRaw = await this.InvokeAsync(this.writerKernel, retryPrompt, this.writerSettings, ct);
+        string retryRaw = await this.chat.CompleteAsync(retryPrompt, ChatRole.Writer, ct);
         parsed = TryParseIdea(retryRaw, angle, index);
 
         if (parsed is not null)
@@ -851,42 +860,13 @@ public class LlmRecommendationProvider : IRecommendationProvider
             SuggestedPost: angle.Theme);
     }
 
-    private async Task<string> InvokeAsync(
-        Kernel kernel,
-        string prompt,
-        OpenAIPromptExecutionSettings settings,
-        CancellationToken ct)
-    {
-        try
-        {
-            FunctionResult result = await kernel.InvokePromptAsync(
-                prompt,
-                new KernelArguments(settings),
-                cancellationToken: ct);
-            return result.GetValue<string>() ?? string.Empty;
-        }
-        catch (Microsoft.SemanticKernel.HttpOperationException ex)
-        {
-            // SK swallows the response body in HttpOperationException.ToString().
-            // Reach into ResponseContent so the user can see *why* the LLM said 400.
-            string body = ex.ResponseContent ?? "(no body captured)";
-            this.logger.LogError(
-                ex,
-                "[LLM] HTTP {Status} from chat endpoint. Response body: {Body}",
-                ex.StatusCode,
-                Truncate(body, 800));
-            throw;
-        }
-    }
-
     private record Angle(string Theme, string Tone, string TriggerSignal, string Rationale);
 
     // Concrete shape for the diagnostic snapshot string. Anonymous-type version
     // got hit by dotnet watch hot-reload renaming '<>f__AnonymousTypeN' indices.
     private record ProviderRunSnapshot(
         string Provider,
-        string StrategistModel,
-        string WriterModel,
+        string Backend,
         long StrategistMs,
         long WriterMs,
         int AngleCount,

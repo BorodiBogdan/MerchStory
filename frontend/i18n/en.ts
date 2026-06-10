@@ -479,7 +479,8 @@ const en = {
   'studio.postTypeAnnouncement': 'Announcement',
   'studio.postTypeJobPost': 'Job Post',
   'studio.postTypePromotion': 'Promotion',
-  'studio.announcement.describe': 'Describe what you want to communicate',
+  'studio.announcement.describe':
+    'Describe what you want to communicate. Be as specific as possible (product, offer, details) for the best generated image.',
   'studio.videoAdsTitle': 'Video Ads',
   'studio.comingSoon': 'Coming Soon',
   'studio.back': 'Back',

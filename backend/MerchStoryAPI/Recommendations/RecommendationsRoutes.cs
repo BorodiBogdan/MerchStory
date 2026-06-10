@@ -12,10 +12,8 @@ public static class RecommendationsRoutes
 {
     private static readonly HashSet<string> ValidFeedbackActions = new(StringComparer.OrdinalIgnoreCase)
     {
-        "viewed",
         "thumbs_up",
         "thumbs_down",
-        "dismissed",
         "generated_from",
     };
 

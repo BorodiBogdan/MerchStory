@@ -56,23 +56,46 @@ async function saveRefreshToken(token: string): Promise<void> {
   return SecureStore.setItemAsync(REFRESH_TOKEN_KEY, token);
 }
 
+// Called when a refresh definitively fails (refresh token expired/revoked) so the
+// app can clear its session and route back to login. Registered by AuthProvider.
+type SessionExpiredHandler = () => void;
+let onSessionExpired: SessionExpiredHandler | null = null;
+
+export function setSessionExpiredHandler(handler: SessionExpiredHandler | null): void {
+  onSessionExpired = handler;
+}
+
+// Single-flight guard: when many requests 401 at once (e.g. the dashboard mounts
+// with an expired JWT), they must NOT each POST /auth/refresh with the same
+// single-use refresh token — the first call revokes it and the rest fail. Instead
+// all callers await the one in-flight refresh and share its result.
+let refreshInFlight: Promise<string | null> | null = null;
+
 async function tryRefreshAccessToken(): Promise<string | null> {
-  const refreshToken = await getRefreshToken();
-  if (!refreshToken) return null;
-  try {
-    const response = await fetch(`${API_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-    if (!response.ok) return null;
-    const data = (await response.json()) as AuthResponse;
-    await saveToken(data.token);
-    await saveRefreshToken(data.refreshToken);
-    return data.token;
-  } catch {
-    return null;
-  }
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    const refreshToken = await getRefreshToken();
+    if (!refreshToken) return null;
+    try {
+      const response = await fetch(`${API_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!response.ok) return null;
+      const data = (await response.json()) as AuthResponse;
+      await saveToken(data.token);
+      await saveRefreshToken(data.refreshToken);
+      return data.token;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
 }
 
 async function fetchWithAuth(url: string, init: RequestInit): Promise<Response> {
@@ -86,7 +109,12 @@ async function fetchWithAuth(url: string, init: RequestInit): Promise<Response> 
 
   // Token expired — attempt refresh and retry once
   const newToken = await tryRefreshAccessToken();
-  if (!newToken) return response;
+  if (!newToken) {
+    // Refresh token is gone/expired/revoked: the session is dead. Tell the app to
+    // sign out so it routes to login instead of leaving a broken logged-in shell.
+    if (token) onSessionExpired?.();
+    return response;
+  }
   return fetch(url, {
     ...init,
     headers: { ...(init.headers as Record<string, string>), Authorization: `Bearer ${newToken}` },
