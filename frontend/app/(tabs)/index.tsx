@@ -18,6 +18,7 @@ import {
 
 import { StudioPageHero } from '@/components/ui/studio/StudioPageHero';
 import { D } from '@/constants/design';
+import { useAuth } from '@/context/auth';
 import { useTheme } from '@/context/theme';
 import { useIdeas } from '@/hooks/useIdeas';
 import { useT } from '@/i18n';
@@ -112,8 +113,10 @@ export default function StudioHub() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
+  // Match the glass navbar's wide rail so the page edges line up with the pill
+  const hPad = !isDesktop ? D.spacing.md : width < 1100 ? D.spacing.xl : 80;
 
-  const styles = useMemo(() => makeStyles(colors, isDesktop), [colors, isDesktop]);
+  const styles = useMemo(() => makeStyles(colors, isDesktop, hPad), [colors, isDesktop, hPad]);
 
   return (
     <ScrollView
@@ -162,6 +165,7 @@ function IdeasForYouSection({
   router: ReturnType<typeof useRouter>;
 }) {
   const styles = useMemo(() => makeIdeasStyles(colors, isDesktop), [colors, isDesktop]);
+  const { isAdmin } = useAuth();
   const { ideas: rawIdeas, recommendationId, isLoading, isRefreshing, error, refresh } = useIdeas();
 
   const promoIdeas = useMemo<PromoIdea[]>(
@@ -225,32 +229,28 @@ function IdeasForYouSection({
     <View style={styles.sectionWrap}>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <View style={styles.eyebrow}>
-            <View style={styles.eyebrowDot} />
-            <Text style={styles.eyebrowText}>{t('ideas.sectionEyebrow')}</Text>
-            <View style={styles.liveBadge}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveText}>{t('ideas.sectionLive')}</Text>
-            </View>
-          </View>
           <Text style={styles.title}>{t('ideas.sectionTitle')}</Text>
           <Text style={styles.subtitle}>{t('ideas.sectionSubtitle')}</Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('ideas.refresh')}
-          accessibilityState={{ busy: isRefreshing, disabled: refreshDisabled }}
-          disabled={refreshDisabled}
-          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-            styles.refreshButton,
-            (pressed || hovered) && !refreshDisabled && { borderColor: colors.accent.primary },
-            refreshDisabled && { opacity: 0.5 },
-          ]}
-          onPress={handleRefresh}
-        >
-          <Ionicons name="refresh" size={14} color={colors.text.secondary} />
-          <Text style={styles.refreshText}>{t('ideas.refresh')}</Text>
-        </Pressable>
+        {/* Force-refresh is admin-only — the backend endpoint requires the
+            AdminOnly policy; regular users rely on the daily cache. */}
+        {isAdmin && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('ideas.refresh')}
+            accessibilityState={{ busy: isRefreshing, disabled: refreshDisabled }}
+            disabled={refreshDisabled}
+            style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+              styles.refreshButton,
+              (pressed || hovered) && !refreshDisabled && { borderColor: colors.accent.primary },
+              refreshDisabled && { opacity: 0.5 },
+            ]}
+            onPress={handleRefresh}
+          >
+            <Ionicons name="refresh" size={14} color={colors.text.secondary} />
+            <Text style={styles.refreshText}>{t('ideas.refresh')}</Text>
+          </Pressable>
+        )}
       </View>
 
       {isLoading && <Text style={styles.statusText}>{t('ideas.loading')}</Text>}
@@ -378,6 +378,8 @@ function IdeaCard({
   // inactive switches. Optimistic; backend records each click as a separate
   // IdeaInteraction row, the dataset captures the trajectory.
   const [thumbState, setThumbState] = useState<null | 'up' | 'down'>(null);
+  const { colorScheme } = useTheme();
+  const isDark = colorScheme === 'dark';
 
   function handleThumbPress(direction: 'up' | 'down', e: GestureResponderEvent) {
     e.stopPropagation();
@@ -386,7 +388,10 @@ function IdeaCard({
     if (next === 'up') onThumb?.('thumbs_up');
     if (next === 'down') onThumb?.('thumbs_down');
   }
-  const styles = useMemo(() => makeIdeaCardStyles(colors, isDesktop), [colors, isDesktop]);
+  const styles = useMemo(
+    () => makeIdeaCardStyles(colors, isDesktop, isDark),
+    [colors, isDesktop, isDark]
+  );
 
   const opacity = useRef(new Animated.Value(0)).current;
   const translate = useRef(new Animated.Value(14)).current;
@@ -425,9 +430,10 @@ function IdeaCard({
     }).start();
 
   const cardLift = lift.interpolate({ inputRange: [0, 1], outputRange: [0, -4] });
+  // Light mode: visible-but-soft outline; dark mode keeps its original border
   const borderColor = hover.interpolate({
     inputRange: [0, 1],
-    outputRange: [colors.border.strong, colors.border.focus],
+    outputRange: [isDark ? colors.border.strong : colors.border.default, colors.border.focus],
   });
 
   const handleHoverIn = () => {
@@ -532,7 +538,12 @@ type HubOptionCardProps = {
 };
 
 function HubOptionCard({ card, index, isDesktop, onPress, t, colors }: HubOptionCardProps) {
-  const styles = useMemo(() => makeCardStyles(colors, isDesktop), [colors, isDesktop]);
+  const { colorScheme } = useTheme();
+  const isDark = colorScheme === 'dark';
+  const styles = useMemo(
+    () => makeCardStyles(colors, isDesktop, isDark),
+    [colors, isDesktop, isDark]
+  );
 
   const opacity = useRef(new Animated.Value(0)).current;
   const translate = useRef(new Animated.Value(16)).current;
@@ -597,9 +608,10 @@ function HubOptionCard({ card, index, isDesktop, onPress, t, colors }: HubOption
 
   const iconTranslateY = lift.interpolate({ inputRange: [0, 1], outputRange: [0, -2] });
   const cardLift = lift.interpolate({ inputRange: [0, 1], outputRange: [0, -4] });
+  // Light mode: visible-but-soft outline; dark mode keeps its original border
   const borderActive = glow.interpolate({
     inputRange: [0, 1],
-    outputRange: [colors.border.strong, colors.border.focus],
+    outputRange: [isDark ? colors.border.strong : colors.border.default, colors.border.focus],
   });
 
   const a11yLabel = `${t(card.labelKey)}. ${t(card.descKey)}${
@@ -679,49 +691,6 @@ function makeIdeasStyles(colors: ReturnType<typeof useTheme>['colors'], isDeskto
       flex: 1,
       maxWidth: 640,
     },
-    eyebrow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: D.spacing.sm,
-    },
-    eyebrowDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.accent.primary,
-    },
-    eyebrowText: {
-      fontSize: D.fontSize.xs,
-      fontWeight: D.fontWeight.bold,
-      color: colors.accent.primary,
-      letterSpacing: 1,
-      textTransform: 'uppercase',
-    },
-    liveBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      marginLeft: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: D.radius.pill,
-      backgroundColor: 'rgba(74,222,128,0.12)',
-      borderWidth: 1,
-      borderColor: 'rgba(74,222,128,0.45)',
-    },
-    liveDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: '#4ADE80',
-    },
-    liveText: {
-      fontSize: 9,
-      fontWeight: D.fontWeight.bold,
-      color: '#4ADE80',
-      letterSpacing: 1,
-    },
     title: {
       fontSize: isDesktop ? D.fontSize.xl : D.fontSize.lg,
       fontWeight: D.fontWeight.bold,
@@ -772,7 +741,11 @@ function makeIdeasStyles(colors: ReturnType<typeof useTheme>['colors'], isDeskto
   });
 }
 
-function makeIdeaCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
+function makeIdeaCardStyles(
+  colors: ReturnType<typeof useTheme>['colors'],
+  isDesktop: boolean,
+  isDark: boolean
+) {
   return StyleSheet.create({
     cardWrap: {
       position: 'relative',
@@ -796,6 +769,11 @@ function makeIdeaCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDes
       overflow: 'hidden',
       ...(Platform.OS === 'web'
         ? ({
+            // Soft resting shadow lifts white cards off the light canvas;
+            // dark mode keeps its original flat look.
+            ...(isDark
+              ? {}
+              : { boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 20px 44px -30px rgba(0,0,0,0.20)' }),
             transitionProperty: 'border-color, background-color, box-shadow',
             transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
             transitionDuration: '220ms',
@@ -806,7 +784,9 @@ function makeIdeaCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDes
       ...(Platform.OS === 'web'
         ? ({
             backgroundColor: colors.bg.elevated,
-            boxShadow: '0 18px 40px -12px rgba(0,0,0,0.45)',
+            boxShadow: isDark
+              ? '0 18px 40px -12px rgba(0,0,0,0.45)'
+              : '0 1px 2px rgba(0,0,0,0.05), 0 28px 56px -28px rgba(0,0,0,0.32)',
           } as any)
         : {}),
     } as any,
@@ -921,11 +901,16 @@ function makeIdeaModalStyles(colors: ReturnType<typeof useTheme>['colors']) {
       width: '100%',
       maxWidth: 480,
       backgroundColor: colors.bg.surface,
-      borderRadius: D.radius.xl,
+      borderRadius: 28,
       borderWidth: 1,
       borderColor: colors.border.subtle,
       padding: D.spacing.xl,
       gap: D.spacing.md,
+      ...(Platform.OS === 'web'
+        ? ({
+            boxShadow: '0 1px 2px rgba(0,0,0,0.05), 0 32px 64px -28px rgba(0,0,0,0.40)',
+          } as object)
+        : {}),
     },
     headerRow: {
       flexDirection: 'row',
@@ -1005,9 +990,11 @@ function makeIdeaModalStyles(colors: ReturnType<typeof useTheme>['colors']) {
       justifyContent: 'center',
       gap: 8,
       height: 48,
-      borderRadius: D.radius.md,
+      borderRadius: D.radius.pill,
       backgroundColor: colors.accent.primary,
-      ...D.shadow.glow,
+      ...(Platform.OS === 'web'
+        ? ({ boxShadow: '0 12px 28px -12px rgba(99,102,241,0.5)' } as object)
+        : D.shadow.glow),
     },
     generateText: {
       fontSize: D.fontSize.base,
@@ -1018,17 +1005,21 @@ function makeIdeaModalStyles(colors: ReturnType<typeof useTheme>['colors']) {
   });
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
+function makeStyles(
+  colors: ReturnType<typeof useTheme>['colors'],
+  isDesktop: boolean,
+  hPad: number
+) {
   return StyleSheet.create({
     scrollContent: {
       flexGrow: 1,
       alignItems: 'center',
-      paddingHorizontal: isDesktop ? D.spacing.xl : D.spacing.md,
-      paddingVertical: isDesktop ? D.spacing['2xl'] : D.spacing.lg,
+      paddingHorizontal: hPad,
+      paddingVertical: isDesktop ? D.spacing.xl : D.spacing.lg,
     },
     container: {
       width: '100%',
-      maxWidth: 1120,
+      maxWidth: 1440,
       position: 'relative',
     },
     cardsRow: {
@@ -1040,7 +1031,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
   });
 }
 
-function makeCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
+function makeCardStyles(
+  colors: ReturnType<typeof useTheme>['colors'],
+  isDesktop: boolean,
+  isDark: boolean
+) {
   return StyleSheet.create({
     cardWrap: {
       flex: isDesktop ? 1 : undefined,
@@ -1072,6 +1067,11 @@ function makeCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop
       position: 'relative',
       ...(Platform.OS === 'web'
         ? ({
+            // Soft resting shadow lifts white cards off the light canvas;
+            // dark mode keeps its original flat look.
+            ...(isDark
+              ? {}
+              : { boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 20px 44px -30px rgba(0,0,0,0.20)' }),
             transitionProperty: 'border-color, background-color, box-shadow',
             transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
             transitionDuration: '220ms',
@@ -1082,7 +1082,9 @@ function makeCardStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop
       ...(Platform.OS === 'web'
         ? ({
             backgroundColor: colors.bg.elevated,
-            boxShadow: '0 18px 40px -12px rgba(0,0,0,0.45)',
+            boxShadow: isDark
+              ? '0 18px 40px -12px rgba(0,0,0,0.45)'
+              : '0 1px 2px rgba(0,0,0,0.05), 0 28px 56px -28px rgba(0,0,0,0.32)',
           } as any)
         : {}),
     } as any,

@@ -192,7 +192,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     wrapper: {
       alignItems: 'center',
-      paddingVertical: D.spacing.md,
+      paddingTop: 0,
+      paddingBottom: D.spacing.md,
     },
     stage: {
       position: 'relative',

@@ -10,9 +10,25 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
         {/* Required for expo-router web scroll behaviour */}
         <ScrollViewStyleReset />
+        {/* Brand fonts, loaded once for the whole app. The id matches the one
+            the landing/auth polish hooks look for, so they skip re-injecting. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          id="ms-landing-fonts"
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Inter:wght@400;500;600;700&display=swap"
+        />
         <style
           dangerouslySetInnerHTML={{
             __html: `
+            /* App-wide web font: Inter for body text (text without an explicit
+               fontFamily inherits this), Newsreader is used by display styles. */
+            html, body {
+              font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              -webkit-font-smoothing: antialiased;
+              text-rendering: optimizeLegibility;
+            }
             /* Override browser autofill background on all inputs.
                #222632 = rgba(255,255,255,0.05) composited over the card surface #161B27. */
             input:-webkit-autofill,

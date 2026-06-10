@@ -359,9 +359,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       gap: D.spacing.md,
       padding: D.spacing.md,
       backgroundColor: colors.bg.surface,
-      borderRadius: D.radius.lg,
+      borderRadius: 20,
       borderWidth: 1,
-      borderColor: colors.border.default,
+      borderColor: colors.border.subtle,
+      ...(Platform.OS === 'web'
+        ? ({
+            boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 18px 40px -28px rgba(0,0,0,0.22)',
+          } as object)
+        : {}),
     },
     verticalHeader: {
       flexDirection: 'row',
