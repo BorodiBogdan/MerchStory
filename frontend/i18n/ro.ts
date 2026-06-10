@@ -350,9 +350,9 @@ const ro: Dictionary = {
   // ── Landing page ─────────────────────────────────────────────────────────
   'landing.signIn': 'Autentificare',
   'landing.hero.eyebrow': 'PUTERE AI · CREAT PENTRU RETAILUL LOCAL',
-  'landing.hero.heading': 'Transformă fotografiile\nîn anunțuri\nprofesionale.',
+  'landing.hero.heading': 'Transformă produsele\nîn reclame profesionale.',
   'landing.hero.subheading':
-    'MerchStory automatizează întregul flux creativ — eliminarea fundalului, generarea scenei și postarea pe social media cu un singur tap — ca tu să te concentrezi pe magazin.',
+    'Faci o poză, iar AI-ul o transformă într-un anunț profesional, gata de postat în secunde.',
   'landing.hero.ctaPrimary': 'Începe gratuit',
   'landing.hero.ctaSecondary': 'Autentificare',
   'landing.hero.trust': 'Gratuit la început · Fără card',
@@ -366,7 +366,7 @@ const ro: Dictionary = {
     'Încarci o fotografie brută. AI-ul elimină fundalul și plasează produsul într-o scenă profesională, automat.',
   'landing.features.feat2Title': 'Motor contextual',
   'landing.features.feat2Body':
-    'Postează când contează — recomandări adaptate vremii, sărbătorilor, evenimentelor și tendințelor locale.',
+    'Postează când contează, cu recomandări adaptate vremii, sărbătorilor, evenimentelor și tendințelor locale.',
   'landing.features.feat3Title': 'Distribuție cu un tap',
   'landing.features.feat3Body':
     'Publică direct pe Facebook și Instagram din același ecran pe care ai creat anunțul. Fără copy-paste.',
@@ -376,15 +376,36 @@ const ro: Dictionary = {
   'landing.how.step1Body':
     'Faci orice fotografie de produs cu telefonul. Fără studio, fără lumini.',
   'landing.how.step2Title': 'AI-ul generează anunțul',
-  'landing.how.step2Body': 'Fundal eliminat, scenă generată, layout compus — în secunde.',
+  'landing.how.step2Body': 'Fundal eliminat, scenă generată și layout compus în secunde.',
   'landing.how.step3Title': 'Postezi și vinzi',
-  'landing.how.step3Body': 'Publici pe canalele de social media sau descarci materialul — gata.',
+  'landing.how.step3Body': 'Publici pe canalele de social media sau descarci materialul. Gata.',
   'landing.footer.heading': 'Gata să duci magazinul\nla nivelul următor?',
   'landing.footer.subheading':
     'Alătură-te retailerilor locali care folosesc MerchStory pentru a crea și posta anunțuri profesionale fără echipă de marketing.',
   'landing.footer.ctaPrimary': 'Începe gratuit',
   'landing.footer.ctaSecondary': 'Ai deja cont? Autentifică-te',
   'landing.footer.copyright': 'MerchStory · Creat pentru retailerii locali',
+  'landing.channels.label': 'PUBLICĂ DIRECT PE',
+  'landing.channels.poweredBy': 'Susținut de Gemini AI',
+  'landing.stats.stat1Value': 'Sub 60s',
+  'landing.stats.stat1Label': 'De la o poză brută la un anunț finalizat',
+  'landing.stats.stat2Value': 'Un tap',
+  'landing.stats.stat2Label': 'Direct pe Facebook și Instagram',
+  'landing.stats.stat3Value': 'Zero',
+  'landing.stats.stat3Label': 'Abilități de design sau marketing necesare',
+  'landing.faq.label': 'ÎNTREBĂRI',
+  'landing.faq.heading': 'Întrebări frecvente.',
+  'landing.faq.q1': 'Am nevoie de experiență în design?',
+  'landing.faq.a1':
+    'Deloc. Faci o poză produsului, iar MerchStory se ocupă de eliminarea fundalului, generarea scenei și layout.',
+  'landing.faq.q2': 'Pe ce canale pot publica?',
+  'landing.faq.a2':
+    'Publici direct pe Facebook și Instagram din același ecran, fără copy-paste sau schimbat aplicații.',
+  'landing.faq.q3': 'Am nevoie de card ca să încep?',
+  'landing.faq.a3': 'Nu. Începi gratuit, fără card.',
+  'landing.faq.q4': 'AI-ul schimbă cum arată produsul meu?',
+  'landing.faq.a4':
+    'Produsul tău rămâne în prim-plan. AI-ul construiește o scenă profesională în jurul lui, păstrându-l recognoscibil.',
 
   // ── Logout modal ─────────────────────────────────────────────────────────
   'logout.title': 'Deconectare?',

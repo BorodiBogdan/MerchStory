@@ -342,9 +342,9 @@ const en = {
   // ── Landing page ─────────────────────────────────────────────────────────
   'landing.signIn': 'Sign In',
   'landing.hero.eyebrow': 'AI-POWERED · BUILT FOR LOCAL RETAIL',
-  'landing.hero.heading': 'Turn product photos\ninto professional\nads instantly.',
+  'landing.hero.heading': 'Products into\n premium ads instantly.',
   'landing.hero.subheading':
-    'MerchStory automates the full creative pipeline — background removal, scene generation, and one-touch social posting — so you can focus on running your store.',
+    'Snap a product photo. AI turns it into a polished ad, ready to post in seconds.',
   'landing.hero.ctaPrimary': 'Get Started Free',
   'landing.hero.ctaSecondary': 'Sign In',
   'landing.hero.trust': 'Free to start · No credit card required',
@@ -357,7 +357,7 @@ const en = {
     'Upload a raw photo. AI removes the background and places your product in a professional studio scene automatically.',
   'landing.features.feat2Title': 'Context Engine',
   'landing.features.feat2Body':
-    'Posts when it matters — recommendations tuned to local weather, holidays, events, and trending occasions.',
+    'Posts when it matters, with recommendations tuned to local weather, holidays, events, and trending occasions.',
   'landing.features.feat3Title': 'One-Touch Distribution',
   'landing.features.feat3Body':
     'Publish directly to Facebook and Instagram from the same screen you created the ad. No copy-pasting.',
@@ -367,15 +367,36 @@ const en = {
   'landing.how.step1Body':
     'Take any product photo with your phone. No studio, no lighting setup needed.',
   'landing.how.step2Title': 'AI Generates the Ad',
-  'landing.how.step2Body': 'Background removed, scene generated, layout composed — in seconds.',
+  'landing.how.step2Body': 'Background removed, scene generated, and layout composed in seconds.',
   'landing.how.step3Title': 'Post & Sell',
-  'landing.how.step3Body': 'Publish to your social channels or download the asset — done.',
+  'landing.how.step3Body': 'Publish to your social channels or download the asset. Done.',
   'landing.footer.heading': 'Ready to level up\nyour store?',
   'landing.footer.subheading':
     'Join local retailers using MerchStory to create and post professional ads without a marketing team.',
   'landing.footer.ctaPrimary': 'Start for Free',
   'landing.footer.ctaSecondary': 'Already have an account? Sign in',
   'landing.footer.copyright': 'MerchStory · Built for local retailers',
+  'landing.channels.label': 'PUBLISH DIRECTLY TO',
+  'landing.channels.poweredBy': 'Powered by Gemini AI',
+  'landing.stats.stat1Value': 'Under 60s',
+  'landing.stats.stat1Label': 'From a raw photo to a finished ad',
+  'landing.stats.stat2Value': 'One tap',
+  'landing.stats.stat2Label': 'Straight to Facebook and Instagram',
+  'landing.stats.stat3Value': 'Zero',
+  'landing.stats.stat3Label': 'Design or marketing skills needed',
+  'landing.faq.label': 'FAQ',
+  'landing.faq.heading': 'Questions, answered.',
+  'landing.faq.q1': 'Do I need any design experience?',
+  'landing.faq.a1':
+    'None at all. Snap a product photo and MerchStory handles background removal, scene generation and layout for you.',
+  'landing.faq.q2': 'Which channels can I publish to?',
+  'landing.faq.a2':
+    'Publish straight to Facebook and Instagram from the same screen, with no copy-pasting or app switching.',
+  'landing.faq.q3': 'Do I need a credit card to start?',
+  'landing.faq.a3': 'No. You can start for free, with no credit card required.',
+  'landing.faq.q4': 'Will the AI change how my product looks?',
+  'landing.faq.a4':
+    'Your product stays the hero. The AI builds a professional scene around it while keeping your item recognizable.',
 
   // ── Logout modal ─────────────────────────────────────────────────────────
   'logout.title': 'Sign out?',
