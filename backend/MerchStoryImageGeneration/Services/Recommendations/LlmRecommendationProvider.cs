@@ -3,14 +3,12 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using MerchStoryImageGeneration.Models.Recommendations;
-using Microsoft.Extensions.Configuration;
+using MerchStoryImageGeneration.Services.Recommendations.Chat;
 using Microsoft.Extensions.Logging;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 namespace MerchStoryImageGeneration.Services.Recommendations;
 
-// Multi-agent recommendation provider via Semantic Kernel.
+// Multi-agent recommendation provider.
 //
 // Pipeline (Phase 4):
 //   1. Strategist (1 LLM call, lower temperature) picks N angles from the
@@ -21,12 +19,10 @@ namespace MerchStoryImageGeneration.Services.Recommendations;
 //      slowest writer rather than the sum.
 //   3. // Critic deferred to v2 — see plan
 //
-// Per-role models supported via separate config keys. Defaulting both to the
-// same model is fine; using a stronger model for Strategist + a faster model
-// for Writers is a common upgrade path.
-//
-// Speaks the OpenAI Chat Completions wire format — works against LM Studio
-// (default), Ollama, vLLM, llama.cpp server, LocalAI, hosted services, etc.
+// This class owns the prompts and the defensive JSON parsing; the actual
+// chat-completion call goes through IRecommendationChatService, so the model
+// backend (LM Studio / DeepSeek / Claude) is a pure config decision —
+// see Recommendations:Llm:Backend and the Chat/ folder.
 public class LlmRecommendationProvider : IRecommendationProvider
 {
     private const string RetryAddendum =
@@ -42,49 +38,14 @@ public class LlmRecommendationProvider : IRecommendationProvider
         CommentHandling = JsonCommentHandling.Skip,
     };
 
-    private readonly Kernel strategistKernel;
-    private readonly Kernel writerKernel;
-    private readonly OpenAIPromptExecutionSettings strategistSettings;
-    private readonly OpenAIPromptExecutionSettings writerSettings;
+    private readonly IRecommendationChatService chat;
     private readonly ILogger<LlmRecommendationProvider> logger;
-    private readonly string strategistModel;
-    private readonly string writerModel;
 
     public LlmRecommendationProvider(
-        IConfiguration configuration,
+        IRecommendationChatService chat,
         ILogger<LlmRecommendationProvider> logger)
     {
-        string baseUrl = configuration["Recommendations:Llm:BaseUrl"]
-            ?? "http://localhost:1234/v1";
-        string defaultModel = configuration["Recommendations:Llm:ChatModel"] ?? "qwen2.5-7b-instruct";
-        this.strategistModel = configuration["Recommendations:Llm:StrategistModel"] ?? defaultModel;
-        this.writerModel = configuration["Recommendations:Llm:WriterModel"] ?? defaultModel;
-        int timeoutSec = configuration.GetValue("Recommendations:Llm:RequestTimeoutSeconds", 90);
-
-        // Many local open-weight models (Gemma 3, Llama 3.1, etc.) — and the
-        // LM Studio runtime for them — reject OpenAI's `response_format: json_object`
-        // flag with a 400. Toggle this off when running smaller models; the
-        // prompt itself still demands JSON-only output and the parser strips
-        // code fences as a safety net.
-        bool useJsonMode = configuration.GetValue("Recommendations:Llm:UseJsonMode", true);
-
-        this.strategistKernel = BuildKernel(this.strategistModel, baseUrl, timeoutSec);
-        this.writerKernel = BuildKernel(this.writerModel, baseUrl, timeoutSec);
-
-        this.strategistSettings = new OpenAIPromptExecutionSettings
-        {
-            ResponseFormat = useJsonMode ? "json_object" : null,
-            MaxTokens = 1200,
-            Temperature = 0.4, // planning likes lower temperature
-        };
-
-        this.writerSettings = new OpenAIPromptExecutionSettings
-        {
-            ResponseFormat = useJsonMode ? "json_object" : null,
-            MaxTokens = 600,
-            Temperature = 0.8, // writing benefits from variation
-        };
-
+        this.chat = chat;
         this.logger = logger;
     }
 
@@ -98,9 +59,8 @@ public class LlmRecommendationProvider : IRecommendationProvider
         Stopwatch sw = Stopwatch.StartNew();
 
         this.logger.LogInformation(
-            "[LLM] Generate start strategist={Strategist} writer={Writer} signals={SignalCount} playbookHits={PlaybookCount} previousIdeas={PreviousCount} ideasPerDay={N}",
-            this.strategistModel,
-            this.writerModel,
+            "[LLM] Generate start backend={Backend} signals={SignalCount} playbookHits={PlaybookCount} previousIdeas={PreviousCount} ideasPerDay={N}",
+            this.chat.Description,
             context.Signals.Count,
             context.PlaybookHits.Count,
             context.PreviousIdeas.Count,
@@ -165,8 +125,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
 
         ProviderRunSnapshot snapshotShape = new(
             Provider: "llm",
-            StrategistModel: this.strategistModel,
-            WriterModel: this.writerModel,
+            Backend: this.chat.Description,
             StrategistMs: strategistMs,
             WriterMs: writerMs,
             AngleCount: angles.Length,
@@ -459,18 +418,6 @@ public class LlmRecommendationProvider : IRecommendationProvider
         }
     }
 
-    private static Kernel BuildKernel(string model, string baseUrl, int timeoutSec)
-    {
-        HttpClient http = new() { Timeout = TimeSpan.FromSeconds(timeoutSec) };
-        return Kernel.CreateBuilder()
-            .AddOpenAIChatCompletion(
-                modelId: model,
-                endpoint: new Uri(baseUrl),
-                apiKey: "not-required",
-                httpClient: http)
-            .Build();
-    }
-
     private static string StripCodeFences(string raw)
     {
         string cleaned = raw.Trim();
@@ -720,7 +667,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
         string raw;
         try
         {
-            raw = await this.InvokeAsync(this.writerKernel, prompt, this.writerSettings, ct);
+            raw = await this.chat.CompleteAsync(prompt, ChatRole.Writer, ct);
         }
         catch (Exception ex)
         {
@@ -756,11 +703,11 @@ public class LlmRecommendationProvider : IRecommendationProvider
         Stopwatch sw = Stopwatch.StartNew();
         string prompt = BuildStrategistPrompt(ctx);
         this.logger.LogInformation(
-            "[LLM] Strategist start promptChars={Chars} model={Model}",
+            "[LLM] Strategist start promptChars={Chars} backend={Backend}",
             prompt.Length,
-            this.strategistModel);
+            this.chat.Description);
 
-        string raw = await this.InvokeAsync(this.strategistKernel, prompt, this.strategistSettings, ct);
+        string raw = await this.chat.CompleteAsync(prompt, ChatRole.Strategist, ct);
         this.logger.LogInformation(
             "[LLM] Strategist response after {Ms}ms responseChars={Chars}",
             sw.ElapsedMilliseconds,
@@ -774,7 +721,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
                 Truncate(raw, 4000));
 
             string retryPrompt = prompt + RetryAddendum;
-            string retryRaw = await this.InvokeAsync(this.strategistKernel, retryPrompt, this.strategistSettings, ct);
+            string retryRaw = await this.chat.CompleteAsync(retryPrompt, ChatRole.Strategist, ct);
             parsed = TryParseAngles(retryRaw, ctx.IdeasPerDay);
             if (parsed is null)
             {
@@ -804,7 +751,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
             angle.Tone,
             prompt.Length);
 
-        string raw = await this.InvokeAsync(this.writerKernel, prompt, this.writerSettings, ct);
+        string raw = await this.chat.CompleteAsync(prompt, ChatRole.Writer, ct);
 
         IdeaDto? parsed = TryParseIdea(raw, angle, index);
         if (parsed is not null)
@@ -823,7 +770,7 @@ public class LlmRecommendationProvider : IRecommendationProvider
             Truncate(raw, 4000));
 
         string retryPrompt = prompt + RetryAddendum;
-        string retryRaw = await this.InvokeAsync(this.writerKernel, retryPrompt, this.writerSettings, ct);
+        string retryRaw = await this.chat.CompleteAsync(retryPrompt, ChatRole.Writer, ct);
         parsed = TryParseIdea(retryRaw, angle, index);
 
         if (parsed is not null)
@@ -851,42 +798,13 @@ public class LlmRecommendationProvider : IRecommendationProvider
             SuggestedPost: angle.Theme);
     }
 
-    private async Task<string> InvokeAsync(
-        Kernel kernel,
-        string prompt,
-        OpenAIPromptExecutionSettings settings,
-        CancellationToken ct)
-    {
-        try
-        {
-            FunctionResult result = await kernel.InvokePromptAsync(
-                prompt,
-                new KernelArguments(settings),
-                cancellationToken: ct);
-            return result.GetValue<string>() ?? string.Empty;
-        }
-        catch (Microsoft.SemanticKernel.HttpOperationException ex)
-        {
-            // SK swallows the response body in HttpOperationException.ToString().
-            // Reach into ResponseContent so the user can see *why* the LLM said 400.
-            string body = ex.ResponseContent ?? "(no body captured)";
-            this.logger.LogError(
-                ex,
-                "[LLM] HTTP {Status} from chat endpoint. Response body: {Body}",
-                ex.StatusCode,
-                Truncate(body, 800));
-            throw;
-        }
-    }
-
     private record Angle(string Theme, string Tone, string TriggerSignal, string Rationale);
 
     // Concrete shape for the diagnostic snapshot string. Anonymous-type version
     // got hit by dotnet watch hot-reload renaming '<>f__AnonymousTypeN' indices.
     private record ProviderRunSnapshot(
         string Provider,
-        string StrategistModel,
-        string WriterModel,
+        string Backend,
         long StrategistMs,
         long WriterMs,
         int AngleCount,
