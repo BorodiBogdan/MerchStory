@@ -4008,6 +4008,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
               ) : (
                 <View style={styles.mobileSection}>
                   <Text style={styles.sectionTitle}>{t('studio.contentSection')}</Text>
+                  <Text style={styles.toggleHelper}>{t('studio.announcement.describe')}</Text>
                   <TextInput
                     style={[styles.textArea, { marginTop: D.spacing.sm }]}
                     placeholder={currentPostType.placeholder}
