@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MerchStory.Tests.Fakes;
+using MerchStory.Tests.Infrastructure;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Print;
@@ -10,7 +11,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -22,6 +22,7 @@ using Xunit;
 
 namespace MerchStory.Tests;
 
+[Collection("Postgres")]
 public class PrintRouteTests : IDisposable
 {
     private readonly Mock<UserManager<AppUser>> userManagerMock;
@@ -30,12 +31,16 @@ public class PrintRouteTests : IDisposable
     private readonly HttpClient client;
     private readonly InMemoryBlobStorage blobs = new();
 
-    public PrintRouteTests()
+    public PrintRouteTests(PostgresFixture postgres)
     {
         Environment.SetEnvironmentVariable("Jwt__Key", "test-super-secret-key-that-is-long-enough-32chars");
         Environment.SetEnvironmentVariable("Jwt__Issuer", "MerchStory");
         Environment.SetEnvironmentVariable("Jwt__Audience", "MerchStoryApp");
         Environment.SetEnvironmentVariable("Jwt__ExpiryMinutes", "60");
+
+        // Clone one database for this test instance; capture the string so every DbContext
+        // scope in the host points at the same database (do not call CreateDatabase per scope).
+        string connectionString = postgres.CreateDatabase();
 
         var store = new Mock<IUserStore<AppUser>>();
         this.userManagerMock = new Mock<UserManager<AppUser>>(
@@ -72,14 +77,8 @@ public class PrintRouteTests : IDisposable
             {
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
-                var dbName = "TestDb-Print-" + Guid.NewGuid();
-                var inMemoryProvider = new ServiceCollection()
-                    .AddEntityFrameworkInMemoryDatabase()
-                    .BuildServiceProvider();
                 services.AddDbContext<AppDbContext>(options =>
-                    options.UseInMemoryDatabase(dbName)
-                           .UseInternalServiceProvider(inMemoryProvider)
-                           .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+                    options.UseNpgsql(connectionString, o => o.UseVector()));
 
                 services.RemoveAll<UserManager<AppUser>>();
                 services.AddSingleton(this.userManagerMock.Object);
@@ -247,6 +246,19 @@ public class PrintRouteTests : IDisposable
                 user.Id = uniqueId;
                 user.Email = email;
                 user.UserName = email;
+
+                // Persist the AppUser here (UserManager is mocked) so the refresh token written
+                // by /auth/register satisfies its foreign key on the real database.
+                using IServiceScope scope = this.factory.Services.CreateScope();
+                AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                db.Users.Add(new AppUser
+                {
+                    Id = uniqueId,
+                    Email = email,
+                    UserName = email,
+                    CreditBalance = credits,
+                });
+                db.SaveChanges();
             })
             .ReturnsAsync(IdentityResult.Success);
 
@@ -254,19 +266,6 @@ public class PrintRouteTests : IDisposable
             "/auth/register",
             new { email, password = "Test1234!" });
         registerResponse.EnsureSuccessStatusCode();
-
-        using (IServiceScope scope = this.factory.Services.CreateScope())
-        {
-            AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            db.Users.Add(new AppUser
-            {
-                Id = uniqueId,
-                Email = email,
-                UserName = email,
-                CreditBalance = credits,
-            });
-            await db.SaveChangesAsync();
-        }
 
         string body = await registerResponse.Content.ReadAsStringAsync();
         using JsonDocument json = JsonDocument.Parse(body);

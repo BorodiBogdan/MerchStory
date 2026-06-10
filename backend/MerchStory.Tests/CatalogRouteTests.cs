@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MerchStory.Tests.Fakes;
+using MerchStory.Tests.Infrastructure;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.ImageGeneration;
 using MerchStoryAPI.LlmServices;
@@ -13,7 +14,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -24,6 +24,7 @@ using Xunit;
 
 namespace MerchStory.Tests;
 
+[Collection("Postgres")]
 public class CatalogRouteTests : IDisposable
 {
     private readonly Mock<UserManager<AppUser>> userManagerMock;
@@ -35,12 +36,16 @@ public class CatalogRouteTests : IDisposable
     private Func<string, IReadOnlyList<string?>?, ImageGenerationResult> currentResponder;
     private string userId = string.Empty;
 
-    public CatalogRouteTests()
+    public CatalogRouteTests(PostgresFixture postgres)
     {
         Environment.SetEnvironmentVariable("Jwt__Key", "test-super-secret-key-that-is-long-enough-32chars");
         Environment.SetEnvironmentVariable("Jwt__Issuer", "MerchStory");
         Environment.SetEnvironmentVariable("Jwt__Audience", "MerchStoryApp");
         Environment.SetEnvironmentVariable("Jwt__ExpiryMinutes", "60");
+
+        // Clone one database for this test instance; capture the string so every DbContext
+        // scope in the host points at the same database (do not call CreateDatabase per scope).
+        string connectionString = postgres.CreateDatabase();
 
         this.currentResponder = (_, _) =>
             throw new InvalidOperationException("Test did not configure a responder.");
@@ -83,14 +88,8 @@ public class CatalogRouteTests : IDisposable
             {
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
-                var dbName = "TestDb-Catalog-" + Guid.NewGuid();
-                var inMemoryProvider = new ServiceCollection()
-                    .AddEntityFrameworkInMemoryDatabase()
-                    .BuildServiceProvider();
                 services.AddDbContext<AppDbContext>(options =>
-                    options.UseInMemoryDatabase(dbName)
-                           .UseInternalServiceProvider(inMemoryProvider)
-                           .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+                    options.UseNpgsql(connectionString, o => o.UseVector()));
 
                 services.RemoveAll<UserManager<AppUser>>();
                 services.AddSingleton(this.userManagerMock.Object);
@@ -306,6 +305,15 @@ public class CatalogRouteTests : IDisposable
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var blobs = (InMemoryBlobStorage)scope.ServiceProvider.GetRequiredService<IBlobStorage>();
+
+            // The product references a different owner; that owner must exist as an AppUser
+            // row so the foreign-key constraint on the real database is satisfied.
+            db.Users.Add(new AppUser
+            {
+                Id = "someone-else",
+                Email = "someone-else@test.com",
+                UserName = "someone-else@test.com",
+            });
             string foreignKey = $"products/someone-else/{Guid.NewGuid():N}.png";
             blobs.Seed(foreignKey, TestCanvas.SolidProductPng(100, 100, new Rgba32(10, 10, 10, 255)), "image/png");
             db.Products.Add(new Product
@@ -421,6 +429,12 @@ public class CatalogRouteTests : IDisposable
                 user.Id = uniqueId;
                 user.Email = email;
                 user.UserName = email;
+
+                // The wallet check on protected endpoints requires the AppUser to exist in the
+                // DB, and on the real database the refresh token written by /auth/register has a
+                // foreign key to it. UserManager is mocked, so persist the row here (before the
+                // endpoint saves the refresh token) with enough credits to pass TryDeductAsync.
+                this.SeedUser(uniqueId, email, 100);
             })
             .ReturnsAsync(IdentityResult.Success);
 
@@ -429,25 +443,23 @@ public class CatalogRouteTests : IDisposable
             new { email, password = "Test1234!" });
         registerResponse.EnsureSuccessStatusCode();
 
-        // The wallet check on protected endpoints requires the AppUser to exist in the DB.
-        // UserManager is mocked, so the register call doesn't persist anything — seed the
-        // user directly with enough credits to pass TryDeductAsync.
-        using (var scope = this.factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            db.Users.Add(new AppUser
-            {
-                Id = uniqueId,
-                Email = email,
-                UserName = email,
-                CreditBalance = 100,
-            });
-            await db.SaveChangesAsync();
-        }
-
         string body = await registerResponse.Content.ReadAsStringAsync();
         using var json = JsonDocument.Parse(body);
         return json.RootElement.GetProperty("token").GetString()!;
+    }
+
+    private void SeedUser(string id, string email, int credits)
+    {
+        using var scope = this.factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Users.Add(new AppUser
+        {
+            Id = id,
+            Email = email,
+            UserName = email,
+            CreditBalance = credits,
+        });
+        db.SaveChanges();
     }
 
     private async Task<HttpResponseMessage> SendCatalogAsync(string token, object payload)
