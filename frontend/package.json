@@ -12,7 +12,8 @@
     "lint": "expo lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "jest --watchAll=false"
+    "test": "jest --watchAll=false",
+    "test:e2e": "playwright test"
   },
   "lint-staged": {
     "**/*.{ts,tsx}": [
@@ -24,7 +25,11 @@
     ]
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/e2e/"
+    ]
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -63,6 +68,7 @@
     "reanimated-color-picker": "^5.1.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/jest": "^29.5.12",
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
