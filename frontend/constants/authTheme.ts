@@ -56,7 +56,7 @@ export function getAuthPalette(isDark: boolean) {
   }
   return {
     isDark: false,
-    canvas: '#FAFAFE',
+    canvas: '#EFF0F8',
     card: '#FFFFFF',
     ink: '#16151E',
     body: '#54535F',
