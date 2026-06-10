@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MerchStory.Tests.Fakes;
+using MerchStory.Tests.Infrastructure;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using MerchStoryAPI.Storage;
@@ -9,7 +10,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -18,6 +18,7 @@ using Xunit;
 
 namespace MerchStory.Tests;
 
+[Collection("Postgres")]
 public class AuthEndpointTests : IDisposable
 {
     private readonly Mock<UserManager<AppUser>> userManagerMock;
@@ -25,7 +26,7 @@ public class AuthEndpointTests : IDisposable
     private readonly WebApplicationFactory<Program> factory;
     private readonly HttpClient client;
 
-    public AuthEndpointTests()
+    public AuthEndpointTests(PostgresFixture postgres)
     {
         // Override JWT config via env vars so the dev key in appsettings.Development.json
         // doesn't bleed into tests. Env vars are read by WebApplication.CreateBuilder before
@@ -35,6 +36,10 @@ public class AuthEndpointTests : IDisposable
         Environment.SetEnvironmentVariable("Jwt__Issuer", "MerchStory");
         Environment.SetEnvironmentVariable("Jwt__Audience", "MerchStoryApp");
         Environment.SetEnvironmentVariable("Jwt__ExpiryMinutes", "60");
+
+        // Clone one database for this test instance; capture the string so every DbContext
+        // scope in the host points at the same database (do not call CreateDatabase per scope).
+        string connectionString = postgres.CreateDatabase();
 
         var store = new Mock<IUserStore<AppUser>>();
         this.userManagerMock = new Mock<UserManager<AppUser>>(
@@ -71,14 +76,8 @@ public class AuthEndpointTests : IDisposable
             {
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
-                var dbName = "TestDb-Auth-" + Guid.NewGuid();
-                var inMemoryProvider = new ServiceCollection()
-                    .AddEntityFrameworkInMemoryDatabase()
-                    .BuildServiceProvider();
                 services.AddDbContext<AppDbContext>(options =>
-                    options.UseInMemoryDatabase(dbName)
-                           .UseInternalServiceProvider(inMemoryProvider)
-                           .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+                    options.UseNpgsql(connectionString, o => o.UseVector()));
 
                 services.RemoveAll<UserManager<AppUser>>();
                 services.AddSingleton(this.userManagerMock.Object);
@@ -112,6 +111,12 @@ public class AuthEndpointTests : IDisposable
             .Callback<AppUser, string>((user, _) =>
             {
                 user.Id = Guid.NewGuid().ToString();
+                user.Email = "newuser@test.com";
+                user.UserName = "newuser@test.com";
+
+                // Persist the AppUser (UserManager is mocked) so the refresh token written by
+                // /auth/register satisfies its foreign key on the real database.
+                this.SeedUser(user.Id, "newuser@test.com");
             })
             .ReturnsAsync(IdentityResult.Success);
 
@@ -147,6 +152,10 @@ public class AuthEndpointTests : IDisposable
     public async Task Login_WithValidCredentials_ReturnsOkWithToken()
     {
         var user = new AppUser { Id = "user-1", Email = "loginuser@test.com", UserName = "loginuser@test.com" };
+
+        // Login writes a refresh token keyed to this user; persist the row first so the
+        // foreign key resolves on the real database.
+        this.SeedUser(user.Id, user.Email);
 
         this.userManagerMock
             .Setup(m => m.FindByEmailAsync("loginuser@test.com"))
@@ -212,6 +221,11 @@ public class AuthEndpointTests : IDisposable
                 user.Id = "gen-user-id";
                 user.Email = "genuser@test.com";
                 user.UserName = "genuser@test.com";
+
+                // The wallet check on protected endpoints requires the AppUser in the DB, and on
+                // the real database the refresh token written by /auth/register has a foreign key
+                // to it. UserManager is mocked, so persist it here with enough credits.
+                this.SeedUser("gen-user-id", "genuser@test.com", 100);
             })
             .ReturnsAsync(IdentityResult.Success);
 
@@ -221,22 +235,6 @@ public class AuthEndpointTests : IDisposable
         string body = await registerResponse.Content.ReadAsStringAsync();
         var json = JsonDocument.Parse(body);
         string? token = json.RootElement.GetProperty("token").GetString();
-
-        // The wallet check on protected endpoints requires the AppUser to exist in the DB.
-        // UserManager is mocked, so the register call doesn't persist anything — seed the
-        // user directly with enough credits to pass TryDeductAsync.
-        using (var scope = this.factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            db.Users.Add(new AppUser
-            {
-                Id = "gen-user-id",
-                Email = "genuser@test.com",
-                UserName = "genuser@test.com",
-                CreditBalance = 100,
-            });
-            await db.SaveChangesAsync();
-        }
 
         var request = new HttpRequestMessage(HttpMethod.Post, "/generate-image/catalog")
         {
@@ -254,5 +252,19 @@ public class AuthEndpointTests : IDisposable
 
         // Auth passed — expect 200 or 502 (Google API will fail with test key), not 401
         Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    private void SeedUser(string id, string email, int credits = 0)
+    {
+        using var scope = this.factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Users.Add(new AppUser
+        {
+            Id = id,
+            Email = email,
+            UserName = email,
+            CreditBalance = credits,
+        });
+        db.SaveChanges();
     }
 }

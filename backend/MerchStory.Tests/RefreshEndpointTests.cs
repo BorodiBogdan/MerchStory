@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using MerchStory.Tests.Infrastructure;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Models;
 using Microsoft.AspNetCore.Http;
@@ -15,6 +16,7 @@ using Xunit;
 
 namespace MerchStory.Tests;
 
+[Collection("Postgres")]
 public class RefreshEndpointTests : IDisposable
 {
     private readonly Mock<UserManager<AppUser>> userManagerMock;
@@ -22,8 +24,12 @@ public class RefreshEndpointTests : IDisposable
     private readonly WebApplicationFactory<Program> factory;
     private readonly HttpClient client;
 
-    public RefreshEndpointTests()
+    public RefreshEndpointTests(PostgresFixture postgres)
     {
+        // Clone one database for this test instance; capture the string so every DbContext
+        // scope in the host points at the same database (do not call CreateDatabase per scope).
+        string connectionString = postgres.CreateDatabase();
+
         var store = new Mock<IUserStore<AppUser>>();
         this.userManagerMock = new Mock<UserManager<AppUser>>(
             store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
@@ -59,13 +65,8 @@ public class RefreshEndpointTests : IDisposable
             {
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
-                var dbName = "TestDb-Refresh-" + Guid.NewGuid();
-                var inMemoryProvider = new ServiceCollection()
-                    .AddEntityFrameworkInMemoryDatabase()
-                    .BuildServiceProvider();
                 services.AddDbContext<AppDbContext>(options =>
-                    options.UseInMemoryDatabase(dbName)
-                           .UseInternalServiceProvider(inMemoryProvider));
+                    options.UseNpgsql(connectionString, o => o.UseVector()));
 
                 services.RemoveAll<UserManager<AppUser>>();
                 services.AddSingleton(this.userManagerMock.Object);
