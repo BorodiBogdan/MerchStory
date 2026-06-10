@@ -332,6 +332,7 @@ export default function TabLayout() {
         <ProfileWalletChoiceModal
           visible={showChoice}
           creditBalance={creditBalance}
+          isAdmin={isAdmin}
           onChooseProfile={() => {
             setShowChoice(false);
             router.navigate('/(tabs)/profile');
@@ -339,6 +340,14 @@ export default function TabLayout() {
           onChooseWallet={() => {
             setShowChoice(false);
             router.push('/wallet');
+          }}
+          onChooseAdmin={() => {
+            setShowChoice(false);
+            router.push('/admin');
+          }}
+          onSignOut={async () => {
+            setShowChoice(false);
+            await signOut();
           }}
           onDismiss={() => setShowChoice(false)}
         />

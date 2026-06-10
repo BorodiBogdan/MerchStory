@@ -18,16 +18,22 @@ import { useT } from '@/i18n';
 interface ProfileWalletChoiceModalProps {
   visible: boolean;
   creditBalance: number;
+  isAdmin?: boolean;
   onChooseProfile: () => void;
   onChooseWallet: () => void;
+  onChooseAdmin?: () => void;
+  onSignOut: () => void;
   onDismiss: () => void;
 }
 
 export function ProfileWalletChoiceModal({
   visible,
   creditBalance,
+  isAdmin = false,
   onChooseProfile,
   onChooseWallet,
+  onChooseAdmin,
+  onSignOut,
   onDismiss,
 }: ProfileWalletChoiceModalProps) {
   const { colors } = useTheme();
@@ -111,6 +117,34 @@ export function ProfileWalletChoiceModal({
               <Text style={styles.choiceLabel}>{t('wallet.choice.wallet')}</Text>
               <Text style={styles.balanceBadge}>{creditBalance}</Text>
             </Pressable>
+
+            {isAdmin && onChooseAdmin && (
+              <Pressable
+                onPress={() => tap(onChooseAdmin)}
+                style={({ pressed }) => [styles.choiceButton, pressed && styles.choicePressed]}
+                accessibilityRole="button"
+                accessibilityLabel={t('admin.openButton')}
+              >
+                <Ionicons name="shield-checkmark-outline" size={22} color={colors.text.primary} />
+                <Text style={styles.choiceLabel}>{t('admin.openButton')}</Text>
+              </Pressable>
+            )}
+
+            <View style={styles.divider} />
+
+            <Pressable
+              onPress={() => tap(onSignOut)}
+              style={({ pressed }) => [
+                styles.choiceButton,
+                styles.signOutButton,
+                pressed && styles.choicePressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t('logout.confirm')}
+            >
+              <Ionicons name="log-out-outline" size={22} color={colors.destructive} />
+              <Text style={[styles.choiceLabel, styles.signOutLabel]}>{t('logout.confirm')}</Text>
+            </Pressable>
           </View>
         </Animated.View>
       </View>
@@ -178,6 +212,18 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.base,
       fontWeight: D.fontWeight.semibold,
       color: colors.text.primary,
+    },
+    divider: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: colors.border.subtle,
+      marginVertical: D.spacing.xs,
+    },
+    signOutButton: {
+      borderColor: colors.border.default,
+      backgroundColor: 'transparent',
+    },
+    signOutLabel: {
+      color: colors.destructive,
     },
     balanceBadge: {
       fontSize: D.fontSize.sm,
