@@ -17,31 +17,42 @@ The engine's output is not a final asset, but more than just copy. Each suggesti
 
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{20756C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    card/.style={draw, rounded corners=2pt, minimum width=34mm, minimum height=20mm, align=center, fill=gray!8},
-    screen/.style={draw, rounded corners=2pt, minimum width=30mm, minimum height=14mm, align=center, fill=yellow!12},
-    pipe/.style={draw, rounded corners=2pt, minimum width=30mm, minimum height=14mm, align=center, fill=blue!8},
-    asset/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=12mm, align=center, fill=gray!10},
-    arr/.style={-{Latex[length=1.6mm]}, thick}
+    font=\sffamily\scriptsize,
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!7,
+                 align=center, text=cInk,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    arrlbl/.style={font=\sffamily\tiny\itshape, text=cInk!80}
 ]
 
-\node[card] (idea) at (0, 0) {%
-    \textbf{Daily idea}\\[2pt]
-    \scriptsize title, body, suggestedPost,\\
-    \scriptsize category, imagePrompt
+\node[card=cIndigo, minimum width=34mm, minimum height=20mm] (idea) at (0, 0) {%
+    \textbf{Daily idea}\\[3pt]
+    title, body, suggestedPost,\\
+    category, imagePrompt
 };
-\node[font=\tiny\itshape] at (0, -1.7) {(recommendation engine)};
+\node[font=\sffamily\tiny\itshape, text=cInk!70] at (0, -1.55) {(recommendation engine)};
 
-\node[screen] (screen) at (5.0, 0) {Asset-creation\\screen\\\scriptsize prompt and category\\\scriptsize pre-filled};
+\node[card=cSlate, minimum width=30mm, minimum height=16mm] (screen) at (5.0, 0)
+    {Asset-creation\\screen\\[2pt]prompt and category\\pre-filled};
 
-\node[pipe] (pipe) at (10.0, 0) {Generation\\pipeline\\\scriptsize (catalogue or\\\scriptsize announcement)};
+\node[card=cIndigo, minimum width=30mm, minimum height=16mm] (pipe) at (10.0, 0)
+    {Generation\\pipeline\\[2pt](catalogue or\\announcement)};
 
-\node[asset] (out) at (14.0, 0) {Final asset\\in gallery};
+\node[card=cTeal, minimum width=26mm, minimum height=12mm] (out) at (14.4, 0)
+    {Final asset\\in gallery};
 
-\draw[arr] (idea) -- node[above, font=\tiny]{\itshape tap ``generate''} (screen);
-\draw[arr] (screen) -- node[above, font=\tiny]{\itshape confirm} (pipe);
+\draw[arr] (idea) -- node[above, arrlbl]{tap ``generate''} (screen);
+\draw[arr] (screen) -- node[above, arrlbl]{confirm} (pipe);
 \draw[arr] (pipe) -- (out);
 
 \end{tikzpicture}%
@@ -55,62 +66,84 @@ The engine has three parts that meet at inference time. An offline indexing path
 
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{20756C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    box/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=10mm, align=center, fill=gray!8},
-    proc/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=8mm, align=center, fill=gray!12},
-    train/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=8mm, align=center, fill=blue!8},
-    rag/.style={draw, rounded corners=2pt, minimum width=30mm, minimum height=7mm, align=center, fill=yellow!15},
-    store/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum width=22mm, minimum height=12mm, align=center, fill=gray!5},
-    person/.style={draw, circle, minimum size=8mm, fill=gray!5, align=center, font=\tiny},
-    arr/.style={-{Latex[length=1.6mm]}, thick},
-    fb/.style={-{Latex[length=1.6mm]}, dashed, thick, gray!75}
+    font=\sffamily\scriptsize,
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!7,
+                 align=center, text=cInk,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    group/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!6,
+                  inner sep=3mm,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    chip/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                 align=center, text=cInk},
+    store/.style={draw=cTeal, line width=0.6pt, cylinder, shape border rotate=90,
+                  aspect=0.22, minimum width=24mm, minimum height=15mm, align=center,
+                  cylinder uses custom fill, cylinder body fill=white,
+                  cylinder end fill=cTeal!15, text=cInk},
+    person/.style={draw=cIndigo, line width=0.6pt, circle, fill=white,
+                   minimum size=9mm, align=center, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    fb/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cGray,
+               dash pattern=on 2.4pt off 1.7pt}
 ]
 
 % --- Top: corpus
-\node[box] (data) at (0, 5.4) {Curated retail\\marketing corpus};
+\node[card=cTeal, minimum width=34mm, minimum height=11mm] (data) at (0, 7.0)
+    {Curated retail\\marketing corpus};
 
 % --- Left branch: indexing
-\node[proc]  (split) at (-4.5, 3.6) {split, chunk, embed};
-\node[store] (vec)   at (-4.5, 1.6) {pgvector\\(playbook +\\past ideas)};
-
-\begin{pgfonlayer}{background}
-\node[draw=gray!55, dashed, rounded corners=4pt, inner sep=2.8mm,
-      fit=(split)(vec),
-      label={[font=\scriptsize\itshape, gray!75]above:Indexing}] (idxbox) {};
-\end{pgfonlayer}
+\node[chip=cSlate, minimum width=27mm, minimum height=8.5mm] (split) at (-3.8, 4.35)
+    {split, chunk, embed};
+\node[store] (vec) at (-3.8, 2.5) {pgvector\\(playbook +\\past ideas)};
 
 % --- Right branch: fine-tuning
-\node[train] (td)    at ( 4.5, 3.9) {training pairs};
-\node[train] (ft)    at ( 4.5, 2.6) {LoRA fine-tune\\(Gemma 3 4B base)};
-\node[train] (ftllm) at ( 4.5, 1.2) {fine-tuned\\writer LLM};
+\node[chip=cIndigo, minimum width=30mm, minimum height=8.5mm] (td) at (3.8, 4.75)
+    {training pairs};
+\node[chip=cIndigo, minimum width=30mm, minimum height=11mm] (ft) at (3.8, 3.55)
+    {LoRA fine-tune\\(Gemma 3 4B base)};
+\node[chip=cIndigo, line width=0.9pt, fill=cIndigo!14, minimum width=30mm,
+      minimum height=11mm] (ftllm) at (3.8, 2.1) {fine-tuned\\writer LLM};
 
 \begin{pgfonlayer}{background}
-\node[draw=blue!50, dashed, rounded corners=4pt, inner sep=2.8mm,
-      fit=(td)(ft)(ftllm),
-      label={[font=\scriptsize\itshape, blue!65]above:Fine-tuning}] (ftbox) {};
+\node[group=cSlate, fit=(split)(vec)] (idxbox) {};
+\node[group=cIndigo, fit=(td)(ft)(ftllm)] (ftbox) {};
 \end{pgfonlayer}
 
 % --- Bottom: inference flow
-\node[person] (retailer) at (-8.4, -1.6) {retailer};
-\node[box]    (app)      at (-5.4, -1.6) {app};
+\node[person] (retailer) at (-9.2, -1.5) {retailer};
+\node[chip=cIndigo, minimum width=16mm, minimum height=8.5mm] (app) at (-7.3, -1.5)
+    {app};
 
-\node[rag] (sig) at (-0.4, -0.5) {context signals};
-\node[rag] (req) at (-0.4, -1.4) {shop profile};
-\node[rag] (ctx) at (-0.4, -2.3) {retrieved playbook\\+ past ideas};
+\node[chip=cAmber, minimum width=24mm, minimum height=11mm] (sig) at (-4.0, -1.5)
+    {context signals};
+\node[chip=cAmber, minimum width=20mm, minimum height=11mm] (req) at (-1.55, -1.5)
+    {shop profile};
+\node[chip=cAmber, minimum width=31mm, minimum height=11mm] (ctx) at (1.55, -1.5)
+    {retrieved playbook\\+ past ideas};
 
 \begin{pgfonlayer}{background}
-\node[draw=yellow!55!black, dashed, rounded corners=4pt, inner sep=2.5mm,
-      fit=(sig)(req)(ctx),
-      label={[font=\scriptsize\itshape]above:RAG prompt}] (ragbox) {};
+\node[group=cAmber, inner sep=2.8mm, fit=(sig)(req)(ctx)] (ragbox) {};
 \end{pgfonlayer}
 
-\node[box] (out) at ( 8.0, -1.6) {ideas};
+\node[card=cIndigo, minimum width=20mm, minimum height=10mm] (out) at (6.9, -1.5)
+    {ideas};
 
 % --- Arrows: corpus splits into both branches
-\draw[arr] (data.south) -- (split.north);
-\draw[arr] (data.south) -- (td.north);
+\draw[arr] (data.south) to[out=-115, in=20] (split.east);
+\draw[arr] (data.south) to[out=-65, in=160] (td.west);
 
 % Indexing internal
 \draw[arr] (split) -- (vec);
@@ -122,14 +155,19 @@ The engine has three parts that meet at inference time. An offline indexing path
 % Inference flow
 \draw[arr] (retailer) -- (app);
 \draw[arr] (app) -- (ragbox.west);
-\draw[arr] (vec.south) to[out=-90, in=180] (ctx.west);
+\draw[arr] (vec.south) to[out=-90, in=90] (ctx.north);
 \draw[arr] (ragbox.east) to[out=0, in=-90] (ftllm.south);
-\draw[arr] (ftllm.south east) to[out=-30, in=90] (out.north);
+\draw[arr] (ftllm.east) to[out=0, in=90] (out.north);
 
 % Feedback loop
-\draw[fb] (out.south) to[out=-90, in=-90, looseness=0.55]
-  node[below, font=\tiny\itshape, gray!75, sloped]{retailer feedback}
+\draw[fb] (out.south) to[out=-90, in=-90, looseness=0.4]
+  node[below=1pt, font=\sffamily\tiny\itshape, text=cGray, sloped]{retailer feedback}
   (retailer.south);
+
+% --- Group tabs (drawn last so they sit above the arrows)
+\node[tab=cSlate]  at ([xshift=4mm]idxbox.north west) {Indexing};
+\node[tab=cIndigo] at ([xshift=4mm]ftbox.north west)  {Fine-tuning};
+\node[tab=cAmber]  at ([xshift=4mm]ragbox.north west) {RAG prompt};
 
 \end{tikzpicture}%
 }
@@ -284,22 +322,38 @@ A single-shot prompt covers all three. Generation runs from a phone, has to fini
 
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{20756C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{0.85\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    svc/.style={draw, rounded corners=2pt, minimum width=32mm, minimum height=10mm, align=center, fill=gray!10},
-    iface/.style={draw, rounded corners=2pt, minimum width=44mm, minimum height=14mm, align=center, fill=yellow!15},
-    prov/.style={draw, rounded corners=2pt, minimum width=28mm, minimum height=10mm, align=center, fill=blue!8},
-    arr/.style={-{Latex[length=1.6mm]}, thick}
+    font=\sffamily\scriptsize,
+    svc/.style={draw=cSlate, line width=0.9pt, rounded corners=3pt, fill=cSlate!7,
+                minimum width=32mm, minimum height=10mm, align=center, text=cInk,
+                drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                             fill=black, opacity=0.12}},
+    iface/.style={draw=cIndigo, line width=0.9pt, rounded corners=3pt,
+                  fill=cIndigo!14, minimum width=50mm, minimum height=16mm,
+                  align=center, text=cInk,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    prov/.style={draw=cGray, line width=0.9pt, rounded corners=3pt, fill=cGray!6,
+                 dash pattern=on 2.4pt off 1.7pt, align=center, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
 
-\node[svc] (ann) at (0, 1.6)  {Announcement\\service};
+\node[svc] (ann) at (0, 1.7)  {Announcement\\service};
 \node[svc] (wal) at (0, 0)    {Wallpaper\\service};
-\node[svc] (cat) at (0, -1.6) {Catalogue\\service};
+\node[svc] (cat) at (0, -1.7) {Catalogue\\service};
 
-\node[iface] (iface) at (5.6, 0) {\texttt{IImageProvider}\\\scriptsize\texttt{GenerateAsync(}\\\scriptsize\texttt{prompt, inlineImages)}};
+\node[iface] (iface) at (5.6, 0) {\textbf{\texttt{IImageProvider}}\\[2pt]\texttt{GenerateAsync(}\\\texttt{prompt, inlineImages)}};
 
-\node[prov, minimum width=36mm, minimum height=14mm] (prov) at (10.8, 0) {Image generation providers\\\scriptsize (Gemini, OpenAI, \dots)};
+\node[prov, minimum width=40mm, minimum height=16mm] (prov) at (11.4, 0)
+    {Image generation providers\\(Gemini, OpenAI, \dots)};
 
 \draw[arr] (ann.east) -- (iface.west);
 \draw[arr] (wal.east) -- (iface.west);
@@ -337,37 +391,49 @@ The mode exists for retailers who cannot tolerate any change to their packaging.
 
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{20756C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    ref/.style   ={draw=black!55,        line width=0.5pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=gray!8},
-    model/.style ={draw=blue!55!black,   line width=0.5pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=blue!6},
-    cmp/.style   ={draw=orange!65!black, line width=0.5pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=orange!10},
-    bad/.style   ={draw=red!55!black,    line width=0.6pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=red!8},
-    good/.style  ={draw=green!50!black,  line width=0.6pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=green!10},
-    arr/.style   ={-{Latex[length=2mm,width=1.6mm]}, thick, draw=black!70},
-    arrlbl/.style={font=\tiny\itshape, fill=white, inner sep=1pt},
-    rowlbl/.style={font=\small\bfseries\itshape, anchor=east, text=black!70}
+    font=\sffamily\scriptsize,
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!7,
+                 minimum width=30mm, minimum height=12mm, align=center, text=cInk,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    model/.style={draw=cGray, line width=0.9pt, rounded corners=3pt, fill=cGray!6,
+                  dash pattern=on 2.4pt off 1.7pt, minimum width=30mm,
+                  minimum height=12mm, align=center, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    darr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!70,
+                 dash pattern=on 2.4pt off 1.7pt},
+    arrlbl/.style={font=\sffamily\tiny\itshape, fill=white, inner sep=1pt,
+                   text=cInk!80},
+    rowlbl/.style={font=\sffamily\small\bfseries, anchor=east, text=cInk!75}
 ]
 
 % --- (a) pure generative ---
-\node[ref]   (refA) at (0,    2.6) {Reference\\photographs};
-\node[model] (mdlA) at (4.2,  2.6) {Multimodal\\model};
-\node[bad]   (outA) at (8.4,  2.6) {Final image\\\textit{products distorted}};
+\node[card=cTeal]  (refA) at (0,    2.6) {Reference\\photographs};
+\node[model]       (mdlA) at (4.4,  2.6) {Multimodal\\model};
+\node[card=cAmber] (outA) at (9.4,  2.6) {Final image\\\textit{products distorted}};
 \draw[arr] (refA) -- (mdlA);
 \draw[arr] (mdlA) -- (outA);
 
 % --- (b) hybrid ---
-\node[ref]   (refB) at (0,    0) {Reference\\photographs};
-\node[model] (mdlB) at (4.2,  0) {Multimodal model\\\scriptsize(outline mode)};
-\node[cmp]   (cmpB) at (8.4,  0) {Deterministic\\compositor};
-\node[good]  (outB) at (12.6, 0) {Final image\\\textit{products faithful}};
+\node[card=cTeal]  (refB) at (0,    0) {Reference\\photographs};
+\node[model]       (mdlB) at (4.4,  0) {Multimodal model\\(outline mode)};
+\node[card=cSlate] (cmpB) at (9.4,  0) {Deterministic\\compositor};
+\node[card=cTeal]  (outB) at (13.8, 0) {Final image\\\textit{products faithful}};
 \draw[arr] (refB) -- (mdlB);
 \draw[arr] (mdlB) -- node[arrlbl, above=1pt]{outlined scene} (cmpB);
 \draw[arr] (cmpB) -- (outB);
 
 % --- Real reference photographs also feed the compositor ---
-\draw[arr, dashed, draw=black!55] (refB.south)
+\draw[darr] (refB.south)
     to[out=-55, in=-125, looseness=0.9]
     node[arrlbl, below=2pt]{real product photos}
     (cmpB.south);
@@ -389,25 +455,48 @@ The pipeline has three stages: a marker-palette selection step that decides whic
 
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{20756C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    inp/.style    ={draw=black!50,        line width=0.4pt, rounded corners=2pt,   minimum width=28mm, minimum height=8mm,  align=center, fill=gray!6,   font=\scriptsize\itshape},
-    proc/.style   ={draw=gray!65,         line width=0.5pt, rounded corners=2.5pt, minimum width=32mm, minimum height=11mm, align=center, fill=gray!12},
-    aicall/.style ={draw=blue!60!black,   line width=0.7pt, rounded corners=2.5pt, minimum width=34mm, minimum height=12mm, align=center, fill=blue!8},
-    art/.style    ={draw=yellow!60!black, line width=0.4pt, rounded corners=2pt,   minimum width=30mm, minimum height=8mm,  align=center, fill=yellow!15, font=\scriptsize\itshape},
-    final/.style  ={draw=green!55!black,  line width=0.7pt, rounded corners=2.5pt, minimum width=32mm, minimum height=10mm, align=center, fill=green!10},
-    arr/.style    ={-{Latex[length=1.8mm,width=1.5mm]}, thick, draw=black!70},
-    bg/.style     ={dashed, rounded corners=4pt, inner sep=2.8mm}
+    font=\sffamily\scriptsize,
+    group/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!6,
+                  inner sep=3mm,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    inp/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                minimum width=28mm, minimum height=8mm, align=center, text=cInk,
+                font=\sffamily\scriptsize\itshape},
+    proc/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                 minimum width=32mm, minimum height=11mm, align=center, text=cInk},
+    aicall/.style={draw=cGray, line width=0.9pt, rounded corners=3pt, fill=cGray!6,
+                   dash pattern=on 2.4pt off 1.7pt, minimum width=34mm,
+                   minimum height=13mm, align=center, text=cInk},
+    art/.style={draw=cAmber, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                minimum width=30mm, minimum height=9mm, align=center, text=cInk,
+                font=\sffamily\scriptsize\itshape},
+    final/.style={draw=cTeal, line width=0.9pt, rounded corners=3pt, fill=cTeal!7,
+                  minimum width=32mm, minimum height=10mm, align=center, text=cInk,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
 
 % ============ Stage 1: Marker palette ============
-\node[inp]  (in1a)       at (0, 5.6) {brand colours};
-\node[inp]  (in1b)       at (0, 4.4) {layout theme};
-\node[inp]  (in1c)       at (0, 3.2) {products};
+\node[inp=cSlate]  (in1a)       at (0, 5.5) {brand colours};
+\node[inp=cSlate]  (in1b)       at (0, 4.4) {layout theme};
+\node[inp=cSlate]  (in1c)       at (0, 3.3) {products};
 
-\node[proc] (palettesel) at (3.8, 4.4) {Marker palette\\selection};
-\node[art]  (palette)    at (3.8, 2.0) {marker assignment\\$\textit{product} \rightarrow \textit{hex}$};
+\node[proc=cSlate] (palettesel) at (3.8, 4.4) {Marker palette\\selection};
+\node[art]         (palette)    at (3.8, 2.2) {marker assignment\\$\textit{product} \rightarrow \textit{hex}$};
 
 \draw[arr] (in1a.east) -- (palettesel.west);
 \draw[arr] (in1b.east) -- (palettesel.west);
@@ -415,17 +504,16 @@ The pipeline has three stages: a marker-palette selection step that decides whic
 \draw[arr] (palettesel.south) -- (palette.north);
 
 \begin{pgfonlayer}{background}
-\node[bg, draw=gray!55, fill=gray!4,
-      fit=(in1a)(in1c)(palettesel)(palette),
-      label={[font=\scriptsize\bfseries\itshape, gray!75]above:Stage 1: marker palette}] {};
+\node[group=cSlate, fit=(in1a)(in1c)(palettesel)(palette)] (stage1) {};
 \end{pgfonlayer}
 
 % ============ Stage 2: Outline rendering ============
-\node[inp]    (in2a)   at (7.2, 5.0) {scene prompt};
-\node[inp]    (in2b)   at (9.6, 5.0) {reference photos};
+\node[inp=cIndigo, minimum width=24mm] (in2a) at (7.4, 5.5) {scene prompt};
+\node[inp=cIndigo, minimum width=27mm] (in2b) at (10.2, 5.5) {reference photos};
 
-\node[aicall] (mdl)    at (8.4, 2.6) {Multimodal model\\\scriptsize(outline mode)\\[1pt]\tiny\textsc{ai call}};
-\node[art]    (canvas) at (8.4, 0.4) {placeholder canvas\\\scriptsize(scene + outlined products)};
+\node[aicall] (mdl)    at (8.8, 3.2) {Multimodal model\\(outline mode)\\[1pt]\tiny\textsc{ai call}};
+\node[art, minimum width=34mm] (canvas) at (8.8, 0.9)
+    {placeholder canvas\\(scene + outlined products)};
 
 \draw[arr] (in2a.south) -- (mdl.north);
 \draw[arr] (in2b.south) -- (mdl.north);
@@ -433,30 +521,35 @@ The pipeline has three stages: a marker-palette selection step that decides whic
 \draw[arr] (mdl.south) -- (canvas.north);
 
 \begin{pgfonlayer}{background}
-\node[bg, draw=blue!55, fill=blue!3,
-      fit=(in2a)(in2b)(mdl)(canvas),
-      label={[font=\scriptsize\bfseries\itshape, blue!65]above:Stage 2: outline rendering}] {};
+\node[group=cIndigo, fit=(in2a)(in2b)(mdl)(canvas)] (stage2) {};
 \end{pgfonlayer}
 
 % ============ Stage 3: Detect and composite ============
-\node[proc]   (detect) at (13.6, 5.6) {Marker detect\\\scriptsize(Chebyshev match,\\\scriptsize largest component)};
-\node[proc]   (mask)   at (13.6, 3.9) {Mask construction\\\scriptsize(flood-fill + dilate)};
-\node[aicall] (lama)   at (13.6, 2.0) {LaMa inpainting\\\scriptsize(erase outlines,\\\scriptsize repaint background)\\[1pt]\tiny\textsc{ai call (IOPaint)}};
-\node[proc]   (paste)  at (13.6, 0.0) {Scale \& alpha-composite\\\scriptsize(retailer photo paste)};
+\node[proc=cSlate, minimum width=38mm] (detect) at (14.6, 5.3)
+    {Marker detect\\(Chebyshev match,\\largest component)};
+\node[proc=cSlate, minimum width=38mm] (mask)   at (14.6, 3.6)
+    {Mask construction\\(flood-fill + dilate)};
+\node[aicall, minimum width=38mm, minimum height=15mm] (lama) at (14.6, 1.7)
+    {LaMa inpainting\\(erase outlines,\\repaint background)\\[1pt]\tiny\textsc{ai call (IOPaint)}};
+\node[proc=cSlate, minimum width=38mm] (paste)  at (14.6, -0.3)
+    {Scale \& alpha-composite\\(retailer photo paste)};
 
 \draw[arr] (canvas.east) to[out=0, in=180, looseness=0.8] (detect.west);
 \draw[arr] (detect.south) -- (mask.north);
 \draw[arr] (mask.south)   -- (lama.north);
 \draw[arr] (lama.south)   -- (paste.north);
 
-\node[final] (out) at (13.6, -1.7) {Final image\\\scriptsize(products faithful)};
+\node[final] (out) at (14.6, -2.2) {Final image\\(products faithful)};
 \draw[arr] (paste.south) -- (out.north);
 
 \begin{pgfonlayer}{background}
-\node[bg, draw=orange!60, fill=orange!3,
-      fit=(detect)(mask)(lama)(paste),
-      label={[font=\scriptsize\bfseries\itshape, orange!70!black]above:Stage 3: detect and composite}] {};
+\node[group=cSlate, fit=(detect)(mask)(lama)(paste)] (stage3) {};
 \end{pgfonlayer}
+
+% ============ Stage tabs (drawn last so they sit above the arrows) ============
+\node[tab=cSlate]  at ([xshift=4mm]stage1.north west) {Stage 1: marker palette};
+\node[tab=cIndigo] at ([xshift=4mm]stage2.north west) {Stage 2: outline rendering};
+\node[tab=cSlate]  at ([xshift=4mm]stage3.north west) {Stage 3: detect and composite};
 
 \end{tikzpicture}%
 }
@@ -565,27 +658,46 @@ The model used is Real-ESRGAN \cite{wang2021realesrgan}, exported to ONNX and ru
 
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{20756C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    inp/.style    ={draw=black!50,        line width=0.4pt, rounded corners=2pt,   minimum width=28mm, minimum height=11mm, align=center, fill=gray!6,   font=\scriptsize\itshape},
-    proc/.style   ={draw=gray!65,         line width=0.5pt, rounded corners=2.5pt, minimum width=32mm, minimum height=12mm, align=center, fill=gray!12},
-    aicall/.style ={draw=blue!60!black,   line width=0.7pt, rounded corners=2.5pt, minimum width=32mm, minimum height=14mm, align=center, fill=blue!8},
-    final/.style  ={draw=green!55!black,  line width=0.7pt, cylinder, shape border rotate=90, aspect=0.25, minimum width=26mm, minimum height=12mm, align=center, fill=green!10},
-    arr/.style    ={-{Latex[length=1.8mm,width=1.5mm]}, thick, draw=black!70},
-    barr/.style   ={-{Latex[length=1.8mm,width=1.5mm]}, thick, dashed, draw=black!55}
+    font=\sffamily\scriptsize,
+    inp/.style={draw=cTeal, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                minimum width=28mm, minimum height=11mm, align=center, text=cInk,
+                font=\sffamily\scriptsize\itshape},
+    proc/.style={draw=cSlate, line width=0.9pt, rounded corners=3pt, fill=cSlate!7,
+                 minimum width=32mm, minimum height=12mm, align=center, text=cInk,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    aicall/.style={draw=cGray, line width=0.9pt, rounded corners=3pt, fill=cGray!6,
+                   dash pattern=on 2.4pt off 1.7pt, minimum width=32mm,
+                   minimum height=14mm, align=center, text=cInk},
+    final/.style={draw=cTeal, line width=0.6pt, cylinder, shape border rotate=90,
+                  aspect=0.22, minimum width=26mm, minimum height=14mm, align=center,
+                  cylinder uses custom fill, cylinder body fill=white,
+                  cylinder end fill=cTeal!15, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    barr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!70,
+                 dash pattern=on 2.4pt off 1.7pt},
+    arrlbl/.style={font=\sffamily\tiny\itshape, text=cInk!80}
 ]
 
-\node[inp]    (src) at (0, 0)    {gallery image\\(native resolution)};
-\node[proc]   (chk) at (4.6, 0)  {compute target pixels\\\scriptsize(paper size @ $300\,$dpi)};
+\node[inp]    (src) at (0, 0)     {gallery image\\(native resolution)};
+\node[proc]   (chk) at (4.6, 0)   {compute target pixels\\(paper size @ $300\,$dpi)};
 \node[aicall] (up)  at (9.4, 1.9) {Real-ESRGAN\\tile upscaler\\[1pt]\tiny\textsc{ai call (ONNX)}};
-\node[proc]   (lay) at (14.2, 0) {PDF layout\\\scriptsize($\pm$ QR code)};
-\node[final]  (out) at (18.8, 0) {print-ready\\PDF in gallery};
+\node[proc]   (lay) at (14.2, 0)  {PDF layout\\($\pm$ QR code)};
+\node[final]  (out) at (18.6, 0)  {print-ready\\PDF in gallery};
 
 \draw[arr]  (src) -- (chk);
-\draw[arr]  (chk.north) to[out=60, in=180]  node[above, font=\tiny\itshape, pos=0.55] {if scale~$>1$} (up.west);
+\draw[arr]  (chk.north) to[out=60, in=180]  node[arrlbl, above, pos=0.55] {if scale~$>1$} (up.west);
 \draw[arr]  (up.east)   to[out=0,  in=120] (lay.north);
-\draw[barr] (chk) -- node[above, font=\tiny\itshape] {else} (lay);
+\draw[barr] (chk) -- node[arrlbl, above] {else} (lay);
 \draw[arr]  (lay) -- (out);
 
 \end{tikzpicture}%

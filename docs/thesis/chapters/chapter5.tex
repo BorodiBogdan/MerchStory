@@ -26,7 +26,7 @@ The next figure puts the two catalogue paths the platform supports side by side.
 \end{minipage}\hfill
 \begin{minipage}[t]{0.47\textwidth}
 \centering
-\samplefig[width=\linewidth,height=0.32\textheight,keepaspectratio]{figures/results/catalogue.jpg}
+\samplefig[width=\linewidth,height=0.32\textheight,keepaspectratio]{figures/results/catalogue.jpeg}
 \end{minipage}
 \caption{Catalogue: hybrid (left) vs.\ fully generative (right).}
 \label{fig:result-catalogues}
@@ -137,16 +137,15 @@ The same DeepEval harness is used to compare candidate writer models head-to-hea
 \begin{figure}[!ht]
 \centering
 
-\definecolor{mGemma}{HTML}{4C72B0}
-\definecolor{mGemmaFT}{HTML}{E45756}
-\definecolor{mDeepSeek}{HTML}{2E8B8B}
-\definecolor{mClaude}{HTML}{CC785C}
-\definecolor{mChatGPT}{HTML}{10A37F}
-\definecolor{gridGray}{HTML}{EDEDED}
-\definecolor{axisGray}{HTML}{4A4A4A}
-\definecolor{labelGray}{HTML}{2B2B2B}
+% --- same palette as Figure \ref{fig:three-tier} ---
+\definecolor{cInk}{HTML}{2E3440}    % text + axis
+\definecolor{cIndigo}{HTML}{3F4D8C} % series 1
+\definecolor{cSlate}{HTML}{4A5568}  % series 4
+\definecolor{cTeal}{HTML}{20756C}   % series 2
+\definecolor{cAmber}{HTML}{B07A1F}  % series 3
+\definecolor{cGray}{HTML}{7C8390}   % series 5 + grid
 
-\begin{tikzpicture}
+\begin{tikzpicture}[font=\sffamily\scriptsize]
 \begin{axis}[
     ybar=1.4pt,
     bar width=8pt,
@@ -157,18 +156,19 @@ The same DeepEval harness is used to compare candidate writer models head-to-hea
     ytick={30,40,50,60,70,80,90,100},
     ymajorgrids=true,
     xmajorgrids=false,
-    major grid style={draw=gridGray, line width=0.4pt},
+    major grid style={draw=cGray!30, thin},
     axis lines*=left,
-    axis line style={draw=axisGray, line width=0.5pt},
-    tick style={draw=axisGray},
-    tick label style={font=\footnotesize, color=labelGray},
-    ylabel={\footnotesize DeepEval score (\%)},
-    ylabel style={color=labelGray, yshift=-2pt},
+    axis line style={draw=cInk!85, line width=0.5pt},
+    tick style={draw=cInk!85},
+    tick label style={font=\sffamily\scriptsize, color=cInk,
+        /pgf/number format/assume math mode=true},
+    ylabel={DeepEval score (\%)},
+    ylabel style={font=\sffamily\scriptsize, color=cInk, yshift=-2pt},
     symbolic x coords={Relevancy, Faithfulness, {Tone Match}, {Schema Compliance}, {Hallucination-Free}},
     xtick=data,
     xticklabel style={
-        font=\footnotesize,
-        color=labelGray,
+        font=\sffamily\scriptsize,
+        color=cInk,
         rotate=18,
         anchor=north east,
         xshift=2pt,
@@ -177,15 +177,16 @@ The same DeepEval harness is used to compare candidate writer models head-to-hea
     nodes near coords,
     nodes near coords align={vertical},
     every node near coord/.append style={
-        font=\fontsize{6.5}{7.5}\selectfont,
-        color=labelGray,
+        font=\sffamily\fontsize{6.5}{7.5}\selectfont,
+        color=cInk,
         rotate=90,
         anchor=west,
         inner sep=0pt,
         xshift=3pt,
         /pgf/number format/fixed,
         /pgf/number format/fixed zerofill,
-        /pgf/number format/precision=1
+        /pgf/number format/precision=1,
+        /pgf/number format/assume math mode=true
     },
     legend image code/.code={\draw[#1] (0cm,-0.08cm) rectangle (0.32cm,0.18cm);},
     legend style={
@@ -195,26 +196,23 @@ The same DeepEval harness is used to compare candidate writer models head-to-hea
         draw=none,
         fill=none,
         column sep=14pt,
-        font=\footnotesize,
+        font=\sffamily\scriptsize,
+        text=cInk,
         /tikz/every even column/.append style={column sep=14pt}
     },
-    every axis plot/.append style={
-        fill opacity=0.92,
-        draw opacity=1,
-        line width=0.3pt
-    },
+    every axis plot/.append style={line width=0.3pt},
     clip=false,
 ]
 
-\addplot[fill=mGemma, draw=mGemma!70!black]
+\addplot[fill=cIndigo, draw=cIndigo!80!black]
     coordinates {(Relevancy,79.2) (Faithfulness,81.9) ({Tone Match},37.5) ({Schema Compliance},69.8) ({Hallucination-Free},90.9)};
-\addplot[fill=mGemmaFT, draw=mGemmaFT!70!black]
+\addplot[fill=cTeal, draw=cTeal!80!black]
     coordinates {(Relevancy,82.5) (Faithfulness,84.0) ({Tone Match},48.0) ({Schema Compliance},71.0) ({Hallucination-Free},91.8)};
-\addplot[fill=mDeepSeek, draw=mDeepSeek!70!black]
+\addplot[fill=cAmber, draw=cAmber!80!black]
     coordinates {(Relevancy,86.4) (Faithfulness,86.8) ({Tone Match},69.5) ({Schema Compliance},64.5) ({Hallucination-Free},93.1)};
-\addplot[fill=mClaude, draw=mClaude!70!black]
+\addplot[fill=cSlate, draw=cSlate!80!black]
     coordinates {(Relevancy,84.7) (Faithfulness,85.6) ({Tone Match},73.8) ({Schema Compliance},72.2) ({Hallucination-Free},91.0)};
-\addplot[fill=mChatGPT, draw=mChatGPT!70!black]
+\addplot[fill=cGray, draw=cGray!80!black]
     coordinates {(Relevancy,84.7) (Faithfulness,91.0) ({Tone Match},51.0) ({Schema Compliance},54.5) ({Hallucination-Free},92.5)};
 
 \legend{Gemma 3 4B, Gemma 3 4B (FT), DeepSeek, Claude, ChatGPT}

@@ -46,24 +46,32 @@ Conditional generation is most commonly achieved through \emph{classifier-free g
 
 \begin{figure}[ht]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % learned denoiser (model)
+\definecolor{cGray}{HTML}{7C8390}   % image / noise states
 \begin{tikzpicture}[
-    node distance=10mm and 6mm,
-    every node/.style={font=\small},
-    box/.style={draw, rounded corners=2pt, minimum width=12mm, minimum height=10mm, align=center},
-    arr/.style={-{Latex[length=2mm]}, thick}
+    node distance=10mm and 13mm,
+    font=\sffamily\scriptsize,
+    every node/.style={text=cInk},
+    box/.style={draw=cGray, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                minimum width=12mm, minimum height=9mm, align=center},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
 \node[box] (x0) {$x_0$};
 \node[box, right=of x0] (x1) {$x_1$};
-\node[right=4mm of x1] (dots) {$\cdots$};
-\node[box, right=4mm of dots] (xt1) {$x_{T-1}$};
+\node[right=5mm of x1] (dots) {$\cdots$};
+\node[box, right=5mm of dots] (xt1) {$x_{T-1}$};
 \node[box, right=of xt1] (xt) {$x_T$};
 
-\draw[arr] (x0) -- node[above, font=\scriptsize] {$+\,\text{noise}$} (x1);
+\draw[arr] (x0) -- node[above=0.5mm] {$+\,\text{noise}$} (x1);
 \draw[arr] (x1) -- (dots);
 \draw[arr] (dots) -- (xt1);
-\draw[arr] (xt1) -- node[above, font=\scriptsize] {$+\,\text{noise}$} (xt);
+\draw[arr] (xt1) -- node[above=0.5mm] {$+\,\text{noise}$} (xt);
 
-\draw[arr, dashed, bend left=30] (xt) to node[below, font=\scriptsize] {denoiser $\epsilon_\theta$, conditioned on text $c$} (x0);
+\draw[arr, draw=cIndigo, dash pattern=on 2.4pt off 1.7pt]
+    (xt.south) to[bend left=32]
+    node[below=1.2mm, text=cIndigo] {denoiser $\epsilon_\theta$, conditioned on text $c$} (x0.south);
 \end{tikzpicture}
 \caption{The forward and reverse processes of a diffusion model. The forward chain (solid) gradually adds noise to a clean image until it becomes pure Gaussian noise. A learned denoiser, conditioned on a text prompt~\(c\), reverses the chain (dashed) at sampling time.}
 \label{fig:diffusion}
@@ -88,16 +96,20 @@ A well-formed prompt for a modern generative model can be decomposed into severa
 
 \begin{figure}[ht]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text
+\definecolor{cIndigo}{HTML}{3F4D8C} % prompt sections
 \begin{tikzpicture}[
-    every node/.style={font=\small\sffamily},
-    block/.style={draw, rounded corners=2pt, minimum width=82mm, minimum height=8mm, anchor=west, fill=gray!5},
-    label/.style={font=\scriptsize\itshape, gray}
+    font=\sffamily\scriptsize,
+    block/.style={draw=cIndigo, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                  text width=86mm, align=left, inner xsep=8pt,
+                  minimum height=8mm, anchor=west, text=cInk}
 ]
-\node[block] (role) at (0,0)         {\textbf{Role.}\;\; ``You are an art director at a top creative studio.''};
-\node[block, below=2mm of role.south west, anchor=north west] (ctx) {\textbf{Brand context.}\;\; name, slogan, colours, business domain.};
-\node[block, below=2mm of ctx.south west, anchor=north west] (layout) {\textbf{Layout zones.}\;\; header (15\%), hero (70\%), footer (15\%).};
-\node[block, below=2mm of layout.south west, anchor=north west] (rules) {\textbf{Content rules.}\;\; what to include, tone, currency formatting.};
-\node[block, below=2mm of rules.south west, anchor=north west] (neg) {\textbf{Negative constraints.}\;\; no sparkles, no fake bokeh, no clipart.};
+\node[block] (role) at (0,0)         {\textcolor{cIndigo}{\textbf{Role.}}\;\; ``You are an art director at a top creative studio.''};
+\node[block, below=2.2mm of role.south west, anchor=north west] (ctx) {\textcolor{cIndigo}{\textbf{Brand context.}}\;\; name, slogan, colours, business domain.};
+\node[block, below=2.2mm of ctx.south west, anchor=north west] (layout) {\textcolor{cIndigo}{\textbf{Layout zones.}}\;\; header (15\%), hero (70\%), footer (15\%).};
+\node[block, below=2.2mm of layout.south west, anchor=north west] (rules) {\textcolor{cIndigo}{\textbf{Content rules.}}\;\; what to include, tone, currency formatting.};
+\node[block, below=2.2mm of rules.south west, anchor=north west] (neg) {\textcolor{cIndigo}{\textbf{Negative constraints.}}\;\; no sparkles, no fake bokeh, no clipart.};
 \end{tikzpicture}
 \caption{Anatomy of a structured prompt for image generation.}
 \label{fig:prompt-anatomy}
@@ -140,60 +152,44 @@ Conceptually, a RAG pipeline operates in three steps, illustrated in Figure~\ref
 
 \begin{figure}[ht]
 \centering
-\definecolor{ragInk}{HTML}{1F2933}
-\definecolor{ragBorder}{HTML}{A8B0BA}
-\definecolor{ragArrow}{HTML}{7B8794}
-\definecolor{ragSlate}{HTML}{3D5A80}
-\definecolor{ragSlateBg}{HTML}{EBEFF5}
-\definecolor{ragAmber}{HTML}{A7693E}
-\definecolor{ragAmberBg}{HTML}{F4ECDF}
-\definecolor{ragSage}{HTML}{4F7A5C}
-\definecolor{ragSageBg}{HTML}{E8F0EA}
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % language model / generation
+\definecolor{cTeal}{HTML}{20756C}   % retrieval / vector store
+\definecolor{cAmber}{HTML}{B07A1F}  % augmentation accent
+\definecolor{cGray}{HTML}{7C8390}   % raw query
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    >={Latex[length=2.8mm,width=2.4mm]},
-    node distance=4.5mm,
-    every node/.style={font=\small\sffamily, text=ragInk},
-    box/.style={
-        draw=ragBorder, line width=0.5pt,
-        rounded corners=3pt,
-        minimum width=24mm, minimum height=15mm,
-        align=center, fill=white, inner sep=2pt
-    },
-    store/.style={
-        draw=ragBorder, line width=0.5pt,
-        cylinder, shape border rotate=90, aspect=0.3,
-        minimum width=20mm, minimum height=16mm,
-        align=center, fill=white, inner sep=1pt
-    },
-    arr/.style={
-        ->, line width=0.9pt, draw=ragArrow,
-        shorten >=1.5pt, shorten <=1.5pt
-    },
-    phaseband/.style={
-        rounded corners=5pt,
-        inner xsep=8pt, inner ysep=9pt
-    },
-    phase/.style={
-        font=\footnotesize\sffamily\bfseries,
-        inner sep=1pt
-    },
-    accent/.style={
-        line width=1.1pt, line cap=round
-    }
+    font=\sffamily\scriptsize,
+    box/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                minimum width=18mm, minimum height=10mm, align=center,
+                inner sep=2pt, text=cInk},
+    store/.style={draw=cTeal, line width=0.6pt, cylinder, shape border rotate=90,
+                  aspect=0.25, minimum width=18mm, minimum height=13mm, align=center,
+                  cylinder uses custom fill, cylinder body fill=white,
+                  cylinder end fill=cTeal!15, inner sep=1pt, text=cInk},
+    phaseband/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!7,
+                      inner xsep=6pt, inner ysep=7pt,
+                      drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                                   fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85,
+                shorten >=1.5pt, shorten <=1.5pt}
 ]
-\node[box] (q) {Query};
-\node[box, right=of q] (emb) {Embedding\\encoder};
-\node[store, right=of emb] (idx) {Vector\\index};
-\node[box, right=of idx] (top) {Top-\(k\)\\retrieved};
-\node[box, right=of top] (prompt) {Augmented\\prompt};
-\node[box, right=of prompt] (llm) {Language\\model};
-\node[box, right=of llm] (ans) {Grounded\\answer};
+\node[box=cGray] (q) {Query};
+\node[box=cIndigo, right=4mm of q] (emb) {Embedding\\encoder};
+\node[store, right=4mm of emb] (idx) {Vector\\index};
+\node[box=cTeal, right=4mm of idx] (top) {Top-\(k\)\\retrieved};
+\node[box=cAmber, right=8mm of top] (prompt) {Augmented\\prompt};
+\node[box=cIndigo, right=8mm of prompt] (llm) {Language\\model};
+\node[box=cIndigo, right=4mm of llm] (ans) {Grounded\\answer};
 
 \begin{scope}[on background layer]
-    \node[phaseband, fit=(q)(top), fill=ragSlateBg] (rband) {};
-    \node[phaseband, fit=(prompt), fill=ragAmberBg] (aband) {};
-    \node[phaseband, fit=(llm)(ans), fill=ragSageBg] (gband) {};
+    \node[phaseband=cTeal,   fit=(q)(top)(idx)] (rband) {};
+    \node[phaseband=cAmber,  fit=(prompt)(prompt.center |- idx.north)(prompt.center |- idx.south)] (aband) {};
+    \node[phaseband=cIndigo, fit=(llm)(ans)(llm.center |- idx.north)(llm.center |- idx.south)] (gband) {};
 \end{scope}
 
 \draw[arr] (q) -- (emb);
@@ -203,13 +199,10 @@ Conceptually, a RAG pipeline operates in three steps, illustrated in Figure~\ref
 \draw[arr] (prompt) -- (llm);
 \draw[arr] (llm) -- (ans);
 
-\node[phase, text=ragSlate, above=3mm of rband.north] (rlabel) {RETRIEVE};
-\node[phase, text=ragAmber, above=3mm of aband.north] (alabel) {AUGMENT};
-\node[phase, text=ragSage,  above=3mm of gband.north] (glabel) {GENERATE};
-
-\draw[accent, draw=ragSlate] (rlabel.south west) -- (rlabel.south east);
-\draw[accent, draw=ragAmber] (alabel.south west) -- (alabel.south east);
-\draw[accent, draw=ragSage]  (glabel.south west) -- (glabel.south east);
+% phase tabs (drawn last so they sit above the band borders)
+\node[tab=cTeal]   at ([xshift=4mm]rband.north west) {RETRIEVE};
+\node[tab=cAmber]  at ([xshift=4mm]aband.north west) {AUGMENT};
+\node[tab=cIndigo] at ([xshift=4mm]gband.north west) {GENERATE};
 \end{tikzpicture}}
 \caption{The retrieve--augment--generate (RAG) pipeline.}
 \label{fig:rag}
@@ -244,66 +237,76 @@ The result is an embedding space in which an image and a caption that describe t
 \begin{figure}[ht]
 \centering
 
-\definecolor{clipImgC}{HTML}{4C72B0}
-\definecolor{clipTxtC}{HTML}{CC785C}
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % encoders + image embeddings
+\definecolor{cTeal}{HTML}{20756C}   % embedding space + text embeddings
+\definecolor{cAmber}{HTML}{B07A1F}  % highlighted pair
+\definecolor{cGray}{HTML}{7C8390}   % raw inputs
 
 \begin{tikzpicture}[
-    every node/.style={font=\small\sffamily},
-    inpImg/.style={draw, dashed, rounded corners=2pt, minimum width=24mm, minimum height=11mm, align=center, fill=clipImgC!5, line width=0.5pt, draw=clipImgC!60!black},
-    inpTxt/.style={draw, dashed, rounded corners=2pt, minimum width=24mm, minimum height=11mm, align=center, fill=clipTxtC!5, line width=0.5pt, draw=clipTxtC!60!black},
-    encImg/.style={draw, rounded corners=3pt, minimum width=24mm, minimum height=12mm, align=center, fill=clipImgC!12, line width=0.7pt, draw=clipImgC!75!black},
-    encTxt/.style={draw, rounded corners=3pt, minimum width=24mm, minimum height=12mm, align=center, fill=clipTxtC!12, line width=0.7pt, draw=clipTxtC!75!black},
-    arrImg/.style={-{Latex[length=2mm]}, thick, draw=clipImgC!75!black},
-    arrTxt/.style={-{Latex[length=2mm]}, thick, draw=clipTxtC!75!black},
-    pairLine/.style={dotted, line width=0.7pt, draw=gray!70},
-    imgDot/.style={circle, fill=clipImgC, minimum size=2.4mm, inner sep=0pt},
-    txtDot/.style={circle, fill=clipTxtC, minimum size=2.4mm, inner sep=0pt}
+    font=\sffamily\scriptsize,
+    every node/.style={text=cInk},
+    inp/.style={draw=cGray, line width=0.6pt, dash pattern=on 2.4pt off 1.7pt,
+                rounded corners=2.5pt, fill=white, minimum width=24mm,
+                minimum height=10mm, align=center},
+    enc/.style={draw=cIndigo, line width=0.9pt, rounded corners=3pt, fill=cIndigo!14,
+                minimum width=24mm, minimum height=11mm, align=center,
+                drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                             fill=black, opacity=0.12}},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    pairLine/.style={dotted, line width=0.8pt, draw=cInk!55},
+    imgDot/.style={circle, fill=cIndigo, minimum size=2.4mm, inner sep=0pt},
+    txtDot/.style={circle, fill=cTeal, minimum size=2.4mm, inner sep=0pt}
 ]
 
 % Inputs
-\node[inpImg] (img) at (0, 1.4) {Image};
-\node[inpTxt] (txt) at (0,-1.4) {\itshape ``a coffee mug''};
+\node[inp] (img) at (0, 1.4) {Image};
+\node[inp] (txt) at (0,-1.4) {\itshape ``a coffee mug''};
 
 % Encoders
-\node[encImg] (imgEnc) at (3.6, 1.4) {Image\\encoder};
-\node[encTxt] (txtEnc) at (3.6,-1.4) {Text\\encoder};
+\node[enc] (imgEnc) at (3.6, 1.4) {Image\\encoder};
+\node[enc] (txtEnc) at (3.6,-1.4) {Text\\encoder};
 
 % Shared embedding space (ellipse)
-\draw[line width=0.7pt, draw=gray!55, fill=gray!3] (8.2, 0) ellipse (2.7cm and 2.05cm);
-\node[font=\scriptsize\sffamily\itshape, anchor=south] at (8.2, 1.9) {shared embedding space};
+\draw[line width=0.9pt, draw=cTeal, fill=cTeal!6,
+      drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                   fill=black, opacity=0.12}]
+      (8.2, 0) ellipse (2.7cm and 2.05cm);
+\node[font=\sffamily\scriptsize\itshape, text=cTeal, anchor=south] at (8.2, 2.15) {shared embedding space};
 
 % Background matched pairs (image dot near text dot)
-\node[imgDot] (i1) at (6.8, 0.85) {};
-\node[txtDot] (t1) at (7.15, 0.55) {};
+\node[imgDot] (i1) at (6.9, 1.35) {};
+\node[txtDot] (t1) at (7.3, 1.05) {};
 \draw[pairLine] (i1) -- (t1);
 
-\node[imgDot] (i2) at (9.25, 0.75) {};
-\node[txtDot] (t2) at (9.5, 1.0) {};
+\node[imgDot] (i2) at (9.15, 0.7) {};
+\node[txtDot] (t2) at (9.55, 1.05) {};
 \draw[pairLine] (i2) -- (t2);
 
-\node[imgDot] (i3) at (6.95,-0.75) {};
-\node[txtDot] (t3) at (6.7,-1.05) {};
+\node[imgDot] (i3) at (7.6,-1.1) {};
+\node[txtDot] (t3) at (7.2,-1.45) {};
 \draw[pairLine] (i3) -- (t3);
 
-\node[imgDot] (i4) at (9.2,-0.65) {};
-\node[txtDot] (t4) at (9.45,-0.95) {};
+\node[imgDot] (i4) at (9.2,-0.6) {};
+\node[txtDot] (t4) at (9.55,-0.95) {};
 \draw[pairLine] (i4) -- (t4);
 
 % Highlighted pair (the example coffee-mug pair)
 \node[imgDot, minimum size=3.4mm] (iHi) at (8.2, 0.1) {};
-\node[txtDot, minimum size=3.4mm] (tHi) at (8.52, 0.32) {};
-\draw[line width=0.6pt, draw=gray!75] (iHi) -- (tHi);
-\draw[dashed, line width=0.5pt, draw=gray!70] (8.36, 0.21) circle (5.5mm);
+\node[txtDot, minimum size=3.4mm] (tHi) at (8.55,-0.12) {};
+\draw[line width=0.6pt, draw=cInk!60] (iHi) -- (tHi);
+\draw[dash pattern=on 2.4pt off 1.7pt, line width=0.8pt, draw=cAmber] (8.375,-0.01) circle (5.5mm);
 
 % Arrows: inputs to encoders, encoders to highlighted pair
-\draw[arrImg] (img) -- (imgEnc);
-\draw[arrTxt] (txt) -- (txtEnc);
-\draw[arrImg] (imgEnc.east) to[out=0, in=160] (iHi);
-\draw[arrTxt] (txtEnc.east) to[out=0, in=200] (tHi);
+\draw[arr] (img) -- (imgEnc);
+\draw[arr] (txt) -- (txtEnc);
+\draw[arr] (imgEnc.east) to[out=0, in=160] (iHi);
+\draw[arr] (txtEnc.east) to[out=0, in=200] (tHi);
 
 % Legend
-\node[font=\scriptsize\sffamily, anchor=west] at (5.7,-2.55) {\textcolor{clipImgC}{$\bullet$}\;image embeddings};
-\node[font=\scriptsize\sffamily, anchor=west] at (8.5,-2.55) {\textcolor{clipTxtC}{$\bullet$}\;text embeddings};
+\node[anchor=west] at (5.7,-2.55) {\textcolor{cIndigo}{$\bullet$}\;image embeddings};
+\node[anchor=west] at (8.5,-2.55) {\textcolor{cTeal}{$\bullet$}\;text embeddings};
 
 \end{tikzpicture}
 \caption{The dual-encoder architecture of CLIP. Image and text encoders are trained jointly so that the embeddings of matching (image, caption) pairs land close together in a shared space, while non-matching pairs are pushed apart. The dashed circle highlights the embedding of the example coffee-mug photo together with its caption; dotted segments mark four further matched pairs.}

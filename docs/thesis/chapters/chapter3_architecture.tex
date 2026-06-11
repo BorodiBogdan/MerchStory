@@ -153,77 +153,110 @@ The platform is organised in three tiers. A \emph{client}, shipped to the retail
 
 \begin{figure}[ht]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % clients / gateway
+\definecolor{cSlate}{HTML}{4A5568}  % application server
+\definecolor{cTeal}{HTML}{20756C}   % data plane
+\definecolor{cAmber}{HTML}{B07A1F}  % on-device cache
+\definecolor{cGray}{HTML}{7C8390}   % external services
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    client/.style={draw, rounded corners=2pt, minimum width=20mm, minimum height=7mm, align=center, fill=gray!5},
-    gw/.style={draw, rounded corners=2pt, minimum width=92mm, minimum height=8mm, align=center, fill=gray!15},
-    svc/.style={draw, rounded corners=2pt, minimum width=22mm, minimum height=10mm, align=center, fill=gray!5},
-    cache/.style={draw, rounded corners=2pt, minimum width=98mm, minimum height=7mm, align=center, fill=yellow!15},
-    store/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum width=22mm, minimum height=10mm, align=center, fill=gray!5},
-    ext/.style={draw, dashed, rounded corners=2pt, minimum width=24mm, minimum height=8mm, align=center},
-    arr/.style={-{Latex[length=1.6mm]}, thick}
+    font=\sffamily\scriptsize,
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, inner sep=0pt,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    cli/.style={draw=cIndigo, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                minimum width=28mm, minimum height=7.5mm, align=center, text=cInk},
+    chip/.style={draw=cSlate, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                 text width=21.5mm, minimum height=9.5mm, align=center,
+                 inner xsep=3pt, text=cInk},
+    store/.style={draw=cTeal, line width=0.6pt, cylinder, shape border rotate=90,
+                  aspect=0.22, minimum width=26mm, minimum height=12mm, align=center,
+                  cylinder uses custom fill, cylinder body fill=white,
+                  cylinder end fill=cTeal!15, text=cInk},
+    ext/.style={draw=cGray, line width=0.6pt, dash pattern=on 2.4pt off 1.7pt,
+                rounded corners=2.5pt, fill=white, minimum width=28mm,
+                minimum height=7.5mm, align=center, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
 
-% Clients (top)
-\node[client] (web)     at (2.0,8.0) {Web client};
-\node[client] (ios)     at (5.0,8.0) {iOS client};
-\node[client] (android) at (8.0,8.0) {Android client};
+% ============ tier cards (drawn first, content on top) ============
+\node[card=cIndigo, fill=cIndigo!7, minimum width=110mm, minimum height=29.5mm]
+      (clientsCard) at (9.8,10.925) {};
+\node[card=cSlate, fill=cSlate!8, minimum width=110mm, minimum height=30.5mm]
+      (serverCard) at (9.8,5.375) {};
+\node[card=cTeal, fill=cTeal!8, minimum width=110mm, minimum height=20.5mm]
+      (dataCard) at (9.8,1.575) {};
+\node[draw=cGray, line width=0.9pt, dash pattern=on 2.4pt off 1.7pt,
+      rounded corners=3pt, inner sep=0pt, fill=cGray!6,
+      minimum width=36mm, minimum height=34.5mm]
+      (extCard) at (1.8,5.375) {};
 
-% API gateway centered above the application server, raised for breathing room
-\node[gw] (gw) at (5.0,6.5) {API gateway (TLS, CORS, rate limits)};
+% ============ card header tabs ============
+\node[tab=cIndigo] at ([xshift=4mm]clientsCard.north west) {Clients};
+\node[tab=cSlate, minimum height=7.5mm, align=left]
+      at ([xshift=4mm]serverCard.north west)
+      {Application server\\(.NET, Semantic Kernel)};
+\node[tab=cTeal] at ([xshift=4mm]dataCard.north west) {Data plane};
+\node[tab=cGray] at ([xshift=4mm]extCard.north west) {External services};
 
-% Application server: feature services in two rows of four, spacing 2.5 units
-\node[svc] (auth)    at (1.25,4.4) {Auth};
-\node[svc] (shop)    at (3.75,4.4) {Shop profile};
-\node[svc] (prod)    at (6.25,4.4) {Product library};
-\node[svc] (gallery) at (8.75,4.4) {Gallery};
+% ============ clients tier ============
+\node[draw=cAmber, line width=0.6pt, rounded corners=2.5pt, fill=cAmber!14,
+      minimum width=102mm, minimum height=8.5mm, align=center, text=cInk]
+      (cache) at (9.8,11.6)
+      {On-device cache, one per device:\\product list and gallery (cleared on writes)};
+\node[cli] (web)     at (6.1,10.2)  {Web client};
+\node[cli] (ios)     at (9.8,10.2)  {iOS client};
+\node[cli] (android) at (13.5,10.2) {Android client};
 
-\node[svc] (refs)    at (1.25,3.0) {Reference\\search};
-\node[svc] (gen)     at (3.75,3.0) {Image\\generation};
-\node[svc] (reco)    at (6.25,3.0) {Recommendation\\engine};
-\node[svc] (bill)    at (8.75,3.0) {Billing\\(credits)};
+% ============ API gateway ============
+\node[draw=cIndigo, line width=0.9pt, rounded corners=3pt, fill=cIndigo!14,
+      minimum width=86mm, minimum height=8mm, align=center, text=cInk,
+      drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                   fill=black, opacity=0.12}]
+      (gw) at (9.8,8.45) {API gateway (TLS, CORS, rate limits)};
 
-% On-device cache lives with the clients, one per device
-\node[cache] (cache) at (5.0,9.5) {On-device cache, one per device: product list and gallery (cleared on writes)};
+% ============ application server: feature services ============
+\node[chip] (auth)    at (5.75,6.025)  {Auth};
+\node[chip] (shop)    at (8.45,6.025)  {Shop profile};
+\node[chip] (prod)    at (11.15,6.025) {Product library};
+\node[chip] (gallery) at (13.85,6.025) {Gallery};
+\node[chip] (refs)    at (5.75,4.725)  {Reference\\search};
+\node[chip] (gen)     at (8.45,4.725)  {Image\\generation};
+\node[chip] (reco)    at (11.15,4.725) {Recommendation\\engine};
+\node[chip] (bill)    at (13.85,4.725) {Billing\\(credits)};
 
-% Application server bounding box
-\begin{pgfonlayer}{background}
-\node[draw, dashed, rounded corners=4pt, inner sep=4mm,
-      fit=(auth)(shop)(prod)(gallery)(refs)(gen)(reco)(bill),
-      label={[font=\scriptsize\itshape]above left:Application server (.NET, Semantic Kernel)}] (server) {};
-\end{pgfonlayer}
+% ============ data plane ============
+\node[store] (db)   at (8.1,1.575)  {PostgreSQL\\+ pgvector};
+\node[store] (blob) at (11.5,1.575) {Blob storage};
 
-% Data plane (lowered for breathing room under the cluster)
-\node[store] (db)   at (3.5,-0.8) {PostgreSQL\\+ pgvector};
-\node[store] (blob) at (6.5,-0.8) {Blob storage};
+% ============ external services ============
+\node[ext] (ai)  at (1.8,6.425) {Multimodal AI\\providers};
+\node[ext] (bg)  at (1.8,5.375) {Background\\removal};
+\node[ext] (geo) at (1.8,4.325) {Geocoding};
 
-% External services (left)
-\node[ext] (ai)  at (-2.6,4.4) {Multimodal AI\\providers};
-\node[ext] (bg)  at (-2.6,3.0) {Background\\removal};
-\node[ext] (geo) at (-2.6,1.7) {Geocoding};
-
-% Arrows: clients to gateway
-\draw[arr] (web)     -- (web     |- gw.north);
-\draw[arr] (ios)     -- (gw.north);
-\draw[arr] (android) -- (android |- gw.north);
-
-% Clients read from their on-device cache
+% ============ arrows ============
+% clients read from their on-device cache
 \draw[arr] (cache.south -| web)     -- (web.north);
 \draw[arr] (cache.south -| ios)     -- (ios.north);
 \draw[arr] (cache.south -| android) -- (android.north);
-
-% Gateway to server (straight down, centred)
-\draw[arr] (gw.south) -- (server.north);
-
-% Server to data plane (straight vertical lines)
-\draw[arr] (server.south -| db.north)   -- (db.north);
-\draw[arr] (server.south -| blob.north) -- (blob.north);
-
-% External services to server
-\draw[arr] (ai.east)  -- (server.west |- ai);
-\draw[arr] (bg.east)  -- (server.west |- bg);
-\draw[arr] (geo.east) -- (server.west |- geo);
+% clients to gateway
+\draw[arr] (web)     -- (web     |- gw.north);
+\draw[arr] (ios)     -- (gw.north);
+\draw[arr] (android) -- (android |- gw.north);
+% gateway to application server
+\draw[arr] (gw.south) -- (serverCard.north);
+% server to data plane
+\draw[arr] (serverCard.south -| db.north)   -- (db.north);
+\draw[arr] (serverCard.south -| blob.north) -- (blob.north);
+% external services to server
+\draw[arr] (ai.east)  -- (serverCard.west |- ai);
+\draw[arr] (bg.east)  -- (serverCard.west |- bg);
+\draw[arr] (geo.east) -- (serverCard.west |- geo);
 
 \end{tikzpicture}%
 }
@@ -237,38 +270,52 @@ Two request shapes are supported. A \emph{synchronous} request is served end-to-
 
 \begin{figure}[ht]
 \centering
+% --- same palette as Figure \ref{fig:three-tier} ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % client
+\definecolor{cSlate}{HTML}{4A5568}  % server
 \begin{minipage}[t]{0.46\textwidth}
 \centering
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize\sffamily},
-    arr/.style={-{Latex[length=1.6mm]}, thick}
+    baseline=(cl.north),
+    font=\sffamily\scriptsize,
+    actor/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                  minimum width=17mm, minimum height=6.5mm, align=center, text=cInk},
+    life/.style={draw=cInk!35, line width=0.6pt, dash pattern=on 2.4pt off 1.7pt},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    every node/.style={text=cInk}
 ]
-\node (cl) at (0,0) {Client};
-\node (sv) at (3.0,0) {Server};
-\draw[thick] (cl) -- ++(0,-2.6);
-\draw[thick] (sv) -- ++(0,-2.6);
-\draw[arr] (0,-0.6) -- node[above]{request} (3.0,-0.6);
-\draw[arr] (3.0,-1.6) -- node[above]{response} (0,-1.6);
-\node[align=center] at (1.5,-2.4) {\itshape synchronous};
+\node[actor=cIndigo] (cl) at (0,0)   {Client};
+\node[actor=cSlate]  (sv) at (3.4,0) {Server};
+\draw[life] (cl.south) -- (0,-2.6);
+\draw[life] (sv.south) -- (3.4,-2.6);
+\draw[arr] (0,-1.0)   -- node[above]{request}  (3.4,-1.0);
+\draw[arr] (3.4,-2.0) -- node[above]{response} (0,-2.0);
+\node[align=center, text=cInk!75] at (1.7,-3.0) {\itshape synchronous};
 \end{tikzpicture}
 \end{minipage}\hfill
 \begin{minipage}[t]{0.46\textwidth}
 \centering
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize\sffamily},
-    arr/.style={-{Latex[length=1.6mm]}, thick}
+    baseline=(cl.north),
+    font=\sffamily\scriptsize,
+    actor/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                  minimum width=17mm, minimum height=6.5mm, align=center, text=cInk},
+    life/.style={draw=cInk!35, line width=0.6pt, dash pattern=on 2.4pt off 1.7pt},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    every node/.style={text=cInk}
 ]
-\node (cl) at (0,0) {Client};
-\node (sv) at (3.0,0) {Server};
-\draw[thick] (cl) -- ++(0,-3.6);
-\draw[thick] (sv) -- ++(0,-3.6);
-\draw[arr] (0,-0.5) -- node[above]{submit} (3.0,-0.5);
-\draw[arr] (3.0,-1.0) -- node[above]{job id} (0,-1.0);
-\draw[arr] (0,-1.7) -- node[above]{poll} (3.0,-1.7);
-\draw[arr] (3.0,-2.1) -- node[above]{pending} (0,-2.1);
-\draw[arr] (0,-2.7) -- node[above]{poll} (3.0,-2.7);
-\draw[arr] (3.0,-3.1) -- node[above]{result} (0,-3.1);
-\node[align=center] at (1.5,-3.5) {\itshape asynchronous job};
+\node[actor=cIndigo] (cl) at (0,0)   {Client};
+\node[actor=cSlate]  (sv) at (3.4,0) {Server};
+\draw[life] (cl.south) -- (0,-4.45);
+\draw[life] (sv.south) -- (3.4,-4.45);
+\draw[arr] (0,-0.9)    -- node[above]{submit}  (3.4,-0.9);
+\draw[arr] (3.4,-1.45) -- node[above]{job id}  (0,-1.45);
+\draw[arr] (0,-2.25)   -- node[above]{poll}    (3.4,-2.25);
+\draw[arr] (3.4,-2.8)  -- node[above]{pending} (0,-2.8);
+\draw[arr] (0,-3.6)    -- node[above]{poll}    (3.4,-3.6);
+\draw[arr] (3.4,-4.15) -- node[above]{result}  (0,-4.15);
+\node[align=center, text=cInk!75] at (1.7,-4.85) {\itshape asynchronous job};
 \end{tikzpicture}
 \end{minipage}
 \caption{The two request shapes supported by the platform. Synchronous requests are served while the client waits; asynchronous job requests return immediately with a job identifier, and the client polls a status endpoint until the result is available.}
@@ -293,14 +340,8 @@ The retailer's first encounter with the platform is a sign-in screen with the op
 
 \begin{figure}[!ht]
 \centering
-\begin{minipage}[t]{0.48\textwidth}
-\centering
-\includegraphics[width=\linewidth]{figures/client/login.png}
-\end{minipage}\hfill
-\begin{minipage}[t]{0.48\textwidth}
-\centering
-\includegraphics[width=\linewidth]{figures/client/onboarding.png}
-\end{minipage}
+\includegraphics[height=0.28\textwidth]{figures/client/login.png}\hfill
+\includegraphics[height=0.28\textwidth]{figures/client/onboarding.png}
 \caption{Login screen and shop onboarding step.}
 \label{fig:client-auth}
 \end{figure}
@@ -351,44 +392,54 @@ The choice of orchestrator does not lock the platform to the Microsoft AI ecosys
 
 \begin{figure}[!ht]
 \centering
+% --- same palette as Figure \ref{fig:three-tier} ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % Semantic Kernel / Azure
+\definecolor{cSlate}{HTML}{4A5568}  % application server
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    layer/.style={draw, rounded corners=3pt, minimum width=120mm, minimum height=11mm, align=center, fill=gray!10, line width=0.4pt},
-    sk/.style={draw, rounded corners=3pt, minimum width=120mm, minimum height=14mm, align=center, fill=blue!8, line width=0.4pt},
-    azure/.style={draw, rounded corners=3pt, minimum width=24mm, minimum height=12mm, align=center, fill=blue!8, line width=0.4pt},
-    prov/.style={draw, rounded corners=3pt, minimum width=24mm, minimum height=12mm, align=center, fill=gray!5, line width=0.4pt},
-    arr/.style={-{Latex[length=2mm]}, thick, gray!75}
+    font=\sffamily\scriptsize,
+    bar/.style={draw=#1, line width=0.9pt, rounded corners=3pt, align=center,
+                text=cInk, drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                                        fill=black, opacity=0.12}},
+    groupcard/.style={draw=#1, line width=0.9pt, rounded corners=3pt, inner sep=0pt,
+                      dash pattern=on 2.4pt off 1.7pt, fill=#1!6,
+                      minimum width=62mm, minimum height=17mm},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    chip/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                 minimum width=27mm, minimum height=11mm, align=center, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
 
-% Top layer
-\node[layer] (api) at (0, 4.5) {\textbf{Application server} \quad (ASP.NET Core, .NET 10)};
+% ============ layer bars ============
+\node[bar=cSlate, fill=cSlate!8, minimum width=146mm, minimum height=10mm]
+      (api) at (0,4.6) {\textbf{Application server} \quad (ASP.NET Core, .NET 10)};
+\node[bar=cIndigo, fill=cIndigo!14, minimum width=146mm, minimum height=13mm]
+      (sk) at (0,2.85)
+      {\textbf{Semantic Kernel}\\prompt templates \;$\cdot$\; retrieval-augmented context \;$\cdot$\; multi-stage chaining};
 
-% Semantic Kernel layer
-\node[sk] (sk) at (0, 2.7) {\textbf{Semantic Kernel}\\\scriptsize prompt templates \;$\cdot$\; retrieval-augmented context \;$\cdot$\; multi-stage chaining};
+% ============ provider group cards ============
+\node[groupcard=cIndigo] (azureCard) at (-4.0,0.3) {};
+\node[groupcard=cGray]   (extCard)   at ( 4.0,0.3) {};
+% ============ provider chips ============
+\node[chip=cIndigo] (aoai) at (-5.45,0.3) {Azure OpenAI};
+\node[chip=cIndigo] (afnd) at (-2.55,0.3) {Azure AI\\Foundry};
+\node[chip=cGray]   (gem)  at ( 2.55,0.3) {Google Gemini};
+\node[chip=cGray]   (nb)   at ( 5.45,0.3) {Nano Banana};
 
-% Provider clusters with bigger horizontal gap between Azure and external
-\node[azure] (aoai) at (-5.4, 0.3) {Azure OpenAI};
-\node[azure] (afnd) at (-2.4, 0.3) {Azure AI\\Foundry};
-\node[prov]  (gem)  at ( 2.4, 0.3) {Google Gemini};
-\node[prov]  (nb)   at ( 5.4, 0.3) {Nano Banana};
-
-% Cluster dashed wrappers with labels
-\begin{pgfonlayer}{background}
-\node[draw=blue!45, dashed, rounded corners=4pt, inner sep=2.5mm,
-      fit=(aoai)(afnd),
-      label={[font=\scriptsize\itshape, blue!65]below:Azure ecosystem}] (azurebox) {};
-\node[draw=gray!55, dashed, rounded corners=4pt, inner sep=2.5mm,
-      fit=(gem)(nb),
-      label={[font=\scriptsize\itshape, gray!75]below:External providers}] (extbox) {};
-\end{pgfonlayer}
-
-% Arrows
+% ============ arrows ============
 \draw[arr] (api.south) -- (sk.north);
 \draw[arr] (sk.south) -- (aoai.north);
 \draw[arr] (sk.south) -- (afnd.north);
 \draw[arr] (sk.south) -- (gem.north);
 \draw[arr] (sk.south) -- (nb.north);
+
+% ============ group tabs (drawn last so they sit above the arrows) ============
+\node[tab=cIndigo] at ([xshift=4mm]azureCard.north west) {Azure ecosystem};
+\node[tab=cGray]   at ([xshift=4mm]extCard.north west)   {External providers};
 
 \end{tikzpicture}%
 }
@@ -458,18 +509,28 @@ Each feature follows a simple internal layering, shown in Figure~\ref{fig:server
 
 \begin{figure}[H]
 \centering
+% --- same palette as Figure \ref{fig:three-tier} ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % entry / orchestration
+\definecolor{cSlate}{HTML}{4A5568}  % feature internals
+\definecolor{cGray}{HTML}{7C8390}   % external boundary
 \begin{tikzpicture}[
-    node distance=8mm,
-    every node/.style={font=\small\sffamily},
-    box/.style={draw, rounded corners=2pt, minimum width=72mm, minimum height=10mm, align=center, fill=gray!5},
-    arr/.style={-{Latex[length=2mm]}, thick}
+    font=\sffamily\scriptsize,
+    bar/.style={draw=#1, line width=0.9pt, rounded corners=3pt, align=center,
+                minimum width=78mm, minimum height=9mm, text=cInk,
+                drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                             fill=black, opacity=0.12}},
+    extbar/.style={draw=cGray, line width=0.9pt, rounded corners=3pt, align=center,
+                   dash pattern=on 2.4pt off 1.7pt, fill=cGray!6,
+                   minimum width=78mm, minimum height=9mm, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
-\node[box] (ep) {Endpoints (\texttt{Map\dots Endpoints})};
-\node[box, below=of ep] (svc) {Feature services};
-\node[box, below=of svc] (orch) {Semantic Kernel + \texttt{IImageProvider}};
-\node[box, below=of orch] (http) {External HTTP boundary};
-\draw[arr] (ep) -- (svc);
-\draw[arr] (svc) -- (orch);
+\node[bar=cIndigo, fill=cIndigo!7]  (ep)   at (0,0)    {Endpoints (\texttt{Map\dots Endpoints})};
+\node[bar=cSlate,  fill=cSlate!8]   (svc)  at (0,-1.7) {Feature services};
+\node[bar=cIndigo, fill=cIndigo!14] (orch) at (0,-3.4) {Semantic Kernel + \texttt{IImageProvider}};
+\node[extbar]                       (http) at (0,-5.1) {External HTTP boundary};
+\draw[arr] (ep)   -- (svc);
+\draw[arr] (svc)  -- (orch);
 \draw[arr] (orch) -- (http);
 \end{tikzpicture}
 \caption{Internal layering of a feature folder on the server.}
@@ -483,44 +544,57 @@ The data layer holds every piece of state that survives a request. PostgreSQL wi
 
 \begin{figure}[H]
 \centering
+% --- same palette as Figure \ref{fig:three-tier} ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cSlate}{HTML}{4A5568}  % Azure compute
+\definecolor{cTeal}{HTML}{20756C}   % data plane
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    compute/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=10mm, align=center, fill=blue!5},
-    cache/.style={draw, rounded corners=2pt, minimum width=110mm, minimum height=7mm, align=center, fill=yellow!15},
-    pgv/.style={draw, rounded corners=2pt, minimum width=24mm, minimum height=11mm, align=center, fill=blue!8},
-    blob/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum width=22mm, minimum height=14mm, align=center, fill=gray!5},
-    arr/.style={-{Latex[length=1.8mm]}, thick}
+    font=\sffamily\scriptsize,
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, inner sep=0pt,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    chip/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                 minimum width=32mm, minimum height=11mm, align=center, text=cInk},
+    store/.style={draw=cTeal, line width=0.6pt, cylinder, shape border rotate=90,
+                  aspect=0.22, minimum width=27mm, minimum height=16mm, align=center,
+                  cylinder uses custom fill, cylinder body fill=white,
+                  cylinder end fill=cTeal!15, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
 
-% Compute layer
-\node[compute] (api)    at (-4.2, 5.2) {API replicas\\\scriptsize (.NET 10)};
-\node[compute] (recjob) at ( 0.0, 5.2) {Recommendation\\job runner};
-\node[compute] (tokjob) at ( 4.2, 5.2) {Refresh-token\\cleaner};
+% ============ cards (drawn first, content on top) ============
+\node[card=cSlate, fill=cSlate!8, minimum width=118mm, minimum height=19mm]
+      (computeCard) at (0,3.2) {};
+\node[card=cTeal, fill=cTeal!8, minimum width=92mm, minimum height=21mm]
+      (pgCard) at (-1.4,0) {};
 
-\begin{pgfonlayer}{background}
-\node[draw, dashed, rounded corners=4pt, inner sep=4mm,
-      fit=(api)(recjob)(tokjob),
-      label={[font=\scriptsize\itshape]above:Azure Container Apps revision}] (compute_box) {};
-\end{pgfonlayer}
+% ============ compute chips ============
+\node[chip=cSlate] (api)    at (-3.9,3.2) {API replicas\\(.NET 10)};
+\node[chip=cSlate] (recjob) at (0,3.2)    {Recommendation\\job runner};
+\node[chip=cSlate] (tokjob) at (3.9,3.2)  {Refresh-token\\cleaner};
 
-% PostgreSQL Flexible Server with three sub-stores
-\node[pgv] (relt) at (-4.0, 0.4) {Relational\\tables};
-\node[pgv] (clip) at (-1.3, 0.4) {pgvector\\(CLIP image\\embeddings)};
-\node[pgv] (txt)  at ( 1.4, 0.4) {pgvector\\(text\\embeddings)};
+% ============ database sub-stores ============
+\node[chip=cTeal, minimum width=26mm, minimum height=14mm] (relt) at (-4.2,0)
+      {Relational\\tables};
+\node[chip=cTeal, minimum width=26mm, minimum height=14mm] (clip) at (-1.4,0)
+      {pgvector\\(CLIP image\\embeddings)};
+\node[chip=cTeal, minimum width=26mm, minimum height=14mm] (txt)  at (1.4,0)
+      {pgvector\\(text\\embeddings)};
 
-\begin{pgfonlayer}{background}
-\node[draw, dashed, rounded corners=4pt, inner sep=3mm,
-      fit=(relt)(clip)(txt),
-      label={[font=\scriptsize\itshape]above left:Azure Database for PostgreSQL Flexible Server}] (pg_box) {};
-\end{pgfonlayer}
+% ============ blob storage ============
+\node[store] (blobstore) at (4.9,0) {Azure\\Blob Storage};
 
-% Blob storage on the right
-\node[blob] (blobstore) at (5.0, -0.2) {Azure\\Blob Storage};
+% ============ arrows ============
+\draw[arr] (computeCard.south -| 1.9,0) -- (pgCard.north -| 1.9,0);
+\draw[arr] (computeCard.south -| blobstore.north) -- (blobstore.north);
 
-% Arrows
-\draw[arr] (compute_box.south -| pg_box.north) -- (pg_box.north);
-\draw[arr] (compute_box.south -| blobstore.north) -- (blobstore.north);
+% ============ card header tabs (drawn last) ============
+\node[tab=cSlate] at ([xshift=4mm]computeCard.north west) {Azure Container Apps revision};
+\node[tab=cTeal]  at ([xshift=4mm]pgCard.north west) {Azure Database for PostgreSQL Flexible Server};
 
 \end{tikzpicture}%
 }
@@ -535,58 +609,46 @@ The schema is a foreign-key spine that ties every record to a tenant. At its cen
 
 \begin{figure}[H]
 \centering
+% --- same palette as Figure \ref{fig:three-tier} ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % AppUser hub
+\definecolor{cSlate}{HTML}{4A5568}  % plain entities
+\definecolor{cTeal}{HTML}{20756C}   % vector-bearing entities + data plane
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\tiny},
-    entity/.style={
-        draw, rectangle split, rectangle split parts=2,
-        rectangle split draw splits=true,
-        rectangle split part fill={gray!20, gray!5},
-        rounded corners=1pt,
-        text width=22mm,
-        align=left,
-        inner sep=1.5pt
-    },
-    user/.style={
-        draw, rectangle split, rectangle split parts=2,
-        rectangle split draw splits=true,
-        rectangle split part fill={blue!22, blue!7},
-        rounded corners=1pt,
-        text width=22mm,
-        align=left,
-        inner sep=1.5pt
-    },
-    vec/.style={
-        draw, rectangle split, rectangle split parts=2,
-        rectangle split draw splits=true,
-        rectangle split part fill={yellow!35, yellow!12},
-        rounded corners=1pt,
-        text width=22mm,
-        align=left,
-        inner sep=1.5pt
-    },
-    fk/.style={->, >=Latex, thin, gray!70}
+    font=\sffamily\scriptsize,
+    ent/.style={rectangle split, rectangle split parts=2,
+                rectangle split part fill={#1, white},
+                draw=#1, line width=0.6pt, rounded corners=2pt,
+                text width=27mm, align=left, inner sep=3pt, text=cInk},
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!6,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    fk/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
 
-% Tenant tables above AppUser
-\node[entity] (shop) at (-4.5, 3.4) {%
-    \textbf{ShopProfile}
+% ============ tenant-scoped tables above AppUser ============
+\node[ent=cSlate, anchor=south] (shop) at (-5.6, 3.2) {%
+    \textcolor{white}{\bfseries ShopProfile}
     \nodepart{two}
     UserId (FK, unique)\\
     BrandName\\
     BusinessDomain\\
     Currency
 };
-\node[entity] (prod) at (0, 3.4) {%
-    \textbf{Product}
+\node[ent=cSlate, anchor=south] (prod) at (0, 3.2) {%
+    \textcolor{white}{\bfseries Product}
     \nodepart{two}
     UserId (FK)\\
     Name\\
     Price, Category\\
     ImageBlobKey
 };
-\node[entity] (gen) at (4.5, 3.4) {%
-    \textbf{GeneratedImage}
+\node[ent=cSlate, anchor=south] (gen) at (5.6, 3.2) {%
+    \textcolor{white}{\bfseries GeneratedImage}
     \nodepart{two}
     UserId (FK)\\
     Name\\
@@ -594,9 +656,9 @@ The schema is a foreign-key spine that ties every record to a tenant. At its cen
     ImageBlobKey
 };
 
-% AppUser at centre
-\node[user] (user) at (0, 1.6) {%
-    \textbf{AppUser}
+% ============ AppUser at centre ============
+\node[ent=cIndigo, line width=0.9pt] (user) at (0, 1.5) {%
+    \textcolor{white}{\bfseries AppUser}
     \nodepart{two}
     Id (PK)\\
     Email\\
@@ -604,31 +666,31 @@ The schema is a foreign-key spine that ties every record to a tenant. At its cen
     CreditBalance
 };
 
-% Tenant tables below AppUser
-\node[entity] (coin) at (-4.5,-0.2) {%
-    \textbf{CreditTransaction}
+% ============ tenant-scoped tables below AppUser ============
+\node[ent=cSlate, anchor=north] (coin) at (-5.6,-0.2) {%
+    \textcolor{white}{\bfseries CreditTransaction}
     \nodepart{two}
     UserId (FK)\\
     Amount\\
     BalanceAfter\\
     RelatedGenImage (FK)
 };
-\node[entity] (rec) at (0,-0.2) {%
-    \textbf{DailyRecommend.}
+\node[ent=cSlate, anchor=north] (rec) at (0,-0.2) {%
+    \textcolor{white}{\bfseries DailyRecommend.}
     \nodepart{two}
     UserId (FK)\\
     GeneratedAtUtc\\
     IdeasJson
 };
-\node[vec] (emb) at (4.5,-0.2) {%
-    \textbf{IdeaEmbedding}
+\node[ent=cTeal, anchor=north] (emb) at (5.6,-0.2) {%
+    \textcolor{white}{\bfseries IdeaEmbedding}
     \nodepart{two}
     UserId (FK)\\
     DailyRecId (FK)\\
     Embedding (text)
 };
 
-% FK arrows tenant -> AppUser
+% ============ FK arrows tenant -> AppUser ============
 \draw[fk] (shop) -- (user);
 \draw[fk] (prod) -- (user);
 \draw[fk] (gen)  -- (user);
@@ -636,38 +698,32 @@ The schema is a foreign-key spine that ties every record to a tenant. At its cen
 \draw[fk] (rec)  -- (user);
 \draw[fk] (emb)  -- (user);
 
-\begin{pgfonlayer}{background}
-\node[draw, dashed, rounded corners=4pt, inner sep=4mm,
-      fit=(shop)(prod)(gen)(user)(coin)(rec)(emb),
-      label={[font=\scriptsize\itshape]above left:Tenant-scoped tables}] (tenant_box) {};
-\end{pgfonlayer}
-
-% Global tables
-\node[entity] (cat) at (-4.5,-2.6) {%
-    \textbf{Category}
+% ============ global tables ============
+\node[ent=cSlate, anchor=north] (cat) at (-6.9,-5.0) {%
+    \textcolor{white}{\bfseries Category}
     \nodepart{two}
     Id (PK)\\
     Name\\
     ParentCategoryId (FK self)
 };
-\node[vec] (rim) at (-1.5,-2.6) {%
-    \textbf{ReferenceImage}
+\node[ent=cTeal, anchor=north] (rim) at (-2.3,-5.0) {%
+    \textcolor{white}{\bfseries ReferenceImage}
     \nodepart{two}
     CategoryId (FK)\\
     Name\\
     ImageBlobKey\\
     Embedding (CLIP)
 };
-\node[vec] (pp) at (1.5,-2.6) {%
-    \textbf{PromoPlaybook}
+\node[ent=cTeal, anchor=north] (pp) at (2.3,-5.0) {%
+    \textcolor{white}{\bfseries PromoPlaybook}
     \nodepart{two}
     BusinessDomain\\
     Theme, Trigger\\
     Tactics\\
     Embedding (text)
 };
-\node[entity] (hol) at (4.5,-2.6) {%
-    \textbf{Holiday}
+\node[ent=cSlate, anchor=north] (hol) at (6.9,-5.0) {%
+    \textcolor{white}{\bfseries Holiday}
     \nodepart{two}
     CountryCode\\
     Year, Date\\
@@ -675,13 +731,22 @@ The schema is a foreign-key spine that ties every record to a tenant. At its cen
 };
 
 \draw[fk] (rim) -- (cat);
-\draw[fk] (cat.north) to[out=110, in=70, looseness=8] (cat.north);
+\draw[fk] (cat.north) .. controls +(125:9mm) and +(55:9mm) .. (cat.north);
 
+% phantom apex so the global card encloses the self-loop
+\node[inner sep=0pt, minimum size=0pt] (catloop) at (-6.9,-4.25) {};
+
+% ============ group cards (background) ============
 \begin{pgfonlayer}{background}
-\node[draw, dashed, rounded corners=4pt, inner sep=3mm,
-      fit=(cat)(rim)(pp)(hol),
-      label={[font=\scriptsize\itshape]below left:Global tables}] (global_box) {};
+\node[card=cTeal, inner sep=4mm, minimum width=174mm,
+      fit=(shop)(prod)(gen)(user)(coin)(rec)(emb)] (tenantCard) {};
+\node[card=cTeal, inner sep=3mm, minimum width=174mm,
+      fit=(cat)(rim)(pp)(hol)(catloop)] (globalCard) {};
 \end{pgfonlayer}
+
+% ============ card header tabs (drawn last) ============
+\node[tab=cTeal] at ([xshift=4mm]tenantCard.north west) {Tenant-scoped tables};
+\node[tab=cTeal] at ([xshift=4mm]globalCard.north west) {Global tables};
 
 \end{tikzpicture}%
 }
@@ -739,30 +804,40 @@ Binary assets such as raw and processed product photographs, generated images an
 
 \begin{figure}[!ht]
 \centering
+% --- same palette as Figure \ref{fig:three-tier} ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % client
+\definecolor{cSlate}{HTML}{4A5568}  % application server
+\definecolor{cTeal}{HTML}{20756C}   % data stores
+\definecolor{cAmber}{HTML}{B07A1F}  % signing step
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    actor/.style={draw, rectangle, rounded corners=2pt, minimum width=24mm, minimum height=8mm, align=center, fill=gray!10},
-    arr/.style={->, >=Latex, thin}
+    font=\sffamily\scriptsize,
+    actor/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                  minimum width=27mm, minimum height=7.5mm, align=center, text=cInk},
+    life/.style={draw=cInk!35, line width=0.6pt, dash pattern=on 2.4pt off 1.7pt},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    every node/.style={text=cInk}
 ]
 
-% Actors at top
-\node[actor] (client) at (0, 5)   {Client};
-\node[actor] (server) at (4.5, 5) {Application server};
-\node[actor] (db)     at (9, 5)   {PostgreSQL};
-\node[actor] (blob)   at (13, 5)  {Blob storage};
+% ============ actors ============
+\node[actor=cIndigo] (client) at (0, 5)   {Client};
+\node[actor=cSlate]  (server) at (4.5, 5) {Application server};
+\node[actor=cTeal]   (db)     at (9, 5)   {PostgreSQL};
+\node[actor=cTeal]   (blob)   at (13, 5)  {Blob storage};
 
-% Lifelines
-\draw[dashed, gray!60] (client.south) -- ++(0,-7);
-\draw[dashed, gray!60] (server.south) -- ++(0,-7);
-\draw[dashed, gray!60] (db.south)     -- ++(0,-7);
-\draw[dashed, gray!60] (blob.south)   -- ++(0,-7);
+% ============ lifelines ============
+\draw[life] (client.south) -- (0,-1.6);
+\draw[life] (server.south) -- (4.5,-1.6);
+\draw[life] (db.south)     -- (9,-1.6);
+\draw[life] (blob.south)   -- (13,-1.6);
 
-% Messages
+% ============ messages ============
 \draw[arr] (0, 4.0)   -- node[above]{1. GET image} (4.5, 4.0);
 \draw[arr] (4.5, 3.2) -- node[above]{2. lookup blob key} (9, 3.2);
 \draw[arr] (9, 2.4)   -- node[above]{3. blob key + content type} (4.5, 2.4);
-\node[font=\tiny\itshape, text=gray!70] at (4.5, 1.6) {sign SAS URL};
+\node[draw=cAmber, line width=0.6pt, rounded corners=2.5pt, fill=cAmber!12,
+      inner xsep=5pt, inner ysep=3pt] at (4.5, 1.6) {\itshape sign SAS URL};
 \draw[arr] (4.5, 0.8) -- node[above]{4. signed SAS URL} (0, 0.8);
 \draw[arr] (0, -0.2)  -- node[above]{5. GET via signed URL} (13, -0.2);
 \draw[arr] (13, -1.0) -- node[above]{6. image bytes} (0, -1.0);
@@ -780,70 +855,88 @@ Azure was chosen because it gives the platform a managed, well-supported and tru
 
 \begin{figure}[ht]
 \centering
+% --- same palette as Figure \ref{fig:three-tier} ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % client / ingress / VNet
+\definecolor{cSlate}{HTML}{4A5568}  % Azure compute + ops
+\definecolor{cTeal}{HTML}{20756C}   % data + secrets
+\definecolor{cGray}{HTML}{7C8390}   % external third-party
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize\sffamily},
-    box/.style={draw, rounded corners=2pt, minimum width=28mm, minimum height=10mm, align=center, fill=gray!5},
-    azurebox/.style={draw, rounded corners=2pt, minimum width=28mm, minimum height=10mm, align=center, fill=blue!10},
-    store/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum width=24mm, minimum height=12mm, align=center, fill=blue!8},
-    ext/.style={draw, dashed, rounded corners=2pt, minimum width=28mm, minimum height=10mm, align=center},
-    gh/.style={draw, rounded corners=2pt, minimum width=28mm, minimum height=10mm, align=center, fill=gray!12},
-    arr/.style={-{Latex[length=2mm]}, thick}
+    font=\sffamily\scriptsize,
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, inner sep=0pt,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    chip/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                 minimum width=30mm, minimum height=10mm, align=center, text=cInk},
+    store/.style={draw=cTeal, line width=0.6pt, cylinder, shape border rotate=90,
+                  aspect=0.22, minimum width=26mm, minimum height=15mm, align=center,
+                  cylinder uses custom fill, cylinder body fill=white,
+                  cylinder end fill=cTeal!15, text=cInk},
+    ext/.style={draw=cGray, line width=0.6pt, dash pattern=on 2.4pt off 1.7pt,
+                rounded corners=2.5pt, fill=white, minimum width=28mm,
+                minimum height=10mm, align=center, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
 
-% Top row: Client (left) and GitHub (right)
-\node[box] (cl)     at (-3.0, 8.0) {Client\\(web, iOS, Android)};
-\node[gh]  (github) at ( 4.0, 8.0) {GitHub repo\\(Actions CI/CD)};
+% ============ containers (drawn first, content on top) ============
+\node[card=cIndigo, fill=cIndigo!6, minimum width=140mm, minimum height=61mm]
+      (vnet) at (0,3.05) {};
+\node[card=cSlate, fill=cSlate!8, minimum width=72mm, minimum height=17mm]
+      (capps) at (-1.9,4.45) {};
 
-% Edge layer: Azure-provided ingress (left) and Container Registry (right)
-\node[azurebox] (apim) at (-3.0, 6.0) {Container Apps ingress\\\scriptsize (TLS, Azure DDoS)};
-\node[azurebox] (acr)  at ( 4.0, 6.0) {Container Registry\\(\texttt{merchstoryacr})};
+% ============ top row: client and GitHub ============
+\node[chip=cIndigo] (cl)     at (0.6,9.3) {Client\\(web, iOS, Android)};
+\node[ext]          (github) at (4.8,9.3) {GitHub repo\\(Actions CI/CD)};
 
-% Container Apps Environment apps
-\node[azurebox] (api) at (-2.5, 3.5) {\texttt{merchstory-api}};
-\node[azurebox] (web) at ( 1.5, 3.5) {\texttt{merchstory-web}};
+% ============ ingress (hero bar) ============
+\node[draw=cIndigo, line width=0.9pt, rounded corners=3pt, fill=cIndigo!14,
+      minimum width=50mm, minimum height=10mm, align=center, text=cInk,
+      drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                   fill=black, opacity=0.12}]
+      (apim) at (0.6,7.6) {Container Apps ingress\\(TLS, Azure DDoS)};
 
-% Storage row inside the VNet
-\node[store]    (db)   at (-5.5, 1.0) {PostgreSQL\\Flexible Server\\(pgvector)};
-\node[store]    (blob) at ( 1.0, 1.0) {Azure\\Blob Storage};
-\node[azurebox] (kv)   at ( 4.5, 1.0) {Azure Key Vault};
+% ============ Container Apps Environment ============
+\node[chip=cSlate] (api) at (-3.6,4.45) {\texttt{merchstory-api}};
+\node[chip=cSlate] (web) at (-0.2,4.45) {\texttt{merchstory-web}};
 
-% Ops row directly under merchstory-api
-\node[azurebox] (logs) at (-2.5, -1.5) {App Insights\\+ Log Analytics};
+% ============ registry ============
+\node[chip=cSlate] (acr) at (4.8,4.45) {Container Registry\\(\texttt{merchstoryacr})};
 
-% External (non-Azure) services on the left, outside the VNet
-\node[ext] (aip) at (-10.5, 5.0) {Multimodal AI\\providers};
-\node[ext] (bg)  at (-10.5, 3.5) {Background\\removal};
-\node[ext] (geo) at (-10.5, 2.0) {Geocoding};
+% ============ data, secrets and ops row ============
+\node[store]       (db)   at (-5.0,1.2) {PostgreSQL\\Flexible Server\\(pgvector)};
+\node[store]       (blob) at (-1.6,1.2) {Azure\\Blob Storage};
+\node[chip=cTeal]  (kv)   at (1.8,1.2)  {Azure Key Vault};
+\node[chip=cSlate] (logs) at (5.0,1.2)  {App Insights\\+ Log Analytics};
 
-% Container Apps Environment frame
-\begin{pgfonlayer}{background}
-\node[draw=blue!50, dashed, rounded corners=3pt, fit=(api)(web), inner sep=2.5mm, label={[font=\scriptsize\itshape, blue!60]above:Container Apps Environment}] (capps_env) {};
-\end{pgfonlayer}
+% ============ external (non-Azure) services ============
+\node[ext] (aip) at (-9.8,5.5) {Multimodal AI\\providers};
+\node[ext] (bg)  at (-9.8,4.3) {Background\\removal};
+\node[ext] (geo) at (-9.8,3.1) {Geocoding};
 
-% Private VNet frame
-\begin{pgfonlayer}{background}
-\node[draw=gray!60, dashed, rounded corners=4pt, fit=(capps_env)(acr)(db)(blob)(kv)(logs), inner sep=5mm, label={[font=\small\itshape]below right:private VNet}] (vnet) {};
-\end{pgfonlayer}
-
-% Arrows: client traffic
+% ============ arrows ============
+% client traffic
 \draw[arr] (cl) -- (apim);
-\draw[arr] (apim) -- (capps_env.north -| apim);
-
+\draw[arr] (apim.south) -- (capps.north -| 0.6,0);
 % CI/CD: GitHub push, ACR pull
-\draw[arr] (github) -- node[right, font=\tiny]{push image} (acr);
-\draw[arr] (acr) -- node[right, font=\tiny]{pull image} (web);
-
-% api → data plane
-\draw[arr] (api) -- (db);
-\draw[arr] (api) -- (blob);
-\draw[arr] (api) -- (kv);
-\draw[arr] (api) -- (logs);
-
-% api → external services
+\draw[arr] (github) -- node[right]{push image} (acr);
+\draw[arr] (acr) -- node[above]{pull image} (web);
+% api -> data plane
+\draw[arr] (api) -- (db.north);
+\draw[arr] (api) -- (blob.north);
+\draw[arr] (api) -- (kv.north);
+\draw[arr] (api) -- (logs.north);
+% api -> external services
 \draw[arr] (api.west) -- (aip.east);
 \draw[arr] (api.west) -- (bg.east);
 \draw[arr] (api.west) -- (geo.east);
+
+% ============ container tabs (drawn last so they sit above the arrows) ============
+\node[tab=cIndigo] at ([xshift=4mm]vnet.north west)  {private VNet};
+\node[tab=cSlate]  at ([xshift=4mm]capps.north west) {Container Apps Environment};
 
 \end{tikzpicture}%
 }
