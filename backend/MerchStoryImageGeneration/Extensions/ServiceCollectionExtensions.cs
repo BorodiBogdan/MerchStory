@@ -3,6 +3,7 @@ using MerchStoryImageGeneration.Services.Recommendations;
 using MerchStoryImageGeneration.Services.Recommendations.Chat;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace MerchStoryImageGeneration.Extensions;
 
@@ -61,25 +62,16 @@ public static class ServiceCollectionExtensions
             //   Local    → LM Studio / Ollama / vLLM via Recommendations:Llm:* (default)
             //   DeepSeek → hosted DeepSeek API via Recommendations:Llm:DeepSeek:*
             //   Claude   → Anthropic Messages API via Recommendations:Llm:Claude:*
+            //   ChatGPT  → OpenAI Chat Completions via Recommendations:Llm:ChatGpt:*
+            // The backend switch lives in RecommendationChatServiceFactory so the
+            // admin eval endpoint can build per-request backends the same way.
             string backend = configuration?["Recommendations:Llm:Backend"] ?? "Local";
-            if (string.Equals(backend, "Local", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(backend, "LmStudio", StringComparison.OrdinalIgnoreCase))
-            {
-                services.AddSingleton<IRecommendationChatService, LmStudioChatService>();
-            }
-            else if (string.Equals(backend, "DeepSeek", StringComparison.OrdinalIgnoreCase))
-            {
-                services.AddSingleton<IRecommendationChatService, DeepSeekChatService>();
-            }
-            else if (string.Equals(backend, "Claude", StringComparison.OrdinalIgnoreCase))
-            {
-                services.AddSingleton<IRecommendationChatService, ClaudeChatService>();
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    $"Unknown Recommendations:Llm:Backend '{backend}'. Supported: Local, DeepSeek, Claude.");
-            }
+            services.AddSingleton<IRecommendationChatService>(sp =>
+                RecommendationChatServiceFactory.Create(
+                    backend,
+                    modelOverride: null,
+                    sp.GetRequiredService<IConfiguration>(),
+                    sp.GetRequiredService<ILoggerFactory>()));
         }
         else
         {

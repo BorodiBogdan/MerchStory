@@ -241,6 +241,7 @@ app.MapProductEndpoints();
 app.MapImageGenerationEndpoints();
 app.MapReferenceImageEndpoints();
 app.MapRecommendationsEndpoints();
+app.MapRecommendationsEvalEndpoints();
 app.MapWalletEndpoints();
 app.MapPrintEndpoints();
 
