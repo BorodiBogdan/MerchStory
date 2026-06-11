@@ -1,0 +1,147 @@
+[
+  {
+    "id": "urban-market-ro-strong-weather",
+    "shop": {"brandName": "Piata Verde", "businessDomain": "Market", "targetAudience": "neighbourhood families", "shopType": "local grocery", "city": "Bucharest", "countryCode": "RO", "generationLanguage": "RO"},
+    "signals": [
+      {"source": "weather", "title": "Heatwave Friday-Sunday", "summary": "35C and sunny all weekend", "severity": "high"},
+      {"source": "trend", "title": "Weekend grilling", "summary": "People plan barbecues in hot weather", "severity": "medium"}
+    ]
+  },
+  {
+    "id": "rural-market-ro-weak",
+    "shop": {"brandName": "Magazin Mihai", "businessDomain": "Market", "targetAudience": "village regulars", "shopType": "village shop", "city": "Bran", "countryCode": "RO", "generationLanguage": "RO"},
+    "signals": [
+      {"source": "weather", "title": "Mild and cloudy", "summary": "18C, light clouds, no rain", "severity": "low"}
+    ]
+  },
+  {
+    "id": "urban-market-en-holiday",
+    "shop": {"brandName": "Corner Pantry", "businessDomain": "Market", "targetAudience": "young professionals", "shopType": "convenience store", "city": "Cluj-Napoca", "countryCode": "RO", "generationLanguage": "EN"},
+    "signals": [
+      {"source": "holiday", "title": "Easter weekend", "summary": "Orthodox Easter this Sunday", "severity": "high"}
+    ]
+  },
+  {
+    "id": "rural-bakery-ro-strong",
+    "shop": {"brandName": "Brutaria Ana", "businessDomain": "Bakery", "targetAudience": "locals", "shopType": "traditional bakery", "city": "Sibiu", "countryCode": "RO", "generationLanguage": "RO"},
+    "signals": [
+      {"source": "weather", "title": "Cold rainy week", "summary": "12C and rain Monday through Thursday", "severity": "medium"},
+      {"source": "holiday", "title": "1 Mai approaching", "summary": "Labour day long weekend next week", "severity": "medium"}
+    ]
+  },
+  {
+    "id": "urban-butcher-en-strong-weather",
+    "shop": {"brandName": "Smith Butchers", "businessDomain": "Butcher", "targetAudience": "weekend cooks", "shopType": "independent butcher", "city": "Timisoara", "countryCode": "RO", "generationLanguage": "EN"},
+    "signals": [
+      {"source": "weather", "title": "Warm sunny weekend", "summary": "27C Saturday and Sunday", "severity": "high"},
+      {"source": "trend", "title": "BBQ season starts", "summary": "Grilling searches rising locally", "severity": "medium"}
+    ]
+  },
+  {
+    "id": "rural-florist-ro-holiday",
+    "shop": {"brandName": "Floraria Lily", "businessDomain": "Florist", "targetAudience": "gift buyers", "shopType": "small florist", "city": "Brasov", "countryCode": "RO", "generationLanguage": "RO"},
+    "signals": [
+      {"source": "holiday", "title": "Mothers Day Sunday", "summary": "National Mothers Day this weekend", "severity": "high"}
+    ]
+  },
+  {
+    "id": "urban-cafe-en-weak",
+    "shop": {"brandName": "Daily Grind", "businessDomain": "Cafe", "targetAudience": "students and remote workers", "shopType": "specialty coffee", "city": "Iasi", "countryCode": "RO", "generationLanguage": "EN"},
+    "signals": [
+      {"source": "trend", "title": "Iced coffee interest", "summary": "Mild seasonal uptick in cold drinks", "severity": "low"}
+    ]
+  },
+  {
+    "id": "rural-market-en-news",
+    "shop": {"brandName": "Hilltop Store", "businessDomain": "Market", "targetAudience": "farmers and families", "shopType": "rural general store", "city": "Sighisoara", "countryCode": "RO", "generationLanguage": "EN"},
+    "signals": [
+      {"source": "news", "title": "Local fair this weekend", "summary": "Town agricultural fair Saturday", "severity": "medium"}
+    ]
+  },
+  {
+    "id": "urban-market-ro-strong-multi",
+    "shop": {"brandName": "Aprozar Central", "businessDomain": "Market", "targetAudience": "city families", "shopType": "produce market", "city": "Bucharest", "countryCode": "RO", "generationLanguage": "RO"},
+    "signals": [
+      {"source": "weather", "title": "First hot week", "summary": "30C, first real heat of the year", "severity": "high"},
+      {"source": "trend", "title": "Watermelon season", "summary": "Watermelon arriving at markets", "severity": "medium"},
+      {"source": "news", "title": "School ends Friday", "summary": "Summer break starts", "severity": "low"}
+    ]
+  },
+  {
+    "id": "rural-bakery-en-weak",
+    "shop": {"brandName": "Village Oven", "businessDomain": "Bakery", "targetAudience": "morning regulars", "shopType": "small bakery", "city": "Viscri", "countryCode": "RO", "generationLanguage": "EN"},
+    "signals": [
+      {"source": "weather", "title": "Cool morning", "summary": "10C at dawn, warming to 19C", "severity": "low"}
+    ]
+  },
+  {
+    "id": "urban-market-en-holiday-strong",
+    "shop": {"brandName": "Market 24", "businessDomain": "Market", "targetAudience": "busy commuters", "shopType": "convenience store", "city": "Constanta", "countryCode": "RO", "generationLanguage": "EN"},
+    "signals": [
+      {"source": "holiday", "title": "National Day Dec 1", "summary": "Public holiday Monday", "severity": "high"},
+      {"source": "weather", "title": "Cold snap", "summary": "Freezing, light snow", "severity": "medium"}
+    ]
+  },
+  {
+    "id": "rural-market-ro-trend",
+    "shop": {"brandName": "Magazin Satul", "businessDomain": "Market", "targetAudience": "village families", "shopType": "village shop", "city": "Marginimea Sibiului", "countryCode": "RO", "generationLanguage": "RO"},
+    "signals": [
+      {"source": "trend", "title": "Canning season", "summary": "People buying jars and vegetables for zacusca", "severity": "medium"}
+    ]
+  },
+  {
+    "id": "urban-bookstore-en-weak",
+    "shop": {"brandName": "Page & Co", "businessDomain": "Bookstore", "targetAudience": "students", "shopType": "independent bookshop", "city": "Cluj-Napoca", "countryCode": "RO", "generationLanguage": "EN"},
+    "signals": [
+      {"source": "news", "title": "Exam season", "summary": "University exams in two weeks", "severity": "low"}
+    ]
+  },
+  {
+    "id": "rural-cafe-ro-weather",
+    "shop": {"brandName": "Cafenea La Deal", "businessDomain": "Cafe", "targetAudience": "tourists and locals", "shopType": "mountain cafe", "city": "Paltinis", "countryCode": "RO", "generationLanguage": "RO"},
+    "signals": [
+      {"source": "weather", "title": "Snowy weekend", "summary": "Fresh snow, busy ski crowd expected", "severity": "high"}
+    ]
+  },
+  {
+    "id": "urban-market-ro-news",
+    "shop": {"brandName": "Piata Noua", "businessDomain": "Market", "targetAudience": "neighbourhood", "shopType": "local grocery", "city": "Oradea", "countryCode": "RO", "generationLanguage": "RO"},
+    "signals": [
+      {"source": "news", "title": "Street festival Saturday", "summary": "Food festival on the main street", "severity": "medium"}
+    ]
+  },
+  {
+    "id": "rural-butcher-ro-holiday",
+    "shop": {"brandName": "Macelaria Ursu", "businessDomain": "Butcher", "targetAudience": "village cooks", "shopType": "village butcher", "city": "Rasinari", "countryCode": "RO", "generationLanguage": "RO"},
+    "signals": [
+      {"source": "holiday", "title": "Christmas in two weeks", "summary": "Traditional pork dishes season", "severity": "high"}
+    ]
+  },
+  {
+    "id": "urban-cafe-en-holiday",
+    "shop": {"brandName": "Bean Street", "businessDomain": "Cafe", "targetAudience": "office workers", "shopType": "coffee bar", "city": "Bucharest", "countryCode": "RO", "generationLanguage": "EN"},
+    "signals": [
+      {"source": "holiday", "title": "Valentine's Day Friday", "summary": "Couples out this weekend", "severity": "medium"}
+    ]
+  },
+  {
+    "id": "rural-market-en-no-signal",
+    "shop": {"brandName": "Crossroads Shop", "businessDomain": "Market", "targetAudience": "passers-by and locals", "shopType": "roadside shop", "city": "Vama Veche", "countryCode": "RO", "generationLanguage": "EN"},
+    "signals": []
+  },
+  {
+    "id": "urban-florist-en-strong",
+    "shop": {"brandName": "Petal House", "businessDomain": "Florist", "targetAudience": "event planners", "shopType": "boutique florist", "city": "Timisoara", "countryCode": "RO", "generationLanguage": "EN"},
+    "signals": [
+      {"source": "trend", "title": "Wedding season", "summary": "Peak local wedding bookings", "severity": "high"},
+      {"source": "weather", "title": "Warm and dry", "summary": "Ideal outdoor event weather", "severity": "low"}
+    ]
+  },
+  {
+    "id": "rural-market-ro-weather-cold",
+    "shop": {"brandName": "Alimentara Doi", "businessDomain": "Market", "targetAudience": "elderly regulars", "shopType": "village grocery", "city": "Borsec", "countryCode": "RO", "generationLanguage": "RO"},
+    "signals": [
+      {"source": "weather", "title": "Hard frost all week", "summary": "Minus 8C, soup weather", "severity": "medium"}
+    ]
+  }
+]
