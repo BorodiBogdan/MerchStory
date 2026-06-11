@@ -83,7 +83,7 @@ The engine has three parts that meet at inference time. An offline indexing path
 
 % --- Right branch: fine-tuning
 \node[train] (td)    at ( 4.5, 3.9) {training pairs};
-\node[train] (ft)    at ( 4.5, 2.6) {LoRA fine-tune\\(7B base)};
+\node[train] (ft)    at ( 4.5, 2.6) {LoRA fine-tune\\(Gemma 3 4B base)};
 \node[train] (ftllm) at ( 4.5, 1.2) {fine-tuned\\writer LLM};
 
 \begin{pgfonlayer}{background}
@@ -145,7 +145,7 @@ The inference path itself is organised as a six-stage chain. The stages are, in 
 
 The engine currently consumes three classes of external signal, with room to add more later. Each runs in parallel and is wrapped in its own error boundary, so a single failure does not abort the run. Failed sources are recorded and the rest continue.
 
-\paragraph{Weather.} A short-range forecast detects heatwaves, cold snaps and heavy rain, and turns each event into a signal tagged high, medium or low with a one-line summary the prompt can read directly.
+\paragraph{Weather.} A short-range forecast detects heatwaves, cold snaps, heavy rain and storms, and turns each event into a signal tagged high or medium with a one-line summary the prompt can read directly.
 
 \paragraph{Holidays.} Upcoming public holidays in the shop's country are emitted over a fourteen-day lookahead, with severity scaling by proximity: high at most three days away, medium at most seven, low further out.
 
@@ -161,7 +161,7 @@ The engine currently consumes three classes of external signal, with room to add
 \hline
 \textbf{Signal} & \textbf{Severity rule} \\
 \hline
-Weather  & High for heatwave or cold snap, medium for sustained warm or cool spells, low for heavy-rain probability $\geq 70\,\%$. \\
+Weather  & High for heatwave, cold snap or storm, medium for heavy-rain probability $\geq 70\,\%$ without a storm. \\
 \hline
 Holiday  & High at $\leq 3$ days, medium at $\leq 7$, low further out. \\
 \hline
@@ -223,7 +223,7 @@ Strategist  & 1                       & 0.4 & \texttt{\{angles: [\{theme, tone, 
 \hline
 Writer      & one per angle, parallel & 0.8 & \texttt{\{title, meta, body, suggestedPost, imagePrompt, type\}} \\
 \hline
-Translator  & one per idea, parallel  & 0.4 & translated counterpart of the writer output \\
+Translator  & one per idea, parallel  & 0.8 & translated counterpart of the writer output \\
 \hline
 \end{tabularx}
 \end{table}
@@ -231,7 +231,7 @@ Translator  & one per idea, parallel  & 0.4 & translated counterpart of the writ
 \subsection{Model selection and writer fine-tuning}
 \label{subsec:rec-model-selection}
 
-Several language models were trialled against the same fixed batch of $(\text{shop}, \text{day}, \text{signal})$ inputs and compared on three axes: tonal fit, specificity to the \texttt{triggerSignal}, and JSON-schema adherence. The candidates were Gemma 3B, DeepSeek, a LoRA-fine-tuned seven-billion-parameter writer, and the enterprise APIs Claude Opus 4.7 and Gemini 2.5 Pro. The enterprise options produced the best output overall, with the cleanest structured responses and the fewest generic CTAs. The fine-tuned writer came close on tonal fit and specificity at a fraction of the hosting cost, while Gemma 3B and DeepSeek drifted back to boilerplate phrasing on weaker signals. Table~\ref{tab:rec-model-comparison} summarises the comparison. That gap is the immediate motivation for the writer-stage fine-tuning described next.
+Several language models were trialled against the same fixed batch of $(\text{shop}, \text{day}, \text{signal})$ inputs and compared on three axes: tonal fit, specificity to the \texttt{triggerSignal}, and JSON-schema adherence. The candidates were Gemma 3 4B, DeepSeek, a LoRA-fine-tuned Gemma 3 4B writer, and the managed APIs Claude Haiku 4.5 and GPT-4o mini. No single model was best on every axis. All of the candidates kept their output on topic, but they varied a lot on brand voice and on how closely they followed the schema. Claude Haiku 4.5 read the most natural and stayed closest to the schema, while GPT-4o mini was looser on both. The plain Gemma 3 4B model was the weakest on tone of voice even though it kept up on the other two axes, so brand voice, rather than basic competence, is its real gap. The fine-tuned Gemma 3 4B writer improved on the plain model's voice at a much lower hosting cost, but it did not yet match the managed models on that axis. Table~\ref{tab:rec-model-comparison} summarises the comparison, and its ratings line up with the per-axis DeepEval scores reported in Chapter~\ref{chap:results-testing}. Closing the voice gap is the immediate motivation for the writer-stage fine-tuning described next.
 
 {\small\renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|Y|Y|Y|Y|}
@@ -253,22 +253,22 @@ Several language models were trialled against the same fixed batch of $(\text{sh
 \hline
 \endlastfoot
 
-Claude Opus 4.7         & Excellent & Excellent & Excellent & High \\
+Claude Haiku 4.5        & Good      & Strong    & Good      & Medium \\
 \hline
-Gemini 2.5 Pro          & Excellent & Excellent & Excellent & High \\
+GPT-4o mini             & Fair      & Strong    & Fair      & Medium \\
 \hline
-Fine-tuned 7B (LoRA)    & Strong    & Strong    & Good      & Low  \\
+Fine-tuned Gemma 3 4B (LoRA) & Fair      & Strong    & Good      & Very low \\
 \hline
-DeepSeek                & Fair      & Fair      & Good      & Low  \\
+DeepSeek                & Good      & Excellent & Fair      & Low  \\
 \hline
-Gemma 3B                & Weak      & Weak      & Fair      & Very low \\
+Gemma 3 4B              & Weak      & Good      & Good      & Very low \\
 \hline
 \end{tabularx}}
 
 \label{subsec:rec-finetune}
-The strategist and translator stages are well served by an off-the-shelf instruction-tuned base model, because their tasks (producing a small structured plan and translating short text) are close enough to the model's pre-training distribution that prompt engineering is sufficient. The writer stage is the place where this is no longer true. A base seven-billion-parameter instruction model, even when given the strategist angle, the playbook entries and the anti-repetition block, gravitates back to the same handful of marketing tropes (``Discover our premium selection'', ``Don't miss out''), regardless of how strongly the prompt forbids them.
+The strategist and translator stages are well served by an off-the-shelf instruction-tuned base model, because their tasks (producing a small structured plan and translating short text) are close enough to the model's pre-training distribution that prompt engineering is sufficient. The writer stage is the place where this is no longer true. A base Gemma 3 4B instruction model, even when given the strategist angle, the playbook entries and the anti-repetition block, gravitates back to the same handful of marketing tropes (``Discover our premium selection'', ``Don't miss out''), regardless of how strongly the prompt forbids them.
 
-The platform therefore serves the writer role with a fine-tuned variant of a seven-billion-parameter instruction model in the Qwen family, adapted via low-rank adaptation (LoRA) \cite{hu2022lora} on a curated corpus of marketing copy from independent retailers. LoRA was preferred over full fine-tuning because the corpus is small, the base model is already well aligned to instruction following, and the low-rank adapters can be hot-swapped at deployment time without redistributing the base weights. The corpus pairs context-signal triples with handcrafted copy that exhibits the qualities the boilerplate base model lacks: a specific, time-bounded reaction to the signal, a voice consistent with a single shop owner, and a concrete call to action that names a real product or aisle rather than a generic category. The strategist and translator continue to use the un-adapted base model.
+The platform therefore serves the writer role with a fine-tuned variant of the Gemma 3 4B instruction model, adapted via low-rank adaptation (LoRA) \cite{hu2022lora} on a curated corpus of marketing copy from independent retailers. LoRA was preferred over full fine-tuning because the corpus is small, the base model is already well aligned to instruction following, and the low-rank adapters can be hot-swapped at deployment time without redistributing the base weights. The corpus pairs context-signal triples with handcrafted copy that exhibits the qualities the boilerplate base model lacks: a specific, time-bounded reaction to the signal, a voice consistent with a single shop owner, and a concrete call to action that names a real product or aisle rather than a generic category. The strategist and translator continue to use the un-adapted base model.
 
 The choice to fine-tune only the writer is itself part of the protocol-over-model-size argument that runs through this chapter: the writer is the one stage where a base model's failures are systematic and visible to the retailer, and the cheapest fix is to adapt the model to the platform's voice rather than ask the prompt to do all the work.
 

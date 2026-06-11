@@ -127,7 +127,7 @@ Administration          & Broad operator oversight over platform data and tenant
 \hline
 \textbf{Requirement} & \textbf{Architectural mechanism} \\
 \hline
-Interactive read/write latency & Cached read paths and stateless API for horizontal scale-out. \\
+Interactive read/write latency & On-device caching of the product list and gallery, plus a stateless API for horizontal scale-out. \\
 \hline
 Long-running AI work & Asynchronous job model with client-polled status. \\
 \hline
@@ -184,13 +184,13 @@ The platform is organised in three tiers. A \emph{client}, shipped to the retail
 \node[svc] (reco)    at (6.25,3.0) {Recommendation\\engine};
 \node[svc] (bill)    at (8.75,3.0) {Billing\\(credits)};
 
-% In-process cache spans the cluster
-\node[cache] (cache) at (5.0,1.7) {In-process per-tenant cache (read-path, invalidated on writes)};
+% On-device cache lives with the clients, one per device
+\node[cache] (cache) at (5.0,9.5) {On-device cache, one per device: product list and gallery (cleared on writes)};
 
 % Application server bounding box
 \begin{pgfonlayer}{background}
 \node[draw, dashed, rounded corners=4pt, inner sep=4mm,
-      fit=(auth)(shop)(prod)(gallery)(refs)(gen)(reco)(bill)(cache),
+      fit=(auth)(shop)(prod)(gallery)(refs)(gen)(reco)(bill),
       label={[font=\scriptsize\itshape]above left:Application server (.NET, Semantic Kernel)}] (server) {};
 \end{pgfonlayer}
 
@@ -207,6 +207,11 @@ The platform is organised in three tiers. A \emph{client}, shipped to the retail
 \draw[arr] (web)     -- (web     |- gw.north);
 \draw[arr] (ios)     -- (gw.north);
 \draw[arr] (android) -- (android |- gw.north);
+
+% Clients read from their on-device cache
+\draw[arr] (cache.south -| web)     -- (web.north);
+\draw[arr] (cache.south -| ios)     -- (ios.north);
+\draw[arr] (cache.south -| android) -- (android.north);
 
 % Gateway to server (straight down, centred)
 \draw[arr] (gw.south) -- (server.north);
@@ -394,7 +399,7 @@ The choice of orchestrator does not lock the platform to the Microsoft AI ecosys
 \label{subsec:capabilities}
 Each capability area on the server is a bounded service that exposes a small set of HTTP endpoints. Authentication is handled inside the server itself: a successful login produces a short-lived JWT access token and a longer-lived refresh token. The access token is validated locally on every request, the refresh token is stored in the database and is rotated each time it is used, and a background service periodically removes tokens that have expired or been revoked.
 
-The retailer-facing entities (shop profile, products, gallery, wallet) are each served by a dedicated feature service that exposes CRUD operations over its part of the schema, with the per-tenant cache and isolation rules inherited from the data layer. Coordination between services is performed at the endpoint layer rather than through direct inter-service calls.
+The retailer-facing entities (shop profile, products, gallery, wallet) are each served by a dedicated feature service that exposes CRUD operations over its part of the schema, with the isolation rules inherited from the data layer. Coordination between services is performed at the endpoint layer rather than through direct inter-service calls.
 
 A thin orchestration layer fronts the supported image providers behind a single \texttt{IImageProvider} abstraction shown in Listing~\ref{lst:iimageprovider}. Each provider has a concrete implementation that wraps its SDK, and a mock implementation returns a deterministic placeholder image during automated testing.
 
@@ -474,7 +479,7 @@ Each feature follows a simple internal layering, shown in Figure~\ref{fig:server
 \section{Data Layer}
 \label{sec:data-layer}
 
-The data layer holds every piece of state that survives a request. PostgreSQL with the pgvector extension stores all relational data and the platform's two embedding spaces, and a separate Azure Blob Storage account holds the binary assets. Each application-server replica fronts the database with a process-local per-tenant read cache. Figure~\ref{fig:data-plane} shows the arrangement and the Azure-hosted compute that reads and writes it.
+The data layer holds every piece of state that survives a request. PostgreSQL with the pgvector extension stores all relational data and the platform's two embedding spaces, and a separate Azure Blob Storage account holds the binary assets. Figure~\ref{fig:data-plane} shows the arrangement and the Azure-hosted compute that reads and writes it.
 
 \begin{figure}[H]
 \centering
@@ -493,12 +498,9 @@ The data layer holds every piece of state that survives a request. PostgreSQL wi
 \node[compute] (recjob) at ( 0.0, 5.2) {Recommendation\\job runner};
 \node[compute] (tokjob) at ( 4.2, 5.2) {Refresh-token\\cleaner};
 
-% In-process cache lives inside the compute box
-\node[cache] (cache) at (0, 3.6) {In-process per-tenant read cache (in-memory, replica-local)};
-
 \begin{pgfonlayer}{background}
 \node[draw, dashed, rounded corners=4pt, inner sep=4mm,
-      fit=(api)(recjob)(tokjob)(cache),
+      fit=(api)(recjob)(tokjob),
       label={[font=\scriptsize\itshape]above:Azure Container Apps revision}] (compute_box) {};
 \end{pgfonlayer}
 
@@ -599,12 +601,12 @@ The schema is a foreign-key spine that ties every record to a tenant. At its cen
     Id (PK)\\
     Email\\
     IsAdmin\\
-    CoinBalance
+    CreditBalance
 };
 
 % Tenant tables below AppUser
 \node[entity] (coin) at (-4.5,-0.2) {%
-    \textbf{CoinTransaction}
+    \textbf{CreditTransaction}
     \nodepart{two}
     UserId (FK)\\
     Amount\\
@@ -687,7 +689,7 @@ The schema is a foreign-key spine that ties every record to a tenant. At its cen
 \label{fig:schema}
 \end{figure}
 
-Two consequences of this layout matter at runtime. The first is that tenant isolation is enforced at the schema level rather than relying on application discipline. Every retailer-owned row carries a UserId foreign key, and the feature services filter on it before returning any data, so a misbehaving or malformed query can at worst read the wrong row, never the wrong tenant's data. The second is that the credit ledger is append-only and self-checking. Each CoinTransaction stores the delta and the resulting balance, so the wallet can be reconciled against the ledger at any point and a divergence would surface immediately. Together these properties hand the schema responsibility for two of the platform's hardest invariants, which would otherwise be re-verified by every endpoint touching retailer data or money.
+Two consequences of this layout matter at runtime. The first is that tenant isolation is enforced at the schema level rather than relying on application discipline. Every retailer-owned row carries a UserId foreign key, and the feature services filter on it before returning any data, so a misbehaving or malformed query can at worst read the wrong row, never the wrong tenant's data. The second is that the credit ledger is append-only and self-checking. Each CreditTransaction stores the delta and the resulting balance, so the wallet can be reconciled against the ledger at any point and a divergence would surface immediately. Together these properties hand the schema responsibility for two of the platform's hardest invariants, which would otherwise be re-verified by every endpoint touching retailer data or money.
 
 {\footnotesize
 \renewcommand{\arraystretch}{1.1}
@@ -713,7 +715,7 @@ Product & An item the retailer sells, with name, price and a representative phot
 \hline
 GeneratedImage & An entry in the gallery, tagged with its asset family. \\
 \hline
-CoinTransaction & A row of the credit ledger that records a debit or refund and, optionally, the asset it paid for. \\
+CreditTransaction & A row of the credit ledger that records a debit or refund and, optionally, the asset it paid for. \\
 \hline
 DailyRecommendation & The day's marketing ideas together with the context snapshot used to produce them. \\
 \hline
@@ -730,7 +732,7 @@ Holiday & A cached public holiday for a country and year, used as a context sign
 }
 
 \paragraph{Caching.}\label{subsec:caching}
-Some screens read the same data on every visit, such as the product list, the gallery, the shop profile and the wallet balance. The feature services that serve these reads put their results in an in-process cache keyed by tenant and feature. A write on behalf of a tenant invalidates the matching entry, so the next read goes back to the database. The cache stays in-process rather than distributed because the application server is stateless, and at the platform's data volumes that is enough to keep the read paths cheap without paying for a separate cache service.
+A few screens show the same data every time the retailer opens them, such as the product list and the gallery. To make these screens feel fast, the client keeps a small cache on the device for the product list and the gallery. When the retailer adds, edits or removes something, the client clears the matching entry, so the next read fetches fresh data from the server. The cache lives on the device and not on the server, so the platform does not need a separate cache service.
 
 \paragraph{Object storage.}\label{subsec:object-storage}
 Binary assets such as raw and processed product photographs, generated images and exported PDFs are kept out of the relational database and live in Microsoft Azure Blob Storage. The arrangement is conventional and is justified by the cost asymmetry between row storage and blob storage, and by the need to serve large files efficiently. The relational schema records the blob key and content type for each binary, and access is mediated by short-lived signed URLs (SAS tokens) issued by the application server, so that no public URL ever leaks beyond the request that needs it. Containers are private with no anonymous access tier, and the only path through which a retailer's assets are reachable is the application server.
@@ -875,7 +877,7 @@ On the operational side, Application Insights collects distributed traces, struc
 \endfoot
 \hline
 \endlastfoot
-Interactive read/write latency & Container Apps (autoscaled) and the in-process cache. \\
+Interactive read/write latency & Container Apps (autoscaled) and on-device read caching in the client. \\
 \hline
 Long-running AI work & Container Apps with hosted services for jobs. \\
 \hline
