@@ -132,7 +132,7 @@ The reference set against which DeepEval is run is a frozen collection of $120$ 
 
 \subsection*{Cross-model evaluation}
 
-The same DeepEval harness is used to compare candidate writer models head-to-head on the reference set, so that decisions about which backbone to host, fine-tune or call as a managed service can be made on evidence rather than intuition. Five models are evaluated: Gemma 3 4B as the open-weights base, Gemma 3 4B (fine-tuned) after supervised fine-tuning on the platform's brand-voice corpus, DeepSeek as an open-weights frontier comparison, and the closed Claude and ChatGPT families as managed-service baselines. Figure~\ref{fig:deepeval-models} reports the mean per-axis score, on a $0$ to $100$ scale, with the y-axis truncated at $60$ to make the differences legible.
+The same DeepEval harness is used to compare candidate writer models head-to-head on the reference set, so that decisions about which backbone to host, fine-tune or call as a managed service can be made on evidence rather than intuition. Five models are evaluated: Gemma 3 4B as the open-weights base, Gemma 3 4B (fine-tuned) after supervised fine-tuning on the platform's brand-voice corpus, DeepSeek as an open-weights frontier comparison, and the closed Claude and ChatGPT families as managed-service baselines. Figure~\ref{fig:deepeval-models} reports the mean per-axis score, on a $0$ to $100$ scale, with the y-axis truncated at $30$ to make the differences legible.
 
 \begin{figure}[!ht]
 \centering
@@ -153,8 +153,8 @@ The same DeepEval harness is used to compare candidate writer models head-to-hea
     width=\textwidth,
     height=9.2cm,
     enlarge x limits=0.14,
-    ymin=60, ymax=108,
-    ytick={60,70,80,90,100},
+    ymin=30, ymax=108,
+    ytick={30,40,50,60,70,80,90,100},
     ymajorgrids=true,
     xmajorgrids=false,
     major grid style={draw=gridGray, line width=0.4pt},
@@ -207,25 +207,25 @@ The same DeepEval harness is used to compare candidate writer models head-to-hea
 ]
 
 \addplot[fill=mGemma, draw=mGemma!70!black]
-    coordinates {(Relevancy,78.2) (Faithfulness,74.1) ({Tone Match},71.4) ({Schema Compliance},82.6) ({Hallucination-Free},76.8)};
+    coordinates {(Relevancy,79.2) (Faithfulness,81.9) ({Tone Match},37.5) ({Schema Compliance},69.8) ({Hallucination-Free},90.9)};
 \addplot[fill=mGemmaFT, draw=mGemmaFT!70!black]
-    coordinates {(Relevancy,91.4) (Faithfulness,89.7) ({Tone Match},93.8) ({Schema Compliance},97.3) ({Hallucination-Free},92.5)};
+    coordinates {(Relevancy,82.5) (Faithfulness,84.0) ({Tone Match},48.0) ({Schema Compliance},71.0) ({Hallucination-Free},91.8)};
 \addplot[fill=mDeepSeek, draw=mDeepSeek!70!black]
-    coordinates {(Relevancy,88.6) (Faithfulness,85.3) ({Tone Match},81.2) ({Schema Compliance},90.5) ({Hallucination-Free},86.9)};
+    coordinates {(Relevancy,86.4) (Faithfulness,86.8) ({Tone Match},69.5) ({Schema Compliance},64.5) ({Hallucination-Free},93.1)};
 \addplot[fill=mClaude, draw=mClaude!70!black]
-    coordinates {(Relevancy,93.7) (Faithfulness,94.2) ({Tone Match},90.6) ({Schema Compliance},96.8) ({Hallucination-Free},95.1)};
+    coordinates {(Relevancy,84.7) (Faithfulness,85.6) ({Tone Match},73.8) ({Schema Compliance},72.2) ({Hallucination-Free},91.0)};
 \addplot[fill=mChatGPT, draw=mChatGPT!70!black]
-    coordinates {(Relevancy,92.1) (Faithfulness,91.5) ({Tone Match},88.4) ({Schema Compliance},95.4) ({Hallucination-Free},93.2)};
+    coordinates {(Relevancy,84.7) (Faithfulness,91.0) ({Tone Match},51.0) ({Schema Compliance},54.5) ({Hallucination-Free},92.5)};
 
 \legend{Gemma 3 4B, Gemma 3 4B (FT), DeepSeek, Claude, ChatGPT}
 
 \end{axis}
 \end{tikzpicture}
-\caption[DeepEval scores for five writer models on the 120-tuple reference set.]{DeepEval scores for five writer models on the 120-tuple reference set, mean per-axis score on a $0$ to $100$ scale. The y-axis is truncated at $60$ so that the spread between models is legible. Raw scores below this floor were not observed in any run.}
+\caption[DeepEval scores for five writer models on the 120-tuple reference set.]{DeepEval scores for five writer models on the 120-tuple reference set, mean per-axis score on a $0$ to $100$ scale. The y-axis is truncated at $30$ so that the spread between models is legible. No raw score fell below this floor.}
 \label{fig:deepeval-models}
 \end{figure}
 
-The reading of Figure~\ref{fig:deepeval-models} is the story the chapter argues. The off-the-shelf Gemma 3 4B model is the weakest on every axis, with the largest gap on Tone Match, the metric most sensitive to brand voice and to Romanian-language register. Supervised fine-tuning on the platform's brand-voice corpus closes most of that gap: the fine-tuned variant is within two points of the strongest model on every axis and leads on Tone Match ($93.8$), overtaking both Claude ($90.6$) and ChatGPT ($88.4$). The closed-frontier models retain a small lead on raw Faithfulness and Hallucination-Free Rate, where their scale advantage shows. On the operational dimensions that matter for a small-retailer product, namely tone match and schema compliance, a fine-tuned $4$-billion-parameter open model is at parity with managed services that cost two orders of magnitude more per call, and is therefore the platform's default writer.
+The reading of Figure~\ref{fig:deepeval-models} is the story the chapter argues. The off-the-shelf Gemma 3 4B model is the weakest on most axes, and its largest deficit by far is on Tone Match ($37.5$), the metric most sensitive to brand voice and to Romanian-language register. Supervised fine-tuning on the platform's brand-voice corpus lifts the model on every axis, with the biggest gain on the same Tone Match dimension that the fine-tuning corpus most directly targets; the fine-tuned variant improves over the base model across the board while still trailing the managed-service models. Among the closed and frontier models the picture is mixed rather than a clean sweep: Claude leads on Tone Match ($73.8$) and Schema Compliance ($72.2$), ChatGPT leads on Faithfulness ($91.0$) but is the weakest of the four on the two judged style axes ($51.0$ and $54.5$), and DeepSeek is strongest on Answer Relevancy ($86.4$) and on the Hallucination-Free Rate ($93.1$). Schema Compliance is notably not a closed-model strength: the open Gemma models score at or above both ChatGPT and DeepSeek on it, which matters because reliable JSON is what lets the writer plug into the rest of the pipeline. The remaining gap for the open model is concentrated on Tone Match, and closing that gap through further fine-tuning is what brings a $4$-billion-parameter open model that costs two orders of magnitude less per call within reach of the managed services on the dimensions that matter for a small-retailer product, which is why the platform's writer is built on a fine-tuned open model rather than a managed API.
 
 A complementary human-rated pass is run before each release: two independent reviewers perform pairwise comparisons of the platform's output against the un-adapted seven-billion-parameter writer on a $30$-tuple stratified sub-sample, and the win-rate is recorded. Image generation is evaluated only manually, by running a small canonical prompt set against each live provider and inspecting the assets for product fidelity and tonal fit.
 
