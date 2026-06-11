@@ -17,17 +17,6 @@ namespace MerchStoryImageGeneration.Services.Recommendations.Chat;
 // ApiKey, timeouts) still comes from the base config.
 public static class RecommendationChatServiceFactory
 {
-    // The config key each backend reads its model id from. Used to apply the
-    // per-request model override.
-    private static string? ModelKeyFor(string backend) => backend.Trim().ToLowerInvariant() switch
-    {
-        "local" or "lmstudio" => "Recommendations:Llm:ChatModel",
-        "deepseek" => "Recommendations:Llm:DeepSeek:Model",
-        "claude" => "Recommendations:Llm:Claude:Model",
-        "chatgpt" or "openai" => "Recommendations:Llm:ChatGpt:Model",
-        _ => null,
-    };
-
     public static IRecommendationChatService Create(
         string backend,
         string? modelOverride,
@@ -82,4 +71,15 @@ public static class RecommendationChatServiceFactory
             .AddInMemoryCollection(overrides)
             .Build();
     }
+
+    // The config key each backend reads its model id from. Used to apply the
+    // per-request model override.
+    private static string? ModelKeyFor(string backend) => backend.Trim().ToLowerInvariant() switch
+    {
+        "local" or "lmstudio" => "Recommendations:Llm:ChatModel",
+        "deepseek" => "Recommendations:Llm:DeepSeek:Model",
+        "claude" => "Recommendations:Llm:Claude:Model",
+        "chatgpt" or "openai" => "Recommendations:Llm:ChatGpt:Model",
+        _ => null,
+    };
 }
