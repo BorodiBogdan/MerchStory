@@ -412,6 +412,8 @@ export interface GenerateCatalogImageParams {
   currency?: Currency;
   language?: AppLanguage;
   offer?: CatalogOfferConfig;
+  // Which image model generates the catalog: 'gemini' (nano banana, default) | 'openai'.
+  imageModel?: 'gemini' | 'openai';
 }
 
 export interface GenerateAnnouncementImageParams {

@@ -37,6 +37,9 @@ import { GalleryImage } from '@/components/ui/GalleryImage';
 import { glassNavRail } from '@/components/ui/GlassNavbar';
 import { InsufficientCreditsModal } from '@/components/ui/InsufficientCreditsModal';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
+import { ModelFab } from '@/components/ui/ModelFab';
+import { ModelPickerModal, type ModelPickerOption } from '@/components/ui/ModelPickerModal';
+import { ModelPickerPopover } from '@/components/ui/ModelPickerPopover';
 import { PlacementZoneEditor } from '@/components/ui/PlacementZoneEditor';
 import { ProductImage } from '@/components/ui/ProductImage';
 import { ProductPickerModal } from '@/components/ui/ProductPickerModal';
@@ -547,6 +550,15 @@ function getBackgroundStyleOptions(tr: TranslateFn) {
   return [
     { value: 'SocialPost', label: tr('studio.backgroundStyle.socialPost') },
     { value: 'Realistic', label: tr('studio.backgroundStyle.realistic') },
+  ];
+}
+// Catalog image models the user can pick between. `credits` is what one
+// generation with that model costs (all 1 for now); add new entries here as more
+// models come online and the header picker scrolls through them automatically.
+function getImageModels(tr: TranslateFn): ModelPickerOption[] {
+  return [
+    { value: 'gemini', label: tr('studio.model.nanoBanana'), icon: 'sparkles-outline', credits: 1 },
+    { value: 'openai', label: tr('studio.model.openai'), icon: 'aperture-outline', credits: 1 },
   ];
 }
 function getPostTypes(tr: TranslateFn): {
@@ -1423,6 +1435,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const COLOR_OPTIONS = useMemo(() => getColorOptions(tr), [tr]);
   const FORMAT_OPTIONS = useMemo(() => getFormatOptions(tr), [tr]);
   const BACKGROUND_STYLE_OPTIONS = useMemo(() => getBackgroundStyleOptions(tr), [tr]);
+  const IMAGE_MODELS = useMemo(() => getImageModels(tr), [tr]);
   const POST_TYPES = useMemo(() => getPostTypes(tr), [tr]);
   const JOB_IMAGE_STYLE_OPTIONS = useMemo(() => getJobImageStyleOptions(tr), [tr]);
   const TONE_OPTIONS = useMemo(() => getToneOptions(tr), [tr]);
@@ -1525,6 +1538,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [showProductNames, setShowProductNames] = useState(true);
   const [showCatalogProductNames, setShowCatalogProductNames] = useState(false);
   const [backgroundStyle, setBackgroundStyle] = useState<'SocialPost' | 'Realistic'>('SocialPost');
+  const [catalogImageModel, setCatalogImageModel] = useState<'gemini' | 'openai'>('gemini');
+  const [modelPickerVisible, setModelPickerVisible] = useState(false);
+  const selectedModel = IMAGE_MODELS.find((m) => m.value === catalogImageModel) ?? IMAGE_MODELS[0];
   const [preserveProductImages, setPreserveProductImages] = useState(false);
   const [showPreserveHelp, setShowPreserveHelp] = useState(false);
   const [showPricesHelp, setShowPricesHelp] = useState(false);
@@ -1662,6 +1678,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         brandContextFields: catalogFields.length > 0 ? catalogFields : undefined,
         currency: catalogCurrency,
         offer,
+        imageModel: catalogImageModel,
       });
       setCatalogResult(result);
       handleAfterPaidGenerate(result);
@@ -3258,6 +3275,33 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             runReviewGeneration(reviewMode);
           }}
         />
+
+        <ModelPickerPopover
+          visible={modelPickerVisible}
+          models={IMAGE_MODELS}
+          selected={catalogImageModel}
+          onSelect={(v) => setCatalogImageModel(v as 'gemini' | 'openai')}
+          onClose={() => setModelPickerVisible(false)}
+          cardStyle={{
+            right: glassNavRail(screenWidth, true).inset + D.spacing.lg,
+            bottom: D.spacing.lg + 60 + D.spacing.sm,
+          }}
+        />
+
+        {activeTab === 'catalog' && catalogMode === 'generate' && (
+          <ModelFab
+            icon={selectedModel.icon}
+            onPress={() => setModelPickerVisible(true)}
+            accessibilityLabel={t('studio.model.pickerTitle')}
+            containerStyle={[
+              styles.modelFabBase,
+              {
+                right: glassNavRail(screenWidth, true).inset + D.spacing.lg,
+                bottom: D.spacing.lg,
+              },
+            ]}
+          />
+        )}
       </>
     );
   }
@@ -4555,6 +4599,29 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           runReviewGeneration(reviewMode);
         }}
       />
+
+      <ModelPickerModal
+        visible={modelPickerVisible}
+        models={IMAGE_MODELS}
+        selected={catalogImageModel}
+        onSelect={(v) => setCatalogImageModel(v as 'gemini' | 'openai')}
+        onClose={() => setModelPickerVisible(false)}
+      />
+
+      {activeTab === 'catalog' && catalogMode === 'generate' && (
+        <ModelFab
+          icon={selectedModel.icon}
+          onPress={() => setModelPickerVisible(true)}
+          accessibilityLabel={t('studio.model.pickerTitle')}
+          containerStyle={[
+            styles.modelFabBase,
+            {
+              right: D.spacing.lg,
+              bottom: insets.bottom + (Platform.OS === 'ios' ? 64 : 56) + D.spacing.md,
+            },
+          ]}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -4796,6 +4863,12 @@ function makeStyles(
       fontSize: D.fontSize.xs,
       color: colors.text.secondary,
       fontWeight: D.fontWeight.medium,
+    },
+    // Floating model button — absolutely positioned over the studio canvas
+    // (left/bottom set inline per layout so it clears the tab bar / sidebar).
+    modelFabBase: {
+      position: 'absolute',
+      zIndex: 50,
     },
     // Interactive segment control docked in the hero (top-right).
     heroSegmentDock: {

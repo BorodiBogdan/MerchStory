@@ -16,9 +16,12 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
         "Every image should be striking enough to stop a viewer's thumb mid-scroll. " +
         "Never add watermarks, placeholders, or lorem ipsum text.";
 
-    public CatalogImageService(IImageProvider provider)
+    private readonly IImageProviderResolver providerResolver;
+
+    public CatalogImageService(IImageProvider provider, IImageProviderResolver providerResolver)
         : base(provider)
     {
+        this.providerResolver = providerResolver;
     }
 
     public Task<ImageGenerationResult> GenerateCatalogImageAsync(
@@ -39,7 +42,10 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             ? BuildOutlinePrompt(request)
             : BuildPrompt(request);
 
-        return this.GenerateAsync(
+        // The catalog flow lets the caller switch the underlying model per request
+        // (nano banana / Gemini by default, OpenAI on demand).
+        IImageProvider provider = this.providerResolver.Resolve(request.ImageModel);
+        return provider.GenerateAsync(
             prompt,
             images.Count > 0 ? images : null,
             cancellationToken);
