@@ -156,6 +156,7 @@ else
     // recommendation chat services.
     builder.Services.AddSingleton<ILLMService, OpenAiCompatibleLlmService>();
 }
+
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireClaim("is_admin", "true"));
