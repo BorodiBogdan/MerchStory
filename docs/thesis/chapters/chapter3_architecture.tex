@@ -157,7 +157,7 @@ The platform is organised in three tiers. A \emph{client}, shipped to the retail
 \definecolor{cInk}{HTML}{2E3440}    % text + arrows
 \definecolor{cIndigo}{HTML}{3F4D8C} % clients / gateway
 \definecolor{cSlate}{HTML}{4A5568}  % application server
-\definecolor{cTeal}{HTML}{20756C}   % data plane
+\definecolor{cTeal}{HTML}{2E5F8C}   % data plane
 \definecolor{cAmber}{HTML}{B07A1F}  % on-device cache
 \definecolor{cGray}{HTML}{7C8390}   % external services
 \resizebox{\textwidth}{!}{%
@@ -322,7 +322,7 @@ Two request shapes are supported. A \emph{synchronous} request is served end-to-
 \label{fig:request-flows}
 \end{figure}
 
-It is useful to record the implementation technologies once. The client is built with React Native \cite{reactnative} (Expo), which lets a single TypeScript codebase be exported as a static web build, an iOS application and an Android application. The server is an ASP.NET Core minimal-API service running on .NET 10. The data plane consists of PostgreSQL 18 with the pgvector extension and Microsoft Azure Blob Storage. React Native was chosen to keep a single codebase for the heterogeneous device population of the target audience, and ASP.NET Core was chosen for its first-class support of the Semantic Kernel orchestration framework on which the platform's AI layer depends.
+It is useful to record the implementation technologies once. The client is built with React Native \cite{reactnative} (Expo), which lets a single TypeScript codebase be exported as a static web build, an iOS application and an Android application. The server is an ASP.NET Core minimal-API service running on .NET 10. The data plane consists of PostgreSQL 18 with the pgvector extension and Microsoft Azure Blob Storage. React Native was chosen to keep a single codebase for the heterogeneous device population of the target audience, and ASP.NET Core was chosen because it has first-class support for the Semantic Kernel orchestration framework, which the platform's language-model reasoning relies on.
 
 \section{Client Tier}
 \label{sec:client-tier}
@@ -381,22 +381,22 @@ Every generated asset is collected in the gallery, where the retailer can browse
 \section{Application Server}
 \label{sec:application-server}
 
-The application server is a minimal-API ASP.NET Core service running on .NET 10. It hosts every feature service the platform exposes and is the host for the Semantic Kernel orchestration layer through which every AI-bound call passes.
+The application server is a minimal-API ASP.NET Core service running on .NET 10. It hosts every feature service the platform exposes. It also hosts the two provider abstractions that AI calls pass through before they leave the server. Semantic Kernel handles the language-model work, and \textbf{IImageProvider} handles image generation.
 
 \subsection{Stack choice, capability areas and internal layering}
 \label{subsec:why-dotnet}
 
-The choice of platform deserves comment because .NET is a less obvious pick for a contemporary AI application than Node.js or Python. The platform's core is an AI orchestration layer that routes prompts across multiple providers, manages prompt templates, applies retrieval-augmented context to language-model calls, and chains several calls in sequence for the daily recommendation engine. Microsoft's \emph{Semantic Kernel} \cite{semantickernel} is a first-class .NET library that bundles all of these facilities behind a unified abstraction, with clean integration into the ASP.NET Core dependency-injection container. Building the server in .NET therefore makes Semantic Kernel a native citizen of the architecture rather than a foreign component, which is the decisive reason for choosing ASP.NET Core minimal-API over Node.js with Express or Python with FastAPI.
+The choice of platform deserves comment because .NET is a less obvious pick for a contemporary AI application than Node.js or Python. One important part of the platform is a layer that orchestrates language-model calls. It routes prompts to several model backends, manages prompt templates, adds retrieval-augmented context to those calls, and runs several calls in a row for the daily recommendation engine. Microsoft's \emph{Semantic Kernel} \cite{semantickernel} is a first-class .NET library that bundles all of these facilities behind a unified abstraction, with clean integration into the ASP.NET Core dependency-injection container. Building the server in .NET therefore makes Semantic Kernel a native citizen of the architecture rather than a foreign component, which is the decisive reason for choosing ASP.NET Core minimal-API over Node.js with Express or Python with FastAPI.
 
-The choice of orchestrator does not lock the platform to the Microsoft AI ecosystem. Semantic Kernel sits above a uniform provider abstraction, and the providers it talks to span both Azure offerings such as Azure OpenAI and Azure AI Foundry, and non-Microsoft offerings such as Google's Gemini family and the Nano Banana image model. Swapping a model is therefore a configuration change rather than a code change. Figure~\ref{fig:semantic-kernel} sketches the arrangement.
+Choosing Semantic Kernel does not tie the platform to one model vendor. The recommendation pipeline can run on local open-weight models through LM Studio or Ollama, on hosted DeepSeek or on OpenAI, and switching between them is a configuration change. Image generation does not use Semantic Kernel at all. It sits behind a separate interface called \textbf{IImageProvider}. In production this interface calls Google's Gemini image model, and it can also call OpenAI's GPT Image 2 model through the same interface. The image model can be changed from inside the platform, with no code change. Figure~\ref{fig:semantic-kernel} shows this arrangement.
 
 \begin{figure}[!ht]
 \centering
 % --- same palette as Figure \ref{fig:three-tier} ---
 \definecolor{cInk}{HTML}{2E3440}    % text + arrows
-\definecolor{cIndigo}{HTML}{3F4D8C} % Semantic Kernel / Azure
+\definecolor{cIndigo}{HTML}{3F4D8C} % abstraction layers
 \definecolor{cSlate}{HTML}{4A5568}  % application server
-\definecolor{cGray}{HTML}{7C8390}   % external providers
+\definecolor{cGray}{HTML}{7C8390}   % backends
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
     font=\sffamily\scriptsize,
@@ -404,46 +404,53 @@ The choice of orchestrator does not lock the platform to the Microsoft AI ecosys
                 text=cInk, drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
                                         fill=black, opacity=0.12}},
     groupcard/.style={draw=#1, line width=0.9pt, rounded corners=3pt, inner sep=0pt,
-                      dash pattern=on 2.4pt off 1.7pt, fill=#1!6,
-                      minimum width=62mm, minimum height=17mm},
+                      dash pattern=on 2.4pt off 1.7pt, fill=#1!6},
     tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
                 minimum height=5.2mm, anchor=south west,
                 font=\sffamily\scriptsize\bfseries, text=white},
     chip/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
-                 minimum width=27mm, minimum height=11mm, align=center, text=cInk},
+                 minimum height=9mm, align=center, text=cInk},
     arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
 
-% ============ layer bars ============
-\node[bar=cSlate, fill=cSlate!8, minimum width=146mm, minimum height=10mm]
-      (api) at (0,4.6) {\textbf{Application server} \quad (ASP.NET Core, .NET 10)};
-\node[bar=cIndigo, fill=cIndigo!14, minimum width=146mm, minimum height=13mm]
-      (sk) at (0,2.85)
-      {\textbf{Semantic Kernel}\\prompt templates \;$\cdot$\; retrieval-augmented context \;$\cdot$\; multi-stage chaining};
+% ============ application server (top, full width) ============
+\node[bar=cSlate, fill=cSlate!8, minimum width=150mm, minimum height=10mm]
+      (api) at (0,5.0) {\textbf{Application server} \quad (ASP.NET Core, .NET 10)};
 
-% ============ provider group cards ============
-\node[groupcard=cIndigo] (azureCard) at (-4.0,0.3) {};
-\node[groupcard=cGray]   (extCard)   at ( 4.0,0.3) {};
-% ============ provider chips ============
-\node[chip=cIndigo] (aoai) at (-5.45,0.3) {Azure OpenAI};
-\node[chip=cIndigo] (afnd) at (-2.55,0.3) {Azure AI\\Foundry};
-\node[chip=cGray]   (gem)  at ( 2.55,0.3) {Google Gemini};
-\node[chip=cGray]   (nb)   at ( 5.45,0.3) {Nano Banana};
+% ============ abstraction bars ============
+\node[bar=cIndigo, fill=cIndigo!14, minimum width=84mm, minimum height=13mm]
+      (sk) at (-3.3,3.0)
+      {\textbf{Semantic Kernel}\\prompt templates \;$\cdot$\; retrieval-augmented context \;$\cdot$\; multi-stage chaining};
+\node[bar=cIndigo, fill=cIndigo!14, minimum width=56mm, minimum height=13mm]
+      (iface) at (4.5,3.0)
+      {\textbf{IImageProvider}\\image generation};
+
+% ============ backend group cards ============
+\node[groupcard=cGray, minimum width=84mm, minimum height=28.5mm] (llmCard) at (-3.3,-0.03) {};
+\node[groupcard=cGray, minimum width=56mm, minimum height=28.5mm] (imgCard) at ( 4.5,-0.03) {};
+
+% ============ language-model backend chips ============
+\node[chip=cGray, minimum width=38mm] (loc) at (-5.4, 0.65) {Local\\(LM Studio / Ollama)};
+\node[chip=cGray, minimum width=28mm] (ds)  at (-1.7, 0.65) {DeepSeek};
+\node[chip=cGray, minimum width=28mm] (oa)  at (-3.55,-0.70) {OpenAI};
+
+% ============ image-generation backend chips ============
+\node[chip=cGray, minimum width=50mm] (gem) at (4.5, 0.65) {Google Gemini};
+\node[chip=cGray, minimum width=50mm] (gpt) at (4.5,-0.70) {GPT Image 2};
 
 % ============ arrows ============
 \draw[arr] (api.south) -- (sk.north);
-\draw[arr] (sk.south) -- (aoai.north);
-\draw[arr] (sk.south) -- (afnd.north);
-\draw[arr] (sk.south) -- (gem.north);
-\draw[arr] (sk.south) -- (nb.north);
+\draw[arr] (api.south) -- (iface.north);
+\draw[arr] (sk.south)    -- (llmCard.north);
+\draw[arr] (iface.south) -- (imgCard.north);
 
 % ============ group tabs (drawn last so they sit above the arrows) ============
-\node[tab=cIndigo] at ([xshift=4mm]azureCard.north west) {Azure ecosystem};
-\node[tab=cGray]   at ([xshift=4mm]extCard.north west)   {External providers};
+\node[tab=cIndigo] at ([xshift=4mm]llmCard.north west) {Language-model backends};
+\node[tab=cIndigo] at ([xshift=4mm]imgCard.north west) {Image-generation backends};
 
 \end{tikzpicture}%
 }
-\caption{Semantic Kernel as a uniform layer over Azure and non-Azure providers.}
+\caption{Provider abstractions on the application server.}
 \label{fig:semantic-kernel}
 \end{figure}
 
@@ -452,9 +459,9 @@ Each capability area on the server is a bounded service that exposes a small set
 
 The retailer-facing entities (shop profile, products, gallery, wallet) are each served by a dedicated feature service that exposes CRUD operations over its part of the schema, with the isolation rules inherited from the data layer. Coordination between services is performed at the endpoint layer rather than through direct inter-service calls.
 
-A thin orchestration layer fronts the supported image providers behind a single \texttt{IImageProvider} abstraction shown in Listing~\ref{lst:iimageprovider}. Each provider has a concrete implementation that wraps its SDK, and a mock implementation returns a deterministic placeholder image during automated testing.
+A thin orchestration layer fronts the supported image providers behind a single \textbf{IImageProvider} abstraction shown in Listing~\ref{lst:iimageprovider}. Each provider has a concrete implementation that wraps its SDK, and a mock implementation returns a deterministic placeholder image during automated testing.
 
-\begin{lstlisting}[style=csharp, caption={The \texttt{IImageProvider} abstraction.}, label={lst:iimageprovider}]
+\begin{lstlisting}[style=csharp, caption={The IImageProvider abstraction.}, label={lst:iimageprovider}]
 public interface IImageProvider
 {
     Task<ImageGenerationResult> GenerateAsync(
@@ -505,7 +512,7 @@ Print & /print & Render a gallery item to a print-ready document. \\
 }
 
 \paragraph{Internal layering.}\label{subsec:server-layering}
-Each feature follows a simple internal layering, shown in Figure~\ref{fig:server-layering}. The endpoint layer handles HTTP concerns only and delegates to a feature service that holds the business logic. The feature service in turn calls the data layer or, for AI-bound work, the Semantic-Kernel-mediated provider abstractions. Those abstractions are the only place from which outbound HTTP calls to third parties leave, which keeps retries, circuit breakers and credential management in one place.
+Each feature follows a simple internal layering, shown in Figure~\ref{fig:server-layering}. The endpoint layer handles HTTP concerns only and delegates to a feature service that holds the business logic. The feature service then calls the data layer. For AI work it instead calls one of the provider abstractions, which are Semantic Kernel for language-model calls and \textbf{IImageProvider} for image generation. Those abstractions are the only place from which outbound HTTP calls to third parties leave, which keeps retries, circuit breakers and credential management in one place.
 
 \begin{figure}[H]
 \centering
@@ -517,18 +524,22 @@ Each feature follows a simple internal layering, shown in Figure~\ref{fig:server
 \begin{tikzpicture}[
     font=\sffamily\scriptsize,
     bar/.style={draw=#1, line width=0.9pt, rounded corners=3pt, align=center,
-                minimum width=78mm, minimum height=9mm, text=cInk,
+                minimum width=90mm, minimum height=13mm, text=cInk,
                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
                              fill=black, opacity=0.12}},
     extbar/.style={draw=cGray, line width=0.9pt, rounded corners=3pt, align=center,
                    dash pattern=on 2.4pt off 1.7pt, fill=cGray!6,
-                   minimum width=78mm, minimum height=9mm, text=cInk},
+                   minimum width=90mm, minimum height=13mm, text=cInk},
     arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
-\node[bar=cIndigo, fill=cIndigo!7]  (ep)   at (0,0)    {Endpoints (\texttt{Map\dots Endpoints})};
-\node[bar=cSlate,  fill=cSlate!8]   (svc)  at (0,-1.7) {Feature services};
-\node[bar=cIndigo, fill=cIndigo!14] (orch) at (0,-3.4) {Semantic Kernel + \texttt{IImageProvider}};
-\node[extbar]                       (http) at (0,-5.1) {External HTTP boundary};
+\node[bar=cIndigo, fill=cIndigo!7]  (ep)   at (0,0)
+      {\textbf{Endpoints}\\HTTP concerns only \;$\cdot$\; \texttt{Map\dots Endpoints}};
+\node[bar=cSlate,  fill=cSlate!8]   (svc)  at (0,-2.0)
+      {\textbf{Feature services}\\business logic for one feature};
+\node[bar=cIndigo, fill=cIndigo!14] (orch) at (0,-4.0)
+      {\textbf{Provider abstractions}\\Semantic Kernel \;$\cdot$\; \textbf{IImageProvider}};
+\node[extbar]                       (http) at (0,-6.0)
+      {\textbf{External HTTP boundary}\\outbound third-party calls leave here};
 \draw[arr] (ep)   -- (svc);
 \draw[arr] (svc)  -- (orch);
 \draw[arr] (orch) -- (http);
@@ -547,7 +558,7 @@ The data layer holds every piece of state that survives a request. PostgreSQL wi
 % --- same palette as Figure \ref{fig:three-tier} ---
 \definecolor{cInk}{HTML}{2E3440}    % text + arrows
 \definecolor{cSlate}{HTML}{4A5568}  % Azure compute
-\definecolor{cTeal}{HTML}{20756C}   % data plane
+\definecolor{cTeal}{HTML}{2E5F8C}   % data plane
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
     font=\sffamily\scriptsize,
@@ -613,7 +624,7 @@ The schema is a foreign-key spine that ties every record to a tenant. At its cen
 \definecolor{cInk}{HTML}{2E3440}    % text + arrows
 \definecolor{cIndigo}{HTML}{3F4D8C} % AppUser hub
 \definecolor{cSlate}{HTML}{4A5568}  % plain entities
-\definecolor{cTeal}{HTML}{20756C}   % vector-bearing entities + data plane
+\definecolor{cTeal}{HTML}{2E5F8C}   % vector-bearing entities + data plane
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
     font=\sffamily\scriptsize,
@@ -808,7 +819,7 @@ Binary assets such as raw and processed product photographs, generated images an
 \definecolor{cInk}{HTML}{2E3440}    % text + arrows
 \definecolor{cIndigo}{HTML}{3F4D8C} % client
 \definecolor{cSlate}{HTML}{4A5568}  % application server
-\definecolor{cTeal}{HTML}{20756C}   % data stores
+\definecolor{cTeal}{HTML}{2E5F8C}   % data stores
 \definecolor{cAmber}{HTML}{B07A1F}  % signing step
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
@@ -859,7 +870,7 @@ Azure was chosen because it gives the platform a managed, well-supported and tru
 \definecolor{cInk}{HTML}{2E3440}    % text + arrows
 \definecolor{cIndigo}{HTML}{3F4D8C} % client / ingress / VNet
 \definecolor{cSlate}{HTML}{4A5568}  % Azure compute + ops
-\definecolor{cTeal}{HTML}{20756C}   % data + secrets
+\definecolor{cTeal}{HTML}{2E5F8C}   % data + secrets
 \definecolor{cGray}{HTML}{7C8390}   % external third-party
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
@@ -923,7 +934,7 @@ Azure was chosen because it gives the platform a managed, well-supported and tru
 \draw[arr] (apim.south) -- (capps.north -| 0.6,0);
 % CI/CD: GitHub push, ACR pull
 \draw[arr] (github) -- node[right]{push image} (acr);
-\draw[arr] (acr) -- node[above]{pull image} (web);
+\draw[arr] (acr) -- node[above, xshift=2mm]{pull image} (web);
 % api -> data plane
 \draw[arr] (api) -- (db.north);
 \draw[arr] (api) -- (blob.north);
@@ -944,7 +955,7 @@ Azure was chosen because it gives the platform a managed, well-supported and tru
 \label{fig:deployment}
 \end{figure}
 
-The application server runs on Azure Container Apps, a managed container runtime built on Kubernetes that provides per-replica scale-out without the operational burden of managing a cluster directly. The choice was made over Azure App Service on two grounds. First, the platform packages its server as a container image already. Second, Container Apps integrates more cleanly with Azure API Management and with the private virtual network in which the data plane lives. A single long-running background service, the refresh-token cleaner, runs as an \texttt{IHostedService} inside the same Container Apps revision as the API. Recommendation generations are started by request handlers as fire-and-forget tasks tracked by an in-memory job registry, so a separate worker tier is not justified at the platform's data volumes. The web build of the client runs as its own Azure Container App (\texttt{merchstory-web}), pulling its image from the same registry as the API; the mobile builds for iOS and Android are distributed through their respective application stores and are not deployed to Azure.
+The application server runs on Azure Container Apps, a managed container runtime built on Kubernetes that provides per-replica scale-out without the operational burden of managing a cluster directly. The choice was made over Azure App Service on two grounds. First, the platform packages its server as a container image already. Second, Container Apps integrates more cleanly with Azure API Management and with the private virtual network in which the data plane lives. A single long-running background service, the refresh-token cleaner, runs inside the same Container Apps revision as the API. Recommendation generations are started by request handlers as fire-and-forget tasks tracked by an in-memory job registry, so a separate worker tier is not justified at the platform's data volumes. The web build of the client runs as its own Azure Container App (\texttt{merchstory-web}), pulling its image from the same registry as the API; the mobile builds for iOS and Android are distributed through their respective application stores and are not deployed to Azure.
 
 The data plane consists of a relational store and an object store. The relational store, including its pgvector extension, runs on Azure Database for PostgreSQL Flexible Server. The flexible-server tier is preferred over the older single-server tier because it supports custom extensions including pgvector, allows VNet-integrated private networking, and provides point-in-time restore over a configurable retention window. Backups are taken automatically, and long-running migrations are executed during deployment before the new container revision becomes ready. Binary assets live in Azure Blob Storage as described in Section~\ref{subsec:object-storage}, with a private endpoint inside the VNet so that the storage account is invisible from the public Internet.
 
