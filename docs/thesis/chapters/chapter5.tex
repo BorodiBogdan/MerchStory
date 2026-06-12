@@ -26,7 +26,7 @@ The next figure puts the two catalogue paths the platform supports side by side.
 \end{minipage}\hfill
 \begin{minipage}[t]{0.47\textwidth}
 \centering
-\samplefig[width=\linewidth,height=0.32\textheight,keepaspectratio]{figures/results/catalogue.jpg}
+\samplefig[width=\linewidth,height=0.32\textheight,keepaspectratio]{figures/results/catalogue.jpeg}
 \end{minipage}
 \caption{Catalogue: hybrid (left) vs.\ fully generative (right).}
 \label{fig:result-catalogues}
@@ -122,53 +122,53 @@ Because the React Native web export is a real DOM tree and the iOS/Android build
 
 The recommendation engine's writer stage produces stochastic text and cannot be verified by equality assertions. It is instead evaluated offline using \emph{DeepEval}~\cite{deepeval2024}, an open-source evaluation framework for language-model applications. The framework was chosen over hand-rolled scripts because its metric library directly covers the axes the platform cares about (answer relevancy, faithfulness, hallucination, and rubric-style judgements over tone and brand voice), and because it reports bootstrap confidence intervals and pass-fail thresholds without requiring bespoke statistics code. The fact that it integrates with the same test runner the rest of the suite already uses was a further point in its favour.
 
-The reference set against which DeepEval is run is a frozen collection of $120$ $(\text{shop}, \text{day}, \text{signal})$ tuples that span urban and rural shop profiles, weak and strong context signals, and both supported languages. Three complementary checks are run on every model or prompt change:
+The reference set against which DeepEval is run is a frozen collection of $20$ tuples that span urban and rural shop profiles, weak and strong context signals, and both supported languages. Three complementary checks are run on every model or prompt change:
 
 \begin{itemize}
     \item Schema and format gate: every output must parse as the declared JSON schema, populate every required field and respect the fixed enumerations for \texttt{type} and \texttt{tone}. Schema failures fail the suite.
-    \item Forbidden-phrase regression: a curated denylist of the boilerplate marketing tropes the writer prompt is built to discourage (``discover our premium selection'', ``don't miss out'', and their Romanian equivalents) is matched against the \texttt{title}, \texttt{body} and \texttt{suggestedPost} fields. The suite tracks the per-100-ideas rate of denylist hits and gates merges on it not regressing.
+    \item Boilerplate-phrase check: the writer prompt is built to steer the model away from a list of overused marketing phrases (for example ``discover our premium selection'', ``don't miss out'', and their Romanian versions). Each run counts how often these phrases still turn up in the \texttt{title}, \texttt{body} and \texttt{suggestedPost} fields, so any rise in that count is easy to notice.
     \item DeepEval metric battery: each output is scored on answer relevancy, faithfulness and hallucination using DeepEval's built-in metrics, and on two custom rubric metrics, Tone Match and Schema Compliance, whose criteria are written against the platform's brand-voice specification. The judge model is rotated between Claude and Gemini across runs to control for judge bias, following the LLM-as-judge protocol of Zheng et al.~\cite{zheng2023llmjudge}. DeepEval reports mean scores per axis with bootstrap confidence intervals, and the suite flags regressions of more than $0.2$ rubric points.
 \end{itemize}
 
 \subsection*{Cross-model evaluation}
 
-The same DeepEval harness is used to compare candidate writer models head-to-head on the reference set, so that decisions about which backbone to host, fine-tune or call as a managed service can be made on evidence rather than intuition. Five models are evaluated: Gemma 3 4B as the open-weights base, Gemma 3 4B (fine-tuned) after supervised fine-tuning on the platform's brand-voice corpus, DeepSeek as an open-weights frontier comparison, and the closed Claude and ChatGPT families as managed-service baselines. Figure~\ref{fig:deepeval-models} reports the mean per-axis score, on a $0$ to $100$ scale, with the y-axis truncated at $60$ to make the differences legible.
+The same DeepEval harness is used to compare candidate writer models head-to-head on the reference set, so that decisions about which backbone to host, fine-tune or call as a managed service can be made on evidence rather than intuition. Five models are evaluated: Gemma 3 4B as the open-weights base, Gemma 3 4B (fine-tuned) after fine-tuning it on a set of example ideas written in the voice and wording the writer should use, DeepSeek as an open-weights frontier comparison, and the closed Claude Haiku 4.5 and GPT-4o mini models as managed-service baselines. Figure~\ref{fig:deepeval-models} reports the mean per-axis score, on a $0$ to $100$ scale, with the y-axis truncated at $30$ to make the differences legible.
 
 \begin{figure}[!ht]
 \centering
 
-\definecolor{mGemma}{HTML}{4C72B0}
-\definecolor{mGemmaFT}{HTML}{E45756}
-\definecolor{mDeepSeek}{HTML}{2E8B8B}
-\definecolor{mClaude}{HTML}{CC785C}
-\definecolor{mChatGPT}{HTML}{10A37F}
-\definecolor{gridGray}{HTML}{EDEDED}
-\definecolor{axisGray}{HTML}{4A4A4A}
-\definecolor{labelGray}{HTML}{2B2B2B}
+% --- same palette as Figure \ref{fig:three-tier} ---
+\definecolor{cInk}{HTML}{2E3440}    % text + axis
+\definecolor{cIndigo}{HTML}{3F4D8C} % series 1
+\definecolor{cSlate}{HTML}{4A5568}  % series 4
+\definecolor{cTeal}{HTML}{2E5F8C}   % series 2
+\definecolor{cAmber}{HTML}{B07A1F}  % series 3
+\definecolor{cGray}{HTML}{7C8390}   % series 5 + grid
 
-\begin{tikzpicture}
+\begin{tikzpicture}[font=\sffamily\scriptsize]
 \begin{axis}[
     ybar=1.4pt,
     bar width=8pt,
     width=\textwidth,
     height=9.2cm,
     enlarge x limits=0.14,
-    ymin=60, ymax=108,
-    ytick={60,70,80,90,100},
+    ymin=30, ymax=108,
+    ytick={30,40,50,60,70,80,90,100},
     ymajorgrids=true,
     xmajorgrids=false,
-    major grid style={draw=gridGray, line width=0.4pt},
+    major grid style={draw=cGray!30, thin},
     axis lines*=left,
-    axis line style={draw=axisGray, line width=0.5pt},
-    tick style={draw=axisGray},
-    tick label style={font=\footnotesize, color=labelGray},
-    ylabel={\footnotesize DeepEval score (\%)},
-    ylabel style={color=labelGray, yshift=-2pt},
+    axis line style={draw=cInk!85, line width=0.5pt},
+    tick style={draw=cInk!85},
+    tick label style={font=\sffamily\scriptsize, color=cInk,
+        /pgf/number format/assume math mode=true},
+    ylabel={DeepEval score (\%)},
+    ylabel style={font=\sffamily\scriptsize, color=cInk, yshift=-2pt},
     symbolic x coords={Relevancy, Faithfulness, {Tone Match}, {Schema Compliance}, {Hallucination-Free}},
     xtick=data,
     xticklabel style={
-        font=\footnotesize,
-        color=labelGray,
+        font=\sffamily\scriptsize,
+        color=cInk,
         rotate=18,
         anchor=north east,
         xshift=2pt,
@@ -177,15 +177,16 @@ The same DeepEval harness is used to compare candidate writer models head-to-hea
     nodes near coords,
     nodes near coords align={vertical},
     every node near coord/.append style={
-        font=\fontsize{6.5}{7.5}\selectfont,
-        color=labelGray,
+        font=\sffamily\fontsize{6.5}{7.5}\selectfont,
+        color=cInk,
         rotate=90,
         anchor=west,
         inner sep=0pt,
         xshift=3pt,
         /pgf/number format/fixed,
         /pgf/number format/fixed zerofill,
-        /pgf/number format/precision=1
+        /pgf/number format/precision=1,
+        /pgf/number format/assume math mode=true
     },
     legend image code/.code={\draw[#1] (0cm,-0.08cm) rectangle (0.32cm,0.18cm);},
     legend style={
@@ -194,45 +195,42 @@ The same DeepEval harness is used to compare candidate writer models head-to-hea
         legend columns=5,
         draw=none,
         fill=none,
-        column sep=14pt,
-        font=\footnotesize,
-        /tikz/every even column/.append style={column sep=14pt}
+        column sep=6pt,
+        font=\sffamily\scriptsize,
+        text=cInk,
+        /tikz/every even column/.append style={column sep=6pt}
     },
-    every axis plot/.append style={
-        fill opacity=0.92,
-        draw opacity=1,
-        line width=0.3pt
-    },
+    every axis plot/.append style={line width=0.3pt},
     clip=false,
 ]
 
-\addplot[fill=mGemma, draw=mGemma!70!black]
-    coordinates {(Relevancy,78.2) (Faithfulness,74.1) ({Tone Match},71.4) ({Schema Compliance},82.6) ({Hallucination-Free},76.8)};
-\addplot[fill=mGemmaFT, draw=mGemmaFT!70!black]
-    coordinates {(Relevancy,91.4) (Faithfulness,89.7) ({Tone Match},93.8) ({Schema Compliance},97.3) ({Hallucination-Free},92.5)};
-\addplot[fill=mDeepSeek, draw=mDeepSeek!70!black]
-    coordinates {(Relevancy,88.6) (Faithfulness,85.3) ({Tone Match},81.2) ({Schema Compliance},90.5) ({Hallucination-Free},86.9)};
-\addplot[fill=mClaude, draw=mClaude!70!black]
-    coordinates {(Relevancy,93.7) (Faithfulness,94.2) ({Tone Match},90.6) ({Schema Compliance},96.8) ({Hallucination-Free},95.1)};
-\addplot[fill=mChatGPT, draw=mChatGPT!70!black]
-    coordinates {(Relevancy,92.1) (Faithfulness,91.5) ({Tone Match},88.4) ({Schema Compliance},95.4) ({Hallucination-Free},93.2)};
+\addplot[fill=cIndigo, draw=cIndigo!80!black]
+    coordinates {(Relevancy,79.2) (Faithfulness,81.9) ({Tone Match},37.5) ({Schema Compliance},69.8) ({Hallucination-Free},90.9)};
+\addplot[fill=cTeal, draw=cTeal!80!black]
+    coordinates {(Relevancy,82.5) (Faithfulness,84.0) ({Tone Match},48.0) ({Schema Compliance},71.0) ({Hallucination-Free},91.8)};
+\addplot[fill=cAmber, draw=cAmber!80!black]
+    coordinates {(Relevancy,86.4) (Faithfulness,86.8) ({Tone Match},69.5) ({Schema Compliance},64.5) ({Hallucination-Free},93.1)};
+\addplot[fill=cSlate, draw=cSlate!80!black]
+    coordinates {(Relevancy,84.7) (Faithfulness,85.6) ({Tone Match},73.8) ({Schema Compliance},72.2) ({Hallucination-Free},91.0)};
+\addplot[fill=cGray, draw=cGray!80!black]
+    coordinates {(Relevancy,84.7) (Faithfulness,91.0) ({Tone Match},51.0) ({Schema Compliance},54.5) ({Hallucination-Free},92.5)};
 
-\legend{Gemma 3 4B, Gemma 3 4B (FT), DeepSeek, Claude, ChatGPT}
+\legend{Gemma 3 4B, Gemma 3 4B (FT), DeepSeek, Claude Haiku 4.5, GPT-4o mini}
 
 \end{axis}
 \end{tikzpicture}
-\caption[DeepEval scores for five writer models on the 120-tuple reference set.]{DeepEval scores for five writer models on the 120-tuple reference set, mean per-axis score on a $0$ to $100$ scale. The y-axis is truncated at $60$ so that the spread between models is legible. Raw scores below this floor were not observed in any run.}
+\caption[DeepEval scores for five writer models on the 20-tuple reference set.]{DeepEval scores for five writer models on the 20-tuple reference set, mean per-axis score on a $0$ to $100$ scale.}
 \label{fig:deepeval-models}
 \end{figure}
 
-The reading of Figure~\ref{fig:deepeval-models} is the story the chapter argues. The off-the-shelf Gemma 3 4B model is the weakest on every axis, with the largest gap on Tone Match, the metric most sensitive to brand voice and to Romanian-language register. Supervised fine-tuning on the platform's brand-voice corpus closes most of that gap: the fine-tuned variant is within two points of the strongest model on every axis and leads on Tone Match ($93.8$), overtaking both Claude ($90.6$) and ChatGPT ($88.4$). The closed-frontier models retain a small lead on raw Faithfulness and Hallucination-Free Rate, where their scale advantage shows. On the operational dimensions that matter for a small-retailer product, namely tone match and schema compliance, a fine-tuned $4$-billion-parameter open model is at parity with managed services that cost two orders of magnitude more per call, and is therefore the platform's default writer.
+The reading of Figure~\ref{fig:deepeval-models} is the story the chapter argues. Each axis in the figure is one of DeepEval's built-in metrics or rubric judges, and what each metric measures is defined in the framework~\cite{deepeval2024}. The exact per-model scores are the values plotted in the figure and are not repeated in the text. The off-the-shelf Gemma 3 4B model is the weakest writer overall, and its clearest gap is on Tone Match, the axis most sensitive to brand voice and to Romanian-language register. Fine-tuning on the example ideas in the target voice raises it on every axis, with the biggest gain on Tone Match, while it still stays below the managed-service models. Among the closed and frontier models no single model wins on every axis. The gap that remains for the open model is mostly on Tone Match, and closing it with more fine-tuning is what would bring a small open model that costs far less per call close to the managed services on the dimensions a small retailer cares about. For this reason a fine-tuned open model is the platform's intended writer, even though the default backend running in production today is still a managed model.
 
-A complementary human-rated pass is run before each release: two independent reviewers perform pairwise comparisons of the platform's output against the un-adapted seven-billion-parameter writer on a $30$-tuple stratified sub-sample, and the win-rate is recorded. Image generation is evaluated only manually, by running a small canonical prompt set against each live provider and inspecting the assets for product fidelity and tonal fit.
+Image generation is evaluated only manually, by running a small canonical prompt set against each live provider and inspecting the assets for product fidelity and tonal fit.
 
 \section{Continuous integration and the merge gate}
 \label{sec:ci-merge-gate}
 
-The build pipeline is hosted on GitHub Actions. On every pull request it runs the backend integration suite against an ephemeral PostgreSQL service container with pgvector enabled, runs the Jest frontend suite, runs the Playwright suite against the development environment, and re-runs the DeepEval schema gate and forbidden-phrase regression on the frozen reference set. All four must pass before merge into \texttt{master}. The merge gate is the platform's single quality bar with no manual override. Table~\ref{tab:capability-test-layer} maps each functional capability area to the test layer that protects it.
+The build pipeline is hosted on GitHub Actions. On every pull request it runs the backend integration suite against an ephemeral PostgreSQL service container with pgvector enabled, runs the Jest frontend suite, and runs the Playwright end-to-end suite. These three suites must pass before a merge into master. The DeepEval battery is not part of the pipeline. It is run by hand on the reference set when the writer model or its prompts change, because it needs API access to the judge models and is too slow and costly to run on every pull request. Table~\ref{tab:capability-test-layer} maps each functional capability area to the test layer that protects it.
 
 {\small\renewcommand{\arraystretch}{1.3}%
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.0cm}|Y|Y|Y|}

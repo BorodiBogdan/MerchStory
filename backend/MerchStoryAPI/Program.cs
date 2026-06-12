@@ -121,7 +121,23 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<IOPaintClient>();
-builder.Services.AddHttpClient<ILLMService, ClaudeLlmService>();
+
+// Composite-judge backend. Claude (default) stays on the native Anthropic
+// Messages API via Anthropic:*; "Local" routes the judge through Semantic
+// Kernel to the OpenAI-compatible endpoint in LlmJudge:Local:* (e.g. a
+// vision-capable Gemma in LM Studio) — same split the recommendation
+// pipeline uses for its chat backends.
+string judgeBackend = builder.Configuration["LlmJudge:Backend"] ?? "Claude";
+if (string.Equals(judgeBackend, "Claude", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient<ILLMService, ClaudeLlmService>();
+}
+else
+{
+    // Singleton: the service owns its kernel + HttpClient, like the
+    // recommendation chat services.
+    builder.Services.AddSingleton<ILLMService, OpenAiCompatibleLlmService>();
+}
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireClaim("is_admin", "true"));
