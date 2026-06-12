@@ -959,7 +959,8 @@ internal sealed record AnnouncementImageApiRequest(
     string? JobSalary = null,
     string? JobImageStyle = null,
     List<string>? JobRequirements = null,
-    string? Language = null)
+    string? Language = null,
+    string? ImageModel = null)
 {
     public AnnouncementImageRequest ToServiceRequest(
         BrandContext? brandContext,
@@ -979,5 +980,6 @@ internal sealed record AnnouncementImageApiRequest(
             this.JobSalary,
             this.JobImageStyle,
             this.JobRequirements,
-            language);
+            language,
+            this.ImageModel);
 }

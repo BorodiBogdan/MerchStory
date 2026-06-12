@@ -1541,6 +1541,10 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [catalogImageModel, setCatalogImageModel] = useState<'gemini' | 'openai'>('gemini');
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const selectedModel = IMAGE_MODELS.find((m) => m.value === catalogImageModel) ?? IMAGE_MODELS[0];
+  // The image-model picker applies to model-backed generation: catalog (in the
+  // generate sub-mode, not the wallpaper compositor) and announcements.
+  const showModelFab =
+    (activeTab === 'catalog' && catalogMode === 'generate') || activeTab === 'announcements';
   const [preserveProductImages, setPreserveProductImages] = useState(false);
   const [showPreserveHelp, setShowPreserveHelp] = useState(false);
   const [showPricesHelp, setShowPricesHelp] = useState(false);
@@ -2002,6 +2006,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         jobImageStyle: isJobPost ? jobImageStyle : undefined,
         jobRequirements:
           isJobPost && jobRequirementsList.length > 0 ? jobRequirementsList : undefined,
+        imageModel: catalogImageModel,
       });
       setAnnoResult(result);
       handleAfterPaidGenerate(result);
@@ -3288,7 +3293,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           }}
         />
 
-        {activeTab === 'catalog' && catalogMode === 'generate' && (
+        {showModelFab && (
           <ModelFab
             icon={selectedModel.icon}
             onPress={() => setModelPickerVisible(true)}
@@ -4608,7 +4613,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         onClose={() => setModelPickerVisible(false)}
       />
 
-      {activeTab === 'catalog' && catalogMode === 'generate' && (
+      {showModelFab && (
         <ModelFab
           icon={selectedModel.icon}
           onPress={() => setModelPickerVisible(true)}

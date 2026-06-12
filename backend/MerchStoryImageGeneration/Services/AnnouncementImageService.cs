@@ -4,15 +4,19 @@ namespace MerchStoryImageGeneration.Services;
 
 internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAnnouncementImageService
 {
-    public AnnouncementImageService(IImageProvider provider)
+    private readonly IImageProviderResolver providerResolver;
+
+    public AnnouncementImageService(IImageProvider provider, IImageProviderResolver providerResolver)
         : base(provider)
     {
+        this.providerResolver = providerResolver;
     }
 
     public Task<ImageGenerationResult> GenerateAnnouncementImageAsync(
         AnnouncementImageRequest request,
         CancellationToken cancellationToken = default)
-        => this.GenerateAsync(BuildPrompt(request), BuildInlineImages(request), cancellationToken);
+        => this.providerResolver.Resolve(request.ImageModel)
+            .GenerateAsync(BuildPrompt(request), BuildInlineImages(request), cancellationToken);
 
     private static List<string>? BuildInlineImages(AnnouncementImageRequest r)
     {

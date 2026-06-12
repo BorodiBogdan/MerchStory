@@ -430,6 +430,7 @@ export interface GenerateAnnouncementImageParams {
   jobImageStyle?: 'with-person' | 'text-only';
   jobRequirements?: string[];
   language?: AppLanguage;
+  imageModel?: 'gemini' | 'openai';
 }
 
 async function parseGenerationResponse(response: Response): Promise<GenerateImageResponse> {

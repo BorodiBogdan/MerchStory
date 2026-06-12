@@ -87,7 +87,11 @@ internal sealed class OpenAiImageProvider : IImageProvider
 
     private static HttpRequestMessage BuildGenerationRequest(string model, string prompt)
     {
-        string json = JsonSerializer.Serialize(new { model, prompt, n = 1 });
+        // "low" is the least restrictive setting the API allows (default is "auto").
+        // Product/catalog imagery routinely trips the stricter default filter with a
+        // spurious "other" category, so we relax it here. Genuinely high-risk content
+        // is still blocked even on "low".
+        string json = JsonSerializer.Serialize(new { model, prompt, n = 1, moderation = "low" });
         return new HttpRequestMessage(HttpMethod.Post, GenerationsUrl)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json"),
@@ -97,6 +101,11 @@ internal sealed class OpenAiImageProvider : IImageProvider
     private static HttpRequestMessage BuildEditsRequest(
         string model, string prompt, IReadOnlyList<string> images)
     {
+        // NOTE: the images/edits endpoint does NOT support the "moderation" parameter
+        // (unlike images/generations) — output moderation here is locked to "auto" and
+        // cannot be relaxed. So branded/real-product catalogs conditioned on inline
+        // photos are prone to "moderation_blocked" (output, "other") with no API knob to
+        // disable it. Gemini handles this path without the same filter.
         var content = new MultipartFormDataContent
         {
             { new StringContent(model), "model" },
