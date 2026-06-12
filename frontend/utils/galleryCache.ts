@@ -144,16 +144,26 @@ export function addItem(item: GalleryItem): void {
   // skip the real fetch, so the page would show only this item. The next focus
   // fetch returns the full list (including this item) anyway.
   if (!state.initialized) return;
-  // Prepend to current view. Other cached pages are now shifted by one on the
-  // server so their content is stale — drop them and only keep the current
-  // page's view in the cache.
-  const nextItems = [item, ...state.items];
+  // A newly created item is the most recent, so it belongs at the top of page 1,
+  // not the page the user happens to be viewing. Jump the view to page 1 and
+  // prepend there. Every other cached page is shifted by one on the server now,
+  // so drop them.
+  const page1 = state.page === 1 ? state.items : state.pages[1];
+  if (!page1) {
+    // Page 1 isn't cached (e.g. after refresh() while on a deeper page). Reset
+    // to page 1 and refetch it so it's rebuilt correctly from the server.
+    state = { ...state, page: 1, pages: {}, total: state.total + 1 };
+    notify();
+    void fetchAndCachePage(1, state.filters, 'replace');
+    return;
+  }
+  const nextPage1 = [item, ...page1].slice(0, state.pageSize);
   state = {
     ...state,
-    items: nextItems,
-    pages: { [state.page]: nextItems.slice(0, state.pageSize) },
+    items: nextPage1,
+    page: 1,
+    pages: { 1: nextPage1 },
     total: state.total + 1,
-    initialized: true,
   };
   notify();
 }
