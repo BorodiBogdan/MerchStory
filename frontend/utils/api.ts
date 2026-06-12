@@ -476,6 +476,8 @@ export interface GenerateWallpaperParams {
   includeLogo: boolean;
   brandContextFields?: string[];
   language?: AppLanguage;
+  // Which image model generates the wallpaper: 'gemini' (nano banana, default) | 'openai'.
+  imageModel?: 'gemini' | 'openai';
 }
 
 export interface TextStyleOptions {

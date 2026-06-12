@@ -921,7 +921,7 @@ internal sealed record CatalogImageApiRequest(
     }
 }
 
-internal sealed record WallpaperApiRequest(string Prompt, string Format, bool IncludeLogo, List<string>? BrandContextFields, string? Language = null)
+internal sealed record WallpaperApiRequest(string Prompt, string Format, bool IncludeLogo, List<string>? BrandContextFields, string? Language = null, string? ImageModel = null)
 {
     public WallpaperImageRequest ToServiceRequest(BrandContext? brandContext, string? brandLogo, string language) =>
         new(
@@ -929,7 +929,8 @@ internal sealed record WallpaperApiRequest(string Prompt, string Format, bool In
             UserPrompt: this.Prompt,
             InlineImages: string.IsNullOrWhiteSpace(brandLogo) ? null : [brandLogo],
             BrandContext: brandContext,
-            Language: language);
+            Language: language,
+            ImageModel: this.ImageModel);
 }
 
 internal sealed record PlacementZone(

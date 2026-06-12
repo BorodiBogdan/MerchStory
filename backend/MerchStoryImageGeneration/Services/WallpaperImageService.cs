@@ -6,22 +6,31 @@ namespace MerchStoryImageGeneration.Services;
 
 internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallpaperImageService
 {
-    public WallpaperImageService(IImageProvider provider)
+    private readonly IImageProviderResolver providerResolver;
+
+    public WallpaperImageService(IImageProvider provider, IImageProviderResolver providerResolver)
         : base(provider)
     {
+        this.providerResolver = providerResolver;
     }
 
     public Task<ImageGenerationResult> GenerateWallpaperAsync(
         WallpaperImageRequest request,
         CancellationToken cancellationToken = default)
-        => this.GenerateAsync(BuildPrompt(request), request.InlineImages, cancellationToken: cancellationToken);
+    {
+        // Like the catalog flow, let the caller switch the underlying model per
+        // request (nano banana / Gemini by default, OpenAI on demand).
+        IImageProvider provider = this.providerResolver.Resolve(request.ImageModel);
+        return provider.GenerateAsync(BuildPrompt(request), request.InlineImages, cancellationToken);
+    }
 
     private static string BuildPrompt(WallpaperImageRequest r)
     {
         const string systemContext =
-            "You are an expert Graphic Designer specializing in retail catalogue layouts. " +
-            "Your task is to generate a professional marketing background template — a backdrop image onto which real product photos will be composited in post-production. " +
-            "The hero area must be simple and clean — a calm, solid or very softly toned color that complements the brand. No busy patterns, no abstract art, no objects. " +
+            "You are an award-winning Art Director specializing in premium retail marketing visuals. " +
+            "Your task is to generate a striking, designer-made background template — a polished backdrop onto which real product photos will be composited in post-production. " +
+            "Make it genuinely cool and high-end: rich color, soft studio lighting, atmospheric depth, smooth gradients, and tasteful modern design elements (soft geometric shapes, light blooms, gentle organic forms, subtle depth-of-field) so it looks like an editorial marketing piece, NOT a flat dead color fill. Be bold. " +
+            "Keep the composition cohesive and avoid chaotic, high-contrast noise right in the middle so products composited on top still read well — but do not play it safe; a beautiful, alive backdrop is the goal. " +
             "TYPOGRAPHY: Only render text that is explicitly listed in the prompt. Do not add any extra text, taglines, or decorative copy. Use modern, clean, sans-serif fonts with premium spacing.";
 
         var sb = new StringBuilder();
@@ -53,7 +62,7 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
         bool hasFooter = hasContact || hasSocials;
 
         // --- DYNAMIC LAYOUT LOGIC ---
-        const string heroStyle = "This is the product placement zone for a retail catalogue. Use a calm, simple color — solid or with a very gentle, barely noticeable shift in tone if it helps the composition, but nothing dramatic. No patterns, no textures, no shapes, no lighting effects, no abstract elements. Think of a clean studio sweep backdrop. Completely empty of any objects, people, or props — real products will be composited here later.";
+        const string heroStyle = "This is where products will be composited for a retail catalogue, so make it a beautiful, premium studio backdrop with real depth and life — not a plain color fill. Use rich smooth gradients, soft diffused studio lighting, gentle vignettes or light blooms, atmospheric depth, and tasteful modern design accents (soft geometric shapes, subtle bands, gentle organic forms) — concentrate the boldest detail toward the edges and corners. Keep it cohesive and avoid harsh, high-contrast clutter or literal objects, props, or people right in the center where products will sit, so the products still stand out. Otherwise be bold and make it look genuinely cool and designed.";
 
         sb.AppendLine("\n### LAYOUT STRUCTURE:");
         if (hasHeader && hasFooter)
@@ -156,6 +165,18 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
             }
         }
 
+        // --- HEADER / FOOTER STYLING ---
+        // Without explicit art direction the model defaults to flat, hard-edged colored
+        // stripes that read as "ugly bands". Steer it toward an integrated, premium treatment.
+        if (hasHeader || hasFooter)
+        {
+            sb.AppendLine("\n### HEADER / FOOTER STYLING:");
+            sb.AppendLine("- Treat the branding bands as part of one cohesive, premium composition — never as flat colored stripes slapped on top.");
+            sb.AppendLine("- Prefer an elegant, minimal treatment: generous negative space, a refined typographic hierarchy, and a thin accent rule or subtle divider instead of a heavy solid block.");
+            sb.AppendLine("- If you tint a band, use a soft, tasteful tone from the brand palette with a smooth, gradient edge that blends naturally into the hero — no harsh flat rectangle with a hard seam.");
+            sb.AppendLine("- Keep the lighting, color temperature, and finish of the bands consistent with the hero so the whole piece reads as a single high-end design.");
+        }
+
         // --- ARTISTIC DIRECTION & VIBE ---
         sb.AppendLine("\n### ARTISTIC DIRECTION & VIBE:");
 
@@ -168,7 +189,7 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
         }
         else
         {
-            sb.AppendLine("- VISUAL STYLE: Use a premium, neutral studio aesthetic.");
+            sb.AppendLine("- VISUAL STYLE: Premium, modern, editorial studio aesthetic — rich color, soft diffused lighting, smooth gradients, and atmospheric depth that make the backdrop feel intentionally designed and high-end.");
         }
 
         if (bc != null)
@@ -198,13 +219,13 @@ internal sealed class WallpaperImageService : ImageGenerationServiceBase, IWallp
             }
         }
 
-        // This constraint is unconditional — the wallpaper must always be a clean backdrop for product placement
+        // This constraint is unconditional — the wallpaper must stay usable as a backdrop for product placement
         sb.AppendLine("\n### NON-NEGOTIABLE CONSTRAINTS:");
-        sb.AppendLine("- HERO ZONE: Must be a plain, minimal backdrop — flat color or very subtle tone only. No gradients, no textures, no patterns, no decorative elements. Real products will be placed here in post-production; anything in this zone makes it unusable.");
+        sb.AppendLine("- PRODUCT ZONE: Real products are composited on top in post-production, so keep the center cohesive and free of literal objects, props, or people and free of chaotic high-contrast noise that would fight the products. Rich gradients, soft lighting, depth, vignettes, and tasteful design accents are encouraged — just keep them from overwhelming the area where products sit.");
         sb.AppendLine("- TEXT: Do NOT invent, add, or decorate with any text that was not explicitly listed above. Only render the exact strings provided — nothing more, no taglines, no decorative labels, no filler copy.");
 
         // --- DYNAMIC FINAL REINFORCEMENT ---
-        const string heroCheck = "must be a simple, calm color — clean and minimal. No patterns, no textures, no shapes, no dramatic effects. Completely empty of objects. Real products will be placed here in post-production.";
+        const string heroCheck = "should look like a premium, designer-made studio backdrop — rich gradients, soft lighting, depth, and tasteful modern accents are encouraged. Just keep it cohesive (no chaotic high-contrast noise and no literal objects, props, or people right where products sit) so the products composited on top still read clearly. Real products will be placed here in post-production.";
 
         sb.AppendLine("\n### FINAL QUALITY CHECK:");
         if (hasHeader && hasFooter)

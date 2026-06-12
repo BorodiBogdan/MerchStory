@@ -541,6 +541,7 @@ const ro: Dictionary = {
   'studio.model.openai': 'OpenAI',
   'studio.model.pickerTitle': 'Model imagine',
   'studio.model.pickerSubtitle': 'Alege ce model AI generează catalogul.',
+  'studio.model.fieldLabel': 'Model generator',
   'studio.opt.tone': 'Ton',
   'studio.opt.jobTitle': 'Titlul jobului',
   'studio.opt.jobSchedule': 'Program de lucru',

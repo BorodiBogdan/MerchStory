@@ -5,4 +5,5 @@ public sealed record WallpaperImageRequest(
     string UserPrompt,
     IReadOnlyList<string>? InlineImages,
     BrandContext? BrandContext = null,
-    string Language = "EN");
+    string Language = "EN",
+    string? ImageModel = null);

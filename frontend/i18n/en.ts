@@ -533,6 +533,7 @@ const en = {
   'studio.model.openai': 'OpenAI',
   'studio.model.pickerTitle': 'Image model',
   'studio.model.pickerSubtitle': 'Choose which AI model generates your catalog.',
+  'studio.model.fieldLabel': 'Generator model',
   'studio.opt.tone': 'Tone',
   'studio.opt.jobTitle': 'Job title',
   'studio.opt.jobSchedule': 'Work schedule',
