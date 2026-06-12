@@ -41,7 +41,7 @@ internal sealed class GeminiImageProvider : IImageProvider
                     continue;
                 }
 
-                var (data, mime) = DecodeInlineImage(raw);
+                var (data, mime) = InlineImageDecoder.Decode(raw);
                 parts.Add(new Part { InlineData = new Blob { Data = data, MimeType = mime } });
             }
         }
@@ -87,23 +87,5 @@ internal sealed class GeminiImageProvider : IImageProvider
         }
 
         return new ImageGenerationResult(imageData, mimeType);
-    }
-
-    // Handles both raw base64 and data URLs (data:image/jpeg;base64,...)
-    private static (byte[] Data, string MimeType) DecodeInlineImage(string raw)
-    {
-        const string prefix = "data:";
-        if (raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            int semicolon = raw.IndexOf(';', StringComparison.Ordinal);
-            int comma = raw.IndexOf(',', StringComparison.Ordinal);
-            string mime = semicolon > 0 && comma > semicolon
-                ? raw[prefix.Length..semicolon]
-                : "image/jpeg";
-            byte[] data = Convert.FromBase64String(raw[(comma + 1)..]);
-            return (data, mime);
-        }
-
-        return (Convert.FromBase64String(raw), "image/jpeg");
     }
 }

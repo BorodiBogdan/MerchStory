@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Azure.Identity;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using MerchStoryAPI.Auth;
 using MerchStoryAPI.Data;
 using MerchStoryAPI.Gallery;
@@ -21,6 +22,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,6 +58,22 @@ if (!string.IsNullOrEmpty(keyVaultUri) && !builder.Environment.IsEnvironment("Te
     }
 
     builder.Configuration.AddEnvironmentVariables();
+}
+
+// Application telemetry. When ApplicationInsights:ConnectionString is set (Key Vault
+// in prod, secret name ApplicationInsights--ConnectionString), ship requests,
+// dependencies, exceptions, ILogger logs, and runtime metrics to Azure Monitor /
+// Application Insights. An empty string is a no-op, so local dev and the offline
+// Testing environment never reach out to Azure — same guard shape as the Key Vault
+// block above.
+string? appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
+if (!string.IsNullOrEmpty(appInsightsConnectionString) && !builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddOpenTelemetry()
+        .UseAzureMonitor(options => options.ConnectionString = appInsightsConnectionString)
+        // Semantic Kernel emits its own traces/metrics; capture them so AI calls show up.
+        .WithTracing(tracing => tracing.AddSource("Microsoft.SemanticKernel*"))
+        .WithMetrics(metrics => metrics.AddMeter("Microsoft.SemanticKernel*"));
 }
 
 // Allow large multipart uploads (admin zip-import endpoint can receive up to ~500MB).
