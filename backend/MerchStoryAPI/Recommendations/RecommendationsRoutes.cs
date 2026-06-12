@@ -58,7 +58,7 @@ public static class RecommendationsRoutes
         if (existing is not null)
         {
             string targetLang = await ResolveTargetLangAsync(db, userId, lang, ct);
-            return Results.Ok(MapReady(existing, targetLang));
+            return Results.Ok(await MapReadyAsync(existing, targetLang, db, userId, ct));
         }
 
         Guid jobId = runner.StartGeneration(userId);
@@ -133,7 +133,7 @@ public static class RecommendationsRoutes
                 }
 
                 string targetLangForJob = await ResolveTargetLangAsync(db, userId, lang, ct);
-                return Results.Ok(MapReady(row, targetLangForJob));
+                return Results.Ok(await MapReadyAsync(row, targetLangForJob, db, userId, ct));
 
             default:
                 return Results.Ok(MapGenerating(entry.JobId));
@@ -189,7 +189,12 @@ public static class RecommendationsRoutes
         return Results.NoContent();
     }
 
-    private static RecommendationResponse MapReady(DailyRecommendation row, string targetLang)
+    private static async Task<RecommendationResponse> MapReadyAsync(
+        DailyRecommendation row,
+        string targetLang,
+        AppDbContext db,
+        string userId,
+        CancellationToken ct)
     {
         IdeaDto[] persistedIdeas = string.IsNullOrEmpty(row.IdeasJson)
             ? Array.Empty<IdeaDto>()
@@ -201,13 +206,43 @@ public static class RecommendationsRoutes
         // wire response — frontend gets a flat IdeaDto in the picked language.
         IdeaDto[] localized = persistedIdeas.Select(i => Project(i, targetLang)).ToArray();
 
+        IReadOnlyDictionary<string, string> feedback =
+            await GetCurrentFeedbackAsync(db, userId, row.Id, ct);
+
         return new RecommendationResponse(
             Status: "ready",
             JobId: null,
             Id: row.Id,
             GeneratedAtUtc: row.GeneratedAtUtc,
             Ideas: localized,
-            Error: null);
+            Error: null,
+            Feedback: feedback);
+    }
+
+    // Current thumb state per idea for this user + recommendation. IdeaInteractions
+    // is an append-only trajectory log (it feeds the future fine-tuning corpus),
+    // so the "current" state is the most recent thumbs_up / thumbs_down row for
+    // each idea. Returning it lets the frontend rehydrate the like/dislike UI
+    // after the card unmounts (tab switch, re-login) instead of resetting to
+    // neutral. Ideas with no thumb interaction are simply absent from the map.
+    private static async Task<IReadOnlyDictionary<string, string>> GetCurrentFeedbackAsync(
+        AppDbContext db,
+        string userId,
+        Guid recId,
+        CancellationToken ct)
+    {
+        var rows = await db.IdeaInteractions
+            .Where(i => i.UserId == userId
+                        && i.DailyRecommendationId == recId
+                        && (i.Action == "thumbs_up" || i.Action == "thumbs_down"))
+            .Select(i => new { i.IdeaId, i.Action, i.CreatedAt })
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(i => i.IdeaId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(i => i.CreatedAt).First().Action);
     }
 
     private static IdeaDto Project(IdeaDto idea, string targetLang)
@@ -299,6 +334,10 @@ public record RecommendationResponse(
     Guid? Id,
     DateTime? GeneratedAtUtc,
     IReadOnlyList<IdeaDto>? Ideas,
-    string? Error);
+    string? Error,
+
+    // Map of ideaId → current thumb action ("thumbs_up" | "thumbs_down").
+    // Only populated for "ready" responses; absent ideas have no thumb yet.
+    IReadOnlyDictionary<string, string>? Feedback = null);
 
 public record FeedbackRequest(string IdeaId, string Action);

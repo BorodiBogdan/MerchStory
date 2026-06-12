@@ -1027,8 +1027,19 @@ export interface IdeaItem {
 // Discriminated response shape — Phase 3 introduces async job semantics.
 // Mock provider responds with "ready" inline; LLM provider responds with
 // "generating" + jobId and the frontend polls via /recommendations/jobs/{jobId}.
+// `feedback` maps ideaId → the user's current thumb on that idea, so the UI can
+// rehydrate likes/dislikes after a remount (tab switch, re-login). Ideas the
+// user hasn't thumbed are simply absent from the map.
+export type IdeaThumb = 'thumbs_up' | 'thumbs_down';
+
 export type RecommendationResponse =
-  | { status: 'ready'; id: string; generatedAtUtc: string; ideas: IdeaItem[] }
+  | {
+      status: 'ready';
+      id: string;
+      generatedAtUtc: string;
+      ideas: IdeaItem[];
+      feedback: Record<string, IdeaThumb>;
+    }
   | { status: 'generating'; jobId: string }
   | { status: 'failed'; error: string };
 
@@ -1050,6 +1061,7 @@ interface RawRecommendationResponse {
   generatedAtUtc?: string | null;
   ideas?: RawIdeaItem[] | null;
   error?: string | null;
+  feedback?: Record<string, string> | null;
 }
 
 function normalizeIdea(raw: RawIdeaItem): IdeaItem {
@@ -1066,6 +1078,19 @@ function normalizeIdea(raw: RawIdeaItem): IdeaItem {
   };
 }
 
+function normalizeFeedback(
+  raw: Record<string, string> | null | undefined
+): Record<string, IdeaThumb> {
+  const out: Record<string, IdeaThumb> = {};
+  if (!raw) return out;
+  for (const [id, action] of Object.entries(raw)) {
+    if (action === 'thumbs_up' || action === 'thumbs_down') {
+      out[id] = action;
+    }
+  }
+  return out;
+}
+
 function normalizeRecommendationResponse(raw: RawRecommendationResponse): RecommendationResponse {
   if (raw.status === 'ready') {
     return {
@@ -1073,6 +1098,7 @@ function normalizeRecommendationResponse(raw: RawRecommendationResponse): Recomm
       id: raw.id ?? '',
       generatedAtUtc: raw.generatedAtUtc ?? '',
       ideas: (raw.ideas ?? []).map(normalizeIdea),
+      feedback: normalizeFeedback(raw.feedback),
     };
   }
   if (raw.status === 'generating') {

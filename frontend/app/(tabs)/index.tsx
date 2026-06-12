@@ -166,7 +166,28 @@ function IdeasForYouSection({
 }) {
   const styles = useMemo(() => makeIdeasStyles(colors, isDesktop), [colors, isDesktop]);
   const { isAdmin } = useAuth();
-  const { ideas: rawIdeas, recommendationId, isLoading, isRefreshing, error, refresh } = useIdeas();
+  const {
+    ideas: rawIdeas,
+    recommendationId,
+    feedback,
+    isLoading,
+    isRefreshing,
+    error,
+    refresh,
+  } = useIdeas();
+
+  // Thumb state lives here (not inside each card) so it survives card remounts
+  // and is seeded from the server's persisted feedback. This is what keeps a
+  // like/dislike from vanishing when the user switches tabs or logs back in.
+  const [thumbs, setThumbs] = useState<Record<string, 'up' | 'down'>>({});
+
+  useEffect(() => {
+    const seeded: Record<string, 'up' | 'down'> = {};
+    for (const [id, action] of Object.entries(feedback)) {
+      seeded[id] = action === 'thumbs_up' ? 'up' : 'down';
+    }
+    setThumbs(seeded);
+  }, [feedback]);
 
   const promoIdeas = useMemo<PromoIdea[]>(
     () =>
@@ -219,9 +240,14 @@ function IdeasForYouSection({
 
   function handleThumb(idea: PromoIdea, action: 'thumbs_up' | 'thumbs_down') {
     if (!recommendationId) return;
+    const direction = action === 'thumbs_up' ? 'up' : 'down';
+    // Press-once: an already-active thumb is a no-op. The user changes their
+    // vote only by pressing the opposite thumb (i.e. changing their mind).
+    if (thumbs[idea.id] === direction) return;
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync().catch(() => {});
     }
+    setThumbs((prev) => ({ ...prev, [idea.id]: direction }));
     void submitIdeaFeedback(recommendationId, idea.id, action);
   }
 
@@ -269,6 +295,7 @@ function IdeasForYouSection({
               isDesktop={isDesktop}
               colors={colors}
               t={t}
+              thumbState={thumbs[idea.id] ?? null}
               onPress={() => handleIdeaPress(idea)}
               onThumb={(action) => handleThumb(idea, action)}
             />
@@ -363,6 +390,7 @@ function IdeaCard({
   isDesktop,
   colors,
   t,
+  thumbState,
   onPress,
   onThumb,
 }: {
@@ -371,22 +399,20 @@ function IdeaCard({
   isDesktop: boolean;
   colors: ReturnType<typeof useTheme>['colors'];
   t: ReturnType<typeof useT>;
+  // Controlled thumb state, owned by IdeasForYouSection so it persists across
+  // card remounts and is seeded from the server's saved feedback.
+  thumbState?: null | 'up' | 'down';
   onPress?: () => void;
   onThumb?: (action: 'thumbs_up' | 'thumbs_down') => void;
 }) {
-  // Local thumb state — clicking the active one clears it; clicking the
-  // inactive switches. Optimistic; backend records each click as a separate
-  // IdeaInteraction row, the dataset captures the trajectory.
-  const [thumbState, setThumbState] = useState<null | 'up' | 'down'>(null);
   const { colorScheme } = useTheme();
   const isDark = colorScheme === 'dark';
 
+  // The press-once / switch-only rule and the optimistic update live in the
+  // parent's onThumb handler; the card just reports which thumb was tapped.
   function handleThumbPress(direction: 'up' | 'down', e: GestureResponderEvent) {
     e.stopPropagation();
-    const next = thumbState === direction ? null : direction;
-    setThumbState(next);
-    if (next === 'up') onThumb?.('thumbs_up');
-    if (next === 'down') onThumb?.('thumbs_down');
+    onThumb?.(direction === 'up' ? 'thumbs_up' : 'thumbs_down');
   }
   const styles = useMemo(
     () => makeIdeaCardStyles(colors, isDesktop, isDark),
