@@ -1,7 +1,6 @@
 using System.ClientModel;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using OpenAI;
 
@@ -22,11 +21,10 @@ namespace MerchStoryImageGeneration.Services.Recommendations;
 public class LlmEmbeddingService : IEmbeddingService
 {
     private readonly IEmbeddingGenerator<string, Embedding<float>> generator;
-    private readonly ILogger<LlmEmbeddingService> logger;
     private readonly string model;
     private readonly int expectedDim;
 
-    public LlmEmbeddingService(IConfiguration configuration, ILogger<LlmEmbeddingService> logger)
+    public LlmEmbeddingService(IConfiguration configuration)
     {
         string baseUrl = (configuration["Recommendations:Llm:BaseUrl"]
             ?? "http://localhost:1234/v1").TrimEnd('/');
@@ -51,7 +49,6 @@ public class LlmEmbeddingService : IEmbeddingService
             .AddOpenAIEmbeddingGenerator(this.model, client)
             .Build();
         this.generator = kernel.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>();
-        this.logger = logger;
     }
 
     public int Dimensions => this.expectedDim;
