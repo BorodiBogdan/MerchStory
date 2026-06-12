@@ -1540,6 +1540,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [backgroundStyle, setBackgroundStyle] = useState<'SocialPost' | 'Realistic'>('SocialPost');
   const [catalogImageModel, setCatalogImageModel] = useState<'gemini' | 'openai'>('gemini');
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
+  // The wallpaper-generation modal opens its own copy of the picker (the canvas FAB is
+  // covered by the modal), but shares the same image-model selection as catalog/announcements.
+  const [wallpaperModelPickerVisible, setWallpaperModelPickerVisible] = useState(false);
   const selectedModel = IMAGE_MODELS.find((m) => m.value === catalogImageModel) ?? IMAGE_MODELS[0];
   // The image-model picker applies to model-backed generation: catalog (in the
   // generate sub-mode, not the wallpaper compositor) and announcements.
@@ -1706,6 +1709,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         format: wallpaperGenFormat,
         includeLogo: wallpaperGenIncludeLogo,
         brandContextFields: wallpaperGenBrandFields,
+        imageModel: catalogImageModel,
       });
       setWallpaperGenResult(res);
       setWallpaperGenKept(false);
@@ -2951,6 +2955,33 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                   {wallpaperGenFormat === 'Poster' && (
                     <Text style={styles.toggleHelper}>{t('studio.formatPosterHint')}</Text>
                   )}
+
+                  <Text style={styles.wallpaperGenSectionLabel}>
+                    {t('studio.model.fieldLabel')}
+                  </Text>
+                  <View style={styles.wallpaperGenModelAnchor}>
+                    <Pressable
+                      style={styles.wallpaperGenModelRow}
+                      onPress={() => setWallpaperModelPickerVisible((v) => !v)}
+                      disabled={wallpaperGenGenerating}
+                    >
+                      <Ionicons name={selectedModel.icon} size={18} color={colors.accent.primary} />
+                      <Text style={styles.wallpaperGenModelLabel}>{selectedModel.label}</Text>
+                      <Ionicons name="chevron-forward" size={18} color={colors.text.muted} />
+                    </Pressable>
+                    {/* Drops directly under the row on web (in-page dropdown, no dimmed dialog) */}
+                    <ModelPickerPopover
+                      visible={wallpaperModelPickerVisible}
+                      models={IMAGE_MODELS}
+                      selected={catalogImageModel}
+                      onSelect={(v) => {
+                        setCatalogImageModel(v as 'gemini' | 'openai');
+                        setWallpaperModelPickerVisible(false);
+                      }}
+                      onClose={() => setWallpaperModelPickerVisible(false)}
+                      cardStyle={{ top: '100%', left: 0, width: '100%', marginTop: D.spacing.xs }}
+                    />
+                  </View>
 
                   <Text style={styles.wallpaperGenSectionLabel}>Style prompt (optional)</Text>
                   <TextInput
@@ -4277,6 +4308,18 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                   <Text style={styles.toggleHelper}>{t('studio.formatPosterHint')}</Text>
                 )}
 
+                {/* Generator model */}
+                <Text style={styles.wallpaperGenSectionLabel}>{t('studio.model.fieldLabel')}</Text>
+                <Pressable
+                  style={styles.wallpaperGenModelRow}
+                  onPress={() => setWallpaperModelPickerVisible(true)}
+                  disabled={wallpaperGenGenerating}
+                >
+                  <Ionicons name={selectedModel.icon} size={18} color={colors.accent.primary} />
+                  <Text style={styles.wallpaperGenModelLabel}>{selectedModel.label}</Text>
+                  <Ionicons name="chevron-forward" size={18} color={colors.text.muted} />
+                </Pressable>
+
                 {/* Prompt */}
                 <Text style={styles.wallpaperGenSectionLabel}>Style prompt (optional)</Text>
                 <TextInput
@@ -4495,6 +4538,16 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             )}
           </View>
         </Pressable>
+        <ModelPickerModal
+          visible={wallpaperModelPickerVisible}
+          models={IMAGE_MODELS}
+          selected={catalogImageModel}
+          onSelect={(v) => {
+            setCatalogImageModel(v as 'gemini' | 'openai');
+            setWallpaperModelPickerVisible(false);
+          }}
+          onClose={() => setWallpaperModelPickerVisible(false)}
+        />
       </Modal>
 
       {/* Wallpaper picker modal */}
@@ -5556,6 +5609,27 @@ function makeStyles(
       padding: D.spacing.md,
       minHeight: 72,
       textAlignVertical: 'top',
+    },
+    wallpaperGenModelAnchor: {
+      position: 'relative',
+      zIndex: 10,
+    },
+    wallpaperGenModelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      backgroundColor: colors.bg.elevated,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      paddingVertical: D.spacing.sm + 2,
+      paddingHorizontal: D.spacing.md,
+    },
+    wallpaperGenModelLabel: {
+      flex: 1,
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
     },
     wallpaperGenToggleRow: {
       flexDirection: 'row',
