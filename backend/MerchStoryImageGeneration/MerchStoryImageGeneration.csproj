@@ -7,7 +7,9 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS9057;CS1591</NoWarn>
+    <!-- SKEXP0010: Semantic Kernel's OpenAI embedding-generator API is marked
+         experimental; we accept the churn risk for LlmEmbeddingService. -->
+    <NoWarn>$(NoWarn);CS9057;CS1591;SKEXP0010</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

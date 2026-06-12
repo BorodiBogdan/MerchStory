@@ -1,7 +1,7 @@
 \chapter{AI Pipeline Design and Implementation}
 \label{chap:contributions}
 
-Chapter~\ref{chap:architecture} treated the recommendation engine and the hybrid catalogue mode as services with a fixed contract. This chapter looks inside both, with a shorter closing section on the print pipeline that supports them.
+Chapter~\ref{chap:architecture} treated the recommendation engine and the hybrid catalogue mode as services with a fixed contract. This chapter looks inside both, then adds two shorter sections, the visual product search that fills the reference library and the print pipeline that prepares finished assets for paper.
 
 The same idea runs through all three. The gap between what an off-the-shelf generative model produces and what a small retailer is willing to publish is rarely closed by a bigger model; it is closed by the protocol that sits around the model. The recommendation engine grounds the language model in retrieved context through a multi-stage prompt chain, the hybrid catalogue pipeline uses a deterministic compositor to bound what the image model is allowed to render, and the print pipeline tiles a small super-resolution model under fixed paper sizes.
 
@@ -17,31 +17,42 @@ The engine's output is not a final asset, but more than just copy. Each suggesti
 
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{2E5F8C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    card/.style={draw, rounded corners=2pt, minimum width=34mm, minimum height=20mm, align=center, fill=gray!8},
-    screen/.style={draw, rounded corners=2pt, minimum width=30mm, minimum height=14mm, align=center, fill=yellow!12},
-    pipe/.style={draw, rounded corners=2pt, minimum width=30mm, minimum height=14mm, align=center, fill=blue!8},
-    asset/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=12mm, align=center, fill=gray!10},
-    arr/.style={-{Latex[length=1.6mm]}, thick}
+    font=\sffamily\scriptsize,
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!7,
+                 align=center, text=cInk,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    arrlbl/.style={font=\sffamily\tiny\itshape, text=cInk!80}
 ]
 
-\node[card] (idea) at (0, 0) {%
-    \textbf{Daily idea}\\[2pt]
-    \scriptsize title, body, suggestedPost,\\
-    \scriptsize category, imagePrompt
+\node[card=cIndigo, minimum width=34mm, minimum height=20mm] (idea) at (0, 0) {%
+    \textbf{Daily idea}\\[3pt]
+    title, body, suggestedPost,\\
+    category, imagePrompt
 };
-\node[font=\tiny\itshape] at (0, -1.7) {(recommendation engine)};
+\node[font=\sffamily\tiny\itshape, text=cInk!70] at (0, -1.55) {(recommendation engine)};
 
-\node[screen] (screen) at (5.0, 0) {Asset-creation\\screen\\\scriptsize prompt and category\\\scriptsize pre-filled};
+\node[card=cSlate, minimum width=34mm, minimum height=20mm] (screen) at (5.0, 0)
+    {Asset-creation\\screen\\[2pt]prompt and category\\pre-filled};
 
-\node[pipe] (pipe) at (10.0, 0) {Generation\\pipeline\\\scriptsize (catalogue or\\\scriptsize announcement)};
+\node[card=cIndigo, minimum width=34mm, minimum height=20mm] (pipe) at (10.0, 0)
+    {Generation\\pipeline\\[2pt](catalogue or\\announcement)};
 
-\node[asset] (out) at (14.0, 0) {Final asset\\in gallery};
+\node[card=cTeal, minimum width=34mm, minimum height=20mm] (out) at (15.0, 0)
+    {Final asset\\in gallery};
 
-\draw[arr] (idea) -- node[above, font=\tiny]{\itshape tap ``generate''} (screen);
-\draw[arr] (screen) -- node[above, font=\tiny]{\itshape confirm} (pipe);
+\draw[arr] (idea) -- node[above, arrlbl]{tap ``generate''} (screen);
+\draw[arr] (screen) -- node[above, arrlbl]{confirm} (pipe);
 \draw[arr] (pipe) -- (out);
 
 \end{tikzpicture}%
@@ -55,62 +66,84 @@ The engine has three parts that meet at inference time. An offline indexing path
 
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{2E5F8C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    box/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=10mm, align=center, fill=gray!8},
-    proc/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=8mm, align=center, fill=gray!12},
-    train/.style={draw, rounded corners=2pt, minimum width=26mm, minimum height=8mm, align=center, fill=blue!8},
-    rag/.style={draw, rounded corners=2pt, minimum width=30mm, minimum height=7mm, align=center, fill=yellow!15},
-    store/.style={draw, cylinder, shape border rotate=90, aspect=0.25, minimum width=22mm, minimum height=12mm, align=center, fill=gray!5},
-    person/.style={draw, circle, minimum size=8mm, fill=gray!5, align=center, font=\tiny},
-    arr/.style={-{Latex[length=1.6mm]}, thick},
-    fb/.style={-{Latex[length=1.6mm]}, dashed, thick, gray!75}
+    font=\sffamily\scriptsize,
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!7,
+                 align=center, text=cInk,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    group/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!6,
+                  inner sep=3mm,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    chip/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                 align=center, text=cInk},
+    store/.style={draw=cTeal, line width=0.6pt, cylinder, shape border rotate=90,
+                  aspect=0.22, minimum width=24mm, minimum height=15mm, align=center,
+                  cylinder uses custom fill, cylinder body fill=white,
+                  cylinder end fill=cTeal!15, text=cInk},
+    person/.style={draw=cIndigo, line width=0.6pt, circle, fill=white,
+                   minimum size=9mm, align=center, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    fb/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cGray,
+               dash pattern=on 2.4pt off 1.7pt}
 ]
 
 % --- Top: corpus
-\node[box] (data) at (0, 5.4) {Curated retail\\marketing corpus};
+\node[card=cTeal, minimum width=34mm, minimum height=11mm] (data) at (0, 7.0)
+    {Curated retail\\marketing corpus};
 
 % --- Left branch: indexing
-\node[proc]  (split) at (-4.5, 3.6) {split, chunk, embed};
-\node[store] (vec)   at (-4.5, 1.6) {pgvector\\(playbook +\\past ideas)};
-
-\begin{pgfonlayer}{background}
-\node[draw=gray!55, dashed, rounded corners=4pt, inner sep=2.8mm,
-      fit=(split)(vec),
-      label={[font=\scriptsize\itshape, gray!75]above:Indexing}] (idxbox) {};
-\end{pgfonlayer}
+\node[chip=cSlate, minimum width=27mm, minimum height=8.5mm] (split) at (-3.8, 4.35)
+    {split, chunk, embed};
+\node[store] (vec) at (-3.8, 2.5) {pgvector\\(playbook +\\past ideas)};
 
 % --- Right branch: fine-tuning
-\node[train] (td)    at ( 4.5, 3.9) {training pairs};
-\node[train] (ft)    at ( 4.5, 2.6) {LoRA fine-tune\\(7B base)};
-\node[train] (ftllm) at ( 4.5, 1.2) {fine-tuned\\writer LLM};
+\node[chip=cIndigo, minimum width=30mm, minimum height=8.5mm] (td) at (3.8, 4.75)
+    {training pairs};
+\node[chip=cIndigo, minimum width=30mm, minimum height=11mm] (ft) at (3.8, 3.55)
+    {LoRA fine-tune\\(Gemma 3 4B base)};
+\node[chip=cIndigo, line width=0.9pt, fill=cIndigo!14, minimum width=30mm,
+      minimum height=11mm] (ftllm) at (3.8, 2.1) {fine-tuned\\writer LLM};
 
 \begin{pgfonlayer}{background}
-\node[draw=blue!50, dashed, rounded corners=4pt, inner sep=2.8mm,
-      fit=(td)(ft)(ftllm),
-      label={[font=\scriptsize\itshape, blue!65]above:Fine-tuning}] (ftbox) {};
+\node[group=cSlate, fit=(split)(vec)] (idxbox) {};
+\node[group=cIndigo, fit=(td)(ft)(ftllm)] (ftbox) {};
 \end{pgfonlayer}
 
 % --- Bottom: inference flow
-\node[person] (retailer) at (-8.4, -1.6) {retailer};
-\node[box]    (app)      at (-5.4, -1.6) {app};
+\node[person] (retailer) at (-9.2, -1.5) {retailer};
+\node[chip=cIndigo, minimum width=16mm, minimum height=8.5mm] (app) at (-7.3, -1.5)
+    {app};
 
-\node[rag] (sig) at (-0.4, -0.5) {context signals};
-\node[rag] (req) at (-0.4, -1.4) {shop profile};
-\node[rag] (ctx) at (-0.4, -2.3) {retrieved playbook\\+ past ideas};
+\node[chip=cAmber, minimum width=24mm, minimum height=11mm] (sig) at (-4.0, -1.5)
+    {context signals};
+\node[chip=cAmber, minimum width=20mm, minimum height=11mm] (req) at (-1.55, -1.5)
+    {shop profile};
+\node[chip=cAmber, minimum width=31mm, minimum height=11mm] (ctx) at (1.55, -1.5)
+    {retrieved playbook\\+ past ideas};
 
 \begin{pgfonlayer}{background}
-\node[draw=yellow!55!black, dashed, rounded corners=4pt, inner sep=2.5mm,
-      fit=(sig)(req)(ctx),
-      label={[font=\scriptsize\itshape]above:RAG prompt}] (ragbox) {};
+\node[group=cAmber, inner sep=2.8mm, fit=(sig)(req)(ctx)] (ragbox) {};
 \end{pgfonlayer}
 
-\node[box] (out) at ( 8.0, -1.6) {ideas};
+\node[card=cIndigo, minimum width=20mm, minimum height=10mm] (out) at (6.9, -1.5)
+    {ideas};
 
 % --- Arrows: corpus splits into both branches
-\draw[arr] (data.south) -- (split.north);
-\draw[arr] (data.south) -- (td.north);
+\draw[arr] (data.south) to[out=-115, in=20] (split.east);
+\draw[arr] (data.south) to[out=-65, in=160] (td.west);
 
 % Indexing internal
 \draw[arr] (split) -- (vec);
@@ -122,14 +155,19 @@ The engine has three parts that meet at inference time. An offline indexing path
 % Inference flow
 \draw[arr] (retailer) -- (app);
 \draw[arr] (app) -- (ragbox.west);
-\draw[arr] (vec.south) to[out=-90, in=180] (ctx.west);
+\draw[arr] (vec.south) to[out=-90, in=90] (ctx.north);
 \draw[arr] (ragbox.east) to[out=0, in=-90] (ftllm.south);
-\draw[arr] (ftllm.south east) to[out=-30, in=90] (out.north);
+\draw[arr] (ftllm.east) to[out=0, in=90] (out.north);
 
 % Feedback loop
-\draw[fb] (out.south) to[out=-90, in=-90, looseness=0.55]
-  node[below, font=\tiny\itshape, gray!75, sloped]{retailer feedback}
+\draw[fb] (out.south) to[out=-90, in=-90, looseness=0.4]
+  node[below=1pt, font=\sffamily\tiny\itshape, text=cGray, sloped]{retailer feedback}
   (retailer.south);
+
+% --- Group tabs (drawn last so they sit above the arrows)
+\node[tab=cSlate]  at ([xshift=4mm]idxbox.north west) {Indexing};
+\node[tab=cIndigo] at ([xshift=4mm]ftbox.north west)  {Fine-tuning};
+\node[tab=cAmber]  at ([xshift=4mm]ragbox.north west) {RAG prompt};
 
 \end{tikzpicture}%
 }
@@ -145,7 +183,7 @@ The inference path itself is organised as a six-stage chain. The stages are, in 
 
 The engine currently consumes three classes of external signal, with room to add more later. Each runs in parallel and is wrapped in its own error boundary, so a single failure does not abort the run. Failed sources are recorded and the rest continue.
 
-\paragraph{Weather.} A short-range forecast detects heatwaves, cold snaps and heavy rain, and turns each event into a signal tagged high, medium or low with a one-line summary the prompt can read directly.
+\paragraph{Weather.} A short-range forecast detects heatwaves, cold snaps, heavy rain and storms, and turns each event into a signal tagged high or medium with a one-line summary the prompt can read directly.
 
 \paragraph{Holidays.} Upcoming public holidays in the shop's country are emitted over a fourteen-day lookahead, with severity scaling by proximity: high at most three days away, medium at most seven, low further out.
 
@@ -161,7 +199,7 @@ The engine currently consumes three classes of external signal, with room to add
 \hline
 \textbf{Signal} & \textbf{Severity rule} \\
 \hline
-Weather  & High for heatwave or cold snap, medium for sustained warm or cool spells, low for heavy-rain probability $\geq 70\,\%$. \\
+Weather  & High for heatwave, cold snap or storm, medium for heavy-rain probability $\geq 70\,\%$ without a storm. \\
 \hline
 Holiday  & High at $\leq 3$ days, medium at $\leq 7$, low further out. \\
 \hline
@@ -179,7 +217,7 @@ The arrangement converts memory into retrieval: the engine has no notion of ``wh
 
 The engine's second grounding source is the platform's \emph{promotional playbook}: a curated table of marketing patterns that have been observed to work in independent retail. Each entry carries a \texttt{Theme} (e.g., ``rainy-day comfort food''), a \texttt{TriggerType} (\emph{weather}, \emph{holiday}, \emph{news} or \emph{seasonal}), a free-text \texttt{Trigger} description, a list of \texttt{Tactics} and an \texttt{ExampleCopy} excerpt, alongside a text embedding of those fields used at retrieval time.
 
-The playbook is partitioned by \emph{business domain}. The platform ships with a dedicated playbook for each of the four named domains it supports. \emph{Market} covers groceries, household goods, snacks and drinks. \emph{Food} covers caf\'es, bakeries and prepared meals. \emph{Retail} covers general-goods shops. \emph{Fashion} covers clothing and accessories. A fifth \emph{Other} playbook of domain-agnostic patterns takes over for shops whose domain falls outside the four. Adding a new named domain is purely an authoring exercise. A fresh set of entries is ingested under the same schema, no code change is required, and the engine picks the right playbook by matching the shop's recorded domain.
+The playbook is partitioned by business domain. The platform ships with a dedicated playbook for each of the four named domains it supports. Market covers groceries, household goods, snacks and drinks. Food covers caf\'es, bakeries and prepared meals. Retail covers general-goods shops. Fashion covers clothing and accessories. A fifth Other playbook of domain-agnostic patterns takes over for shops whose domain falls outside the four. Adding a new named domain is purely an authoring exercise. A fresh set of entries is ingested under the same schema, no code change is required, and the engine picks the right playbook by matching the shop's recorded domain.
 
 The entries themselves were not generated by a model. They were authored by hand from three sources: marketing literature aimed at independent retailers, a manual review of the social-media output of small shops in the target region, and observations from the development team's pilot outreach. A pattern was admitted to the playbook only when it recurred across all three sources, so every entry corresponds to a tactic with a known precedent rather than to a novel suggestion the engine has to invent on its own. The result is a small corpus, in the low hundreds of entries, that is dense, opinionated and easy to inspect, which is exactly the regime in which retrieval-augmented prompting outperforms an end-to-end model call.
 
@@ -223,7 +261,7 @@ Strategist  & 1                       & 0.4 & \texttt{\{angles: [\{theme, tone, 
 \hline
 Writer      & one per angle, parallel & 0.8 & \texttt{\{title, meta, body, suggestedPost, imagePrompt, type\}} \\
 \hline
-Translator  & one per idea, parallel  & 0.4 & translated counterpart of the writer output \\
+Translator  & one per idea, parallel  & 0.8 & translated counterpart of the writer output \\
 \hline
 \end{tabularx}
 \end{table}
@@ -231,7 +269,7 @@ Translator  & one per idea, parallel  & 0.4 & translated counterpart of the writ
 \subsection{Model selection and writer fine-tuning}
 \label{subsec:rec-model-selection}
 
-Several language models were trialled against the same fixed batch of $(\text{shop}, \text{day}, \text{signal})$ inputs and compared on three axes: tonal fit, specificity to the \texttt{triggerSignal}, and JSON-schema adherence. The candidates were Gemma 3B, DeepSeek, a LoRA-fine-tuned seven-billion-parameter writer, and the enterprise APIs Claude Opus 4.7 and Gemini 2.5 Pro. The enterprise options produced the best output overall, with the cleanest structured responses and the fewest generic CTAs. The fine-tuned writer came close on tonal fit and specificity at a fraction of the hosting cost, while Gemma 3B and DeepSeek drifted back to boilerplate phrasing on weaker signals. Table~\ref{tab:rec-model-comparison} summarises the comparison. That gap is the immediate motivation for the writer-stage fine-tuning described next.
+Several language models were trialled against the same fixed batch of $(\text{shop}, \text{day}, \text{signal})$ inputs and compared on three axes: tonal fit, specificity to the \texttt{triggerSignal}, and JSON-schema adherence. The candidates were Gemma 3 4B, DeepSeek, a LoRA-fine-tuned Gemma 3 4B writer, and the managed APIs Claude Haiku 4.5 and GPT-4o mini. No single model was best on every axis. All of the candidates kept their output on topic, but they varied a lot on brand voice and on how closely they followed the schema. Claude Haiku 4.5 read the most natural and stayed closest to the schema, while GPT-4o mini was looser on both. The plain Gemma 3 4B model was the weakest on tone of voice even though it kept up on the other two axes, so brand voice, rather than basic competence, is its real gap. The fine-tuned Gemma 3 4B writer improved on the plain model's voice at a much lower hosting cost, but it did not yet match the managed models on that axis. Table~\ref{tab:rec-model-comparison} summarises the comparison, and its ratings line up with the per-axis DeepEval scores reported in Chapter~\ref{chap:results-testing}. Closing the voice gap is the immediate motivation for the writer-stage fine-tuning described next.
 
 {\small\renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|Y|Y|Y|Y|}
@@ -253,22 +291,22 @@ Several language models were trialled against the same fixed batch of $(\text{sh
 \hline
 \endlastfoot
 
-Claude Opus 4.7         & Excellent & Excellent & Excellent & High \\
+Claude Haiku 4.5        & Good      & Strong    & Good      & Medium \\
 \hline
-Gemini 2.5 Pro          & Excellent & Excellent & Excellent & High \\
+GPT-4o mini             & Fair      & Strong    & Fair      & Medium \\
 \hline
-Fine-tuned 7B (LoRA)    & Strong    & Strong    & Good      & Low  \\
+Fine-tuned Gemma 3 4B (LoRA) & Fair      & Strong    & Good      & Very low \\
 \hline
-DeepSeek                & Fair      & Fair      & Good      & Low  \\
+DeepSeek                & Good      & Excellent & Fair      & Low  \\
 \hline
-Gemma 3B                & Weak      & Weak      & Fair      & Very low \\
+Gemma 3 4B              & Weak      & Good      & Good      & Very low \\
 \hline
 \end{tabularx}}
 
 \label{subsec:rec-finetune}
-The strategist and translator stages are well served by an off-the-shelf instruction-tuned base model, because their tasks (producing a small structured plan and translating short text) are close enough to the model's pre-training distribution that prompt engineering is sufficient. The writer stage is the place where this is no longer true. A base seven-billion-parameter instruction model, even when given the strategist angle, the playbook entries and the anti-repetition block, gravitates back to the same handful of marketing tropes (``Discover our premium selection'', ``Don't miss out''), regardless of how strongly the prompt forbids them.
+The strategist and translator stages are well served by an off-the-shelf instruction-tuned base model, because their tasks (producing a small structured plan and translating short text) are close enough to the model's pre-training distribution that prompt engineering is sufficient. The writer stage is the place where this is no longer true. A base Gemma 3 4B instruction model, even when given the strategist angle, the playbook entries and the anti-repetition block, gravitates back to the same handful of marketing tropes (``Discover our premium selection'', ``Don't miss out''), regardless of how strongly the prompt forbids them.
 
-The platform therefore serves the writer role with a fine-tuned variant of a seven-billion-parameter instruction model in the Qwen family, adapted via low-rank adaptation (LoRA) \cite{hu2022lora} on a curated corpus of marketing copy from independent retailers. LoRA was preferred over full fine-tuning because the corpus is small, the base model is already well aligned to instruction following, and the low-rank adapters can be hot-swapped at deployment time without redistributing the base weights. The corpus pairs context-signal triples with handcrafted copy that exhibits the qualities the boilerplate base model lacks: a specific, time-bounded reaction to the signal, a voice consistent with a single shop owner, and a concrete call to action that names a real product or aisle rather than a generic category. The strategist and translator continue to use the un-adapted base model.
+The platform therefore serves the writer role with a fine-tuned variant of the Gemma 3 4B instruction model, adapted via low-rank adaptation (LoRA) \cite{hu2022lora} on a curated corpus of marketing copy from independent retailers. LoRA was preferred over full fine-tuning because the corpus is small, the base model is already well aligned to instruction following, and the low-rank adapters can be hot-swapped at deployment time without redistributing the base weights. The corpus pairs context-signal triples with handcrafted copy that exhibits the qualities the boilerplate base model lacks: a specific, time-bounded reaction to the signal, a voice consistent with a single shop owner, and a concrete call to action that names a real product or aisle rather than a generic category. The strategist and translator continue to use the un-adapted base model.
 
 The choice to fine-tune only the writer is itself part of the protocol-over-model-size argument that runs through this chapter: the writer is the one stage where a base model's failures are systematic and visible to the retailer, and the cheapest fix is to adapt the model to the platform's voice rather than ask the prompt to do all the work.
 
@@ -284,28 +322,71 @@ A single-shot prompt covers all three. Generation runs from a phone, has to fini
 
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{2E5F8C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{0.85\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    svc/.style={draw, rounded corners=2pt, minimum width=32mm, minimum height=10mm, align=center, fill=gray!10},
-    iface/.style={draw, rounded corners=2pt, minimum width=44mm, minimum height=14mm, align=center, fill=yellow!15},
-    prov/.style={draw, rounded corners=2pt, minimum width=28mm, minimum height=10mm, align=center, fill=blue!8},
-    arr/.style={-{Latex[length=1.6mm]}, thick}
+    font=\sffamily\scriptsize,
+    svc/.style={draw=cSlate, line width=0.9pt, rounded corners=3pt, fill=cSlate!7,
+                minimum width=32mm, minimum height=10mm, align=center, text=cInk,
+                drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                             fill=black, opacity=0.12}},
+    iface/.style={draw=cIndigo, line width=1.0pt, rounded corners=3pt,
+                  fill=cIndigo!14, minimum width=50mm, minimum height=18mm,
+                  align=center, text=cInk,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    prov/.style={draw=cGray, line width=0.9pt, rounded corners=3pt, fill=cGray!6,
+                 dash pattern=on 2.4pt off 1.7pt, align=center, text=cInk},
+    group/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!6,
+                  inner sep=2.8mm,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    bus/.style={line width=0.9pt, draw=cInk!70, rounded corners=2pt},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    arrlbl/.style={font=\sffamily\tiny\itshape, text=cInk!80}
 ]
 
-\node[svc] (ann) at (0, 1.6)  {Announcement\\service};
+% --- asset services (deterministic platform code) ---
+\node[svc] (ann) at (0, 1.7)  {Announcement\\service};
 \node[svc] (wal) at (0, 0)    {Wallpaper\\service};
-\node[svc] (cat) at (0, -1.6) {Catalogue\\service};
+\node[svc] (cat) at (0, -1.7) {Catalogue\\service};
 
-\node[iface] (iface) at (5.6, 0) {\texttt{IImageProvider}\\\scriptsize\texttt{GenerateAsync(}\\\scriptsize\texttt{prompt, inlineImages)}};
+\begin{pgfonlayer}{background}
+\node[group=cSlate, fit=(ann)(wal)(cat)] (svcbox) {};
+\end{pgfonlayer}
 
-\node[prov, minimum width=36mm, minimum height=14mm] (prov) at (10.8, 0) {Image generation providers\\\scriptsize (Gemini, OpenAI, \dots)};
+% --- the shared abstraction (hero) ---
+\node[iface] (iface) at (6.9, 0)
+    {\textbf{\texttt{IImageProvider}}\\[3pt]
+     {\color{cIndigo}\texttt{GenerateAsync(}}\\
+     {\color{cIndigo}\texttt{prompt, inlineImages)}}};
+\node[arrlbl, text=cInk!70] at (6.9, -1.42) {single seam, provider-agnostic};
 
-\draw[arr] (ann.east) -- (iface.west);
-\draw[arr] (wal.east) -- (iface.west);
-\draw[arr] (cat.east) -- (iface.west);
+% --- external providers ---
+\node[prov, minimum width=40mm, minimum height=18mm] (prov) at (13.8, 0)
+    {Image generation providers\\(Gemini, OpenAI, \dots)};
 
-\draw[arr] (iface.east) -- (prov.west);
+% --- three callers merge onto one bus, one shared call ---
+\draw[bus] (ann.east) -- (2.7, 1.7) -- (2.7, -1.7) -- (cat.east);
+\draw[bus] (wal.east) -- (2.7, 0);
+\fill[cInk!70] (2.7, 0) circle (1.6pt);
+\draw[arr] (2.7, 0) -- node[above=2pt, arrlbl]{shared call} (iface.west);
+
+% --- provider chosen per request ---
+\draw[arr] (iface.east) -- node[above=2pt, arrlbl]{selected per request} (prov.west);
+
+% --- group tabs (drawn last, above the arrows) ---
+\node[tab=cSlate] at ([xshift=4mm]svcbox.north west) {Asset services};
+\node[tab=cGray]  at ([xshift=4mm]prov.north west)   {External};
 
 \end{tikzpicture}%
 }
@@ -317,7 +398,7 @@ A single-shot prompt covers all three. Generation runs from a phone, has to fini
 
 \textbf{Wallpaper.} Wallpapers are background templates onto which real product photos are pasted later. The prompt is built dynamically from the brand context the retailer has filled in. A header band is reserved only when there is brand text or a logo, a footer band only when there is contact or social information, and otherwise the whole canvas is given over to a clean hero zone. Two rules close every wallpaper prompt: the hero area must stay plain, with no patterns or props, and the only text the model may render is the exact strings the prompt lists.
 
-\textbf{Catalogue.} The catalogue path turns the retailer's product photos, brand context, layout style, colour theme and format into a single catalogue image. The prompt carries an art-direction block (composition, typography, lighting, colour) so that one call to the provider produces a usable result without a separate critique step. Catalogue generation has two modes. The default mode lets the model render everything, the products included. The preserve mode keeps the retailer's product pixels untouched.
+\textbf{Catalogue.} The catalogue path turns the retailer's product photos, brand context, layout style, colour theme and format into a single catalogue image. The prompt carries an art-direction block (composition, typography, lighting, colour) so that one call to the provider produces a usable result without a separate critique step. Catalogue generation has two model-based modes, alongside a third path that invokes no generative model at all and is described in Section~\ref{subsec:inhouse-composite}. The default mode lets the model render everything, the products included. The preserve mode keeps the retailer's product pixels untouched.
 
 The preserve mode is the most complex path on the platform. It is the only one that combines a generative step with a deterministic post-processor, and the only one that imposes a strict contract on the model output, namely a coloured silhouette around each product and a quiet zone of clean background around each silhouette, that the post-processor then relies on. It exists because some retailers cannot tolerate any change to their products, even small rewrites of label text or substitutions with visually similar items, which off-the-shelf multimodal models still produce regularly. The rest of this section explores how the preserve mode is built, why a fully generative pipeline does not meet that bar, and how the deterministic compositor closes the gap.
 
@@ -328,53 +409,82 @@ A retail catalogue must show the actual products on offer. A photograph of a pac
 
 Even the best multimodal image models, when conditioned on the retailer's own product photographs as inline references, fail this bar with regularity. Two failure modes recur. The first is \emph{label hallucination}: the model preserves the rough shape and dominant colour of the product but invents the text on its label, producing a packet whose typeface, brand mark and ingredient list are entirely fictional. The second is \emph{lookalike substitution}: the model replaces the reference product with a different but visually similar one, for example a near-identical chocolate bar from a competing brand. A small but persistent failure rate of either kind is unacceptable for marketing material that goes out under the retailer's name.
 
-The hybrid catalogue mode introduced in Section~\ref{sec:requirements} of Chapter~\ref{chap:architecture} is the platform's response to this constraint. Its central idea is to decouple \emph{scene generation}, which generative models do well, from \emph{product fidelity}, which they do badly, and to enforce the latter with a small deterministic post-processor.
+The hybrid catalogue mode introduced in Section~\ref{sec:requirements} of Chapter~\ref{chap:architecture} is the platform's response to this constraint. Its central idea is to decouple scene generation, which generative models do well, from product fidelity, which they do badly, and to enforce the latter with a small deterministic post-processor.
 
 \label{subsec:hyb-protocol}
-The platform's response to the constraint above is the outline-as-protocol idea. The platform asks the model to render the full catalogue scene with the retailer's products in place, and to draw a tight \emph{silhouette outline} around each product in a unique marker colour reserved for that product. The model is told to keep every product faithful to its reference in size, shape and orientation, which current models do reliably. A deterministic compositor then detects each marker colour, erases the rendered product together with its outline, inpaints the residue, and pastes the retailer's real product photograph into the cleaned region at the same position and size. The product is therefore untouched, pixel for pixel, while the model handles the backdrop, props, colour grading, layout and accompanying text.
+The platform's response to the constraint above is the outline-as-protocol idea. The platform asks the model to render the full catalogue scene with the retailer's products in place, and to draw a tight silhouette outline around each product in a unique marker colour reserved for that product. The model is told to keep every product faithful to its reference in size, shape and orientation, which current models do reliably. A deterministic compositor then detects each marker colour, erases the rendered product together with its outline, inpaints the residue, and pastes the retailer's real product photograph into the cleaned region at the same position and size. The product is therefore untouched, pixel for pixel, while the model handles the backdrop, props, colour grading, layout and accompanying text.
 
 The mode exists for retailers who cannot tolerate any change to their packaging. Even visually similar renders often rewrite label text, alter typography or invent small graphical details that the retailer spots at a glance. The hybrid path leaves the packaging exactly as the retailer supplied it.
 
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{2E5F8C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    ref/.style   ={draw=black!55,        line width=0.5pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=gray!8},
-    model/.style ={draw=blue!55!black,   line width=0.5pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=blue!6},
-    cmp/.style   ={draw=orange!65!black, line width=0.5pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=orange!10},
-    bad/.style   ={draw=red!55!black,    line width=0.6pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=red!8},
-    good/.style  ={draw=green!50!black,  line width=0.6pt, rounded corners=3pt, minimum width=30mm, minimum height=12mm, align=center, fill=green!10},
-    arr/.style   ={-{Latex[length=2mm,width=1.6mm]}, thick, draw=black!70},
-    arrlbl/.style={font=\tiny\itshape, fill=white, inner sep=1pt},
-    rowlbl/.style={font=\small\bfseries\itshape, anchor=east, text=black!70}
+    font=\sffamily\scriptsize,
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!7,
+                 minimum width=30mm, minimum height=12mm, align=center, text=cInk,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    model/.style={draw=cGray, line width=0.9pt, rounded corners=3pt, fill=cGray!6,
+                  dash pattern=on 2.4pt off 1.7pt, minimum width=30mm,
+                  minimum height=12mm, align=center, text=cInk},
+    ghost/.style={draw=cGray!55, line width=0.8pt, rounded corners=3pt, fill=cGray!4,
+                  dash pattern=on 2pt off 1.6pt, minimum width=30mm,
+                  minimum height=12mm, align=center, text=cGray!85,
+                  font=\sffamily\scriptsize\itshape},
+    group/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!6,
+                  inner sep=2.8mm,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    darr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!70,
+                 dash pattern=on 2.4pt off 1.7pt},
+    arrlbl/.style={font=\sffamily\tiny\itshape, fill=white, inner sep=1pt,
+                   text=cInk!80}
 ]
 
-% --- (a) pure generative ---
-\node[ref]   (refA) at (0,    2.6) {Reference\\photographs};
-\node[model] (mdlA) at (4.2,  2.6) {Multimodal\\model};
-\node[bad]   (outA) at (8.4,  2.6) {Final image\\\textit{products distorted}};
+% --- (a) pure generative: no guardrail stage, products distort ---
+\node[card=cTeal]  (refA) at (0,    2.7) {Reference\\photographs};
+\node[model]       (mdlA) at (4.4,  2.7) {Multimodal\\model};
+\node[ghost]       (ghA)  at (9.2,  2.7) {no compositor};
+\node[card=cAmber] (outA) at (13.8, 2.7) {Final image\\\textit{products distorted}};
 \draw[arr] (refA) -- (mdlA);
-\draw[arr] (mdlA) -- (outA);
+\draw[arr] (mdlA) -- (ghA);
+\draw[arr] (ghA)  -- (outA);
 
-% --- (b) hybrid ---
-\node[ref]   (refB) at (0,    0) {Reference\\photographs};
-\node[model] (mdlB) at (4.2,  0) {Multimodal model\\\scriptsize(outline mode)};
-\node[cmp]   (cmpB) at (8.4,  0) {Deterministic\\compositor};
-\node[good]  (outB) at (12.6, 0) {Final image\\\textit{products faithful}};
+% --- (b) hybrid: outline mode + deterministic compositor (the contribution) ---
+\node[card=cTeal]  (refB) at (0,    0) {Reference\\photographs};
+\node[model]       (mdlB) at (4.4,  0) {Multimodal model\\(outline mode)};
+\node[card=cSlate, line width=1.0pt, fill=cSlate!16] (cmpB) at (9.2, 0)
+    {Deterministic\\compositor};
+\node[card=cTeal]  (outB) at (13.8, 0) {Final image\\\textit{products faithful}};
 \draw[arr] (refB) -- (mdlB);
 \draw[arr] (mdlB) -- node[arrlbl, above=1pt]{outlined scene} (cmpB);
 \draw[arr] (cmpB) -- (outB);
 
-% --- Real reference photographs also feed the compositor ---
-\draw[arr, dashed, draw=black!55] (refB.south)
+% --- real reference photographs also feed the compositor ---
+\draw[darr] (refB.south)
     to[out=-55, in=-125, looseness=0.9]
-    node[arrlbl, below=2pt]{real product photos}
+    node[arrlbl, below=2pt, name=fblbl]{real product photos}
     (cmpB.south);
 
-% --- Row badges ---
-\node[rowlbl] at (-1.7, 2.6) {(a) pure};
-\node[rowlbl] at (-1.7, 0)   {(b) hybrid};
+% --- framed rows with tabs (drawn behind the nodes) ---
+\begin{pgfonlayer}{background}
+\node[group=cGray,  fit=(refA)(mdlA)(ghA)(outA)]            (rowA) {};
+\node[group=cSlate, fit=(refB)(mdlB)(cmpB)(outB)(fblbl)]    (rowB) {};
+\end{pgfonlayer}
+\node[tab=cGray]  at ([xshift=4mm]rowA.north west) {(a) Pure generative};
+\node[tab=cSlate] at ([xshift=4mm]rowB.north west) {(b) Hybrid: outline + composite};
 
 \end{tikzpicture}%
 }
@@ -385,29 +495,50 @@ The mode exists for retailers who cannot tolerate any change to their packaging.
 \subsection{The three-stage pipeline}
 \label{subsec:hyb-pipeline}
 
-The pipeline has three stages: a marker-palette selection step that decides which colours to reserve for which products, an outline-rendering step in which the multimodal model produces a placeholder catalogue, and a deterministic detect-and-composite step that turns the placeholder into the final image. Figure~\ref{fig:hybrid-pipeline} shows the artefacts that flow between the stages.
-
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{2E5F8C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    inp/.style    ={draw=black!50,        line width=0.4pt, rounded corners=2pt,   minimum width=28mm, minimum height=8mm,  align=center, fill=gray!6,   font=\scriptsize\itshape},
-    proc/.style   ={draw=gray!65,         line width=0.5pt, rounded corners=2.5pt, minimum width=32mm, minimum height=11mm, align=center, fill=gray!12},
-    aicall/.style ={draw=blue!60!black,   line width=0.7pt, rounded corners=2.5pt, minimum width=34mm, minimum height=12mm, align=center, fill=blue!8},
-    art/.style    ={draw=yellow!60!black, line width=0.4pt, rounded corners=2pt,   minimum width=30mm, minimum height=8mm,  align=center, fill=yellow!15, font=\scriptsize\itshape},
-    final/.style  ={draw=green!55!black,  line width=0.7pt, rounded corners=2.5pt, minimum width=32mm, minimum height=10mm, align=center, fill=green!10},
-    arr/.style    ={-{Latex[length=1.8mm,width=1.5mm]}, thick, draw=black!70},
-    bg/.style     ={dashed, rounded corners=4pt, inner sep=2.8mm}
+    font=\sffamily\scriptsize,
+    group/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!6,
+                  inner sep=3mm,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    inp/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                minimum width=28mm, minimum height=8mm, align=center, text=cInk,
+                font=\sffamily\scriptsize\itshape},
+    proc/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                 minimum width=32mm, minimum height=11mm, align=center, text=cInk},
+    aicall/.style={draw=cGray, line width=0.9pt, rounded corners=3pt, fill=cGray!6,
+                   dash pattern=on 2.4pt off 1.7pt, minimum width=34mm,
+                   minimum height=13mm, align=center, text=cInk},
+    art/.style={draw=cAmber, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                minimum width=30mm, minimum height=9mm, align=center, text=cInk,
+                font=\sffamily\scriptsize\itshape},
+    final/.style={draw=cTeal, line width=0.9pt, rounded corners=3pt, fill=cTeal!7,
+                  minimum width=32mm, minimum height=10mm, align=center, text=cInk,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85}
 ]
 
 % ============ Stage 1: Marker palette ============
-\node[inp]  (in1a)       at (0, 5.6) {brand colours};
-\node[inp]  (in1b)       at (0, 4.4) {layout theme};
-\node[inp]  (in1c)       at (0, 3.2) {products};
+\node[inp=cSlate]  (in1a)       at (0, 5.5) {brand colours};
+\node[inp=cSlate]  (in1b)       at (0, 4.4) {layout theme};
+\node[inp=cSlate]  (in1c)       at (0, 3.3) {products};
 
-\node[proc] (palettesel) at (3.8, 4.4) {Marker palette\\selection};
-\node[art]  (palette)    at (3.8, 2.0) {marker assignment\\$\textit{product} \rightarrow \textit{hex}$};
+\node[proc=cSlate] (palettesel) at (3.8, 4.4) {Marker palette\\selection};
+\node[art]         (palette)    at (3.8, 2.2) {marker assignment\\$\textit{product} \rightarrow \textit{hex}$};
 
 \draw[arr] (in1a.east) -- (palettesel.west);
 \draw[arr] (in1b.east) -- (palettesel.west);
@@ -415,17 +546,16 @@ The pipeline has three stages: a marker-palette selection step that decides whic
 \draw[arr] (palettesel.south) -- (palette.north);
 
 \begin{pgfonlayer}{background}
-\node[bg, draw=gray!55, fill=gray!4,
-      fit=(in1a)(in1c)(palettesel)(palette),
-      label={[font=\scriptsize\bfseries\itshape, gray!75]above:Stage 1: marker palette}] {};
+\node[group=cSlate, fit=(in1a)(in1c)(palettesel)(palette)] (stage1) {};
 \end{pgfonlayer}
 
 % ============ Stage 2: Outline rendering ============
-\node[inp]    (in2a)   at (7.2, 5.0) {scene prompt};
-\node[inp]    (in2b)   at (9.6, 5.0) {reference photos};
+\node[inp=cIndigo, minimum width=24mm] (in2a) at (7.4, 5.5) {scene prompt};
+\node[inp=cIndigo, minimum width=27mm] (in2b) at (10.2, 5.5) {reference photos};
 
-\node[aicall] (mdl)    at (8.4, 2.6) {Multimodal model\\\scriptsize(outline mode)\\[1pt]\tiny\textsc{ai call}};
-\node[art]    (canvas) at (8.4, 0.4) {placeholder canvas\\\scriptsize(scene + outlined products)};
+\node[aicall] (mdl)    at (8.8, 3.2) {Multimodal model\\(outline mode)\\[1pt]\tiny\textsc{ai call}};
+\node[art, minimum width=34mm] (canvas) at (8.8, 0.9)
+    {placeholder canvas\\(scene + outlined products)};
 
 \draw[arr] (in2a.south) -- (mdl.north);
 \draw[arr] (in2b.south) -- (mdl.north);
@@ -433,36 +563,43 @@ The pipeline has three stages: a marker-palette selection step that decides whic
 \draw[arr] (mdl.south) -- (canvas.north);
 
 \begin{pgfonlayer}{background}
-\node[bg, draw=blue!55, fill=blue!3,
-      fit=(in2a)(in2b)(mdl)(canvas),
-      label={[font=\scriptsize\bfseries\itshape, blue!65]above:Stage 2: outline rendering}] {};
+\node[group=cIndigo, fit=(in2a)(in2b)(mdl)(canvas)] (stage2) {};
 \end{pgfonlayer}
 
 % ============ Stage 3: Detect and composite ============
-\node[proc]   (detect) at (13.6, 5.6) {Marker detect\\\scriptsize(Chebyshev match,\\\scriptsize largest component)};
-\node[proc]   (mask)   at (13.6, 3.9) {Mask construction\\\scriptsize(flood-fill + dilate)};
-\node[aicall] (lama)   at (13.6, 2.0) {LaMa inpainting\\\scriptsize(erase outlines,\\\scriptsize repaint background)\\[1pt]\tiny\textsc{ai call (IOPaint)}};
-\node[proc]   (paste)  at (13.6, 0.0) {Scale \& alpha-composite\\\scriptsize(retailer photo paste)};
+\node[proc=cSlate, minimum width=38mm] (detect) at (14.6, 5.3)
+    {Marker detect\\(Chebyshev match,\\largest component)};
+\node[proc=cSlate, minimum width=38mm] (mask)   at (14.6, 3.6)
+    {Mask construction\\(flood-fill + dilate)};
+\node[aicall, minimum width=38mm, minimum height=15mm] (lama) at (14.6, 1.7)
+    {LaMa inpainting\\(erase outlines,\\repaint background)\\[1pt]\tiny\textsc{ai call (IOPaint)}};
+\node[proc=cSlate, minimum width=38mm] (paste)  at (14.6, -0.3)
+    {Scale \& alpha-composite\\(retailer photo paste)};
 
 \draw[arr] (canvas.east) to[out=0, in=180, looseness=0.8] (detect.west);
 \draw[arr] (detect.south) -- (mask.north);
 \draw[arr] (mask.south)   -- (lama.north);
 \draw[arr] (lama.south)   -- (paste.north);
 
-\node[final] (out) at (13.6, -1.7) {Final image\\\scriptsize(products faithful)};
+\node[final] (out) at (14.6, -2.2) {Final image\\(products faithful)};
 \draw[arr] (paste.south) -- (out.north);
 
 \begin{pgfonlayer}{background}
-\node[bg, draw=orange!60, fill=orange!3,
-      fit=(detect)(mask)(lama)(paste),
-      label={[font=\scriptsize\bfseries\itshape, orange!70!black]above:Stage 3: detect and composite}] {};
+\node[group=cSlate, fit=(detect)(mask)(lama)(paste)] (stage3) {};
 \end{pgfonlayer}
+
+% ============ Stage tabs (drawn last so they sit above the arrows) ============
+\node[tab=cSlate]  at ([xshift=4mm]stage1.north west) {Stage 1: marker palette};
+\node[tab=cIndigo] at ([xshift=4mm]stage2.north west) {Stage 2: outline rendering};
+\node[tab=cSlate]  at ([xshift=4mm]stage3.north west) {Stage 3: detect and composite};
 
 \end{tikzpicture}%
 }
 \caption{Three-stage pipeline of the hybrid catalogue mode: marker palette selection, outline rendering by the multimodal model, and deterministic detect-erase-composite.}
 \label{fig:hybrid-pipeline}
 \end{figure}
+
+The pipeline has three stages: a marker-palette selection step that decides which colours to reserve for which products, an outline-rendering step in which the multimodal model produces a placeholder catalogue, and a deterministic detect-and-composite step that turns the placeholder into the final image. Figure~\ref{fig:hybrid-pipeline} shows the artefacts that flow between the stages.
 
 \paragraph{Stage 1: marker palette selection.}
 Before any model call is issued, the platform decides which colour will mark which product. The candidate pool is twelve highly saturated neon hues (magenta, cyan, electric violet, hot pink, chartreuse and so on), ordered so that the first $k$ entries are spread evenly around the hue circle for any $k$ from one to twelve. From this pool two exclusion rules remove unsuitable colours:
@@ -533,7 +670,7 @@ If the per-trial acceptance probabilities are treated as approximately independe
 
 \begin{table}[!ht]
 \centering
-\caption{Compound acceptance probability under the independent-trial model, given a single-trial acceptance rate of $0.70$. The pipeline caps at three trials in production; the four- and five-trial rows are shown to make the diminishing marginal gain from raising the cap visible.}
+\caption{Compound acceptance probability table.}
 \label{tab:hyb-acceptance}
 \small
 \renewcommand{\arraystretch}{1.3}
@@ -556,6 +693,104 @@ If the per-trial acceptance probabilities are treated as approximately independe
 
 These figures are observational and informal; a controlled benchmark with a fixed evaluation set, blind human raters and per-failure-mode breakdown is left to future work. They are presented here to motivate the three-trial cap, not as a definitive measurement.
 
+\subsection{In-house composite onto a wallpaper}
+\label{subsec:inhouse-composite}
+
+The third catalogue flavour listed in Table~\ref{tab:catalogue-flavours} of Chapter~\ref{chap:architecture} is the in-house composite. It differs from the two flavours above in one decisive way: it invokes no generative model at the moment the catalogue is built. Where the fully generative mode (Section~\ref{subsec:gen-overview}) asks the provider to render the whole scene, and the preserve mode (Section~\ref{subsec:hyb-motivation}) asks it to render a scene with placeholder regions, the in-house composite asks the provider for nothing at all. The whole catalogue is assembled by the platform's own deterministic code.
+
+The backdrop comes from one of two sources. The retailer can reuse a brand wallpaper produced earlier by the wallpaper service (Section~\ref{subsec:gen-overview}), the same brand-themed image shown in Figure~\ref{fig:result-wallpaper}, or upload a custom background of their own. Either way the backdrop is fixed before the catalogue is built, so the platform makes no inference call while assembling it.
+
+Onto that backdrop the deterministic compositor lays the selected products. Each product photograph is trimmed to its opaque bounding box and alpha-composited into place, together with its price and the shop's brand identity, using the same compositing machinery that Stage~3 of the hybrid pipeline (Section~\ref{subsec:hyb-pipeline}) uses to paste real products into a generated scene. The difference is that here there is no generated scene to detect, no marker outline to erase and no judge loop to run, because nothing in the image was produced by a model and so nothing can be hallucinated or substituted.
+
+The trade-off is straightforward. The in-house composite spends no credits at generation time, is fully deterministic and preserves every product pixel for pixel, which makes it the cheapest and most predictable of the three flavours. The price paid is that the visual richness of the result is bounded by the backdrop the retailer supplied or generated once, rather than tailored to the chosen products by a fresh model call. It therefore suits retailers who want complete control over the layout, or who want to produce catalogues repeatedly without spending credits on every one, while the two model-based flavours remain available whenever a freshly generated scene is worth the cost.
+
+\section{Visual Product Search}
+\label{sec:visual-search}
+
+A retail asset is only as convincing as the product photograph it starts from. The platform therefore lets a retailer represent a product with a clean image from a curated catalogue of professional product photography, the evenly lit reference the hybrid catalogue pipeline of Section~\ref{subsec:hyb-pipeline} later reuses to keep products faithful. The theory behind this search by photo was covered in Section~\ref{sec:visual-similarity} and its storage in Section~\ref{subsec:relational-schema}. Figure~\ref{fig:visual-search} shows how the parts fit together.
+
+The catalogue is curated in advance and organised by Category. Each image is embedded once by the CLIP ViT-B/32 vision encoder~\cite{radford2021clip}, which the platform hosts and runs on its own servers, and the resulting 512-dimensional vector is L2-normalised and stored in the \texttt{ReferenceImage.Embedding} column as a pgvector vector(512), indexed with a Hierarchical Navigable Small World index under cosine distance. Embedding happens ahead of time, so a search never re-runs the encoder over the catalogue.
+
+When the retailer adds a product, they photograph the real item and the platform returns the ten closest catalogue products, ranked by visual similarity. They keep their own photo or pick one of these matches to represent the product.
+
+\begin{figure}[H]
+\centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{2E5F8C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\sffamily\scriptsize,
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!7,
+                 align=center, text=cInk,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    group/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!6,
+                  inner sep=2.8mm,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    chip/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                 align=center, text=cInk},
+    store/.style={draw=cTeal, line width=0.6pt, cylinder, shape border rotate=90,
+                  aspect=0.22, minimum width=24mm, minimum height=15mm, align=center,
+                  cylinder uses custom fill, cylinder body fill=white,
+                  cylinder end fill=cTeal!15, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    fb/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cGray,
+               dash pattern=on 2.4pt off 1.7pt},
+    arrlbl/.style={font=\sffamily\tiny\itshape, fill=white, inner sep=1pt, text=cInk!80}
+]
+
+% --- inputs ---
+\node[store] (cat) at (-4.2, 1.7) {Curated\\catalogue};
+\node[card=cTeal, minimum width=20mm, minimum height=11mm] (photo) at (-4.2, -1.7)
+    {phone\\photo};
+
+% --- shared encoder (hero) and the vector it emits ---
+\node[card=cIndigo, minimum width=32mm, minimum height=16mm] (enc) at (0, 0)
+    {CLIP \texttt{ViT-B/32}\\vision encoder\\(ONNX)};
+\node[chip=cSlate, minimum width=26mm, minimum height=12mm] (vec) at (3.4, 0)
+    {512-d vector\\(L2-normalised)};
+
+% --- offline destination ---
+\node[store] (pg) at (7.4, 1.7) {pgvector index\\\texttt{vector(512)}\\HNSW, cosine};
+
+% --- online query path ---
+\node[card=cSlate, minimum width=30mm, minimum height=13mm] (topk) at (7.2, -1.7)
+    {cosine top-10\\nearest neighbours};
+\node[card=cAmber, minimum width=22mm, minimum height=13mm] (cand) at (10.8, -1.7)
+    {ranked\\matches};
+\node[store] (lib) at (13.8, -1.7) {product\\library};
+
+% --- central frame: the one shared encoder ---
+\begin{pgfonlayer}{background}
+\node[group=cIndigo, fit=(enc)(vec)] (encbox) {};
+\end{pgfonlayer}
+\node[tab=cIndigo] at ([xshift=4mm]encbox.north west) {shared CLIP encoder};
+
+% --- arrows ---
+\draw[fb]  (cat.east)   to[out=0, in=150] node[arrlbl, pos=0.55]{once, on import} (enc.150);
+\draw[arr] (photo.east) to[out=0, in=210] node[arrlbl, pos=0.55]{on upload} (enc.210);
+\draw[arr] (enc.east) -- (vec.west);
+\draw[fb]  (vec.north) to[out=90, in=180]  node[arrlbl, pos=0.62]{index} (pg.west);
+\draw[arr] (vec.south) to[out=-90, in=180] node[arrlbl, pos=0.62]{query} (topk.west);
+\draw[fb]  (pg.south) to[out=-90, in=90] node[arrlbl, pos=0.5]{indexed vectors} (topk.north);
+\draw[arr] (topk.east) -- node[arrlbl]{top 10} (cand.west);
+\draw[arr] (cand.east) -- node[arrlbl]{keep or swap} (lib.west);
+
+\end{tikzpicture}%
+}
+\caption{Search by photo. The curated catalogue is embedded once by the CLIP vision encoder and indexed in pgvector. An uploaded phone photograph is embedded by the same encoder and matched by cosine nearest-neighbour search, and the retailer keeps the photograph or swaps in the closest studio match.}
+\label{fig:visual-search}
+\end{figure}
+
 \section{Print Pipeline and DPI Enhancer}
 \label{sec:print-pipeline}
 
@@ -565,27 +800,66 @@ The model used is Real-ESRGAN \cite{wang2021realesrgan}, exported to ONNX and ru
 
 \begin{figure}[H]
 \centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{2E5F8C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    every node/.style={font=\scriptsize},
-    inp/.style    ={draw=black!50,        line width=0.4pt, rounded corners=2pt,   minimum width=28mm, minimum height=11mm, align=center, fill=gray!6,   font=\scriptsize\itshape},
-    proc/.style   ={draw=gray!65,         line width=0.5pt, rounded corners=2.5pt, minimum width=32mm, minimum height=12mm, align=center, fill=gray!12},
-    aicall/.style ={draw=blue!60!black,   line width=0.7pt, rounded corners=2.5pt, minimum width=32mm, minimum height=14mm, align=center, fill=blue!8},
-    final/.style  ={draw=green!55!black,  line width=0.7pt, cylinder, shape border rotate=90, aspect=0.25, minimum width=26mm, minimum height=12mm, align=center, fill=green!10},
-    arr/.style    ={-{Latex[length=1.8mm,width=1.5mm]}, thick, draw=black!70},
-    barr/.style   ={-{Latex[length=1.8mm,width=1.5mm]}, thick, dashed, draw=black!55}
+    font=\sffamily\scriptsize,
+    inp/.style={draw=cTeal, line width=0.9pt, rounded corners=3pt, fill=cTeal!7,
+                minimum width=30mm, minimum height=12mm, align=center, text=cInk,
+                font=\sffamily\scriptsize\itshape,
+                drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                             fill=black, opacity=0.12}},
+    proc/.style={draw=cSlate, line width=0.9pt, rounded corners=3pt, fill=cSlate!7,
+                 minimum width=32mm, minimum height=12mm, align=center, text=cInk,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    aicall/.style={draw=cGray, line width=0.9pt, rounded corners=3pt, fill=cGray!6,
+                   dash pattern=on 2.4pt off 1.7pt, minimum width=32mm,
+                   minimum height=15mm, align=center, text=cInk},
+    final/.style={draw=cTeal, line width=0.6pt, cylinder, shape border rotate=90,
+                  aspect=0.22, minimum width=26mm, minimum height=14mm, align=center,
+                  cylinder uses custom fill, cylinder body fill=white,
+                  cylinder end fill=cTeal!15, text=cInk},
+    group/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!6,
+                  inner sep=2.8mm,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    barr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!70,
+                 dash pattern=on 2.4pt off 1.7pt},
+    arrlbl/.style={font=\sffamily\tiny\itshape, fill=white, inner sep=1pt,
+                   text=cInk!80}
 ]
 
-\node[inp]    (src) at (0, 0)    {gallery image\\(native resolution)};
-\node[proc]   (chk) at (4.6, 0)  {compute target pixels\\\scriptsize(paper size @ $300\,$dpi)};
+% --- gallery endpoints (outside the pipeline frame) ---
+\node[inp]    (src) at (0, 0)     {gallery image\\(native resolution)};
+\node[proc]   (chk) at (4.6, 0)   {compute target pixels\\(paper size @ $300\,$dpi)};
 \node[aicall] (up)  at (9.4, 1.9) {Real-ESRGAN\\tile upscaler\\[1pt]\tiny\textsc{ai call (ONNX)}};
-\node[proc]   (lay) at (14.2, 0) {PDF layout\\\scriptsize($\pm$ QR code)};
-\node[final]  (out) at (18.8, 0) {print-ready\\PDF in gallery};
+\node[proc]   (lay) at (14.2, 0)  {PDF layout\\($\pm$ QR code)};
+\node[final]  (out) at (18.6, 0)  {print-ready\\PDF in gallery};
 
-\draw[arr]  (src) -- (chk);
-\draw[arr]  (chk.north) to[out=60, in=180]  node[above, font=\tiny\itshape, pos=0.55] {if scale~$>1$} (up.west);
-\draw[arr]  (up.east)   to[out=0,  in=120] (lay.north);
-\draw[barr] (chk) -- node[above, font=\tiny\itshape] {else} (lay);
+% --- frame the processing stages (gallery endpoints stay outside) ---
+\begin{pgfonlayer}{background}
+\node[group=cSlate, fit=(chk)(up)(lay)] (pipe) {};
+\end{pgfonlayer}
+\node[tab=cSlate] at ([xshift=4mm]pipe.north west) {Print pipeline};
+
+% --- flow with a conditional upscale gate ---
+\draw[arr] (src) -- (chk);
+\fill[cInk!75] (chk.east) circle (1.4pt);
+\draw[arr]  (chk.east) to[out=55, in=180]
+      node[arrlbl, pos=0.55] {if scale~$>1$} (up.west);
+\draw[arr]  (up.east) to[out=0, in=95] (lay.north);
+\draw[barr] (chk.east) -- node[arrlbl] {else} (lay.west);
 \draw[arr]  (lay) -- (out);
 
 \end{tikzpicture}%
