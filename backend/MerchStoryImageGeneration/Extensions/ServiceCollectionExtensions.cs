@@ -32,6 +32,12 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IImageProvider, GeminiImageProvider>();
         }
 
+        // OpenAI image model — opt-in alternative the catalog flow can pick per
+        // request (see IImageProviderResolver). The default registration above
+        // still backs everything else (announcements, wallpapers).
+        services.AddScoped<OpenAiImageProvider>();
+        services.AddScoped<IImageProviderResolver, ImageProviderResolver>();
+
         // Content-type services
         services.AddScoped<ICatalogImageService, CatalogImageService>();
         services.AddScoped<IAnnouncementImageService, AnnouncementImageService>();

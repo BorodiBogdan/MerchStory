@@ -13,4 +13,5 @@ public sealed record AnnouncementImageRequest(
     string? JobSalary = null,                     // Job Post only — optional
     string? JobImageStyle = null,                 // Job Post only — "with-person" | "text-only"
     IReadOnlyList<string>? JobRequirements = null, // Job Post only — e.g. ["Driver's license", "Communication skills"]
-    string Language = "EN");                        // "EN" | "RO" — language of generated copy
+    string Language = "EN",                         // "EN" | "RO" — language of generated copy
+    string? ImageModel = null);                     // "gemini" (default / nano banana) | "openai"
