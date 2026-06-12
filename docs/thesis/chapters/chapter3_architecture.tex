@@ -65,13 +65,13 @@ Promotion & A discount-driven post advertising a price cut, coupon code or time-
 
 The internal mechanics of the hybrid catalogue mode are deferred to the contributions chapter that follows.
 
-\textbf{Daily marketing recommendations:} Once a day, the platform must produce a small ranked set of fresh marketing themes adapted to the retailer's shop and to the day's external context (weather, local events, holidays). Each theme is presented as a fully drafted promotional idea, in the locked language, and the retailer may either dismiss it, react to it, or hand it directly to the asset-generation pipeline as a starting prompt. The recommendation engine that produces these themes is the first of the two main contributions of this thesis and is described in detail in Chapter 4.
+\textbf{Daily marketing recommendations:} Once a day, the platform must produce a small ranked set of fresh marketing themes adapted to the retailer's shop and to the day's external context (weather, recent news, holidays). Each theme is presented as a fully drafted promotional idea, in the locked language, and the retailer may either dismiss it, react to it, or hand it directly to the asset-generation pipeline as a starting prompt. The recommendation engine that produces these themes is the first of the two main contributions of this thesis and is described in detail in Chapter 4.
 
 \textbf{Asset library and print export:} Every generated asset, regardless of family and mode, is persisted to the retailer's gallery, where it can be browsed and filtered by asset type, by date and by name. The gallery is the canonical record of everything the platform has produced for the shop. Any gallery item may be exported as a print-ready document, in paper sizes A6 to A3, at $300\,$dpi; if the source asset is below the target resolution, the platform's premium print pipeline upscales it through a learned super-resolution model before laying out the page.
 
 \textbf{Billing and credit accounting:} Every generation that consumes a paid AI provider must be debited against a per-tenant credit balance. The ledger is consistency-critical: a debit is recorded only when the AI call succeeds, a refund is issued only when it fails, and no retailer can be charged for a call that produced no asset. Each billable call is therefore wrapped in an atomic debit-and-record block, and any provider failure triggers an automatic refund. A small administrative interface lets operators grant credits to tenants and inspect the ledger, which is currently the only way a retailer's balance can grow.
 
-\textbf{Administration:} A small set of capabilities is reserved to operators with the administrative flag set on their account, giving them broad oversight of the platform's data and tenants when intervention is required. The administrative surface is deliberately spartan and lives inside the same client application as the retailer surface, with the privileged screens hidden from non-administrative accounts.
+\textbf{Administration:} A small set of capabilities is reserved to operators with the administrative flag set on their account. An operator can grant credits to a retailer's wallet and look up accounts by email, and can curate the shared reference catalogue by adding professional product images one at a time or importing a categorised archive of them in bulk. The administrative surface is deliberately spartan and lives inside the same client application as the retailer surface, with the privileged screens hidden from non-administrative accounts.
 
 \begin{table}[ht]
 \centering
@@ -97,7 +97,7 @@ Library and print       & Persistent gallery with print-ready export from A6 to 
 \hline
 Billing                 & Transactional credit ledger with an atomic debit-and-record around every AI call. \\
 \hline
-Administration          & Broad operator oversight over platform data and tenants. \\
+Administration          & Credit grants, account lookup and reference-catalogue curation, reserved to operators. \\
 \hline
 \end{tabularx}
 \end{table}
@@ -963,7 +963,7 @@ The platform's public surface is the Container Apps Environment's built-in ingre
 
 Every credential consumed by the platform, including the AI provider keys, the background-removal API key and the database connection string, is stored in Azure Key Vault and read at start-up by the Container Apps revision through a system-assigned managed identity. Credentials never appear in container images, in environment files committed to source control or in deployment manifests. The same managed identity also authenticates the application server against the other Azure services it consumes (Blob Storage, the database, Application Insights), so key rotation everywhere becomes the responsibility of Azure rather than of the platform. The VNet topology is conservative around all of this: the database, the blob storage account and Key Vault are reachable only through private endpoints inside the VNet, with their public network access disabled at the resource level, and the Container Apps Environment sits in the same VNet and exposes only its built-in HTTPS ingress to the Internet.
 
-On the operational side, Application Insights collects distributed traces, structured logs and live metrics from every component. Each request is tagged with a tenant identifier and a correlation identifier that is propagated through every external HTTP call, so that the entire trajectory of a recommendation run or of an image generation can be reconstructed from a single trace. A small set of Log Analytics dashboards aggregates operational metrics and is consulted manually rather than feeding any automatic decision. The build and deploy pipeline is hosted on GitHub Actions: a push to a feature branch triggers the test suites described in Section~\ref{sec:testing-strategy}, and merging into \texttt{master} triggers the build of a new container image, its push to the platform's container registry, and the rollout of a new revision on Container Apps. The web client follows an analogous flow, with the build artefact uploaded to the static-site account on success.
+On the operational side, Application Insights collects distributed traces, structured logs and live metrics from every component. Each request is tagged with a tenant identifier and a correlation identifier that is propagated through every external HTTP call, so that the entire trajectory of a recommendation run or of an image generation can be reconstructed from a single trace. A small set of Log Analytics dashboards aggregates operational metrics and is consulted manually rather than feeding any automatic decision. The build and deploy pipeline is hosted on GitHub Actions: a push to a feature branch triggers the test suites described in Chapter~\ref{chap:results-testing}, and merging into \texttt{master} triggers the build of a new container image, its push to the platform's container registry, and the rollout of a new revision on Container Apps. The web client follows an analogous flow, with the build artefact uploaded to the static-site account on success.
 
 {\small
 \renewcommand{\arraystretch}{1.3}
@@ -998,3 +998,5 @@ Secret management & Azure Key Vault with managed identities. \\
 Auditability & Application Insights traces and logs, with Log Analytics dashboards. \\
 \end{tabularx}
 }
+
+Taken together, these managed services let the platform satisfy its non-functional requirements by construction: Container Apps' autoscaling and the stateless server hold interactive reads and writes within their latency target, the asynchronous job model keeps long-running AI calls off the request path, and the platform ingress, the per-tenant rate limiter and Key Vault-backed secrets cover availability, cost control and security without any bespoke infrastructure. The Application Insights traces and Log Analytics dashboards described above are what confirm these bounds hold in production.

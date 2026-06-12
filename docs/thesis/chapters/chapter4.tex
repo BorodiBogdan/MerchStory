@@ -1,7 +1,7 @@
 \chapter{AI Pipeline Design and Implementation}
 \label{chap:contributions}
 
-Chapter~\ref{chap:architecture} treated the recommendation engine and the hybrid catalogue mode as services with a fixed contract. This chapter looks inside both, with a shorter closing section on the print pipeline that supports them.
+Chapter~\ref{chap:architecture} treated the recommendation engine and the hybrid catalogue mode as services with a fixed contract. This chapter looks inside both, then adds two shorter sections, the visual product search that fills the reference library and the print pipeline that prepares finished assets for paper.
 
 The same idea runs through all three. The gap between what an off-the-shelf generative model produces and what a small retailer is willing to publish is rarely closed by a bigger model; it is closed by the protocol that sits around the model. The recommendation engine grounds the language model in retrieved context through a multi-stage prompt chain, the hybrid catalogue pipeline uses a deterministic compositor to bound what the image model is allowed to render, and the print pipeline tiles a small super-resolution model under fixed paper sizes.
 
@@ -398,7 +398,7 @@ A single-shot prompt covers all three. Generation runs from a phone, has to fini
 
 \textbf{Wallpaper.} Wallpapers are background templates onto which real product photos are pasted later. The prompt is built dynamically from the brand context the retailer has filled in. A header band is reserved only when there is brand text or a logo, a footer band only when there is contact or social information, and otherwise the whole canvas is given over to a clean hero zone. Two rules close every wallpaper prompt: the hero area must stay plain, with no patterns or props, and the only text the model may render is the exact strings the prompt lists.
 
-\textbf{Catalogue.} The catalogue path turns the retailer's product photos, brand context, layout style, colour theme and format into a single catalogue image. The prompt carries an art-direction block (composition, typography, lighting, colour) so that one call to the provider produces a usable result without a separate critique step. Catalogue generation has two modes. The default mode lets the model render everything, the products included. The preserve mode keeps the retailer's product pixels untouched.
+\textbf{Catalogue.} The catalogue path turns the retailer's product photos, brand context, layout style, colour theme and format into a single catalogue image. The prompt carries an art-direction block (composition, typography, lighting, colour) so that one call to the provider produces a usable result without a separate critique step. Catalogue generation has two model-based modes, alongside a third path that invokes no generative model at all and is described in Section~\ref{subsec:inhouse-composite}. The default mode lets the model render everything, the products included. The preserve mode keeps the retailer's product pixels untouched.
 
 The preserve mode is the most complex path on the platform. It is the only one that combines a generative step with a deterministic post-processor, and the only one that imposes a strict contract on the model output, namely a coloured silhouette around each product and a quiet zone of clean background around each silhouette, that the post-processor then relies on. It exists because some retailers cannot tolerate any change to their products, even small rewrites of label text or substitutions with visually similar items, which off-the-shelf multimodal models still produce regularly. The rest of this section explores how the preserve mode is built, why a fully generative pipeline does not meet that bar, and how the deterministic compositor closes the gap.
 
@@ -692,6 +692,104 @@ If the per-trial acceptance probabilities are treated as approximately independe
 \end{table}
 
 These figures are observational and informal; a controlled benchmark with a fixed evaluation set, blind human raters and per-failure-mode breakdown is left to future work. They are presented here to motivate the three-trial cap, not as a definitive measurement.
+
+\subsection{In-house composite onto a wallpaper}
+\label{subsec:inhouse-composite}
+
+The third catalogue flavour listed in Table~\ref{tab:catalogue-flavours} of Chapter~\ref{chap:architecture} is the in-house composite. It differs from the two flavours above in one decisive way: it invokes no generative model at the moment the catalogue is built. Where the fully generative mode (Section~\ref{subsec:gen-overview}) asks the provider to render the whole scene, and the preserve mode (Section~\ref{subsec:hyb-motivation}) asks it to render a scene with placeholder regions, the in-house composite asks the provider for nothing at all. The whole catalogue is assembled by the platform's own deterministic code.
+
+The backdrop comes from one of two sources. The retailer can reuse a brand wallpaper produced earlier by the wallpaper service (Section~\ref{subsec:gen-overview}), the same brand-themed image shown in Figure~\ref{fig:result-wallpaper}, or upload a custom background of their own. Either way the backdrop is fixed before the catalogue is built, so the platform makes no inference call while assembling it.
+
+Onto that backdrop the deterministic compositor lays the selected products. Each product photograph is trimmed to its opaque bounding box and alpha-composited into place, together with its price and the shop's brand identity, using the same compositing machinery that Stage~3 of the hybrid pipeline (Section~\ref{subsec:hyb-pipeline}) uses to paste real products into a generated scene. The difference is that here there is no generated scene to detect, no marker outline to erase and no judge loop to run, because nothing in the image was produced by a model and so nothing can be hallucinated or substituted.
+
+The trade-off is straightforward. The in-house composite spends no credits at generation time, is fully deterministic and preserves every product pixel for pixel, which makes it the cheapest and most predictable of the three flavours. The price paid is that the visual richness of the result is bounded by the backdrop the retailer supplied or generated once, rather than tailored to the chosen products by a fresh model call. It therefore suits retailers who want complete control over the layout, or who want to produce catalogues repeatedly without spending credits on every one, while the two model-based flavours remain available whenever a freshly generated scene is worth the cost.
+
+\section{Visual Product Search}
+\label{sec:visual-search}
+
+A retail asset is only as convincing as the product photograph it starts from. The platform therefore lets a retailer represent a product with a clean image from a curated catalogue of professional product photography, the evenly lit reference the hybrid catalogue pipeline of Section~\ref{subsec:hyb-pipeline} later reuses to keep products faithful. The theory behind this search by photo was covered in Section~\ref{sec:visual-similarity} and its storage in Section~\ref{subsec:relational-schema}. Figure~\ref{fig:visual-search} shows how the parts fit together.
+
+The catalogue is curated in advance and organised by Category. Each image is embedded once by the CLIP ViT-B/32 vision encoder~\cite{radford2021clip}, which the platform hosts and runs on its own servers, and the resulting 512-dimensional vector is L2-normalised and stored in the \texttt{ReferenceImage.Embedding} column as a pgvector vector(512), indexed with a Hierarchical Navigable Small World index under cosine distance. Embedding happens ahead of time, so a search never re-runs the encoder over the catalogue.
+
+When the retailer adds a product, they photograph the real item and the platform returns the ten closest catalogue products, ranked by visual similarity. They keep their own photo or pick one of these matches to represent the product.
+
+\begin{figure}[H]
+\centering
+% --- self-contained palette (muted, print-friendly) ---
+\definecolor{cInk}{HTML}{2E3440}    % text + arrows
+\definecolor{cIndigo}{HTML}{3F4D8C} % LLM / orchestration stages
+\definecolor{cSlate}{HTML}{4A5568}  % deterministic platform code
+\definecolor{cTeal}{HTML}{2E5F8C}   % stores
+\definecolor{cAmber}{HTML}{B07A1F}  % highlight accent
+\definecolor{cGray}{HTML}{7C8390}   % external providers
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\sffamily\scriptsize,
+    card/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!7,
+                 align=center, text=cInk,
+                 drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                              fill=black, opacity=0.12}},
+    group/.style={draw=#1, line width=0.9pt, rounded corners=3pt, fill=#1!6,
+                  inner sep=2.8mm,
+                  drop shadow={shadow xshift=0.5mm, shadow yshift=-0.5mm,
+                               fill=black, opacity=0.12}},
+    tab/.style={fill=#1, rounded corners=2.5pt, inner xsep=6pt, inner ysep=0pt,
+                minimum height=5.2mm, anchor=south west,
+                font=\sffamily\scriptsize\bfseries, text=white},
+    chip/.style={draw=#1, line width=0.6pt, rounded corners=2.5pt, fill=white,
+                 align=center, text=cInk},
+    store/.style={draw=cTeal, line width=0.6pt, cylinder, shape border rotate=90,
+                  aspect=0.22, minimum width=24mm, minimum height=15mm, align=center,
+                  cylinder uses custom fill, cylinder body fill=white,
+                  cylinder end fill=cTeal!15, text=cInk},
+    arr/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cInk!85},
+    fb/.style={-{Latex[length=2mm,width=1.5mm]}, line width=0.7pt, draw=cGray,
+               dash pattern=on 2.4pt off 1.7pt},
+    arrlbl/.style={font=\sffamily\tiny\itshape, fill=white, inner sep=1pt, text=cInk!80}
+]
+
+% --- inputs ---
+\node[store] (cat) at (-4.2, 1.7) {Curated\\catalogue};
+\node[card=cTeal, minimum width=20mm, minimum height=11mm] (photo) at (-4.2, -1.7)
+    {phone\\photo};
+
+% --- shared encoder (hero) and the vector it emits ---
+\node[card=cIndigo, minimum width=32mm, minimum height=16mm] (enc) at (0, 0)
+    {CLIP \texttt{ViT-B/32}\\vision encoder\\(ONNX)};
+\node[chip=cSlate, minimum width=26mm, minimum height=12mm] (vec) at (3.4, 0)
+    {512-d vector\\(L2-normalised)};
+
+% --- offline destination ---
+\node[store] (pg) at (7.4, 1.7) {pgvector index\\\texttt{vector(512)}\\HNSW, cosine};
+
+% --- online query path ---
+\node[card=cSlate, minimum width=30mm, minimum height=13mm] (topk) at (7.2, -1.7)
+    {cosine top-10\\nearest neighbours};
+\node[card=cAmber, minimum width=22mm, minimum height=13mm] (cand) at (10.8, -1.7)
+    {ranked\\matches};
+\node[store] (lib) at (13.8, -1.7) {product\\library};
+
+% --- central frame: the one shared encoder ---
+\begin{pgfonlayer}{background}
+\node[group=cIndigo, fit=(enc)(vec)] (encbox) {};
+\end{pgfonlayer}
+\node[tab=cIndigo] at ([xshift=4mm]encbox.north west) {shared CLIP encoder};
+
+% --- arrows ---
+\draw[fb]  (cat.east)   to[out=0, in=150] node[arrlbl, pos=0.55]{once, on import} (enc.150);
+\draw[arr] (photo.east) to[out=0, in=210] node[arrlbl, pos=0.55]{on upload} (enc.210);
+\draw[arr] (enc.east) -- (vec.west);
+\draw[fb]  (vec.north) to[out=90, in=180]  node[arrlbl, pos=0.62]{index} (pg.west);
+\draw[arr] (vec.south) to[out=-90, in=180] node[arrlbl, pos=0.62]{query} (topk.west);
+\draw[fb]  (pg.south) to[out=-90, in=90] node[arrlbl, pos=0.5]{indexed vectors} (topk.north);
+\draw[arr] (topk.east) -- node[arrlbl]{top 10} (cand.west);
+\draw[arr] (cand.east) -- node[arrlbl]{keep or swap} (lib.west);
+
+\end{tikzpicture}%
+}
+\caption{Search by photo. The curated catalogue is embedded once by the CLIP vision encoder and indexed in pgvector. An uploaded phone photograph is embedded by the same encoder and matched by cosine nearest-neighbour search, and the retailer keeps the photograph or swaps in the closest studio match.}
+\label{fig:visual-search}
+\end{figure}
 
 \section{Print Pipeline and DPI Enhancer}
 \label{sec:print-pipeline}

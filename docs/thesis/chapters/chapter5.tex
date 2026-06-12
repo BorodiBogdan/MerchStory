@@ -132,7 +132,7 @@ The reference set against which DeepEval is run is a frozen collection of $20$ t
 
 \subsection*{Cross-model evaluation}
 
-The same DeepEval harness is used to compare candidate writer models head-to-head on the reference set, so that decisions about which backbone to host, fine-tune or call as a managed service can be made on evidence rather than intuition. Five models are evaluated: Gemma 3 4B as the open-weights base, Gemma 3 4B (fine-tuned) after fine-tuning it on a set of example ideas written in the voice and wording the writer should use, DeepSeek as an open-weights frontier comparison, and the closed Claude and ChatGPT families as managed-service baselines. Figure~\ref{fig:deepeval-models} reports the mean per-axis score, on a $0$ to $100$ scale, with the y-axis truncated at $30$ to make the differences legible.
+The same DeepEval harness is used to compare candidate writer models head-to-head on the reference set, so that decisions about which backbone to host, fine-tune or call as a managed service can be made on evidence rather than intuition. Five models are evaluated: Gemma 3 4B as the open-weights base, Gemma 3 4B (fine-tuned) after fine-tuning it on a set of example ideas written in the voice and wording the writer should use, DeepSeek as an open-weights frontier comparison, and the closed Claude Haiku 4.5 and GPT-4o mini models as managed-service baselines. Figure~\ref{fig:deepeval-models} reports the mean per-axis score, on a $0$ to $100$ scale, with the y-axis truncated at $30$ to make the differences legible.
 
 \begin{figure}[!ht]
 \centering
@@ -195,10 +195,10 @@ The same DeepEval harness is used to compare candidate writer models head-to-hea
         legend columns=5,
         draw=none,
         fill=none,
-        column sep=14pt,
+        column sep=6pt,
         font=\sffamily\scriptsize,
         text=cInk,
-        /tikz/every even column/.append style={column sep=14pt}
+        /tikz/every even column/.append style={column sep=6pt}
     },
     every axis plot/.append style={line width=0.3pt},
     clip=false,
@@ -215,7 +215,7 @@ The same DeepEval harness is used to compare candidate writer models head-to-hea
 \addplot[fill=cGray, draw=cGray!80!black]
     coordinates {(Relevancy,84.7) (Faithfulness,91.0) ({Tone Match},51.0) ({Schema Compliance},54.5) ({Hallucination-Free},92.5)};
 
-\legend{Gemma 3 4B, Gemma 3 4B (FT), DeepSeek, Claude, ChatGPT}
+\legend{Gemma 3 4B, Gemma 3 4B (FT), DeepSeek, Claude Haiku 4.5, GPT-4o mini}
 
 \end{axis}
 \end{tikzpicture}
