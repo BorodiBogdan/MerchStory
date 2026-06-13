@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 
+import { glassNavRail } from '@/components/ui/GlassNavbar';
 import { D } from '@/constants/design';
 import { useTheme } from '@/context/theme';
 import { useT } from '@/i18n';
@@ -25,8 +26,12 @@ export default function VideoComingSoon() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
+  const railInset = glassNavRail(width, true).inset;
 
-  const styles = useMemo(() => makeStyles(colors, isDesktop), [colors, isDesktop]);
+  const styles = useMemo(
+    () => makeStyles(colors, isDesktop, railInset),
+    [colors, isDesktop, railInset]
+  );
 
   const opacity = useRef(new Animated.Value(0)).current;
   const translate = useRef(new Animated.Value(14)).current;
@@ -115,19 +120,21 @@ export default function VideoComingSoon() {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: boolean) {
+function makeStyles(
+  colors: ReturnType<typeof useTheme>['colors'],
+  isDesktop: boolean,
+  railInset: number
+) {
   return StyleSheet.create({
     scrollContent: {
       flexGrow: 1,
-      paddingHorizontal: D.spacing.lg,
       paddingBottom: D.spacing['2xl'],
       paddingTop: isDesktop ? D.spacing.lg : D.spacing.md,
       alignItems: 'stretch',
     },
     topBar: {
       width: '100%',
-      maxWidth: 1120,
-      alignSelf: 'center',
+      paddingHorizontal: railInset,
       paddingBottom: D.spacing.xl,
     },
     backButton: {
@@ -151,6 +158,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors'], isDesktop: bo
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: D.spacing['2xl'],
+      paddingHorizontal: D.spacing.lg,
     },
     center: {
       maxWidth: 520,
