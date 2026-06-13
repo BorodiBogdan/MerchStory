@@ -29,7 +29,7 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CatalogOfferModal } from '@/components/ui/CatalogOfferModal';
+import { CatalogOfferModal, type OfferOptionSummary } from '@/components/ui/CatalogOfferModal';
 import { ChipSelector } from '@/components/ui/ChipSelector';
 import { ColorPicker } from '@/components/ui/ColorPicker';
 import { CreditIcon } from '@/components/ui/CreditIcon';
@@ -704,6 +704,115 @@ function BrandContextSection({
         })}
       </View>
     </>
+  );
+}
+
+// Width / height for a wallpaper format value, used both for the picker preview and
+// for sizing the generated result image.
+function formatRatioValue(value: string): number {
+  switch (value) {
+    case 'Poster':
+      return 1 / Math.SQRT2;
+    case '1:1':
+      return 1;
+    case '4:5':
+      return 4 / 5;
+    case '16:9':
+      return 16 / 9;
+    case '9:16':
+    default:
+      return 9 / 16;
+  }
+}
+
+// A format option rendered as a card with a small live aspect-ratio preview so the
+// shape of the output reads at a glance. Active state uses the brand-indigo tint to
+// stay cohesive with the brand-context chips.
+function WallpaperFormatCard({
+  label,
+  sub,
+  value,
+  active,
+  disabled,
+  compact,
+  onPress,
+}: {
+  label: string;
+  sub: string;
+  value: string;
+  active: boolean;
+  disabled?: boolean;
+  // Narrow (mobile / small-window web) layout: four cards share a tight row, so the
+  // label is scaled down and clamped to one line to keep long words ("Landscape")
+  // from overflowing the card.
+  compact?: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  const ratio = formatRatioValue(value);
+  const box = 28;
+  const previewW = ratio >= 1 ? box : box * ratio;
+  const previewH = ratio >= 1 ? box / ratio : box;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={({ pressed }) => [
+        {
+          flex: 1,
+          minWidth: 0,
+          alignItems: 'center',
+          gap: 6,
+          paddingVertical: D.spacing.sm + 2,
+          paddingHorizontal: compact ? 2 : 4,
+          borderRadius: D.radius.md,
+          borderWidth: 1.5,
+          borderColor: active ? colors.accent.primary : colors.border.default,
+          backgroundColor: active ? colors.accent.dim : colors.bg.elevated,
+        },
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <View style={{ height: box, justifyContent: 'center' }}>
+        <View
+          style={{
+            width: previewW,
+            height: previewH,
+            borderRadius: 3,
+            borderWidth: 1.5,
+            borderColor: active ? colors.accent.primary : colors.text.muted,
+            backgroundColor: active ? colors.accent.primary : 'transparent',
+          }}
+        />
+      </View>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+        style={{
+          alignSelf: 'stretch',
+          textAlign: 'center',
+          fontSize: compact ? D.fontSize.xs : D.fontSize.sm,
+          fontWeight: D.fontWeight.semibold,
+          color: active ? colors.accent.primary : colors.text.primary,
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        numberOfLines={1}
+        style={{
+          alignSelf: 'stretch',
+          textAlign: 'center',
+          fontSize: compact ? 10 : D.fontSize.xs,
+          color: active ? colors.accent.secondary : colors.text.muted,
+        }}
+      >
+        {sub}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -1622,24 +1731,30 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   }
 
   // Settings recap shown on the review modal's "generation options" step.
-  function buildOptionsSummary(
-    mode: 'catalog' | 'wallpaperOn'
-  ): { label: string; value: string }[] {
-    const onOff = (v: boolean) => (v ? t('studio.offer.optOn') : t('studio.offer.optOff'));
+  function buildOptionsSummary(mode: 'catalog' | 'wallpaperOn'): OfferOptionSummary[] {
+    // Toggle settings carry a tone so the modal renders an On/Off status pill.
+    const toggle = (v: boolean): Pick<OfferOptionSummary, 'value' | 'tone'> => ({
+      value: v ? t('studio.offer.optOn') : t('studio.offer.optOff'),
+      tone: v ? 'on' : 'off',
+    });
     // Product-name row is rendered by the modal itself (it forces it off and
     // annotates when the offer has a group/bundle), so it is omitted here.
     if (mode === 'wallpaperOn') {
       return [
-        { label: t('studio.offer.optLayout'), value: layout },
-        { label: t('studio.offer.optPrices'), value: onOff(showPrices) },
+        { label: t('studio.offer.optLayout'), value: layout, icon: 'grid-outline' },
+        { label: t('studio.offer.optPrices'), icon: 'pricetag-outline', ...toggle(showPrices) },
       ];
     }
     return [
-      { label: t('studio.offer.optFormat'), value: catalogFormat },
-      { label: t('studio.offer.optTheme'), value: colorTheme },
-      { label: t('studio.offer.optBackground'), value: backgroundStyle },
-      { label: t('studio.offer.optPrices'), value: onOff(showPrices) },
-      { label: t('studio.offer.optPreserve'), value: onOff(preserveProductImages) },
+      { label: t('studio.offer.optFormat'), value: catalogFormat, icon: 'crop-outline' },
+      { label: t('studio.offer.optTheme'), value: colorTheme, icon: 'color-palette-outline' },
+      { label: t('studio.offer.optBackground'), value: backgroundStyle, icon: 'image-outline' },
+      { label: t('studio.offer.optPrices'), icon: 'pricetag-outline', ...toggle(showPrices) },
+      {
+        label: t('studio.offer.optPreserve'),
+        icon: 'lock-closed-outline',
+        ...toggle(preserveProductImages),
+      },
     ];
   }
 
@@ -1929,6 +2044,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   // colors chip is dropped from the catalog brand-context list to avoid duplication.
   const catalogContextItems = useMemo(
     () => contextItems.filter((i) => i.key !== 'brandColors'),
+    [contextItems]
+  );
+
+  // The wallpaper modal handles the logo through its own "Include Logo" toggle, so the
+  // logo chip is dropped from its brand-context list to avoid offering it twice.
+  const wallpaperBrandItems = useMemo(
+    () => contextItems.filter((i) => i.key !== 'logoBase64'),
     [contextItems]
   );
 
@@ -2889,10 +3011,17 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                   contentContainerStyle={styles.wallpaperGenScrollContent}
                   keyboardShouldPersistTaps="handled"
                 >
-                  <Text style={styles.wallpaperGenTitle}>{t('wallpapers.modal.title')}</Text>
-                  <Text style={styles.wallpaperGenSubtitle}>
-                    {t('studio.wallpaperModal.subtitle')}
-                  </Text>
+                  <View style={styles.wallpaperGenHeader}>
+                    <View style={styles.wallpaperGenHeaderIcon}>
+                      <Ionicons name="image-outline" size={20} color={colors.accent.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.wallpaperGenTitle}>{t('wallpapers.modal.title')}</Text>
+                      <Text style={styles.wallpaperGenSubtitle}>
+                        {t('studio.wallpaperModal.subtitle')}
+                      </Text>
+                    </View>
+                  </View>
 
                   <Text style={styles.wallpaperGenSectionLabel}>
                     {t('wallpapers.modal.format')}
@@ -2903,53 +3032,34 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         {
                           value: 'Poster',
                           label: t('studio.wallpaperModal.posterAspect'),
-                          ratio: t('studio.wallpaperModal.posterRatioHint'),
+                          sub: t('studio.wallpaperModal.posterRatioHint'),
                         },
                         {
                           value: '9:16',
                           label: t('studio.wallpaperModal.verticalAspect'),
-                          ratio: '9:16',
+                          sub: '9:16',
                         },
                         {
                           value: '1:1',
                           label: t('studio.wallpaperModal.squareAspect'),
-                          ratio: '1:1',
+                          sub: '1:1',
                         },
                         {
                           value: '4:5',
                           label: t('studio.wallpaperModal.portraitAspect'),
-                          ratio: '4:5',
+                          sub: '4:5',
                         },
                       ] as const
                     ).map((opt) => (
-                      <Pressable
+                      <WallpaperFormatCard
                         key={opt.value}
-                        style={[
-                          styles.wallpaperGenFormatPill,
-                          wallpaperGenFormat === opt.value && styles.wallpaperGenFormatPillActive,
-                        ]}
-                        onPress={() => setWallpaperGenFormat(opt.value)}
+                        label={opt.label}
+                        sub={opt.sub}
+                        value={opt.value}
+                        active={wallpaperGenFormat === opt.value}
                         disabled={wallpaperGenGenerating}
-                      >
-                        <Text
-                          style={[
-                            styles.wallpaperGenFormatPillText,
-                            wallpaperGenFormat === opt.value &&
-                              styles.wallpaperGenFormatPillTextActive,
-                          ]}
-                        >
-                          {opt.label}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.wallpaperGenFormatPillRatio,
-                            wallpaperGenFormat === opt.value &&
-                              styles.wallpaperGenFormatPillTextActive,
-                          ]}
-                        >
-                          {opt.ratio}
-                        </Text>
-                      </Pressable>
+                        onPress={() => setWallpaperGenFormat(opt.value)}
+                      />
                     ))}
                   </View>
                   {wallpaperGenFormat === 'Poster' && (
@@ -2994,66 +3104,30 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     editable={!wallpaperGenGenerating}
                   />
 
-                  <View style={styles.wallpaperGenToggleRow}>
-                    <View>
-                      <Text style={styles.wallpaperGenToggleLabel}>
-                        {t('wallpapers.modal.includeLogo')}
-                      </Text>
-                      <Text style={styles.wallpaperGenToggleHint}>
-                        Place your brand logo in the header
-                      </Text>
+                  {shopProfile?.logoUrl && (
+                    <View style={styles.wallpaperGenToggleRow}>
+                      <View style={{ flex: 1, paddingRight: D.spacing.md }}>
+                        <Text style={styles.wallpaperGenToggleLabel}>
+                          {t('wallpapers.modal.includeLogo')}
+                        </Text>
+                        <Text style={styles.wallpaperGenToggleHint}>
+                          Place your brand logo in the header
+                        </Text>
+                      </View>
+                      <Switch
+                        value={wallpaperGenIncludeLogo}
+                        onValueChange={setWallpaperGenIncludeLogo}
+                        disabled={wallpaperGenGenerating}
+                        trackColor={{ true: colors.accent.primary }}
+                      />
                     </View>
-                    <Switch
-                      value={wallpaperGenIncludeLogo}
-                      onValueChange={setWallpaperGenIncludeLogo}
-                      disabled={wallpaperGenGenerating}
-                      trackColor={{ true: colors.accent.primary }}
-                    />
-                  </View>
+                  )}
 
-                  <Text style={styles.wallpaperGenSectionLabel}>
-                    {t('wallpapers.modal.includeBrand')}
-                  </Text>
-                  <View>
-                    {(
-                      [
-                        { key: 'brandName', label: 'Brand Name' },
-                        { key: 'slogan', label: 'Slogan' },
-                        { key: 'brandColors', label: 'Brand Colors' },
-                        { key: 'businessDomain', label: 'Business Domain' },
-                        { key: 'shopType', label: 'Shop Type' },
-                        { key: 'targetAudience', label: 'Target Audience' },
-                        { key: 'phoneNumber', label: 'Phone Number' },
-                        { key: 'email', label: 'Email' },
-                        { key: 'addresses', label: 'Address' },
-                        { key: 'instagramHandle', label: 'Instagram' },
-                        { key: 'facebookHandle', label: 'Facebook' },
-                        { key: 'tikTokHandle', label: 'TikTok' },
-                      ] as const
-                    ).map((opt) => {
-                      const checked = wallpaperGenBrandFields.includes(opt.key);
-                      return (
-                        <Pressable
-                          key={opt.key}
-                          style={({ pressed }) => [
-                            styles.wallpaperGenCheckRow,
-                            pressed && { opacity: 0.7 },
-                          ]}
-                          onPress={() => toggleWallpaperGenBrandField(opt.key)}
-                          disabled={wallpaperGenGenerating}
-                          accessibilityRole="checkbox"
-                          accessibilityState={{ checked }}
-                        >
-                          <Ionicons
-                            name={checked ? 'checkbox' : 'square-outline'}
-                            size={isDesktop ? 18 : 24}
-                            color={checked ? colors.accent.primary : colors.text.muted}
-                          />
-                          <Text style={styles.wallpaperGenCheckLabel}>{opt.label}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  <BrandContextSection
+                    items={wallpaperBrandItems}
+                    selected={wallpaperGenBrandFields}
+                    onToggle={toggleWallpaperGenBrandField}
+                  />
 
                   {wallpaperError && <Text style={styles.wallpaperGenError}>{wallpaperError}</Text>}
 
@@ -4242,10 +4316,17 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                 contentContainerStyle={styles.wallpaperGenScrollContent}
                 keyboardShouldPersistTaps="handled"
               >
-                <Text style={styles.wallpaperGenTitle}>{t('wallpapers.modal.title')}</Text>
-                <Text style={styles.wallpaperGenSubtitle}>
-                  {t('studio.wallpaperModal.subtitle')}
-                </Text>
+                <View style={styles.wallpaperGenHeader}>
+                  <View style={styles.wallpaperGenHeaderIcon}>
+                    <Ionicons name="image-outline" size={20} color={colors.accent.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.wallpaperGenTitle}>{t('wallpapers.modal.title')}</Text>
+                    <Text style={styles.wallpaperGenSubtitle}>
+                      {t('studio.wallpaperModal.subtitle')}
+                    </Text>
+                  </View>
+                </View>
 
                 {/* Format */}
                 <Text style={styles.wallpaperGenSectionLabel}>{t('wallpapers.modal.format')}</Text>
@@ -4255,53 +4336,35 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                       {
                         value: 'Poster',
                         label: t('studio.wallpaperModal.posterAspect'),
-                        ratio: t('studio.wallpaperModal.posterRatioHint'),
+                        sub: t('studio.wallpaperModal.posterRatioHint'),
                       },
                       {
                         value: '9:16',
                         label: t('studio.wallpaperModal.verticalAspect'),
-                        ratio: '9:16',
+                        sub: '9:16',
                       },
                       {
                         value: '1:1',
                         label: t('studio.wallpaperModal.squareAspect'),
-                        ratio: '1:1',
+                        sub: '1:1',
                       },
                       {
                         value: '16:9',
                         label: t('wallpapers.modal.formatLandscape'),
-                        ratio: '16:9',
+                        sub: '16:9',
                       },
                     ] as const
                   ).map((opt) => (
-                    <Pressable
+                    <WallpaperFormatCard
                       key={opt.value}
-                      style={[
-                        styles.wallpaperGenFormatPill,
-                        wallpaperGenFormat === opt.value && styles.wallpaperGenFormatPillActive,
-                      ]}
-                      onPress={() => setWallpaperGenFormat(opt.value)}
+                      label={opt.label}
+                      sub={opt.sub}
+                      value={opt.value}
+                      active={wallpaperGenFormat === opt.value}
                       disabled={wallpaperGenGenerating}
-                    >
-                      <Text
-                        style={[
-                          styles.wallpaperGenFormatPillText,
-                          wallpaperGenFormat === opt.value &&
-                            styles.wallpaperGenFormatPillTextActive,
-                        ]}
-                      >
-                        {opt.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.wallpaperGenFormatPillRatio,
-                          wallpaperGenFormat === opt.value &&
-                            styles.wallpaperGenFormatPillTextActive,
-                        ]}
-                      >
-                        {opt.ratio}
-                      </Text>
-                    </Pressable>
+                      compact
+                      onPress={() => setWallpaperGenFormat(opt.value)}
+                    />
                   ))}
                 </View>
                 {wallpaperGenFormat === 'Poster' && (
@@ -4332,68 +4395,32 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                   editable={!wallpaperGenGenerating}
                 />
 
-                {/* Include logo */}
-                <View style={styles.wallpaperGenToggleRow}>
-                  <View>
-                    <Text style={styles.wallpaperGenToggleLabel}>
-                      {t('wallpapers.modal.includeLogo')}
-                    </Text>
-                    <Text style={styles.wallpaperGenToggleHint}>
-                      Place your brand logo in the header
-                    </Text>
+                {/* Include logo (only when the shop actually has a logo) */}
+                {shopProfile?.logoUrl && (
+                  <View style={styles.wallpaperGenToggleRow}>
+                    <View style={{ flex: 1, paddingRight: D.spacing.md }}>
+                      <Text style={styles.wallpaperGenToggleLabel}>
+                        {t('wallpapers.modal.includeLogo')}
+                      </Text>
+                      <Text style={styles.wallpaperGenToggleHint}>
+                        Place your brand logo in the header
+                      </Text>
+                    </View>
+                    <Switch
+                      value={wallpaperGenIncludeLogo}
+                      onValueChange={setWallpaperGenIncludeLogo}
+                      disabled={wallpaperGenGenerating}
+                      trackColor={{ true: colors.accent.primary }}
+                    />
                   </View>
-                  <Switch
-                    value={wallpaperGenIncludeLogo}
-                    onValueChange={setWallpaperGenIncludeLogo}
-                    disabled={wallpaperGenGenerating}
-                    trackColor={{ true: colors.accent.primary }}
-                  />
-                </View>
+                )}
 
-                {/* Brand context */}
-                <Text style={styles.wallpaperGenSectionLabel}>
-                  {t('wallpapers.modal.includeBrand')}
-                </Text>
-                <View>
-                  {(
-                    [
-                      { key: 'brandName', label: 'Brand Name' },
-                      { key: 'slogan', label: 'Slogan' },
-                      { key: 'brandColors', label: 'Brand Colors' },
-                      { key: 'businessDomain', label: 'Business Domain' },
-                      { key: 'shopType', label: 'Shop Type' },
-                      { key: 'targetAudience', label: 'Target Audience' },
-                      { key: 'phoneNumber', label: 'Phone Number' },
-                      { key: 'email', label: 'Email' },
-                      { key: 'addresses', label: 'Address' },
-                      { key: 'instagramHandle', label: 'Instagram' },
-                      { key: 'facebookHandle', label: 'Facebook' },
-                      { key: 'tikTokHandle', label: 'TikTok' },
-                    ] as const
-                  ).map((opt) => {
-                    const checked = wallpaperGenBrandFields.includes(opt.key);
-                    return (
-                      <Pressable
-                        key={opt.key}
-                        style={({ pressed }) => [
-                          styles.wallpaperGenCheckRow,
-                          pressed && { opacity: 0.7 },
-                        ]}
-                        onPress={() => toggleWallpaperGenBrandField(opt.key)}
-                        disabled={wallpaperGenGenerating}
-                        accessibilityRole="checkbox"
-                        accessibilityState={{ checked }}
-                      >
-                        <Ionicons
-                          name={checked ? 'checkbox' : 'square-outline'}
-                          size={isDesktop ? 18 : 24}
-                          color={checked ? colors.accent.primary : colors.text.muted}
-                        />
-                        <Text style={styles.wallpaperGenCheckLabel}>{opt.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                {/* Brand context (only the fields the shop has actually filled in) */}
+                <BrandContextSection
+                  items={wallpaperBrandItems}
+                  selected={wallpaperGenBrandFields}
+                  onToggle={toggleWallpaperGenBrandField}
+                />
 
                 {wallpaperError && <Text style={styles.wallpaperGenError}>{wallpaperError}</Text>}
 
@@ -5552,6 +5579,20 @@ function makeStyles(
       gap: D.spacing.sm,
       paddingBottom: D.spacing.md,
     },
+    wallpaperGenHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.md,
+      paddingRight: isWeb ? D.spacing.xl : 0,
+    },
+    wallpaperGenHeaderIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.dim,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     wallpaperGenTitle: {
       fontSize: D.fontSize.lg,
       fontWeight: D.fontWeight.bold,
@@ -5572,32 +5613,6 @@ function makeStyles(
     wallpaperGenFormatRow: {
       flexDirection: 'row',
       gap: D.spacing.sm,
-    },
-    wallpaperGenFormatPill: {
-      flex: 1,
-      alignItems: 'center',
-      paddingVertical: D.spacing.sm,
-      borderRadius: D.radius.md,
-      borderWidth: 1,
-      borderColor: colors.border.default,
-      backgroundColor: colors.bg.elevated,
-    },
-    wallpaperGenFormatPillActive: {
-      backgroundColor: colors.accent.primary,
-      borderColor: colors.accent.primary,
-    },
-    wallpaperGenFormatPillText: {
-      fontSize: D.fontSize.sm,
-      fontWeight: D.fontWeight.semibold,
-      color: colors.text.primary,
-    },
-    wallpaperGenFormatPillRatio: {
-      fontSize: D.fontSize.xs,
-      color: colors.text.muted,
-      marginTop: 1,
-    },
-    wallpaperGenFormatPillTextActive: {
-      color: '#fff',
     },
     wallpaperGenInput: {
       backgroundColor: colors.bg.elevated,
@@ -5648,18 +5663,6 @@ function makeStyles(
       fontSize: D.fontSize.xs,
       color: colors.text.muted,
       marginTop: 2,
-    },
-    wallpaperGenCheckRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: isDesktop ? D.spacing.sm : D.spacing.md,
-      paddingVertical: isDesktop ? 7 : 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border.subtle,
-    },
-    wallpaperGenCheckLabel: {
-      fontSize: isDesktop ? D.fontSize.sm : D.fontSize.base,
-      color: colors.text.primary,
     },
     wallpaperGenError: {
       fontSize: D.fontSize.xs,

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -89,6 +89,9 @@ export default function GalleryScreen() {
   const numColumns = isWeb ? (screenWidth < 600 ? 2 : screenWidth < 1024 ? 3 : 4) : 2;
 
   const useSidebar = isWeb && screenWidth >= 900;
+  // Phone-width layout: compact header that scrolls away inside the list.
+  // True on all native and on web below 600px (matches the grid breakpoint above).
+  const isPhone = !isWeb || screenWidth < 600;
   const hPadding = !isWeb
     ? MOBILE_H_PADDING
     : screenWidth < 600
@@ -458,9 +461,20 @@ export default function GalleryScreen() {
     </View>
   ) : null;
 
-  const photosContent = () => {
+  const photosContent = (header?: ReactElement) => {
+    // On phone the header rides inside the list (as ListHeaderComponent) so it
+    // scrolls away. For the non-list states below, render it above the message.
+    const wrap = (node: ReactElement) =>
+      header ? (
+        <>
+          {header}
+          {node}
+        </>
+      ) : (
+        node
+      );
     if (loading && items.length === 0) {
-      return (
+      return wrap(
         <View style={styles.centerFill}>
           <View style={styles.loaderHalo}>
             <ActivityIndicator size="large" color={colors.accent.primary} />
@@ -470,7 +484,7 @@ export default function GalleryScreen() {
       );
     }
     if (error && items.length === 0) {
-      return (
+      return wrap(
         <View style={styles.centerFill}>
           <View style={styles.emptyIconCircle}>
             <View style={styles.emptyIconInner}>
@@ -494,7 +508,7 @@ export default function GalleryScreen() {
         </View>
       );
     }
-    if (items.length === 0) return emptyState;
+    if (items.length === 0) return wrap(emptyState);
     return (
       <FlatList
         ref={listRef}
@@ -506,9 +520,11 @@ export default function GalleryScreen() {
         contentContainerStyle={[
           styles.grid,
           isWeb && !useSidebar && { paddingHorizontal: hPadding },
+          isPhone && { paddingBottom: 96 },
         ]}
         columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={header}
         onEndReached={!isWeb ? () => void galleryCache.loadMore() : undefined}
         onEndReachedThreshold={0.4}
         ListFooterComponent={listFooter}
@@ -559,145 +575,200 @@ export default function GalleryScreen() {
         ? 'image'
         : 'images';
 
-  return (
-    <View style={styles.root}>
-      <View style={styles.pageContainer}>
-        <Animated.View style={[styles.pageHeader, heroAnimStyle]}>
-          <View style={styles.headerTextBlock}>
-            <Text style={styles.pageTitle}>{t('gallery.pageTitle')}</Text>
-            <View style={styles.subtitleRow}>
-              {assetType === 'Video' ? (
-                <View style={[styles.countChip, styles.countChipAlt]}>
-                  <Ionicons name="time-outline" size={12} color={colors.accent.secondary} />
-                  <Text style={[styles.countChipText, { color: colors.accent.secondary }]}>
-                    Soon
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.countChip}>
-                  <Ionicons name={activeOption.icon} size={12} color={colors.accent.primary} />
-                  <Text style={styles.countChipText}>
-                    {itemCount} {countNoun}
-                  </Text>
-                </View>
-              )}
-              <Text style={styles.pageSubtitle}>{t('gallery.pageSubtitle')}</Text>
-            </View>
+  // Asset-type dropdown pieces, shared between the desktop header and the
+  // phone overlay so the menu markup lives in one place.
+  const dropdownMenuItems = dropdownOptions.map((opt) => {
+    const active = opt.value === assetType;
+    return (
+      <Pressable
+        key={opt.value}
+        style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+          styles.dropdownOption,
+          active && styles.dropdownOptionActive,
+          hovered && styles.dropdownOptionHovered,
+          pressed && { opacity: 0.85 },
+        ]}
+        onPress={() => selectAssetType(opt.value)}
+      >
+        <Ionicons
+          name={opt.icon}
+          size={16}
+          color={active ? colors.accent.primary : colors.text.secondary}
+        />
+        <Text
+          style={[styles.dropdownOptionLabel, active && styles.dropdownOptionLabelActive]}
+          numberOfLines={1}
+        >
+          {t(opt.labelKey)}
+        </Text>
+        {opt.soon && (
+          <View style={styles.dropdownSoonBadge}>
+            <Text style={styles.dropdownSoonBadgeText}>{t('gallery.videoBadge')}</Text>
           </View>
-
-          {/* Storage type dropdown */}
-          <View style={styles.dropdownAnchor}>
-            <Pressable
-              style={({ pressed }) => [styles.dropdownTrigger, pressed && { opacity: 0.85 }]}
-              onPress={() => setDropdownOpen((v) => !v)}
-              accessibilityRole="button"
-              accessibilityLabel={t('gallery.storageDropdownLabel')}
-            >
-              <Ionicons
-                name={activeOption.icon}
-                size={16}
-                color={colors.accent.primary}
-                style={{ marginRight: 8 }}
-              />
-              <Text style={styles.dropdownTriggerLabel} numberOfLines={1}>
-                {t(activeOption.labelKey)}
-              </Text>
-              <Ionicons
-                name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
-                size={16}
-                color={colors.text.secondary}
-                style={{ marginLeft: 8 }}
-              />
-            </Pressable>
-            {dropdownOpen && (
-              <View style={styles.dropdownPopover}>
-                {dropdownOptions.map((opt) => {
-                  const active = opt.value === assetType;
-                  return (
-                    <Pressable
-                      key={opt.value}
-                      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-                        styles.dropdownOption,
-                        active && styles.dropdownOptionActive,
-                        hovered && styles.dropdownOptionHovered,
-                        pressed && { opacity: 0.85 },
-                      ]}
-                      onPress={() => selectAssetType(opt.value)}
-                    >
-                      <Ionicons
-                        name={opt.icon}
-                        size={16}
-                        color={active ? colors.accent.primary : colors.text.secondary}
-                      />
-                      <Text
-                        style={[
-                          styles.dropdownOptionLabel,
-                          active && styles.dropdownOptionLabelActive,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {t(opt.labelKey)}
-                      </Text>
-                      {opt.soon && (
-                        <View style={styles.dropdownSoonBadge}>
-                          <Text style={styles.dropdownSoonBadgeText}>
-                            {t('gallery.videoBadge')}
-                          </Text>
-                        </View>
-                      )}
-                      {active && (
-                        <Ionicons
-                          name="checkmark"
-                          size={14}
-                          color={colors.accent.primary}
-                          style={{ marginLeft: 'auto' }}
-                        />
-                      )}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
-          </View>
-        </Animated.View>
-        {dropdownOpen && (
-          <Pressable
-            style={styles.dropdownBackdrop}
-            onPress={() => setDropdownOpen(false)}
-            accessibilityElementsHidden
+        )}
+        {active && (
+          <Ionicons
+            name="checkmark"
+            size={14}
+            color={colors.accent.primary}
+            style={{ marginLeft: 'auto' }}
           />
         )}
+      </Pressable>
+    );
+  });
 
-        <Animated.View style={gridAnimStyle}>
-          {assetType === 'Video' ? (
-            videosContent
-          ) : useSidebar ? (
-            <View style={styles.sidebarLayout}>
-              <View style={styles.sidebar}>
-                <GalleryFilterBar
-                  value={filters}
-                  onChange={handleFiltersChange}
-                  layout="vertical"
-                  resultCount={loading ? undefined : total}
-                  showTypeFilter={assetType !== 'Pdf'}
+  const dropdownTriggerEl = (
+    <Pressable
+      style={({ pressed }) => [styles.dropdownTrigger, pressed && { opacity: 0.85 }]}
+      onPress={() => setDropdownOpen((v) => !v)}
+      accessibilityRole="button"
+      accessibilityLabel={t('gallery.storageDropdownLabel')}
+    >
+      <Ionicons
+        name={activeOption.icon}
+        size={16}
+        color={colors.accent.primary}
+        style={{ marginRight: 8 }}
+      />
+      <Text style={styles.dropdownTriggerLabel} numberOfLines={1}>
+        {t(activeOption.labelKey)}
+      </Text>
+      <Ionicons
+        name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
+        size={16}
+        color={colors.text.secondary}
+        style={{ marginLeft: 8 }}
+      />
+    </Pressable>
+  );
+
+  const countChipEl =
+    assetType === 'Video' ? (
+      <View style={[styles.countChip, styles.countChipAlt]}>
+        <Ionicons name="time-outline" size={12} color={colors.accent.secondary} />
+        <Text style={[styles.countChipText, { color: colors.accent.secondary }]}>Soon</Text>
+      </View>
+    ) : (
+      <View style={styles.countChip}>
+        <Ionicons name={activeOption.icon} size={12} color={colors.accent.primary} />
+        <Text style={styles.countChipText}>
+          {itemCount} {countNoun}
+        </Text>
+      </View>
+    );
+
+  // Compact header used on phones; lives inside the list so it scrolls away.
+  // The dropdown trigger stays here, but its menu is rendered as a page-level
+  // overlay below so it does not get clipped inside the scrolling list.
+  const phoneHeader = (
+    <View>
+      <View style={styles.pageHeaderPhone}>
+        <View style={styles.phoneTitleBlock}>
+          <Text style={styles.pageTitlePhone}>{t('gallery.pageTitle')}</Text>
+          {countChipEl}
+        </View>
+        <View style={styles.dropdownAnchor}>{dropdownTriggerEl}</View>
+      </View>
+      {assetType !== 'Video' && (
+        <View style={styles.filterBarWrap}>
+          <GalleryFilterBar
+            value={filters}
+            onChange={handleFiltersChange}
+            resultCount={loading ? undefined : total}
+            showTypeFilter={assetType !== 'Pdf'}
+          />
+        </View>
+      )}
+    </View>
+  );
+
+  return (
+    <View style={styles.root}>
+      {/* Key by breakpoint so crossing phone<->desktop fully remounts the tree.
+          Both branches otherwise start with <Animated.View>, which React would
+          reuse, leaving a stale-measured header (a large blank gap on resize). */}
+      <View style={styles.pageContainer} key={isPhone ? 'phone' : 'desktop'}>
+        {isPhone ? (
+          <>
+            <Animated.View style={gridAnimStyle}>
+              {assetType === 'Video' ? (
+                <>
+                  {phoneHeader}
+                  {videosContent}
+                </>
+              ) : (
+                photosContent(phoneHeader)
+              )}
+            </Animated.View>
+            {dropdownOpen && (
+              <>
+                <Pressable
+                  style={styles.dropdownBackdrop}
+                  onPress={() => setDropdownOpen(false)}
+                  accessibilityElementsHidden
                 />
+                <View style={styles.dropdownPopoverPhone}>{dropdownMenuItems}</View>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <Animated.View style={[styles.pageHeader, heroAnimStyle]}>
+              <View style={styles.headerTextBlock}>
+                <Text style={styles.pageTitle}>{t('gallery.pageTitle')}</Text>
+                <View style={styles.subtitleRow}>
+                  {countChipEl}
+                  <Text style={styles.pageSubtitle}>{t('gallery.pageSubtitle')}</Text>
+                </View>
               </View>
-              <View style={styles.sidebarContent}>{photosContent()}</View>
-            </View>
-          ) : (
-            <>
-              <View style={styles.filterBarWrap}>
-                <GalleryFilterBar
-                  value={filters}
-                  onChange={handleFiltersChange}
-                  resultCount={loading ? undefined : total}
-                  showTypeFilter={assetType !== 'Pdf'}
-                />
+
+              {/* Storage type dropdown */}
+              <View style={styles.dropdownAnchor}>
+                {dropdownTriggerEl}
+                {dropdownOpen && <View style={styles.dropdownPopover}>{dropdownMenuItems}</View>}
               </View>
-              {photosContent()}
-            </>
-          )}
-        </Animated.View>
+            </Animated.View>
+            {dropdownOpen && (
+              <Pressable
+                style={styles.dropdownBackdrop}
+                onPress={() => setDropdownOpen(false)}
+                accessibilityElementsHidden
+              />
+            )}
+
+            <Animated.View style={gridAnimStyle}>
+              {assetType === 'Video' ? (
+                videosContent
+              ) : useSidebar ? (
+                <View style={styles.sidebarLayout}>
+                  <View style={styles.sidebar}>
+                    <GalleryFilterBar
+                      value={filters}
+                      onChange={handleFiltersChange}
+                      layout="vertical"
+                      resultCount={loading ? undefined : total}
+                      showTypeFilter={assetType !== 'Pdf'}
+                    />
+                  </View>
+                  <View style={styles.sidebarContent}>{photosContent()}</View>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.filterBarWrap}>
+                    <GalleryFilterBar
+                      value={filters}
+                      onChange={handleFiltersChange}
+                      resultCount={loading ? undefined : total}
+                      showTypeFilter={assetType !== 'Pdf'}
+                    />
+                  </View>
+                  {photosContent()}
+                </>
+              )}
+            </Animated.View>
+          </>
+        )}
       </View>
 
       <KeepImageModal
@@ -913,6 +984,46 @@ function makeStyles(
     pageSubtitle: {
       fontSize: D.fontSize.sm,
       color: colors.text.muted,
+    },
+
+    // ── Compact phone header (scrolls away inside the list) ───────────────
+    pageHeaderPhone: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: D.spacing.sm,
+      paddingHorizontal: hPadding,
+      paddingTop: D.spacing.md,
+      paddingBottom: D.spacing.sm,
+    },
+    phoneTitleBlock: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm,
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    pageTitlePhone: {
+      fontSize: 24,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.5,
+      flexShrink: 1,
+    },
+    // Page-level overlay popover so the menu is not clipped by the scrolling list.
+    dropdownPopoverPhone: {
+      position: 'absolute',
+      top: 56,
+      right: hPadding,
+      width: 240,
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      paddingVertical: 4,
+      overflow: 'hidden',
+      zIndex: 60,
+      ...D.shadow.modal,
     },
 
     // ── Storage type dropdown ────────────────────────────────────────────
