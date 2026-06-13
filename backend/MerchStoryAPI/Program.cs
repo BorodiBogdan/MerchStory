@@ -22,7 +22,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using OpenTelemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -71,6 +70,7 @@ if (!string.IsNullOrEmpty(appInsightsConnectionString) && !builder.Environment.I
 {
     builder.Services.AddOpenTelemetry()
         .UseAzureMonitor(options => options.ConnectionString = appInsightsConnectionString)
+
         // Semantic Kernel emits its own traces/metrics; capture them so AI calls show up.
         .WithTracing(tracing => tracing.AddSource("Microsoft.SemanticKernel*"))
         .WithMetrics(metrics => metrics.AddMeter("Microsoft.SemanticKernel*"));

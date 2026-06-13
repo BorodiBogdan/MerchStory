@@ -43,6 +43,11 @@ export interface OfferProduct {
 export interface OfferOptionSummary {
   label: string;
   value: string;
+  /** Leading glyph rendered in the row's accent tile. */
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
+  /** Toggle-style settings render their value as an On/Off status pill;
+   *  'neutral' (the default) renders the value as plain emphasized text. */
+  tone?: 'on' | 'off' | 'neutral';
 }
 
 interface CatalogOfferModalProps {
@@ -405,24 +410,22 @@ export function CatalogOfferModal({
     return <Text style={styles.priceCurrent}>{formatPrice(base, product.currency)}</Text>;
   }
 
-  // Plain product row used when the offer toggle is OFF (read-only summary).
-  function renderSummaryItem(product: OfferProduct) {
+  // Read-only product line shown when the offer toggle is OFF. Rendered as a
+  // billing-style row (thumb · name · right-aligned price) grouped into one card,
+  // so the list reads as an intentional summary rather than floating boxes.
+  function renderSummaryItem(product: OfferProduct, first: boolean) {
     return (
-      <View key={product.id} style={styles.row}>
-        <View style={styles.rowTop}>
-          <ProductImage id={product.id} style={styles.thumb} />
-          <View style={styles.rowInfo}>
-            <Text style={styles.productName} numberOfLines={1}>
-              {product.name}
-            </Text>
-            {renderEditablePrice(
-              product,
-              <Text style={styles.priceCurrent}>
-                {formatPrice(effectivePrice(product), product.currency)}
-              </Text>
-            )}
-          </View>
-        </View>
+      <View key={product.id} style={[styles.summaryRow, !first && styles.optionRowBorder]}>
+        <ProductImage id={product.id} style={styles.thumb} />
+        <Text style={styles.summaryName} numberOfLines={2}>
+          {product.name}
+        </Text>
+        {renderEditablePrice(
+          product,
+          <Text style={styles.summaryPrice}>
+            {formatPrice(effectivePrice(product), product.currency)}
+          </Text>
+        )}
       </View>
     );
   }
@@ -588,6 +591,44 @@ export function CatalogOfferModal({
     );
   }
 
+  // One row of the grouped "generation options" card: accent icon tile, label,
+  // and either a plain emphasized value or an On/Off status pill. `note` renders
+  // a small caption beneath the row (used for the names-forced explanation).
+  function renderOptionRow(opt: OfferOptionSummary, first: boolean, note?: string) {
+    const tone = opt.tone ?? 'neutral';
+    return (
+      <View key={opt.label} style={[styles.optionRow, !first && styles.optionRowBorder]}>
+        <View style={styles.optionMain}>
+          {opt.icon && (
+            <View style={styles.optionIcon}>
+              <Ionicons name={opt.icon} size={17} color={colors.accent.primary} />
+            </View>
+          )}
+          <Text style={styles.optionLabel} numberOfLines={1}>
+            {opt.label}
+          </Text>
+          {tone === 'neutral' ? (
+            <Text style={styles.optionValue} numberOfLines={1}>
+              {opt.value}
+            </Text>
+          ) : (
+            <View style={[styles.tonePill, tone === 'on' ? styles.tonePillOn : styles.tonePillOff]}>
+              <View
+                style={[styles.toneDot, tone === 'on' ? styles.toneDotOn : styles.toneDotOff]}
+              />
+              <Text
+                style={[styles.toneText, tone === 'on' ? styles.toneTextOn : styles.toneTextOff]}
+              >
+                {opt.value}
+              </Text>
+            </View>
+          )}
+        </View>
+        {note ? <Text style={styles.optionNote}>{note}</Text> : null}
+      </View>
+    );
+  }
+
   const groupableCount = selectedForGroup.size;
 
   return (
@@ -614,7 +655,9 @@ export function CatalogOfferModal({
               {allowOffer && (
                 <View style={styles.offerToggleRow}>
                   <View style={styles.offerToggleLabel}>
-                    <Ionicons name="pricetag-outline" size={18} color={colors.accent.primary} />
+                    <View style={styles.optionIcon}>
+                      <Ionicons name="pricetag-outline" size={17} color={colors.accent.primary} />
+                    </View>
                     <Text style={styles.offerToggleText}>{t('studio.offer.markAsOffer')}</Text>
                   </View>
                   <Switch
@@ -637,7 +680,9 @@ export function CatalogOfferModal({
                 showsVerticalScrollIndicator={false}
               >
                 {!allowOffer || !offerEnabled ? (
-                  products.map((p) => renderSummaryItem(p))
+                  <View style={styles.optionsCard}>
+                    {products.map((p, i) => renderSummaryItem(p, i === 0))}
+                  </View>
                 ) : (
                   <>
                     {looseProducts.length > 0 && (
@@ -729,31 +774,23 @@ export function CatalogOfferModal({
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                {optionsSummary.map((opt) => (
-                  <View key={opt.label} style={styles.optionRow}>
-                    <Text style={styles.optionLabel}>{opt.label}</Text>
-                    <Text style={styles.optionValue}>{opt.value}</Text>
-                  </View>
-                ))}
-                {(() => {
-                  const namesForced = allowOffer && offerHasGrouping(groups);
-                  const namesValue = namesForced
-                    ? t('studio.offer.optOff')
-                    : showProductNames
-                      ? t('studio.offer.optOn')
-                      : t('studio.offer.optOff');
-                  return (
-                    <>
-                      <View style={styles.optionRow}>
-                        <Text style={styles.optionLabel}>{t('studio.offer.optNames')}</Text>
-                        <Text style={styles.optionValue}>{namesValue}</Text>
-                      </View>
-                      {namesForced && (
-                        <Text style={styles.offerHint}>{t('studio.offer.namesDisabledNote')}</Text>
-                      )}
-                    </>
-                  );
-                })()}
+                <View style={styles.optionsCard}>
+                  {optionsSummary.map((opt, i) => renderOptionRow(opt, i === 0))}
+                  {(() => {
+                    const namesForced = allowOffer && offerHasGrouping(groups);
+                    const namesOn = !namesForced && showProductNames;
+                    return renderOptionRow(
+                      {
+                        label: t('studio.offer.optNames'),
+                        icon: 'text-outline',
+                        value: namesOn ? t('studio.offer.optOn') : t('studio.offer.optOff'),
+                        tone: namesOn ? 'on' : 'off',
+                      },
+                      optionsSummary.length === 0,
+                      namesForced ? t('studio.offer.namesDisabledNote') : undefined
+                    );
+                  })()}
+                </View>
               </ScrollView>
 
               <View style={styles.actions}>
@@ -834,18 +871,18 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: colors.bg.input,
-      borderRadius: D.radius.md,
+      backgroundColor: colors.bg.surface,
+      borderRadius: D.radius.lg,
       borderWidth: 1,
       borderColor: colors.border.subtle,
-      paddingHorizontal: D.spacing.md,
+      paddingHorizontal: D.spacing.sm + 2,
       paddingVertical: D.spacing.sm,
       marginBottom: D.spacing.md,
     },
     offerToggleLabel: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: D.spacing.sm,
+      gap: D.spacing.sm + 2,
     },
     offerToggleText: {
       fontSize: D.fontSize.base,
@@ -887,6 +924,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       height: 48,
       borderRadius: D.radius.sm,
       backgroundColor: colors.bg.elevated,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
     },
     thumbSmall: {
       width: 40,
@@ -1035,21 +1074,59 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.text.muted,
       marginTop: -2,
     },
-    optionRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: D.spacing.md,
+    optionsCard: {
       backgroundColor: colors.bg.surface,
-      borderRadius: D.radius.md,
+      borderRadius: D.radius.lg,
       borderWidth: 1,
       borderColor: colors.border.subtle,
-      paddingHorizontal: D.spacing.md,
-      paddingVertical: D.spacing.sm,
+      overflow: 'hidden',
+    },
+    summaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm + 2,
+      paddingHorizontal: D.spacing.sm + 2,
+      paddingVertical: 10,
+    },
+    summaryName: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.primary,
+    },
+    summaryPrice: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.semibold,
+      color: colors.text.secondary,
+    },
+    optionRow: {
+      paddingHorizontal: D.spacing.sm + 2,
+      paddingVertical: 12,
+    },
+    optionRowBorder: {
+      borderTopWidth: 1,
+      borderTopColor: colors.border.subtle,
+    },
+    optionMain: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: D.spacing.sm + 2,
+    },
+    optionIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: D.radius.md,
+      backgroundColor: colors.accent.dim,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     optionLabel: {
-      fontSize: D.fontSize.sm,
-      color: colors.text.muted,
+      flex: 1,
+      minWidth: 0,
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
     },
     optionValue: {
       flexShrink: 1,
@@ -1057,6 +1134,52 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.base,
       fontWeight: D.fontWeight.semibold,
       color: colors.text.primary,
+    },
+    optionNote: {
+      fontSize: D.fontSize.xs,
+      color: colors.text.muted,
+      lineHeight: 16,
+      marginTop: 6,
+      paddingLeft: 34 + D.spacing.sm + 2,
+    },
+    tonePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingLeft: 9,
+      paddingRight: 11,
+      paddingVertical: 5,
+      borderRadius: D.radius.pill,
+      borderWidth: 1,
+    },
+    tonePillOn: {
+      backgroundColor: colors.accent.dim,
+      borderColor: 'transparent',
+    },
+    tonePillOff: {
+      backgroundColor: 'transparent',
+      borderColor: colors.border.default,
+    },
+    toneDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+    },
+    toneDotOn: {
+      backgroundColor: colors.accent.primary,
+    },
+    toneDotOff: {
+      backgroundColor: colors.text.muted,
+    },
+    toneText: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.semibold,
+    },
+    toneTextOn: {
+      color: colors.accent.secondary,
+    },
+    toneTextOff: {
+      color: colors.text.muted,
     },
     ungroupBtn: {
       flexDirection: 'row',

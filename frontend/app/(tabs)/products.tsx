@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -28,6 +28,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ModelFab } from '@/components/ui/ModelFab';
 import { Pagination } from '@/components/ui/Pagination';
 import { ProductFilterBar, ProductFilterState } from '@/components/ui/ProductFilterBar';
 import { ProductImage } from '@/components/ui/ProductImage';
@@ -177,6 +178,9 @@ export default function ProductsScreen() {
   const [refTextError, setRefTextError] = useState<string | null>(null);
 
   const useSidebar = isWeb && screenWidth >= 900;
+  // Phone-width layout: compact header that scrolls away + floating action button.
+  // True on all native and on web below 600px (matches the grid breakpoint below).
+  const isPhone = !isWeb || screenWidth < 600;
   const SIDEBAR_WIDTH = 272;
   const SIDEBAR_GAP = D.spacing.lg;
 
@@ -546,9 +550,20 @@ export default function ProductsScreen() {
     </Pressable>
   );
 
-  const listContent = () => {
+  const listContent = (header?: ReactElement) => {
+    // On phone the header rides inside the list (as ListHeaderComponent) so it
+    // scrolls away. For the non-list states below, render it above the message.
+    const wrap = (node: ReactElement) =>
+      header ? (
+        <>
+          {header}
+          {node}
+        </>
+      ) : (
+        node
+      );
     if (isLoading) {
-      return (
+      return wrap(
         <View style={styles.centerFill}>
           <View style={styles.loaderHalo}>
             <ActivityIndicator size="large" color={colors.accent.primary} />
@@ -558,7 +573,7 @@ export default function ProductsScreen() {
       );
     }
     if (error) {
-      return (
+      return wrap(
         <View style={styles.centerFill}>
           <View style={styles.emptyIconCircle}>
             <Ionicons name="cloud-offline-outline" size={40} color={colors.accent.primary} />
@@ -588,7 +603,7 @@ export default function ProductsScreen() {
         filters.maxPrice
       );
       if (isFiltered) {
-        return (
+        return wrap(
           <View style={styles.emptyState}>
             <View style={styles.emptyIconCircle}>
               <View style={styles.emptyIconInner}>
@@ -614,7 +629,7 @@ export default function ProductsScreen() {
           </View>
         );
       }
-      return (
+      return wrap(
         <View style={styles.emptyState}>
           <View style={styles.emptyIconCircle}>
             <View style={styles.emptyIconInner}>
@@ -674,9 +689,14 @@ export default function ProductsScreen() {
         numColumns={numColumns}
         key={numColumns}
         renderItem={renderProduct}
-        contentContainerStyle={[styles.grid, useSidebar && { paddingHorizontal: 0 }]}
+        contentContainerStyle={[
+          styles.grid,
+          useSidebar && { paddingHorizontal: 0 },
+          isPhone && { paddingBottom: 96 },
+        ]}
         columnWrapperStyle={numColumns > 1 ? styles.gridRow : undefined}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={header}
         onEndReached={!isWeb ? () => void productsCache.loadMore() : undefined}
         onEndReachedThreshold={0.4}
         ListFooterComponent={footer}
@@ -705,78 +725,121 @@ export default function ProductsScreen() {
     transform: [{ translateY: gridTranslate.value }],
   }));
 
+  const showFilter =
+    totalProducts > 0 ||
+    filters.search ||
+    filters.categories.length > 0 ||
+    filters.minPrice ||
+    filters.maxPrice;
+
+  // Compact header used on phones; lives inside the list so it scrolls away.
+  const phoneHeader = (
+    <View>
+      <View style={styles.pageHeaderPhone}>
+        <Text style={styles.pageTitlePhone}>{t('products.pageTitle')}</Text>
+        <View style={styles.countChip}>
+          <Ionicons name="cube-outline" size={12} color={colors.accent.primary} />
+          <Text style={styles.countChipText}>
+            {totalProducts} {totalProducts === 1 ? 'item' : 'items'}
+          </Text>
+        </View>
+      </View>
+      {showFilter && (
+        <View style={styles.filterBarWrap}>
+          <ProductFilterBar
+            value={filters}
+            onChange={handleFiltersChange}
+            categories={categories}
+            resultCount={isLoading ? undefined : totalProducts}
+          />
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <View style={styles.root}>
-      <View style={styles.pageContainer}>
-        <Animated.View style={[styles.pageHeader, heroAnimStyle]}>
-          <View style={styles.headerTextBlock}>
-            <Text style={styles.pageTitle}>{t('products.pageTitle')}</Text>
-            <View style={styles.subtitleRow}>
-              <View style={styles.countChip}>
-                <Ionicons name="cube-outline" size={12} color={colors.accent.primary} />
-                <Text style={styles.countChipText}>
-                  {totalProducts} {totalProducts === 1 ? 'item' : 'items'}
-                </Text>
-              </View>
-              <Text style={styles.pageSubtitle}>in your catalog</Text>
-            </View>
-          </View>
-
-          <View style={styles.headerActions}>
-            <Pressable
-              style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
-              onPress={openAddModal}
-              accessibilityRole="button"
-              accessibilityLabel="Add product"
-            >
-              <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.addButtonText}>{t('products.addButton')}</Text>
-            </Pressable>
-          </View>
-        </Animated.View>
-
-        <Animated.View style={gridAnimStyle}>
-          {(() => {
-            const showFilter =
-              totalProducts > 0 ||
-              filters.search ||
-              filters.categories.length > 0 ||
-              filters.minPrice ||
-              filters.maxPrice;
-            const useSidebarLayout = isWeb && screenWidth >= 900;
-            if (!showFilter) return listContent();
-            if (useSidebarLayout) {
-              return (
-                <View style={styles.sidebarLayout}>
-                  <View style={styles.sidebar}>
-                    <ProductFilterBar
-                      value={filters}
-                      onChange={handleFiltersChange}
-                      categories={categories}
-                      layout="vertical"
-                      resultCount={isLoading ? undefined : totalProducts}
-                    />
+      {/* Key by breakpoint so crossing phone<->desktop fully remounts the tree.
+          Both branches otherwise start with <Animated.View>, which React would
+          reuse, leaving a stale-measured header (a large blank gap on resize). */}
+      <View style={styles.pageContainer} key={isPhone ? 'phone' : 'desktop'}>
+        {isPhone ? (
+          <Animated.View style={gridAnimStyle}>{listContent(phoneHeader)}</Animated.View>
+        ) : (
+          <>
+            <Animated.View style={[styles.pageHeader, heroAnimStyle]}>
+              <View style={styles.headerTextBlock}>
+                <Text style={styles.pageTitle}>{t('products.pageTitle')}</Text>
+                <View style={styles.subtitleRow}>
+                  <View style={styles.countChip}>
+                    <Ionicons name="cube-outline" size={12} color={colors.accent.primary} />
+                    <Text style={styles.countChipText}>
+                      {totalProducts} {totalProducts === 1 ? 'item' : 'items'}
+                    </Text>
                   </View>
-                  <View style={styles.sidebarContent}>{listContent()}</View>
+                  <Text style={styles.pageSubtitle}>in your catalog</Text>
                 </View>
-              );
-            }
-            return (
-              <>
-                <View style={styles.filterBarWrap}>
-                  <ProductFilterBar
-                    value={filters}
-                    onChange={handleFiltersChange}
-                    categories={categories}
-                    resultCount={isLoading ? undefined : totalProducts}
-                  />
-                </View>
-                {listContent()}
-              </>
-            );
-          })()}
-        </Animated.View>
+              </View>
+
+              <View style={styles.headerActions}>
+                <Pressable
+                  style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
+                  onPress={openAddModal}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add product"
+                >
+                  <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 6 }} />
+                  <Text style={styles.addButtonText}>{t('products.addButton')}</Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+
+            <Animated.View style={gridAnimStyle}>
+              {(() => {
+                const useSidebarLayout = isWeb && screenWidth >= 900;
+                if (!showFilter) return listContent();
+                if (useSidebarLayout) {
+                  return (
+                    <View style={styles.sidebarLayout}>
+                      <View style={styles.sidebar}>
+                        <ProductFilterBar
+                          value={filters}
+                          onChange={handleFiltersChange}
+                          categories={categories}
+                          layout="vertical"
+                          resultCount={isLoading ? undefined : totalProducts}
+                        />
+                      </View>
+                      <View style={styles.sidebarContent}>{listContent()}</View>
+                    </View>
+                  );
+                }
+                return (
+                  <>
+                    <View style={styles.filterBarWrap}>
+                      <ProductFilterBar
+                        value={filters}
+                        onChange={handleFiltersChange}
+                        categories={categories}
+                        resultCount={isLoading ? undefined : totalProducts}
+                      />
+                    </View>
+                    {listContent()}
+                  </>
+                );
+              })()}
+            </Animated.View>
+          </>
+        )}
       </View>
+      {isPhone && (
+        <ModelFab
+          icon="add"
+          onPress={openAddModal}
+          accessibilityLabel={t('products.addButton')}
+          containerStyle={styles.fab}
+        />
+      )}
 
       {/* Delete confirmation */}
       <Modal
@@ -1710,6 +1773,29 @@ function makeStyles(
       fontSize: D.fontSize.sm,
       fontWeight: D.fontWeight.semibold,
       letterSpacing: 0.2,
+    },
+
+    // ── Compact phone header (scrolls away inside the list) ───────────────
+    pageHeaderPhone: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: D.spacing.sm,
+      paddingHorizontal: hPadding,
+      paddingTop: D.spacing.md,
+      paddingBottom: D.spacing.sm,
+    },
+    pageTitlePhone: {
+      fontSize: 24,
+      fontWeight: D.fontWeight.bold,
+      color: colors.text.primary,
+      letterSpacing: -0.5,
+    },
+    fab: {
+      position: 'absolute',
+      right: D.spacing.lg,
+      bottom: D.spacing.lg,
+      zIndex: 50,
     },
 
     // ── Grid ─────────────────────────────────────────────────────────────
