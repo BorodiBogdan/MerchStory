@@ -73,6 +73,7 @@ export function ModelPickerModal({
 
   function handleSelect(value: string) {
     onSelect(value);
+    onClose();
   }
 
   return (
