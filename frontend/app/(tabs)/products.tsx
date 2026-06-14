@@ -323,10 +323,10 @@ export default function ProductsScreen() {
   }
 
   function showPhotoSourcePicker() {
-    Alert.alert('Add Photo', undefined, [
-      { text: 'Take Photo', onPress: () => void takePhoto() },
-      { text: 'Choose from Library', onPress: () => void pickImage() },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('products.photoSource.title'), undefined, [
+      { text: t('products.photoSource.take'), onPress: () => void takePhoto() },
+      { text: t('products.photoSource.choose'), onPress: () => void pickImage() },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   }
 
@@ -340,7 +340,7 @@ export default function ProductsScreen() {
       const result = await removeBackground(b64);
       setPreviewProcessedB64(result.imageBase64);
     } catch (err: unknown) {
-      setRemoveBgError(err instanceof Error ? err.message : 'Background removal failed.');
+      setRemoveBgError(err instanceof Error ? err.message : t('products.error.bgRemoval'));
     } finally {
       setIsRemovingBg(false);
     }
@@ -360,7 +360,7 @@ export default function ProductsScreen() {
       setSimilarPage(0);
       setShowSimilarModal(true);
     } catch (err: unknown) {
-      setSimilarError(err instanceof Error ? err.message : 'Similarity search failed.');
+      setSimilarError(err instanceof Error ? err.message : t('products.error.similarity'));
     } finally {
       setIsFindingSimilar(false);
     }
@@ -379,7 +379,7 @@ export default function ProductsScreen() {
       setSimilarPage(0);
       setShowSimilarModal(true);
     } catch (err: unknown) {
-      setRefTextError(err instanceof Error ? err.message : 'Text search failed.');
+      setRefTextError(err instanceof Error ? err.message : t('products.error.textSearch'));
     } finally {
       setIsSearchingByText(false);
     }
@@ -419,14 +419,14 @@ export default function ProductsScreen() {
   function validate(): boolean {
     let valid = true;
     if (!draftName.trim()) {
-      setNameError('Product name is required');
+      setNameError(t('products.modal.nameRequired'));
       valid = false;
     } else {
       setNameError('');
     }
     const priceNum = parseFloat(draftPrice);
     if (!draftPrice.trim() || isNaN(priceNum) || priceNum < 0) {
-      setPriceError('Enter a valid price');
+      setPriceError(t('products.modal.priceError'));
       valid = false;
     } else {
       setPriceError('');
@@ -479,7 +479,7 @@ export default function ProductsScreen() {
       void refreshCategories();
       closeModal();
     } catch (err: unknown) {
-      setNameError(err instanceof Error ? err.message : 'Save failed. Please try again.');
+      setNameError(err instanceof Error ? err.message : t('products.error.save'));
     } finally {
       setIsSaving(false);
     }
@@ -568,7 +568,9 @@ export default function ProductsScreen() {
           <View style={styles.loaderHalo}>
             <ActivityIndicator size="large" color={colors.accent.primary} />
           </View>
-          <Text style={[styles.emptySubtitle, { marginTop: D.spacing.md }]}>Loading catalog…</Text>
+          <Text style={[styles.emptySubtitle, { marginTop: D.spacing.md }]}>
+            {t('products.loadingCatalog')}
+          </Text>
         </View>
       );
     }
@@ -578,7 +580,7 @@ export default function ProductsScreen() {
           <View style={styles.emptyIconCircle}>
             <Ionicons name="cloud-offline-outline" size={40} color={colors.accent.primary} />
           </View>
-          <Text style={styles.emptyTitle}>Couldn&apos;t load catalog</Text>
+          <Text style={styles.emptyTitle}>{t('products.loadError')}</Text>
           <Text style={styles.emptySubtitle}>{error}</Text>
           <Pressable
             style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
@@ -590,7 +592,7 @@ export default function ProductsScreen() {
               color={colors.text.secondary}
               style={{ marginRight: 6 }}
             />
-            <Text style={styles.retryText}>Try again</Text>
+            <Text style={styles.retryText}>{t('common.tryAgain')}</Text>
           </Pressable>
         </View>
       );
@@ -624,7 +626,7 @@ export default function ProductsScreen() {
                 color={colors.text.secondary}
                 style={{ marginRight: 6 }}
               />
-              <Text style={styles.retryText}>Clear filters</Text>
+              <Text style={styles.retryText}>{t('products.clearFilters')}</Text>
             </Pressable>
           </View>
         );
@@ -786,7 +788,7 @@ export default function ProductsScreen() {
                   style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
                   onPress={openAddModal}
                   accessibilityRole="button"
-                  accessibilityLabel="Add product"
+                  accessibilityLabel={t('products.addButton')}
                 >
                   <Ionicons name="add" size={18} color="#fff" style={{ marginRight: 6 }} />
                   <Text style={styles.addButtonText}>{t('products.addButton')}</Text>
@@ -904,23 +906,23 @@ export default function ProductsScreen() {
                         style={({ pressed }) => [styles.modalBackBtn, pressed && { opacity: 0.6 }]}
                         onPress={() => setShowSimilarModal(false)}
                         accessibilityRole="button"
-                        accessibilityLabel="Back to search"
+                        accessibilityLabel={t('products.similarModal.backToSearch')}
                         hitSlop={8}
                       >
                         <Ionicons name="chevron-back" size={16} color={colors.accent.primary} />
-                        <Text style={styles.modalBackText}>Back</Text>
+                        <Text style={styles.modalBackText}>{t('common.back')}</Text>
                       </Pressable>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.modalTitle}>Professional References</Text>
+                        <Text style={styles.modalTitle}>{t('products.similarModal.title')}</Text>
                         <Text style={styles.modalSubtitle}>
-                          Tap a photo to use it as your product reference image.
+                          {t('products.similarModal.subtitle')}
                         </Text>
                       </View>
                       <Pressable
                         style={({ pressed }) => [styles.modalCloseBtn, pressed && { opacity: 0.6 }]}
                         onPress={() => setShowSimilarModal(false)}
                         accessibilityRole="button"
-                        accessibilityLabel="Close"
+                        accessibilityLabel={t('common.close')}
                         hitSlop={8}
                       >
                         <Ionicons name="close" size={18} color={colors.text.secondary} />
@@ -938,10 +940,10 @@ export default function ProductsScreen() {
                             />
                           </View>
                         </View>
-                        <Text style={styles.emptyTitle}>No matches</Text>
-                        <Text style={styles.emptySubtitle}>
-                          No similar products found in the reference library.
+                        <Text style={styles.emptyTitle}>
+                          {t('products.similarModal.emptyTitle')}
                         </Text>
+                        <Text style={styles.emptySubtitle}>{t('products.similarModal.empty')}</Text>
                       </View>
                     ) : (
                       (() => {
@@ -969,7 +971,10 @@ export default function ProductsScreen() {
                                   ]}
                                   onPress={() => selectReferenceImage(item)}
                                   accessibilityRole="button"
-                                  accessibilityLabel={`Use ${item.name}`}
+                                  accessibilityLabel={t('products.modal.useReferenceA11y').replace(
+                                    '{name}',
+                                    item.name
+                                  )}
                                 >
                                   <View style={styles.similarCardInner}>
                                     <View style={styles.similarImageWrap}>
@@ -1017,7 +1022,7 @@ export default function ProductsScreen() {
                                   ]}
                                   disabled={page === 0}
                                   onPress={() => setSimilarPage((p) => Math.max(0, p - 1))}
-                                  accessibilityLabel="Previous page"
+                                  accessibilityLabel={t('products.similarModal.prevPage')}
                                 >
                                   <Ionicons
                                     name="chevron-back"
@@ -1051,7 +1056,7 @@ export default function ProductsScreen() {
                                   onPress={() =>
                                     setSimilarPage((p) => Math.min(totalPages - 1, p + 1))
                                   }
-                                  accessibilityLabel="Next page"
+                                  accessibilityLabel={t('products.similarModal.nextPage')}
                                 >
                                   <Ionicons
                                     name="chevron-forward"
@@ -1077,16 +1082,16 @@ export default function ProductsScreen() {
                         <Ionicons name="image-outline" size={18} color={colors.accent.primary} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.modalTitle}>Preview Photo</Text>
+                        <Text style={styles.modalTitle}>{t('products.previewModal.title')}</Text>
                         <Text style={styles.modalSubtitle}>
-                          Enhance your photo before using it.
+                          {t('products.previewModal.subtitle')}
                         </Text>
                       </View>
                       <Pressable
                         style={({ pressed }) => [styles.modalCloseBtn, pressed && { opacity: 0.6 }]}
                         onPress={() => setShowPreview(false)}
                         accessibilityRole="button"
-                        accessibilityLabel="Back"
+                        accessibilityLabel={t('common.back')}
                         hitSlop={8}
                       >
                         <Ionicons name="arrow-back" size={18} color={colors.text.secondary} />
@@ -1096,7 +1101,9 @@ export default function ProductsScreen() {
                     {/* Step indicator */}
                     <View style={styles.stepIndicator}>
                       <View style={[styles.stepPill, styles.stepPillActive]}>
-                        <Text style={styles.stepPillTextActive}>1 · Preview</Text>
+                        <Text style={styles.stepPillTextActive}>
+                          {t('products.previewModal.step1')}
+                        </Text>
                       </View>
                       <View style={styles.stepConnector} />
                       <View style={[styles.stepPill, previewProcessedB64 && styles.stepPillActive]}>
@@ -1105,12 +1112,12 @@ export default function ProductsScreen() {
                             previewProcessedB64 ? styles.stepPillTextActive : styles.stepPillText
                           }
                         >
-                          2 · Enhance
+                          {t('products.previewModal.step2')}
                         </Text>
                       </View>
                       <View style={styles.stepConnector} />
                       <View style={styles.stepPill}>
-                        <Text style={styles.stepPillText}>3 · Confirm</Text>
+                        <Text style={styles.stepPillText}>{t('products.previewModal.step3')}</Text>
                       </View>
                     </View>
 
@@ -1127,7 +1134,9 @@ export default function ProductsScreen() {
                       {previewProcessedB64 && (
                         <View style={styles.previewBadge}>
                           <Ionicons name="checkmark-circle" size={12} color="#fff" />
-                          <Text style={styles.previewBadgeText}>Background removed</Text>
+                          <Text style={styles.previewBadgeText}>
+                            {t('products.previewModal.bgRemovedBadge')}
+                          </Text>
                         </View>
                       )}
                     </View>
@@ -1158,11 +1167,11 @@ export default function ProductsScreen() {
                           <View style={{ flex: 1 }}>
                             <Text style={styles.enhanceButtonTitle}>
                               {previewProcessedB64
-                                ? 'Remove Background Again'
-                                : 'Remove Background'}
+                                ? t('products.previewModal.removeBgAgain')
+                                : t('products.previewModal.removeBg')}
                             </Text>
                             <Text style={styles.enhanceButtonSubtitle}>
-                              AI-powered, one-tap cleanup
+                              {t('products.previewModal.removeBgSub')}
                             </Text>
                           </View>
                           <Ionicons name="chevron-forward" size={14} color={colors.text.muted} />
@@ -1193,10 +1202,10 @@ export default function ProductsScreen() {
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.enhanceButtonTitle}>
-                              Find Professional Reference
+                              {t('products.previewModal.findReference')}
                             </Text>
                             <Text style={styles.enhanceButtonSubtitle}>
-                              Swap in a studio-quality match
+                              {t('products.previewModal.findReferenceSub')}
                             </Text>
                           </View>
                           <Ionicons name="chevron-forward" size={14} color={colors.text.muted} />
@@ -1216,7 +1225,9 @@ export default function ProductsScreen() {
                         style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.75 }]}
                         onPress={() => confirmImageChoice(false)}
                       >
-                        <Text style={styles.cancelButtonText}>Use Original</Text>
+                        <Text style={styles.cancelButtonText}>
+                          {t('products.previewModal.useOriginal')}
+                        </Text>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [
@@ -1233,7 +1244,9 @@ export default function ProductsScreen() {
                           color="#fff"
                           style={{ marginRight: 6 }}
                         />
-                        <Text style={styles.saveButtonText}>Use Processed</Text>
+                        <Text style={styles.saveButtonText}>
+                          {t('products.previewModal.useProcessed')}
+                        </Text>
                       </Pressable>
                     </View>
                   </>
@@ -1255,15 +1268,15 @@ export default function ProductsScreen() {
                         </Text>
                         <Text style={styles.modalSubtitle}>
                           {editingProduct
-                            ? 'Update the details of this product.'
-                            : 'Add a new item to your catalog.'}
+                            ? t('products.modal.editSubtitle')
+                            : t('products.modal.newSubtitle')}
                         </Text>
                       </View>
                       <Pressable
                         style={({ pressed }) => [styles.modalCloseBtn, pressed && { opacity: 0.6 }]}
                         onPress={closeModal}
                         accessibilityRole="button"
-                        accessibilityLabel="Close"
+                        accessibilityLabel={t('common.close')}
                         hitSlop={8}
                       >
                         <Ionicons name="close" size={18} color={colors.text.secondary} />
@@ -1273,7 +1286,7 @@ export default function ProductsScreen() {
                     {/* Photo picker */}
                     <SectionLabel
                       icon="camera-outline"
-                      text="Photo"
+                      text={t('products.modal.photoLabel')}
                       color={colors.accent.primary}
                       mutedColor={colors.text.muted}
                     />
@@ -1285,7 +1298,7 @@ export default function ProductsScreen() {
                       ]}
                       onPress={() => (isWeb ? void pickImage() : showPhotoSourcePicker())}
                       accessibilityRole="button"
-                      accessibilityLabel="Pick product photo"
+                      accessibilityLabel={t('products.modal.pickPhotoA11y')}
                     >
                       {draftImageUri ? (
                         <Image
@@ -1305,13 +1318,17 @@ export default function ProductsScreen() {
                           <Text style={styles.imagePickerLabel}>
                             {t('products.modal.photoPlaceholder')}
                           </Text>
-                          <Text style={styles.imagePickerHint}>PNG or JPG, up to 10 MB</Text>
+                          <Text style={styles.imagePickerHint}>
+                            {t('products.modal.photoHint')}
+                          </Text>
                         </View>
                       )}
                       {draftImageUri && (
                         <View style={styles.imagePickerOverlay}>
                           <Ionicons name="camera-reverse-outline" size={16} color="#fff" />
-                          <Text style={styles.imagePickerOverlayText}>Change</Text>
+                          <Text style={styles.imagePickerOverlayText}>
+                            {t('products.modal.change')}
+                          </Text>
                         </View>
                       )}
                     </Pressable>
@@ -1320,14 +1337,14 @@ export default function ProductsScreen() {
                     <View style={styles.fieldGroup}>
                       <SectionLabel
                         icon="search-outline"
-                        text="Search the library"
+                        text={t('products.modal.searchLibrary')}
                         color={colors.accent.secondary}
                         mutedColor={colors.text.muted}
                       />
                       <View style={styles.refSearchRow}>
                         <TextInput
                           style={styles.textInput}
-                          placeholder="e.g. chips, coffee, sneakers"
+                          placeholder={t('products.modal.searchLibraryPlaceholder')}
                           placeholderTextColor={colors.text.muted}
                           value={refSearchText}
                           onChangeText={(txt) => {
@@ -1350,7 +1367,7 @@ export default function ProductsScreen() {
                           onPress={() => void handleFindSimilarByText()}
                           disabled={isSearchingByText || !refSearchText.trim()}
                           accessibilityRole="button"
-                          accessibilityLabel="Search the professional library by name"
+                          accessibilityLabel={t('products.modal.searchLibraryA11y')}
                         >
                           {isSearchingByText ? (
                             <ActivityIndicator size="small" color="#fff" />
@@ -1360,7 +1377,7 @@ export default function ProductsScreen() {
                         </Pressable>
                       </View>
                       <Text style={styles.refSearchHint}>
-                        Find a professional reference by name instead of a photo.
+                        {t('products.modal.searchLibraryHint')}
                       </Text>
                       {refTextError ? (
                         <View style={styles.inlineErrorBanner}>
@@ -1384,7 +1401,7 @@ export default function ProductsScreen() {
                       />
                       <TextInput
                         style={[styles.textInput, nameError ? styles.textInputError : null]}
-                        placeholder="e.g. Artisan Coffee Blend"
+                        placeholder={t('products.modal.namePlaceholder')}
                         placeholderTextColor={colors.text.muted}
                         value={draftName}
                         onChangeText={(txt) => {
@@ -1417,7 +1434,7 @@ export default function ProductsScreen() {
                         <View style={styles.categoryInputRow}>
                           <TextInput
                             style={[styles.textInput, { flex: 1 }]}
-                            placeholder="Type a new category"
+                            placeholder={t('products.modal.categoryInputPlaceholder')}
                             placeholderTextColor={colors.text.muted}
                             value={draftCategory}
                             onChangeText={setDraftCategory}
@@ -1435,7 +1452,7 @@ export default function ProductsScreen() {
                               styles.categoryCancelBtn,
                               pressed && { opacity: 0.7 },
                             ]}
-                            accessibilityLabel="Cancel new category"
+                            accessibilityLabel={t('products.modal.cancelCategory')}
                           >
                             <Ionicons name="close" size={18} color={colors.text.secondary} />
                           </Pressable>
@@ -1465,7 +1482,7 @@ export default function ProductsScreen() {
                               <Pressable
                                 onPress={() => setDraftCategory('')}
                                 hitSlop={6}
-                                accessibilityLabel="Clear category"
+                                accessibilityLabel={t('products.modal.clearCategory')}
                               >
                                 <Ionicons name="close-circle" size={16} color={colors.text.muted} />
                               </Pressable>
@@ -1488,7 +1505,7 @@ export default function ProductsScreen() {
                           >
                             {categories.length === 0 ? (
                               <Text style={styles.categoryDropdownEmpty}>
-                                No categories yet — add your first below.
+                                {t('products.modal.noCategoriesHint')}
                               </Text>
                             ) : (
                               categories.map((c) => {
@@ -1574,7 +1591,10 @@ export default function ProductsScreen() {
                               ]}
                               accessibilityRole="radio"
                               accessibilityState={{ selected }}
-                              accessibilityLabel={`Currency ${c}`}
+                              accessibilityLabel={t('products.modal.currencyA11y').replace(
+                                '{currency}',
+                                c
+                              )}
                             >
                               <Text style={styles.currencySymbol}>{currencySymbol(c)}</Text>
                               <Text
@@ -1611,7 +1631,7 @@ export default function ProductsScreen() {
                             styles.priceInput,
                             priceError ? styles.textInputError : null,
                           ]}
-                          placeholder="0.00"
+                          placeholder={t('products.modal.pricePlaceholder')}
                           placeholderTextColor={colors.text.muted}
                           value={draftPrice}
                           onChangeText={(txt) => {
@@ -1651,7 +1671,7 @@ export default function ProductsScreen() {
                         ]}
                         onPress={() => void saveProduct()}
                         accessibilityRole="button"
-                        accessibilityLabel="Save product"
+                        accessibilityLabel={t('products.modal.saveA11y')}
                         disabled={isSaving}
                       >
                         {isSaving ? (
@@ -1786,7 +1806,7 @@ function makeStyles(
       paddingBottom: D.spacing.sm,
     },
     pageTitlePhone: {
-      fontSize: 24,
+      fontSize: 20,
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
       letterSpacing: -0.5,

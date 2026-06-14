@@ -685,7 +685,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingBottom: D.spacing.md,
     },
     pageTitle: {
-      fontSize: D.fontSize['2xl'],
+      fontSize: isWeb ? D.fontSize['2xl'] : 20,
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
       letterSpacing: -0.5,

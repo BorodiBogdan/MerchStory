@@ -39,6 +39,16 @@ export default function Root({ children }: { children: React.ReactNode }) {
               caret-color: #F8FAFC;
               transition: background-color 5000s ease-in-out 0s;
             }
+            /* Stop mobile browsers (notably iOS Safari) from auto-zooming and
+               jumping to a focused field. The zoom only fires when the control's
+               font-size is under 16px, so pin text controls to 16px on phone
+               widths. iOS ignores viewport maximum-scale, so this is the only
+               reliable fix and it leaves intentional pinch-zoom untouched. */
+            @media (max-width: 768px) {
+              input, textarea, select {
+                font-size: 16px !important;
+              }
+            }
           `,
           }}
         />
