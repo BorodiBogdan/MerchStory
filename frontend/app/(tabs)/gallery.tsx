@@ -34,6 +34,7 @@ import { useT } from '@/i18n';
 import {
   deleteGalleryItem,
   fetchGalleryImage,
+  fetchGalleryImageBase64,
   type GalleryAssetType,
   type GalleryItem,
   updateGalleryItemName,
@@ -215,24 +216,50 @@ export default function GalleryScreen() {
   async function handleDownload() {
     if (!lightboxItem) return;
     try {
-      const entry = await galleryImageCache.load(lightboxItem.id);
-      const match = entry.uri.match(/^data:([^;]+);base64,(.+)$/);
-      const mimeType = match?.[1] ?? 'image/png';
+      // Resolve the actual image bytes. A cached entry may already be a data URI
+      // (freshly generated images are primed as base64), but gallery items loaded
+      // from the server are cross-origin blob SAS URLs — those can't be saved via
+      // the browser download attribute (it's ignored cross-origin, so the tab just
+      // navigates to the image) nor written to a file on native. Fall back to the
+      // authenticated raw endpoint, which returns the bytes server-side.
+      let mimeType = 'image/png';
+      let base64: string | undefined;
+
+      const cached = await galleryImageCache.load(lightboxItem.id).catch(() => null);
+      const match = cached?.uri.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        mimeType = match[1];
+        base64 = match[2];
+      } else {
+        const raw = await fetchGalleryImageBase64(lightboxItem.id);
+        mimeType = raw.mimeType || 'image/png';
+        base64 = raw.imageBase64;
+      }
+      if (!base64) return;
+
       const ext = mimeType.split('/')[1] ?? 'png';
       const safeName =
         (lightboxItem.name || 'image').replace(/[^a-z0-9_\-. ]+/gi, '_').trim() || 'image';
       const fileName = `${safeName}.${ext}`;
 
       if (isWeb) {
+        // Download from a same-origin object URL so the browser saves the file
+        // instead of navigating to a cross-origin link.
+        const byteChars = atob(base64);
+        const bytes = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+        const blob = new Blob([bytes], { type: mimeType });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = entry.uri;
+        a.href = url;
         a.download = fileName;
+        document.body.appendChild(a);
         a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
         return;
       }
 
-      const base64 = match?.[2];
-      if (!base64) return;
       const dir = FileSystem.cacheDirectory;
       if (!dir) return;
       const filePath = `${dir}${fileName}`;
@@ -782,45 +809,6 @@ export default function GalleryScreen() {
         submitLabel="Save"
       />
 
-      {/* Delete confirmation */}
-      <Modal
-        visible={confirmDeleteId !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setConfirmDeleteId(null)}
-      >
-        <Pressable style={styles.confirmOverlay} onPress={() => setConfirmDeleteId(null)}>
-          <Pressable style={styles.confirmDialog} onPress={() => {}}>
-            <View style={styles.confirmIconWrap}>
-              <View style={styles.confirmIconInner}>
-                <Ionicons name="trash-outline" size={26} color={colors.destructive} />
-              </View>
-            </View>
-            <Text style={styles.confirmTitle}>{t('gallery.deleteConfirm.title')}</Text>
-            <Text style={styles.confirmBody}>{t('gallery.deleteConfirm.body')}</Text>
-            <View style={styles.confirmActions}>
-              <Pressable
-                style={({ pressed }) => [styles.confirmCancel, pressed && { opacity: 0.75 }]}
-                onPress={() => setConfirmDeleteId(null)}
-              >
-                <Text style={styles.confirmCancelText}>{t('common.cancel')}</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.confirmDelete, pressed && { opacity: 0.85 }]}
-                onPress={() => {
-                  const id = confirmDeleteId;
-                  setConfirmDeleteId(null);
-                  if (id) void handleDelete(id);
-                }}
-              >
-                <Ionicons name="trash" size={14} color="#fff" style={{ marginRight: 6 }} />
-                <Text style={styles.confirmDeleteText}>{t('common.delete')}</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
       {/* Lightbox */}
       <Modal
         visible={lightboxItem !== null}
@@ -906,6 +894,46 @@ export default function GalleryScreen() {
                 />
               </View>
             )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Delete confirmation — rendered last so it stacks above the lightbox
+          when deleting from the full-screen viewer. */}
+      <Modal
+        visible={confirmDeleteId !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmDeleteId(null)}
+      >
+        <Pressable style={styles.confirmOverlay} onPress={() => setConfirmDeleteId(null)}>
+          <Pressable style={styles.confirmDialog} onPress={() => {}}>
+            <View style={styles.confirmIconWrap}>
+              <View style={styles.confirmIconInner}>
+                <Ionicons name="trash-outline" size={26} color={colors.destructive} />
+              </View>
+            </View>
+            <Text style={styles.confirmTitle}>{t('gallery.deleteConfirm.title')}</Text>
+            <Text style={styles.confirmBody}>{t('gallery.deleteConfirm.body')}</Text>
+            <View style={styles.confirmActions}>
+              <Pressable
+                style={({ pressed }) => [styles.confirmCancel, pressed && { opacity: 0.75 }]}
+                onPress={() => setConfirmDeleteId(null)}
+              >
+                <Text style={styles.confirmCancelText}>{t('common.cancel')}</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.confirmDelete, pressed && { opacity: 0.85 }]}
+                onPress={() => {
+                  const id = confirmDeleteId;
+                  setConfirmDeleteId(null);
+                  if (id) void handleDelete(id);
+                }}
+              >
+                <Ionicons name="trash" size={14} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.confirmDeleteText}>{t('common.delete')}</Text>
+              </Pressable>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1004,7 +1032,7 @@ function makeStyles(
       minWidth: 0,
     },
     pageTitlePhone: {
-      fontSize: 24,
+      fontSize: 20,
       fontWeight: D.fontWeight.bold,
       color: colors.text.primary,
       letterSpacing: -0.5,

@@ -68,6 +68,7 @@ export function ModelPickerPopover({
 
   function handleSelect(value: string) {
     onSelect(value);
+    onClose();
   }
 
   return (
