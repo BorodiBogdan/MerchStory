@@ -7,7 +7,32 @@ export default function Root({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
+        />
+        <title>MerchStory</title>
+
+        {/* App identity + PWA manifest (Android "Install app", desktop PWA). */}
+        <meta name="application-name" content="MerchStory" />
+        <meta
+          name="description"
+          content="Turn raw product photos into professional AI-generated ads, catalogs, and wallpapers."
+        />
+        <meta name="theme-color" content="#6366F1" />
+        <link rel="manifest" href="/manifest.json" />
+
+        {/* iOS "Add to Home Screen": Safari ignores the manifest, so these tags
+            (capable + title + apple-touch-icon) are what make the saved web app
+            launch full-screen with the MerchStory mark instead of a screenshot. */}
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="MerchStory" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
+
         {/* Required for expo-router web scroll behaviour */}
         <ScrollViewStyleReset />
         {/* Brand fonts, loaded once for the whole app. The id matches the one
