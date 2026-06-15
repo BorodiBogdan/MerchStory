@@ -16,4 +16,8 @@ public record GrantCreditsRequest(string UserEmail, int Amount, string? Note);
 
 public record GrantCreditsResponse(string UserId, string UserEmail, int Balance, WalletTransactionDto Transaction);
 
-public record AdminUserLookupDto(string Id, string Email, string UserName, bool IsAdmin, int CreditBalance);
+public record AdminUserLookupDto(string Id, string Email, string UserName, bool IsAdmin, int CreditBalance, bool CanViewRecommendations);
+
+public record SetRecommendationsAccessRequest(string UserEmail, bool CanView);
+
+public record SetRecommendationsAccessResponse(string UserId, string UserEmail, bool CanViewRecommendations);

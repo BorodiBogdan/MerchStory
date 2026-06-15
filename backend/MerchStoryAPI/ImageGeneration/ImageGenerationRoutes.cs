@@ -837,9 +837,10 @@ internal sealed record CatalogImageApiRequest(
     string? Language = null,
     bool PreserveProductImages = false,
     string BackgroundStyle = "SocialPost",
-    bool ShowProductNames = false,
     CatalogOfferApi? Offer = null,
-    string? ImageModel = null)
+    string? ImageModel = null,
+    bool ShowStockDisclaimer = false,
+    bool ShowDiscountPercentage = true)
 {
     public CatalogImageRequest ToServiceRequest(
         BrandContext? brandContext,
@@ -871,10 +872,11 @@ internal sealed record CatalogImageApiRequest(
             this.PreserveProductImages,
             markerAssignments,
             this.BackgroundStyle,
-            this.ShowProductNames,
             brandColors,
             this.BuildOffer(itemById),
-            this.ImageModel);
+            this.ImageModel,
+            this.ShowStockDisclaimer,
+            this.ShowDiscountPercentage);
     }
 
     // Resolve the wire offer (product GUIDs) into a service offer that carries the

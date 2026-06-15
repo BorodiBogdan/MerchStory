@@ -60,11 +60,18 @@ interface CatalogOfferModalProps {
   allowOffer?: boolean;
   /** Settings recap shown on the final "generation options" step. */
   optionsSummary?: OfferOptionSummary[];
+  /** Whether to render the "product names" recap row. Only the on-wallpaper flow
+   *  overlays names; AI-generated catalogs never do, so they hide the row. */
+  showNamesRow?: boolean;
   /** Current "show product names" toggle; the review step renders it (and forces
    *  it off when the offer has a group/bundle). */
   showProductNames?: boolean;
   generating?: boolean;
   cost?: number;
+  /** Whether the generated image states the discount % (vs. only old+new price).
+   *  Rendered as an editable toggle on the review step when the offer has a discount. */
+  showDiscountPercentage?: boolean;
+  onShowDiscountPercentageChange?: (value: boolean) => void;
   onCancel: () => void;
   /** priceOverrides maps productId -> in-modal base price (DB price unchanged). */
   onContinue: (offer: CatalogOfferConfig, priceOverrides: Record<string, number>) => void;
@@ -86,9 +93,12 @@ export function CatalogOfferModal({
   subtitle,
   allowOffer = true,
   optionsSummary = [],
+  showNamesRow = true,
   showProductNames = false,
   generating = false,
   cost,
+  showDiscountPercentage = false,
+  onShowDiscountPercentageChange,
   onCancel,
   onContinue,
 }: CatalogOfferModalProps) {
@@ -106,6 +116,11 @@ export function CatalogOfferModal({
   const [priceOverrides, setPriceOverrides] = useState<Record<string, number>>({});
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [priceDraft, setPriceDraft] = useState('');
+  // Inline editor for an offer's after-discount price (groups with equal prices only).
+  const [editingDiscountIdx, setEditingDiscountIdx] = useState<number | null>(null);
+  const [discountDraft, setDiscountDraft] = useState('');
+  // Reveals the "show discount percentage" helper on the review step.
+  const [showDiscountPercentHelp, setShowDiscountPercentHelp] = useState(false);
 
   const productById = useMemo(() => {
     const map = new Map<string, OfferProduct>();
@@ -127,6 +142,9 @@ export function CatalogOfferModal({
       setPriceOverrides({});
       setEditingPriceId(null);
       setPriceDraft('');
+      setEditingDiscountIdx(null);
+      setDiscountDraft('');
+      setShowDiscountPercentHelp(false);
     }
   }, [visible, productKey]);
 
@@ -294,6 +312,39 @@ export function CatalogOfferModal({
     setGroups((prev) => prev.map((g, i) => (i === index ? { ...g, percent: clamped } : g)));
   }
 
+  // A 'group' offer where every item shares the same (possibly overridden) price.
+  // Such offers can be priced by their after-discount amount; the percentage is then
+  // derived. Single-item groups qualify trivially. Bundles and mixed-price groups do not.
+  function uniformGroupPrice(group: CatalogOfferGroup): number | null {
+    if (group.kind !== 'group') return null;
+    const items = group.productIds
+      .map((id) => productById.get(id))
+      .filter((p): p is OfferProduct => Boolean(p));
+    if (items.length === 0) return null;
+    const base = effectivePrice(items[0]);
+    return items.every((p) => effectivePrice(p) === base) ? base : null;
+  }
+
+  function startEditDiscount(index: number, currentDiscounted: number) {
+    haptic();
+    setEditingDiscountIdx(index);
+    setDiscountDraft(String(currentDiscounted));
+  }
+
+  // Set the after-discount price for a uniform group and back-compute the percentage
+  // at full precision, so the typed price round-trips exactly through discountedPrice
+  // (and the backend's Discount) without rounding drift.
+  function commitDiscount(index: number, basePrice: number) {
+    const parsed = parseFloat(discountDraft.replace(',', '.').replace(/[^0-9.]/g, ''));
+    if (Number.isFinite(parsed) && basePrice > 0) {
+      const clamped = Math.max(0, Math.min(basePrice, parsed));
+      const percent = (1 - clamped / basePrice) * 100;
+      setGroups((prev) => prev.map((g, i) => (i === index ? { ...g, percent } : g)));
+    }
+    setEditingDiscountIdx(null);
+    setDiscountDraft('');
+  }
+
   // Step 1 → step 2 (review generation options).
   function handleProductsContinue() {
     haptic();
@@ -368,7 +419,9 @@ export function CatalogOfferModal({
           <View style={styles.customWrap}>
             <TextInput
               style={styles.customInput as object}
-              value={percent === 0 ? '' : String(percent)}
+              // A price-derived percent can be fractional; show it rounded so the box
+              // stays clean. Typing here still produces a clean integer percent.
+              value={percent === 0 ? '' : String(Math.round(percent))}
               onChangeText={(text) => {
                 const digits = text.replace(/[^0-9]/g, '');
                 setPercent(index, digits === '' ? 0 : parseInt(digits, 10));
@@ -576,6 +629,52 @@ export function CatalogOfferModal({
 
         {renderPercentControl(index, group.percent)}
 
+        {(() => {
+          const base = uniformGroupPrice(group);
+          if (base === null) return null;
+          const current = discountedPrice(base, group.percent);
+          return (
+            <View style={styles.discountPriceRow}>
+              <Text style={styles.discountPriceLabel}>
+                {t('studio.offer.discountedPriceLabel')}
+              </Text>
+              {editingDiscountIdx === index ? (
+                <View style={styles.priceEdit}>
+                  <TextInput
+                    style={styles.priceEditInput as object}
+                    value={discountDraft}
+                    onChangeText={setDiscountDraft}
+                    keyboardType="decimal-pad"
+                    autoFocus
+                    selectTextOnFocus
+                    onSubmitEditing={() => commitDiscount(index, base)}
+                    onBlur={() => commitDiscount(index, base)}
+                    accessibilityLabel={t('studio.offer.editDiscountedPrice')}
+                  />
+                  <Pressable
+                    onPress={() => commitDiscount(index, base)}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('studio.offer.editDiscountedPrice')}
+                  >
+                    <Ionicons name="checkmark-circle" size={18} color={colors.accent.primary} />
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => startEditDiscount(index, current)}
+                  style={styles.priceWithEdit}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('studio.offer.editDiscountedPrice')}
+                >
+                  <Text style={styles.discountPriceValue}>{formatPrice(current, currency)}</Text>
+                  <Ionicons name="pencil" size={13} color={colors.text.muted} />
+                </Pressable>
+              )}
+            </View>
+          );
+        })()}
+
         {isBundle && (
           <View style={styles.bundleTotal}>
             <Text style={styles.bundleTotalLabel}>{t('studio.offer.bundleTotal')}</Text>
@@ -628,6 +727,54 @@ export function CatalogOfferModal({
       </View>
     );
   }
+
+  // Interactive review-step row (not a read-only recap): lets the user decide whether
+  // the generated image states the discount %. Only meaningful when a discount exists.
+  function renderDiscountPercentToggle() {
+    return (
+      <View key="discount-percent" style={styles.optionRow}>
+        <View style={styles.optionMain}>
+          <View style={styles.optionIcon}>
+            <Ionicons name="pricetag-outline" size={17} color={colors.accent.primary} />
+          </View>
+          <Text style={styles.optionLabel} numberOfLines={1}>
+            {t('studio.offer.optShowDiscountPercent')}
+          </Text>
+          <Pressable
+            onPress={() => {
+              haptic();
+              setShowDiscountPercentHelp((v) => !v);
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('studio.offer.optShowDiscountPercent')}
+          >
+            <Ionicons
+              name={showDiscountPercentHelp ? 'information-circle' : 'information-circle-outline'}
+              size={18}
+              color={colors.text.muted}
+            />
+          </Pressable>
+          <Switch
+            value={showDiscountPercentage}
+            onValueChange={(v) => {
+              haptic();
+              onShowDiscountPercentageChange?.(v);
+            }}
+            trackColor={{ false: colors.border.default, true: colors.accent.primary }}
+            thumbColor="#fff"
+          />
+        </View>
+        {showDiscountPercentHelp && (
+          <Text style={styles.optionNote}>{t('studio.offer.optShowDiscountPercentHelp')}</Text>
+        )}
+      </View>
+    );
+  }
+
+  // The discount-percentage toggle only makes sense when the offer actually carries a
+  // percentage discount; with no discount there is nothing to show or hide.
+  const showDiscountToggle = allowOffer && offerEnabled && groups.some((g) => g.percent > 0);
 
   const groupableCount = selectedForGroup.size;
 
@@ -775,21 +922,25 @@ export function CatalogOfferModal({
                 showsVerticalScrollIndicator={false}
               >
                 <View style={styles.optionsCard}>
-                  {optionsSummary.map((opt, i) => renderOptionRow(opt, i === 0))}
-                  {(() => {
-                    const namesForced = allowOffer && offerHasGrouping(groups);
-                    const namesOn = !namesForced && showProductNames;
-                    return renderOptionRow(
-                      {
-                        label: t('studio.offer.optNames'),
-                        icon: 'text-outline',
-                        value: namesOn ? t('studio.offer.optOn') : t('studio.offer.optOff'),
-                        tone: namesOn ? 'on' : 'off',
-                      },
-                      optionsSummary.length === 0,
-                      namesForced ? t('studio.offer.namesDisabledNote') : undefined
-                    );
-                  })()}
+                  {showDiscountToggle && renderDiscountPercentToggle()}
+                  {optionsSummary.map((opt, i) =>
+                    renderOptionRow(opt, !showDiscountToggle && i === 0)
+                  )}
+                  {showNamesRow &&
+                    (() => {
+                      const namesForced = allowOffer && offerHasGrouping(groups);
+                      const namesOn = !namesForced && showProductNames;
+                      return renderOptionRow(
+                        {
+                          label: t('studio.offer.optNames'),
+                          icon: 'text-outline',
+                          value: namesOn ? t('studio.offer.optOn') : t('studio.offer.optOff'),
+                          tone: namesOn ? 'on' : 'off',
+                        },
+                        !showDiscountToggle && optionsSummary.length === 0,
+                        namesForced ? t('studio.offer.namesDisabledNote') : undefined
+                      );
+                    })()}
                 </View>
               </ScrollView>
 
@@ -1252,6 +1403,24 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: D.fontSize.base,
       fontWeight: D.fontWeight.bold,
       color: '#34D399',
+    },
+    discountPriceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderTopWidth: 1,
+      borderTopColor: colors.border.subtle,
+      paddingTop: D.spacing.sm,
+    },
+    discountPriceLabel: {
+      fontSize: D.fontSize.sm,
+      fontWeight: D.fontWeight.medium,
+      color: colors.text.secondary,
+    },
+    discountPriceValue: {
+      fontSize: D.fontSize.base,
+      fontWeight: D.fontWeight.bold,
+      color: colors.accent.primary,
     },
     bundleTotal: {
       flexDirection: 'row',

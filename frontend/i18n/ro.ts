@@ -705,6 +705,9 @@ const ro: Dictionary = {
   'studio.showProductNames': 'Afișează numele produselor',
   'studio.showProductNames.helper':
     'Când este activat, fiecare produs este etichetat cu numele său. Când este dezactivat, nu se afișează niciun text cu nume — produsele și prețurile vorbesc de la sine.',
+  'studio.showStockDisclaimer': 'Disclaimer stoc',
+  'studio.showStockDisclaimer.helper':
+    'Când este activat, se adaugă undeva în imagine (de obicei în subsol) un mic disclaimer „În limita stocului disponibil”. Dezactivat implicit.',
   'studio.opt.backgroundStyle': 'Stil fundal',
   'studio.backgroundStyle.socialPost': 'Postare social',
   'studio.backgroundStyle.realistic': 'Realist',
@@ -921,6 +924,29 @@ const ro: Dictionary = {
   'adminGrant.error.email': 'Alege un utilizator din listă.',
   'adminGrant.error.failed': 'Adăugarea a eșuat. Încearcă din nou.',
 
+  'admin.options.grantRecommendations.title': 'Acces la idei de promovare',
+  'admin.options.grantRecommendations.description':
+    'Alege ce utilizatori pot vedea ideile zilnice de promovare.',
+
+  'adminRecommendations.title': 'Acces la idei de promovare',
+  'adminRecommendations.subtitle':
+    'Alege cine poate vedea ideile zilnice de promovare. Administratorii au mereu acces.',
+  'adminRecommendations.email.label': 'Email utilizator',
+  'adminRecommendations.email.placeholder': 'nume@exemplu.com',
+  'adminRecommendations.lookup.empty': 'Niciun utilizator găsit.',
+  'adminRecommendations.lookup.hint': 'Scrie cel puțin 2 caractere pentru a căuta.',
+  'adminRecommendations.grant': 'Acordă acces',
+  'adminRecommendations.revoke': 'Retrage accesul',
+  'adminRecommendations.saving': 'Se salvează…',
+  'adminRecommendations.success.granted': 'Ai acordat acces la ideile de promovare pentru {email}.',
+  'adminRecommendations.success.revoked':
+    'Ai retras accesul la ideile de promovare pentru {email}.',
+  'adminRecommendations.state.hasAccess': 'Poate vedea ideile de promovare',
+  'adminRecommendations.state.noAccess': 'Fără acces la ideile de promovare',
+  'adminRecommendations.state.adminAlways': 'Administratorii văd mereu ideile de promovare.',
+  'adminRecommendations.error.email': 'Alege un utilizator din listă.',
+  'adminRecommendations.error.failed': 'Actualizarea a eșuat. Încearcă din nou.',
+
   // ── Catalog offer review ─────────────────────────────────────────────────
   'studio.offer.title': 'Verifică catalogul',
   'studio.offer.subtitle':
@@ -947,6 +973,8 @@ const ro: Dictionary = {
   'studio.offer.bundleTotal': 'Total pachet',
   'studio.offer.customPercent': 'Custom',
   'studio.offer.editPrice': 'Modifică prețul',
+  'studio.offer.discountedPriceLabel': 'După reducere',
+  'studio.offer.editDiscountedPrice': 'Modifică prețul după reducere',
   'studio.offer.continue': 'Continuă',
   'studio.offer.back': 'Înapoi',
   'studio.offer.optionsTitle': 'Opțiuni de generare',
@@ -960,6 +988,9 @@ const ro: Dictionary = {
   'studio.offer.optNames': 'Afișează nume produse',
   'studio.offer.optPreserve': 'Păstrează imaginile produselor',
   'studio.offer.optLayout': 'Aranjament',
+  'studio.offer.optShowDiscountPercent': 'Afișează procentajul reducerii',
+  'studio.offer.optShowDiscountPercentHelp':
+    'Când este activat, imaginea afișează procentajul reducerii (de exemplu 25%). Când este dezactivat, afișează doar prețul nou cu prețul vechi tăiat.',
   'studio.offer.namesDisabledNote': 'Numele produselor sunt ascunse pentru grupuri și pachete.',
 };
 

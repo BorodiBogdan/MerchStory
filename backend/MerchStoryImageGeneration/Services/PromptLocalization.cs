@@ -13,6 +13,21 @@ public static class LanguageInstruction
     }
 }
 
+public static class StockDisclaimerInstruction
+{
+    public static string For(string? language)
+    {
+        string normalized = (language ?? "EN").Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "RO" => "STOCK DISCLAIMER — DO render this exact short disclaimer once, somewhere small and unobtrusive (for example a slim footer strip or a corner): \"În limita stocului disponibil\". " +
+                    "This specific line is explicitly ALLOWED and required — it is an exception to the no-made-up-text rule. Keep it small, flat, and legible; it must never compete with the products or prices.\n\n",
+            _ => "STOCK DISCLAIMER — DO render this exact short disclaimer once, somewhere small and unobtrusive (for example a slim footer strip or a corner): \"While stocks last\". " +
+                 "This specific line is explicitly ALLOWED and required — it is an exception to the no-made-up-text rule. Keep it small, flat, and legible; it must never compete with the products or prices.\n\n",
+        };
+    }
+}
+
 public static class CurrencyFormatter
 {
     public static string SymbolFor(string? currency)

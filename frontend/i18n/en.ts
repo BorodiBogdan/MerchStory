@@ -697,6 +697,9 @@ const en = {
   'studio.showProductNames': 'Show product names',
   'studio.showProductNames.helper':
     'When on, each product is labeled with its name. When off, no name typography is rendered — the products and prices speak for themselves.',
+  'studio.showStockDisclaimer': 'Stock disclaimer',
+  'studio.showStockDisclaimer.helper':
+    'When on, a small “While stocks last” disclaimer is added somewhere in the image (usually a footer). Off by default.',
   'studio.opt.backgroundStyle': 'Background style',
   'studio.backgroundStyle.socialPost': 'Social post',
   'studio.backgroundStyle.realistic': 'Realistic',
@@ -906,6 +909,28 @@ const en = {
   'adminGrant.error.email': 'Pick a user from the list.',
   'adminGrant.error.failed': 'Grant failed. Try again.',
 
+  'admin.options.grantRecommendations.title': 'Promotion ideas access',
+  'admin.options.grantRecommendations.description':
+    'Choose which users can see the daily promotion ideas.',
+
+  'adminRecommendations.title': 'Promotion ideas access',
+  'adminRecommendations.subtitle':
+    'Choose who can see the daily promotion ideas. Admins always have access.',
+  'adminRecommendations.email.label': 'User email',
+  'adminRecommendations.email.placeholder': 'name@example.com',
+  'adminRecommendations.lookup.empty': 'No users matched.',
+  'adminRecommendations.lookup.hint': 'Type at least 2 characters to search.',
+  'adminRecommendations.grant': 'Grant access',
+  'adminRecommendations.revoke': 'Revoke access',
+  'adminRecommendations.saving': 'Saving…',
+  'adminRecommendations.success.granted': 'Granted promotion ideas access to {email}.',
+  'adminRecommendations.success.revoked': 'Revoked promotion ideas access for {email}.',
+  'adminRecommendations.state.hasAccess': 'Can see promotion ideas',
+  'adminRecommendations.state.noAccess': 'No access to promotion ideas',
+  'adminRecommendations.state.adminAlways': 'Admins always see promotion ideas.',
+  'adminRecommendations.error.email': 'Pick a user from the list.',
+  'adminRecommendations.error.failed': 'Update failed. Try again.',
+
   // ── Catalog offer review ─────────────────────────────────────────────────
   'studio.offer.title': 'Review catalog',
   'studio.offer.subtitle':
@@ -932,6 +957,8 @@ const en = {
   'studio.offer.bundleTotal': 'Bundle total',
   'studio.offer.customPercent': 'Custom',
   'studio.offer.editPrice': 'Edit price',
+  'studio.offer.discountedPriceLabel': 'After discount',
+  'studio.offer.editDiscountedPrice': 'Edit price after discount',
   'studio.offer.continue': 'Continue',
   'studio.offer.back': 'Back',
   'studio.offer.optionsTitle': 'Generation options',
@@ -945,6 +972,9 @@ const en = {
   'studio.offer.optNames': 'Show product names',
   'studio.offer.optPreserve': 'Preserve product images',
   'studio.offer.optLayout': 'Layout',
+  'studio.offer.optShowDiscountPercent': 'Show discount percentage',
+  'studio.offer.optShowDiscountPercentHelp':
+    'When on, the image states the discount percentage (for example 25%). When off, it shows only the new price with the old price crossed out.',
   'studio.offer.namesDisabledNote': 'Product names are hidden for groups and bundles.',
 };
 

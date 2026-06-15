@@ -43,6 +43,12 @@ import * as galleryCache from '@/utils/galleryCache';
 import * as galleryImageCache from '@/utils/galleryImageCache';
 
 const isWeb = Platform.OS === 'web';
+// Phones/tablets get the native share sheet; desktop browsers keep a plain
+// file download (their "share" sheet has no obvious way to just save the image).
+const isMobileWeb =
+  isWeb &&
+  typeof navigator !== 'undefined' &&
+  /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent ?? '');
 const MAX_CONTENT_WIDTH = 1600;
 const WEB_H_PADDING = 80;
 const MOBILE_H_PADDING = D.spacing.md;
@@ -243,12 +249,31 @@ export default function GalleryScreen() {
       const fileName = `${safeName}.${ext}`;
 
       if (isWeb) {
-        // Download from a same-origin object URL so the browser saves the file
-        // instead of navigating to a cross-origin link.
         const byteChars = atob(base64);
         const bytes = new Uint8Array(byteChars.length);
         for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
         const blob = new Blob([bytes], { type: mimeType });
+
+        // On phones, hand the photo to the native share sheet (Messages,
+        // WhatsApp, etc.). Desktop browsers skip this and download the file,
+        // since their share sheet has no clear "just save the image" option.
+        const nav = navigator as Navigator & {
+          canShare?: (data?: ShareData) => boolean;
+        };
+        const file = new File([blob], fileName, { type: mimeType });
+        if (isMobileWeb && typeof nav.share === 'function' && nav.canShare?.({ files: [file] })) {
+          try {
+            await nav.share({ files: [file], title: lightboxItem.name || fileName });
+            return;
+          } catch (err) {
+            // User dismissed the share sheet — respect that, don't force a download.
+            if (err instanceof Error && err.name === 'AbortError') return;
+            // Anything else (share failed/unsupported) falls through to download.
+          }
+        }
+
+        // Download from a same-origin object URL so the browser saves the file
+        // instead of navigating to a cross-origin link.
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -855,11 +880,7 @@ export default function GalleryScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={t('studio.a11y.downloadImage')}
                 >
-                  <Ionicons
-                    name={isWeb ? 'download-outline' : 'share-outline'}
-                    size={18}
-                    color="#fff"
-                  />
+                  <Ionicons name="share-outline" size={18} color="#fff" />
                 </Pressable>
                 <Pressable
                   style={({ pressed }) => [
