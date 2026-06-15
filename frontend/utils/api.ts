@@ -154,6 +154,7 @@ export interface AdminUserLookup {
   userName: string;
   isAdmin: boolean;
   creditBalance: number;
+  canViewRecommendations: boolean;
 }
 
 export interface GrantCreditsResponse {
@@ -182,6 +183,7 @@ export interface AuthResponse {
   isAdmin: boolean;
   preferredLanguage: AppLanguage;
   creditBalance: number;
+  canViewRecommendations: boolean;
 }
 
 export interface BrandColor {
@@ -1235,6 +1237,31 @@ export async function grantCredits(
     );
   }
   return response.json() as Promise<GrantCreditsResponse>;
+}
+
+export interface SetRecommendationsAccessResponse {
+  userId: string;
+  userEmail: string;
+  canViewRecommendations: boolean;
+}
+
+export async function setRecommendationsAccess(
+  userEmail: string,
+  canView: boolean
+): Promise<SetRecommendationsAccessResponse> {
+  const response = await fetchWithAuth(`${API_URL}/wallet/grant-recommendations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userEmail, canView }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      (errorData as { detail?: string }).detail ??
+        `Failed to update access (status ${response.status})`
+    );
+  }
+  return response.json() as Promise<SetRecommendationsAccessResponse>;
 }
 
 // ── Print Shop ───────────────────────────────────────────────────────────────

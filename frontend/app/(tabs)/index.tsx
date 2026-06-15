@@ -111,6 +111,7 @@ export default function StudioHub() {
   const { colors } = useTheme();
   const t = useT();
   const router = useRouter();
+  const { isAdmin, canViewRecommendations } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
   // Match the glass navbar's wide rail so the page edges line up with the pill
@@ -146,7 +147,9 @@ export default function StudioHub() {
           ))}
         </View>
 
-        <IdeasForYouSection isDesktop={isDesktop} colors={colors} t={t} router={router} />
+        {(isAdmin || canViewRecommendations) && (
+          <IdeasForYouSection isDesktop={isDesktop} colors={colors} t={t} router={router} />
+        )}
       </View>
     </ScrollView>
   );

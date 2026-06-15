@@ -266,6 +266,12 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="admin-grant-recommendations"
+          options={{
+            tabBarItemStyle: { display: 'none' },
+          }}
+        />
+        <Tabs.Screen
           name="add-products-professional"
           options={{
             tabBarItemStyle: { display: 'none' },

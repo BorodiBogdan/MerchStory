@@ -909,6 +909,28 @@ const en = {
   'adminGrant.error.email': 'Pick a user from the list.',
   'adminGrant.error.failed': 'Grant failed. Try again.',
 
+  'admin.options.grantRecommendations.title': 'Promotion ideas access',
+  'admin.options.grantRecommendations.description':
+    'Choose which users can see the daily promotion ideas.',
+
+  'adminRecommendations.title': 'Promotion ideas access',
+  'adminRecommendations.subtitle':
+    'Choose who can see the daily promotion ideas. Admins always have access.',
+  'adminRecommendations.email.label': 'User email',
+  'adminRecommendations.email.placeholder': 'name@example.com',
+  'adminRecommendations.lookup.empty': 'No users matched.',
+  'adminRecommendations.lookup.hint': 'Type at least 2 characters to search.',
+  'adminRecommendations.grant': 'Grant access',
+  'adminRecommendations.revoke': 'Revoke access',
+  'adminRecommendations.saving': 'Saving…',
+  'adminRecommendations.success.granted': 'Granted promotion ideas access to {email}.',
+  'adminRecommendations.success.revoked': 'Revoked promotion ideas access for {email}.',
+  'adminRecommendations.state.hasAccess': 'Can see promotion ideas',
+  'adminRecommendations.state.noAccess': 'No access to promotion ideas',
+  'adminRecommendations.state.adminAlways': 'Admins always see promotion ideas.',
+  'adminRecommendations.error.email': 'Pick a user from the list.',
+  'adminRecommendations.error.failed': 'Update failed. Try again.',
+
   // ── Catalog offer review ─────────────────────────────────────────────────
   'studio.offer.title': 'Review catalog',
   'studio.offer.subtitle':

@@ -33,6 +33,7 @@ interface AuthUser {
   isShopSetupComplete: boolean;
   isAdmin: boolean;
   creditBalance: number;
+  canViewRecommendations: boolean;
 }
 
 interface AuthState {
@@ -42,6 +43,7 @@ interface AuthState {
   isShopSetupComplete: boolean;
   isAdmin: boolean;
   creditBalance: number;
+  canViewRecommendations: boolean;
   isLoading: boolean;
 }
 
@@ -64,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isShopSetupComplete: false,
     isAdmin: false,
     creditBalance: 0,
+    canViewRecommendations: false,
     isLoading: true,
   });
 
@@ -81,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isShopSetupComplete: user.isShopSetupComplete ?? false,
             isAdmin: user.isAdmin ?? false,
             creditBalance: user.creditBalance ?? 0,
+            canViewRecommendations: user.canViewRecommendations ?? false,
             isLoading: false,
           });
         } else {
@@ -102,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
       creditBalance: data.creditBalance ?? 0,
+      canViewRecommendations: data.canViewRecommendations ?? false,
     };
     await storage.setItem(TOKEN_KEY, data.token);
     await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
@@ -114,6 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
       creditBalance: user.creditBalance,
+      canViewRecommendations: user.canViewRecommendations,
       isLoading: false,
     });
   }
@@ -127,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
       creditBalance: data.creditBalance ?? 0,
+      canViewRecommendations: data.canViewRecommendations ?? false,
     };
     await storage.setItem(TOKEN_KEY, data.token);
     await storage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
@@ -139,6 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isShopSetupComplete: data.isShopSetupComplete,
       isAdmin: data.isAdmin,
       creditBalance: user.creditBalance,
+      canViewRecommendations: user.canViewRecommendations,
       isLoading: false,
     });
   }
@@ -163,6 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isShopSetupComplete: false,
       isAdmin: false,
       creditBalance: 0,
+      canViewRecommendations: false,
       isLoading: false,
     });
   }, []);

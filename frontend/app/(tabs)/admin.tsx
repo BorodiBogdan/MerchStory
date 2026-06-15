@@ -76,6 +76,13 @@ export default function AdminScreen() {
       description: t('admin.options.grantCoins.description'),
       onPress: () => router.push('/admin-grant-credits'),
     },
+    {
+      key: 'grant-recommendations',
+      icon: 'bulb-outline',
+      title: t('admin.options.grantRecommendations.title'),
+      description: t('admin.options.grantRecommendations.description'),
+      onPress: () => router.push('/admin-grant-recommendations'),
+    },
   ];
 
   return (
