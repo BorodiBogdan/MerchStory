@@ -22,7 +22,13 @@ export interface LedgerEntry {
 }
 
 export interface MockState {
-  user: { email: string; userName: string; isAdmin: boolean; isShopSetupComplete: boolean };
+  user: {
+    email: string;
+    userName: string;
+    isAdmin: boolean;
+    isShopSetupComplete: boolean;
+    canViewRecommendations: boolean;
+  };
   startBalance: number;
   balance: number;
   ledger: LedgerEntry[];
@@ -82,13 +88,19 @@ export class MockServer {
     return item;
   }
 
-  constructor(opts?: { startBalance?: number; isAdmin?: boolean; isShopSetupComplete?: boolean }) {
+  constructor(opts?: {
+    startBalance?: number;
+    isAdmin?: boolean;
+    isShopSetupComplete?: boolean;
+    canViewRecommendations?: boolean;
+  }) {
     this.state = {
       user: {
         email: 'e2e@test.com',
         userName: 'e2e@test.com',
         isAdmin: opts?.isAdmin ?? false,
         isShopSetupComplete: opts?.isShopSetupComplete ?? false,
+        canViewRecommendations: opts?.canViewRecommendations ?? false,
       },
       startBalance: opts?.startBalance ?? 50,
       balance: opts?.startBalance ?? 50,
@@ -144,6 +156,7 @@ export class MockServer {
       userName: this.state.user.userName,
       isShopSetupComplete: this.state.user.isShopSetupComplete,
       isAdmin: this.state.user.isAdmin,
+      canViewRecommendations: this.state.user.canViewRecommendations,
       preferredLanguage: 'EN',
       creditBalance: this.state.balance,
     };
@@ -412,7 +425,11 @@ export class MockServer {
 
 export interface MockFixtures {
   mock: MockServer;
-  seedAuth: (opts?: { isAdmin?: boolean; isShopSetupComplete?: boolean }) => Promise<void>;
+  seedAuth: (opts?: {
+    isAdmin?: boolean;
+    isShopSetupComplete?: boolean;
+    canViewRecommendations?: boolean;
+  }) => Promise<void>;
 }
 
 // Test fixture: installs the network interception and exposes the mock server plus a helper to
@@ -427,17 +444,24 @@ export const test = base.extend<MockFixtures>({
     await provide(server);
   },
   seedAuth: async ({ context }, provide) => {
-    const seed = async (opts?: { isAdmin?: boolean; isShopSetupComplete?: boolean }) => {
+    const seed = async (opts?: {
+      isAdmin?: boolean;
+      isShopSetupComplete?: boolean;
+      canViewRecommendations?: boolean;
+    }) => {
       const server = (context as unknown as { __mock?: MockServer }).__mock;
       if (server) {
         server.state.user.isAdmin = opts?.isAdmin ?? server.state.user.isAdmin;
         server.state.user.isShopSetupComplete = opts?.isShopSetupComplete ?? true;
+        server.state.user.canViewRecommendations =
+          opts?.canViewRecommendations ?? server.state.user.canViewRecommendations;
       }
       const user = {
         email: 'e2e@test.com',
         userName: 'e2e@test.com',
         isShopSetupComplete: opts?.isShopSetupComplete ?? true,
         isAdmin: opts?.isAdmin ?? false,
+        canViewRecommendations: opts?.canViewRecommendations ?? false,
         creditBalance: server?.state.balance ?? 50,
       };
       await context.addInitScript(

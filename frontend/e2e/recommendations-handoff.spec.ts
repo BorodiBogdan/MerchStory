@@ -7,7 +7,9 @@ test('the daily recommendation is loaded and shown on the hub', async ({
   mock,
   seedAuth,
 }) => {
-  await seedAuth({ isShopSetupComplete: true });
+  // Recommendations are an admin-granted capability; the hub only fetches and renders the
+  // daily idea when the user can view them (or is an admin).
+  await seedAuth({ isShopSetupComplete: true, canViewRecommendations: true });
 
   await page.goto('/');
 

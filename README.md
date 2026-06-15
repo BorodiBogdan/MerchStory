@@ -1,16 +1,24 @@
 # MerchStory
 
-Turn raw product photos into professional AI-generated ads, catalogs, and wallpapers for small and local retailers — with one-tap publishing to Facebook.
+MerchStory turns a small retailer's raw product photos and shop profile into professional, brand-consistent marketing assets (announcements, catalogs, and wallpapers). It also watches real-world context (weather, holidays, recent news) and suggests fresh marketing ideas every day, then hands an idea straight to the generation pipeline. The client runs as web, iOS, and Android from a single React Native (Expo) codebase, and the service is deployed on Microsoft Azure.
 
 ## Features
 
-- **Auth** — email/password, JWT + refresh tokens, admin accounts
-- **Shop onboarding** — 3-step setup flow (brand colors, logo, contact)
-- **Products** — CRUD, photo upload, search-by-photo via CLIP embeddings (pgvector)
-- **AI image generation** — announcements, catalogs (with text overlay via `CatalogCompositor`), and wallpapers, powered by Google Gemini
-- **Gallery** — browse and reuse every generated asset
-- **Social publishing** — Facebook OAuth + page posting, with a cached post history
-- **Admin** — professional product-import flow for curated catalogs
+- **Auth.** Email/password sign-in, JWT access tokens with rotating refresh tokens, and an admin flag on the account.
+- **Shop onboarding.** A 3-step setup flow captures brand descriptors, visual identity (colors, logo), and contact details. Currency and generation language are locked at the end and inherited by every later request.
+- **Product library.** Create, edit, and delete products (name, category, price, photo), filter by name/category/price, and clean up photos with one-tap background removal (delegated to a local IOPaint service).
+- **Reference catalogue and search-by-photo.** A curated, category-tree catalogue of professional product imagery. A phone photo is matched against it with CLIP embeddings stored in pgvector, so the retailer can swap a snapshot for a clean studio image without typing a description.
+- **AI image generation.** Three asset families:
+  - *Announcements* (sub-typed as general announcement, job post, or promotion),
+  - *Catalogs* (fully generative, hybrid product-preserving via the in-house compositor, or in-house composite with no model call),
+  - *Wallpapers.*
+  Generation is provider-agnostic behind `IImageProvider`: Google Gemini in production, OpenAI GPT Image as an opt-in per-request alternative, and mock/canned providers for tests and local iteration.
+- **Daily recommendations.** A ranked set of fresh marketing themes grounded in the shop profile, external context signals (weather, holidays, news), and a curated promo playbook retrieved over pgvector (RAG). Ideas carry a ready-to-use image prompt that pre-fills the asset-creation screen. The chat backend is configurable (local LM Studio/Ollama, DeepSeek, Claude, or ChatGPT).
+- **Gallery.** Every generated asset is persisted and browsable, filterable by type, date, and name.
+- **Print export.** Any gallery item exports as a print-ready PDF from A6 to A3 at 300 dpi. A premium path upscales low-resolution sources through a Real-ESRGAN ONNX model before layout.
+- **Credits and wallet.** Every paid AI call is debited against a per-tenant credit balance through a transactional ledger: the debit commits only when the call succeeds, and a failure triggers an automatic refund.
+- **Admin.** Operator-only screens to grant credits, grant recommendation access, look up accounts, and curate the reference catalogue (single add or bulk ZIP import).
+- **Localisation.** English and Romanian, locked at onboarding and carried end-to-end.
 
 ---
 
@@ -30,35 +38,48 @@ Turn raw product photos into professional AI-generated ads, catalogs, and wallpa
 ```
 /
 ├── backend/
-│   ├── MerchStoryAPI/                # ASP.NET Core minimal API
-│   │   ├── Auth/                     # JWT + refresh tokens
+│   ├── MerchStoryAPI/                # ASP.NET Core minimal API (main service)
+│   │   ├── Auth/                     # JWT + refresh tokens, RefreshTokenCleanupService
+│   │   ├── Categories/               # Reference-catalogue category tree
+│   │   ├── Common/                   # Shared helpers
 │   │   ├── Data/                     # EF Core DbContext (pgvector enabled)
-│   │   ├── Models/                   # AppUser, RefreshToken, ShopProfile, Product,
-│   │   │                             #   GeneratedImage, ReferenceImage, SocialPost
-│   │   ├── Migrations/
-│   │   ├── Shop/                     # Shop profile endpoints
-│   │   ├── Products/                 # Product CRUD
 │   │   ├── Gallery/                  # Generated-asset library
-│   │   ├── ImageGeneration/          # Generation endpoints + CatalogCompositor
-│   │   ├── ReferenceImages/          # CLIP embedding + vector search
-│   │   ├── Facebook/                 # Facebook OAuth + publishing
-│   │   └── Social/                   # Social post cache & sync
-│   ├── MerchStoryImageGeneration/    # Announcement / Catalog / Wallpaper services
-│   │   ├── Services/                 # GeminiImageProvider, MockImageProvider, ...
-│   │   ├── Models/                   # Request DTOs + BrandContext
-│   │   └── Extensions/
-│   └── MerchStory.Tests/             # xUnit integration tests
+│   │   ├── Geocoding/                # Nominatim geocoding for context signals
+│   │   ├── ImageGeneration/          # Generation endpoints + CatalogCompositor + Fonts
+│   │   ├── LlmServices/              # Claude (Anthropic) + OpenAI-compatible LLM judges
+│   │   ├── Migrations/               # EF Core migrations (pgvector-enabled)
+│   │   ├── Models/                   # AppUser, ShopProfile, Product, GeneratedImage,
+│   │   │                             #   ReferenceImage, CreditTransaction, DailyRecommendation,
+│   │   │                             #   IdeaEmbedding, PromoPlaybookEntry, Holiday, PrintJob, ...
+│   │   ├── Print/                    # PDF export + Real-ESRGAN upscaler + QR links
+│   │   ├── Products/                 # Product CRUD, photo upload, background removal
+│   │   ├── Recommendations/          # Daily recommendation engine + context providers + jobs
+│   │   ├── ReferenceImages/          # CLIP embedding service + pgvector search
+│   │   ├── Shop/                     # Shop profile endpoints
+│   │   ├── Storage/                  # Azure Blob Storage abstraction
+│   │   ├── Wallet/                   # Credit ledger endpoints
+│   │   └── Program.cs                # Endpoint wiring, DI, auth, CORS, telemetry
+│   ├── MerchStoryImageGeneration/    # Image generation + recommendation class library
+│   │   ├── Services/                 # Announcement/Catalog/Wallpaper services,
+│   │   │                             #   Gemini/OpenAI/Mock/Canned providers, Recommendations/
+│   │   ├── Models/                   # Request DTOs, BrandContext, recommendation DTOs
+│   │   └── Extensions/               # DI registration
+│   ├── MerchStory.Tests/             # xUnit integration tests
+│   ├── iopaint/                      # Dockerized IOPaint background-removal service
+│   └── models/                       # Gitignored ONNX models (CLIP, Real-ESRGAN)
 ├── frontend/                         # React Native (Expo) app
 │   ├── app/
 │   │   ├── (auth)/                   # Login & register
 │   │   ├── (setup)/                  # 3-step shop onboarding
-│   │   └── (tabs)/                   # index, products, gallery, wallpapers, analytics, profile
-│   ├── components/ui/                # Reusable UI components
-│   ├── context/                      # Auth, theme, shop, setup
-│   ├── utils/                        # API client
-│   └── constants/                    # Design tokens & theme
+│   │   └── (tabs)/                   # index, products, gallery, wallpapers, wallet, print,
+│   │                                 #   profile, studio/, admin + admin-grant screens
+│   ├── components/                   # Reusable UI components (incl. studio/)
+│   ├── context/                      # auth, theme, shop, setup
+│   ├── utils/                        # api.ts (central API client)
+│   └── constants/                    # design tokens & theme colors
 ├── docs/
-│   └── project-description.md        # Full product spec
+│   └── thesis/                       # LaTeX thesis (full product + architecture writeup)
+├── recommendation-eval/             # Offline evaluation harness for recommendation output
 ├── docker-compose.yml
 ├── docker-compose.override.yml
 └── .env.example                      # Environment variable template
@@ -95,40 +116,43 @@ For **local backend development** (without Docker), configure `backend/MerchStor
   "Google": {
     "ApiKey": "your_google_genai_api_key_here"
   },
-  "Facebook": {
-    "AppId": "your_facebook_app_id",
-    "AppSecret": "your_facebook_app_secret"
-  },
   "Clip": {
     "ModelPath": "./models/clip_vision_model.onnx"
   }
 }
 ```
 
-> Never commit real secrets. `appsettings.Development.json` is gitignored for this reason.
+> Never commit real secrets. `appsettings.Development.json` is gitignored for this reason. In production these values are sourced from Azure Key Vault.
+
+Optional configuration sections (all have safe defaults so the app runs without them):
+
+- `Recommendations:ProviderType` (`Mock` default, or `Llm`) and `Recommendations:Llm:Backend` (`Local`, `DeepSeek`, `Claude`, or `ChatGpt`) select the daily-recommendation engine and its chat backend.
+- `LlmJudge:Backend` (`Claude` default, or `Local`) picks the composite-judge model.
+- `ImageProvider:UseCannedImage=true` returns a fixed PNG instead of calling Gemini, for iterating on the compositor without paying for API calls.
+- `Storage:*` / `Azure:BlobServiceUri` configure Azure Blob Storage (Azurite for local dev, managed identity in production).
 
 ---
 
 ## CLIP Model (Search-by-Photo)
 
-The "find similar products from a photo" feature runs OpenAI's **CLIP ViT-B/32** vision model **locally** via ONNX Runtime — no external API calls, no per-request cost. Embeddings (512-dim) are stored in PostgreSQL using `pgvector` for similarity search.
+The "find similar products from a photo" feature runs OpenAI's **CLIP ViT-B/32** vision model **locally** via ONNX Runtime, with no external API calls and no per-request cost. Embeddings (512-dim) are stored in PostgreSQL using `pgvector` for similarity search.
 
 You must download the model file before the backend can start:
 
 1. Download `clip_vision_model.onnx` from the Qdrant mirror on Hugging Face:
    https://huggingface.co/Qdrant/clip-ViT-B-32-vision
-2. Place it somewhere the backend can read, e.g. `backend/MerchStoryAPI/models/clip_vision_model.onnx`.
+2. Place it somewhere the backend can read, e.g. `backend/models/clip_vision_model.onnx`.
 3. Point the `Clip:ModelPath` setting at it (see the `appsettings.Development.json` example above), or set the env var `Clip__ModelPath=/path/to/clip_vision_model.onnx`.
 
 For Docker, mount the model into the backend container and set `Clip__ModelPath` to the in-container path (the compose file already expects this).
 
-The model is ~350 MB. It is **not** committed to the repo.
+The model is ~350 MB. It is **not** committed to the repo. The premium print path uses a separate Real-ESRGAN ONNX model, also gitignored; if it is absent, print export still works for sources already at the target resolution.
 
 ---
 
 ## Running with Docker (Recommended)
 
-This starts the database, backend, and frontend together:
+This starts the database, backend, frontend, and the IOPaint background-removal service together:
 
 ```bash
 docker compose up --build
@@ -138,6 +162,7 @@ docker compose up --build
 |---------|-----|
 | Frontend | http://localhost:3000 |
 | Backend API | http://localhost:5257 |
+| IOPaint | http://localhost:8080 |
 | PostgreSQL | localhost:5432 |
 
 To stop:
@@ -169,7 +194,7 @@ dotnet ef database update
 dotnet run
 ```
 
-The API will be available at `http://localhost:5257`.
+The API will be available at `http://localhost:5257`. Migrations are also applied automatically on startup.
 
 ### Adding a New Migration
 
@@ -193,9 +218,9 @@ npm start
 ```
 
 Then press:
-- `a` — open on Android emulator
-- `i` — open on iOS simulator
-- `w` — open in web browser
+- `a` to open on Android emulator
+- `i` to open on iOS simulator
+- `w` to open in web browser
 
 Or scan the QR code with the **Expo Go** app on your phone.
 
@@ -283,19 +308,20 @@ Ensure your code passes locally before opening a PR.
 
 All non-auth routes require a `Bearer <jwt>` header.
 
-| Group | Purpose |
-|-------|---------|
-| `/auth/*` | Register, login, refresh token |
-| `/shop/*` | Shop profile — brand colors, logo, contact info |
-| `/products/*` | Product CRUD and photo upload |
-| `/reference-images/*` | CLIP-based search-by-photo (pgvector) |
-| `/gallery/*` | User's generated-asset library |
-| `/image-generation/*` | Announcement / catalog / wallpaper generation (Gemini) |
-| `/facebook/*` | Facebook OAuth + page publishing |
-| `/social/*` | Cached social-post feed |
+| Group | Prefix | Purpose |
+|-------|--------|---------|
+| Auth | `/auth` | Register, log in, refresh tokens, change interface language |
+| Shop | `/shop` | Read and update the shop profile and logo |
+| Products | `/products` | Product CRUD, photo upload, one-tap background removal |
+| Reference catalogue | `/reference-images` | Browse, search-by-photo (CLIP/pgvector), and bulk import |
+| Image generation | `/generate-image` | Announcements, catalogs, and wallpapers (fully generative or hybrid) |
+| Gallery | `/gallery` | Save, list, rename, and delete generated assets |
+| Wallet | `/wallet` | Read the credit balance and ledger, grant credits (operator only) |
+| Recommendations | `/recommendations` | Fetch today's ideas, request a refresh, leave feedback |
+| Print | `/print` | Render a gallery item to a print-ready PDF |
 
 ---
 
-## Docs
+## Cloud Deployment
 
-See [docs/project-description.md](docs/project-description.md) for the full product spec and feature roadmap (P0 → P1 → P2).
+The service runs on Microsoft Azure: Container Apps for the stateless API, Azure Database for PostgreSQL Flexible Server (with pgvector) for relational data and embeddings, Azure Blob Storage for binary assets, Azure Key Vault for secrets, and Application Insights / Azure Monitor for logs and traces. See [docs/thesis/](docs/thesis/) for the full architecture and deployment chapter.
