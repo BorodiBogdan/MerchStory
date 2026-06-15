@@ -160,10 +160,44 @@ public static class WalletRoutes
                     u.Email ?? string.Empty,
                     u.UserName ?? string.Empty,
                     u.IsAdmin,
-                    u.CreditBalance))
+                    u.CreditBalance,
+                    u.CanViewRecommendations))
                 .ToListAsync(ct);
 
             return Results.Ok(matches);
+        }).RequireAuthorization("AdminOnly");
+
+        group.MapPost("/grant-recommendations", async (
+            SetRecommendationsAccessRequest request,
+            UserManager<AppUser> userManager,
+            ILogger<Program> logger) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.UserEmail))
+            {
+                return Results.BadRequest("UserEmail is required.");
+            }
+
+            AppUser? target = await userManager.FindByEmailAsync(request.UserEmail.Trim());
+            if (target is null)
+            {
+                return Results.NotFound(new { detail = "User not found." });
+            }
+
+            target.CanViewRecommendations = request.CanView;
+            IdentityResult result = await userManager.UpdateAsync(target);
+            if (!result.Succeeded)
+            {
+                logger.LogWarning(
+                    "Failed to set recommendations access for {Email}: {Errors}",
+                    request.UserEmail,
+                    string.Join(", ", result.Errors.Select(e => e.Description)));
+                return Results.Problem("Failed to update recommendations access.", statusCode: 500);
+            }
+
+            return Results.Ok(new SetRecommendationsAccessResponse(
+                target.Id,
+                target.Email!,
+                target.CanViewRecommendations));
         }).RequireAuthorization("AdminOnly");
     }
 

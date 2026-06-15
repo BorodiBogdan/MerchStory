@@ -46,6 +46,12 @@ public static class RecommendationsRoutes
             return Results.Unauthorized();
         }
 
+        UserGate? gate = await GetUserGateAsync(db, userId, ct);
+        if (gate is null || !(gate.IsAdmin || gate.CanViewRecommendations))
+        {
+            return Results.Forbid();
+        }
+
         DateTime todayStart = DateTime.UtcNow.Date;
         DateTime tomorrowStart = todayStart.AddDays(1);
         DailyRecommendation? existing = await db.DailyRecommendations
@@ -57,7 +63,7 @@ public static class RecommendationsRoutes
 
         if (existing is not null)
         {
-            string targetLang = await ResolveTargetLangAsync(db, userId, lang, ct);
+            string targetLang = ResolveTargetLang(lang, gate.PreferredLanguage);
             return Results.Ok(await MapReadyAsync(existing, targetLang, db, userId, ct));
         }
 
@@ -97,6 +103,12 @@ public static class RecommendationsRoutes
             return Results.Unauthorized();
         }
 
+        UserGate? gate = await GetUserGateAsync(db, userId, ct);
+        if (gate is null || !(gate.IsAdmin || gate.CanViewRecommendations))
+        {
+            return Results.Forbid();
+        }
+
         JobEntry? entry = registry.Get(jobId);
         if (entry is null || entry.UserId != userId)
         {
@@ -132,7 +144,7 @@ public static class RecommendationsRoutes
                         Error: "Recommendation row missing after job completion."));
                 }
 
-                string targetLangForJob = await ResolveTargetLangAsync(db, userId, lang, ct);
+                string targetLangForJob = ResolveTargetLang(lang, gate.PreferredLanguage);
                 return Results.Ok(await MapReadyAsync(row, targetLangForJob, db, userId, ct));
 
             default:
@@ -152,6 +164,12 @@ public static class RecommendationsRoutes
         if (userId is null)
         {
             return Results.Unauthorized();
+        }
+
+        UserGate? gate = await GetUserGateAsync(db, userId, ct);
+        if (gate is null || !(gate.IsAdmin || gate.CanViewRecommendations))
+        {
+            return Results.Forbid();
         }
 
         if (string.IsNullOrWhiteSpace(request.IdeaId))
@@ -274,14 +292,10 @@ public static class RecommendationsRoutes
     //   1. Explicit `?lang=` query param from the frontend (its useI18n() value).
     //      The frontend's i18n state is the source of truth — it can change
     //      faster than AppUser.PreferredLanguage syncs.
-    //   2. AppUser.PreferredLanguage as fallback when the param is absent /
-    //      malformed (e.g. someone hits the API directly).
-    //   3. "en" when no user record either.
-    private static async Task<string> ResolveTargetLangAsync(
-        AppDbContext db,
-        string userId,
-        string? queryLang,
-        CancellationToken ct)
+    //   2. AppUser.PreferredLanguage (already loaded with the access gate) as
+    //      fallback when the param is absent / malformed (e.g. someone hits the
+    //      API directly).
+    private static string ResolveTargetLang(string? queryLang, AppLanguage userLang)
     {
         if (!string.IsNullOrWhiteSpace(queryLang))
         {
@@ -292,25 +306,22 @@ public static class RecommendationsRoutes
             }
         }
 
-        return await GetTargetLangAsync(db, userId, ct);
-    }
-
-    // Reads the user's app-language preference (AppUser.PreferredLanguage)
-    // and normalizes to an ISO-639-1 lang code matching the keys in
-    // IdeaDto.Translations. Returns "en" when the user record is missing.
-    private static async Task<string> GetTargetLangAsync(AppDbContext db, string userId, CancellationToken ct)
-    {
-        AppLanguage? lang = await db.Users
-            .Where(u => u.Id == userId)
-            .Select(u => (AppLanguage?)u.PreferredLanguage)
-            .FirstOrDefaultAsync(ct);
-
-        return lang switch
+        return userLang switch
         {
             AppLanguage.RO => "ro",
             _ => "en",
         };
     }
+
+    // Single projected read backing the access gate. Promotion ideas are only
+    // available to admins and to users an admin has explicitly granted access
+    // to (AppUser.CanViewRecommendations). PreferredLanguage rides along so the
+    // handlers don't need a second db.Users round-trip to localize ideas.
+    private static Task<UserGate?> GetUserGateAsync(AppDbContext db, string userId, CancellationToken ct) =>
+        db.Users
+            .Where(u => u.Id == userId)
+            .Select(u => new UserGate(u.IsAdmin, u.CanViewRecommendations, u.PreferredLanguage))
+            .FirstOrDefaultAsync(ct);
 
     private static RecommendationResponse MapGenerating(Guid jobId) => new(
         Status: "generating",
@@ -323,6 +334,8 @@ public static class RecommendationsRoutes
     private static string? GetUserId(ClaimsPrincipal principal) =>
         principal.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+    private sealed record UserGate(bool IsAdmin, bool CanViewRecommendations, AppLanguage PreferredLanguage);
 }
 
 // Discriminated response. Status is the only always-present field; everything

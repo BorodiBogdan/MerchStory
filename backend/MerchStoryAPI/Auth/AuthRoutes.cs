@@ -58,7 +58,8 @@ public static class AuthRoutes
                 false,
                 user.IsAdmin,
                 user.PreferredLanguage.ToString(),
-                user.CreditBalance));
+                user.CreditBalance,
+                user.CanViewRecommendations));
         });
 
         group.MapPost("/login", async (
@@ -105,7 +106,8 @@ public static class AuthRoutes
                 hasProfile,
                 user.IsAdmin,
                 user.PreferredLanguage.ToString(),
-                user.CreditBalance));
+                user.CreditBalance,
+                user.CanViewRecommendations));
         });
 
         group.MapPost("/refresh", async (
@@ -141,7 +143,8 @@ public static class AuthRoutes
                 hasProfile,
                 stored.User.IsAdmin,
                 stored.User.PreferredLanguage.ToString(),
-                stored.User.CreditBalance));
+                stored.User.CreditBalance,
+                stored.User.CanViewRecommendations));
         });
 
         group.MapPut("/language", async (

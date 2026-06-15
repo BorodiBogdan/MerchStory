@@ -8,6 +8,8 @@ public class AppUser : IdentityUser
 
     public bool IsAdmin { get; set; }
 
+    public bool CanViewRecommendations { get; set; }
+
     public AppLanguage PreferredLanguage { get; set; } = AppLanguage.EN;
 
     public bool HasSetLanguagePreference { get; set; }
