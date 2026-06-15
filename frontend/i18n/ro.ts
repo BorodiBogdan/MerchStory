@@ -950,6 +950,8 @@ const ro: Dictionary = {
   'studio.offer.bundleTotal': 'Total pachet',
   'studio.offer.customPercent': 'Custom',
   'studio.offer.editPrice': 'Modifică prețul',
+  'studio.offer.discountedPriceLabel': 'După reducere',
+  'studio.offer.editDiscountedPrice': 'Modifică prețul după reducere',
   'studio.offer.continue': 'Continuă',
   'studio.offer.back': 'Înapoi',
   'studio.offer.optionsTitle': 'Opțiuni de generare',
@@ -963,6 +965,9 @@ const ro: Dictionary = {
   'studio.offer.optNames': 'Afișează nume produse',
   'studio.offer.optPreserve': 'Păstrează imaginile produselor',
   'studio.offer.optLayout': 'Aranjament',
+  'studio.offer.optShowDiscountPercent': 'Afișează procentajul reducerii',
+  'studio.offer.optShowDiscountPercentHelp':
+    'Când este activat, imaginea afișează procentajul reducerii (de exemplu 25%). Când este dezactivat, afișează doar prețul nou cu prețul vechi tăiat.',
   'studio.offer.namesDisabledNote': 'Numele produselor sunt ascunse pentru grupuri și pachete.',
 };
 

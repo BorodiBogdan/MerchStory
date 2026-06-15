@@ -34,7 +34,8 @@ public sealed record CatalogImageRequest(
     string? BrandColors = null,  // shop palette, only used when ColorTheme == "Brand Colors"
     CatalogOffer? Offer = null,  // discount / group / bundle deal (non-preserve only)
     string? ImageModel = null,   // "gemini" (default / nano banana) | "openai"
-    bool ShowStockDisclaimer = false);  // render an "in limita stocului disponibil" / "while stocks last" line
+    bool ShowStockDisclaimer = false,  // render an "in limita stocului disponibil" / "while stocks last" line
+    bool ShowDiscountPercentage = true);  // state the discount % (e.g. "25% off"); when false only old+new price show
 
 public sealed record ProductMarkerAssignment(string ProductName, string MarkerHex);
 

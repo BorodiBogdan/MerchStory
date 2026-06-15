@@ -412,6 +412,9 @@ export interface GenerateCatalogImageParams {
   currency?: Currency;
   language?: AppLanguage;
   offer?: CatalogOfferConfig;
+  // When on, the image states the discount % (e.g. "25% off"); when off it shows only
+  // the new price with the old price crossed out. Off by default.
+  showDiscountPercentage?: boolean;
   // When on, the image includes a small "while stocks last" disclaimer. Off by default.
   showStockDisclaimer?: boolean;
   // Which image model generates the catalog: 'gemini' (nano banana, default) | 'openai'.

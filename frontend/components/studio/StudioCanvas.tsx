@@ -1663,6 +1663,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [showNamesHelp, setShowNamesHelp] = useState(false);
   const [showStockDisclaimer, setShowStockDisclaimer] = useState(false);
   const [showStockDisclaimerHelp, setShowStockDisclaimerHelp] = useState(false);
+  // Whether the generated image states the discount % or just old+new price. Off by
+  // default; toggled on the offer modal's review step (only when a discount exists).
+  const [showDiscountPercentage, setShowDiscountPercentage] = useState(false);
   const [showBackgroundStyleHelp, setShowBackgroundStyleHelp] = useState(false);
   const [reviewMode, setReviewMode] = useState<null | 'catalog' | 'wallpaperOn'>(null);
   // In-modal base-price overrides (productId -> price), applied to the next generation only.
@@ -1802,6 +1805,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         brandContextFields: catalogFields.length > 0 ? catalogFields : undefined,
         currency: catalogCurrency,
         offer,
+        showDiscountPercentage,
         showStockDisclaimer,
         imageModel: catalogImageModel,
       });
@@ -3409,6 +3413,8 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           }
           generating={reviewMode === 'wallpaperOn' ? wallpaperOnGenerating : catalogGenerating}
           cost={reviewMode === 'wallpaperOn' ? undefined : 1}
+          showDiscountPercentage={showDiscountPercentage}
+          onShowDiscountPercentageChange={setShowDiscountPercentage}
           onCancel={() => setReviewMode(null)}
           onContinue={(offer, overrides) => {
             priceOverridesRef.current = overrides;
@@ -4740,6 +4746,8 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         showProductNames={reviewMode === 'wallpaperOn' ? showProductNames : showCatalogProductNames}
         generating={reviewMode === 'wallpaperOn' ? wallpaperOnGenerating : catalogGenerating}
         cost={reviewMode === 'wallpaperOn' ? undefined : 1}
+        showDiscountPercentage={showDiscountPercentage}
+        onShowDiscountPercentageChange={setShowDiscountPercentage}
         onCancel={() => setReviewMode(null)}
         onContinue={(offer, overrides) => {
           priceOverridesRef.current = overrides;

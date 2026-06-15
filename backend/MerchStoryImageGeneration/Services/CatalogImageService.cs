@@ -517,6 +517,7 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
     {
         CatalogOffer offer = r.Offer!;
         bool showPrices = r.ShowPrices;
+        bool showPercent = r.ShowDiscountPercentage;
         var grouped = new HashSet<CatalogProductItem>(offer.Groups.SelectMany(g => g.Items));
         var loose = r.Products.Where(p => !grouped.Contains(p)).ToList();
 
@@ -530,9 +531,11 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             "design, NOT a plain number floating in a corner. ");
         if (offer.Groups.Any(g => g.Percent > 0))
         {
-            sb.Append(
-                "Where an offer has a percentage discount, show that discount percentage prominently, " +
-                "the original price clearly crossed out, and the new discounted price as the hero. ");
+            sb.Append(showPercent
+                ? "Where an offer has a percentage discount, show that discount percentage prominently, " +
+                  "the original price clearly crossed out, and the new discounted price as the hero. "
+                : "Where an offer has a discount, show the original price clearly crossed out and the new " +
+                  "discounted price as the hero, WITHOUT stating any discount percentage anywhere. ");
         }
 
         int idx = 1;
@@ -593,18 +596,22 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
                     sb.Append("This total is only for the items the customer pays for. The free item is a bonus on top: do NOT add it into or subtract it from this price, and do NOT present the free item as a price reduction or a crossed-out total. ");
                     if (g.Percent > 0 && g.BundleOriginalPrice is decimal originalPrice && originalPrice != bundlePrice)
                     {
-                        sb.Append($"This price is {FormatPercent(g.Percent)} off the usual {CurrencyFormatter.Format(originalPrice, r.Currency)}; show that discount with the original crossed out. ");
+                        sb.Append(showPercent
+                            ? $"This price is {FormatPercent(g.Percent)} off the usual {CurrencyFormatter.Format(originalPrice, r.Currency)}; show that discount with the original crossed out. "
+                            : $"This price is reduced from the usual {CurrencyFormatter.Format(originalPrice, r.Currency)}; show the original crossed out, WITHOUT stating any discount percentage. ");
                     }
                 }
                 else if (g.Percent > 0)
                 {
-                    sb.Append($"The bundle is {FormatPercent(g.Percent)} off; make the discount obvious without showing any prices. ");
+                    sb.Append(showPercent
+                        ? $"The bundle is {FormatPercent(g.Percent)} off; make the discount obvious without showing any prices. "
+                        : "The bundle is on sale at a reduced price; make the promotion obvious without showing any prices or stating a discount percentage. ");
                 }
             }
             else
             {
                 bool allEqual = g.Items.Select(p => p.Price).Distinct().Count() == 1;
-                string discountPhrase = g.Percent > 0 ? $", each {FormatPercent(g.Percent)} off" : string.Empty;
+                string discountPhrase = g.Percent > 0 && showPercent ? $", each {FormatPercent(g.Percent)} off" : string.Empty;
                 sb.Append($"Offer {idx} — a GROUP of {g.Items.Count} products sold separately{discountPhrase}: {names}. ");
                 sb.Append("Show these products right next to each other as one cluster, never scattered to different corners. ");
 
@@ -628,7 +635,9 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
                 }
                 else if (g.Percent > 0)
                 {
-                    sb.Append($"They are {FormatPercent(g.Percent)} off; make the discount obvious without showing any prices. ");
+                    sb.Append(showPercent
+                        ? $"They are {FormatPercent(g.Percent)} off; make the discount obvious without showing any prices. "
+                        : "They are on sale at a reduced price; make the promotion obvious without showing any prices or stating a discount percentage. ");
                 }
             }
 

@@ -935,6 +935,8 @@ const en = {
   'studio.offer.bundleTotal': 'Bundle total',
   'studio.offer.customPercent': 'Custom',
   'studio.offer.editPrice': 'Edit price',
+  'studio.offer.discountedPriceLabel': 'After discount',
+  'studio.offer.editDiscountedPrice': 'Edit price after discount',
   'studio.offer.continue': 'Continue',
   'studio.offer.back': 'Back',
   'studio.offer.optionsTitle': 'Generation options',
@@ -948,6 +950,9 @@ const en = {
   'studio.offer.optNames': 'Show product names',
   'studio.offer.optPreserve': 'Preserve product images',
   'studio.offer.optLayout': 'Layout',
+  'studio.offer.optShowDiscountPercent': 'Show discount percentage',
+  'studio.offer.optShowDiscountPercentHelp':
+    'When on, the image states the discount percentage (for example 25%). When off, it shows only the new price with the old price crossed out.',
   'studio.offer.namesDisabledNote': 'Product names are hidden for groups and bundles.',
 };
 
