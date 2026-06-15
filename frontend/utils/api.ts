@@ -412,6 +412,8 @@ export interface GenerateCatalogImageParams {
   currency?: Currency;
   language?: AppLanguage;
   offer?: CatalogOfferConfig;
+  // When on, the image includes a small "while stocks last" disclaimer. Off by default.
+  showStockDisclaimer?: boolean;
   // Which image model generates the catalog: 'gemini' (nano banana, default) | 'openai'.
   imageModel?: 'gemini' | 'openai';
 }

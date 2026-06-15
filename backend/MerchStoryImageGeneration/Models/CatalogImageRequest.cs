@@ -33,7 +33,8 @@ public sealed record CatalogImageRequest(
     bool ShowProductNames = false,
     string? BrandColors = null,  // shop palette, only used when ColorTheme == "Brand Colors"
     CatalogOffer? Offer = null,  // discount / group / bundle deal (non-preserve only)
-    string? ImageModel = null);  // "gemini" (default / nano banana) | "openai"
+    string? ImageModel = null,   // "gemini" (default / nano banana) | "openai"
+    bool ShowStockDisclaimer = false);  // render an "in limita stocului disponibil" / "while stocks last" line
 
 public sealed record ProductMarkerAssignment(string ProductName, string MarkerHex);
 

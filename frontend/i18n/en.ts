@@ -697,6 +697,9 @@ const en = {
   'studio.showProductNames': 'Show product names',
   'studio.showProductNames.helper':
     'When on, each product is labeled with its name. When off, no name typography is rendered — the products and prices speak for themselves.',
+  'studio.showStockDisclaimer': 'Stock disclaimer',
+  'studio.showStockDisclaimer.helper':
+    'When on, a small “While stocks last” disclaimer is added somewhere in the image (usually a footer). Off by default.',
   'studio.opt.backgroundStyle': 'Background style',
   'studio.backgroundStyle.socialPost': 'Social post',
   'studio.backgroundStyle.realistic': 'Realistic',

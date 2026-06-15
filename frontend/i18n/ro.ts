@@ -705,6 +705,9 @@ const ro: Dictionary = {
   'studio.showProductNames': 'Afișează numele produselor',
   'studio.showProductNames.helper':
     'Când este activat, fiecare produs este etichetat cu numele său. Când este dezactivat, nu se afișează niciun text cu nume — produsele și prețurile vorbesc de la sine.',
+  'studio.showStockDisclaimer': 'Disclaimer stoc',
+  'studio.showStockDisclaimer.helper':
+    'Când este activat, se adaugă undeva în imagine (de obicei în subsol) un mic disclaimer „În limita stocului disponibil”. Dezactivat implicit.',
   'studio.opt.backgroundStyle': 'Stil fundal',
   'studio.backgroundStyle.socialPost': 'Postare social',
   'studio.backgroundStyle.realistic': 'Realist',

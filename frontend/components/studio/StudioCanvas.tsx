@@ -1647,7 +1647,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [showProductNames, setShowProductNames] = useState(true);
   const [showCatalogProductNames, setShowCatalogProductNames] = useState(false);
   const [backgroundStyle, setBackgroundStyle] = useState<'SocialPost' | 'Realistic'>('SocialPost');
-  const [catalogImageModel, setCatalogImageModel] = useState<'gemini' | 'openai'>('gemini');
+  const [catalogImageModel, setCatalogImageModel] = useState<'gemini' | 'openai'>('openai');
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   // The wallpaper-generation modal opens its own copy of the picker (the canvas FAB is
   // covered by the modal), but shares the same image-model selection as catalog/announcements.
@@ -1661,6 +1661,8 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [showPreserveHelp, setShowPreserveHelp] = useState(false);
   const [showPricesHelp, setShowPricesHelp] = useState(false);
   const [showNamesHelp, setShowNamesHelp] = useState(false);
+  const [showStockDisclaimer, setShowStockDisclaimer] = useState(false);
+  const [showStockDisclaimerHelp, setShowStockDisclaimerHelp] = useState(false);
   const [showBackgroundStyleHelp, setShowBackgroundStyleHelp] = useState(false);
   const [reviewMode, setReviewMode] = useState<null | 'catalog' | 'wallpaperOn'>(null);
   // In-modal base-price overrides (productId -> price), applied to the next generation only.
@@ -1800,6 +1802,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         brandContextFields: catalogFields.length > 0 ? catalogFields : undefined,
         currency: catalogCurrency,
         offer,
+        showStockDisclaimer,
         imageModel: catalogImageModel,
       });
       setCatalogResult(result);
@@ -2265,12 +2268,40 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             {showNamesHelp && (
               <Text style={styles.toggleHelper}>{t('studio.showProductNames.helper')}</Text>
             )}
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleLabelRow}>
+                <Text style={styles.toggleLabel}>{t('studio.showStockDisclaimer')}</Text>
+                <Pressable
+                  onPress={() => setShowStockDisclaimerHelp((v) => !v)}
+                  hitSlop={8}
+                  style={styles.infoButton}
+                  accessibilityLabel={t('studio.showStockDisclaimer')}
+                >
+                  <Ionicons
+                    name={
+                      showStockDisclaimerHelp ? 'information-circle' : 'information-circle-outline'
+                    }
+                    size={18}
+                    color={colors.text.muted}
+                  />
+                </Pressable>
+              </View>
+              <Switch
+                value={showStockDisclaimer}
+                onValueChange={setShowStockDisclaimer}
+                thumbColor={showStockDisclaimer ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            {showStockDisclaimerHelp && (
+              <Text style={styles.toggleHelper}>{t('studio.showStockDisclaimer.helper')}</Text>
+            )}
             <View style={styles.toggleLabelRow}>
               <OptionLabel label={t('studio.opt.backgroundStyle')} />
               <Pressable
                 onPress={() => setShowBackgroundStyleHelp((v) => !v)}
                 hitSlop={8}
-                style={styles.infoButton}
+                style={styles.labelInfoButton}
                 accessibilityLabel={t('studio.opt.backgroundStyle')}
               >
                 <Ionicons
@@ -3599,12 +3630,44 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     {showNamesHelp && (
                       <Text style={styles.toggleHelper}>{t('studio.showProductNames.helper')}</Text>
                     )}
+                    <View style={styles.toggleRow}>
+                      <View style={styles.toggleLabelRow}>
+                        <Text style={styles.toggleLabel}>{t('studio.showStockDisclaimer')}</Text>
+                        <Pressable
+                          onPress={() => setShowStockDisclaimerHelp((v) => !v)}
+                          hitSlop={8}
+                          style={styles.infoButton}
+                          accessibilityLabel={t('studio.showStockDisclaimer')}
+                        >
+                          <Ionicons
+                            name={
+                              showStockDisclaimerHelp
+                                ? 'information-circle'
+                                : 'information-circle-outline'
+                            }
+                            size={18}
+                            color={colors.text.muted}
+                          />
+                        </Pressable>
+                      </View>
+                      <Switch
+                        value={showStockDisclaimer}
+                        onValueChange={setShowStockDisclaimer}
+                        thumbColor={showStockDisclaimer ? colors.accent.primary : colors.text.muted}
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                    {showStockDisclaimerHelp && (
+                      <Text style={styles.toggleHelper}>
+                        {t('studio.showStockDisclaimer.helper')}
+                      </Text>
+                    )}
                     <View style={styles.toggleLabelRow}>
                       <OptionLabel label={t('studio.opt.backgroundStyle')} />
                       <Pressable
                         onPress={() => setShowBackgroundStyleHelp((v) => !v)}
                         hitSlop={8}
-                        style={styles.infoButton}
+                        style={styles.labelInfoButton}
                         accessibilityLabel={t('studio.opt.backgroundStyle')}
                       >
                         <Ionicons
@@ -5320,6 +5383,13 @@ function makeStyles(
     },
     infoButton: {
       padding: 2,
+    },
+    // Info button sitting next to an OptionLabel: match the label's own vertical
+    // margins so the icon centers on the label text instead of riding high above it.
+    labelInfoButton: {
+      padding: 2,
+      marginTop: D.spacing.md,
+      marginBottom: D.spacing.xs,
     },
     toggleHelper: {
       fontSize: D.fontSize.xs,
