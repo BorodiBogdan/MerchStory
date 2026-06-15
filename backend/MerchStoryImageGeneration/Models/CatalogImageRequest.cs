@@ -30,7 +30,6 @@ public sealed record CatalogImageRequest(
     bool PreserveProductImages = false,
     IReadOnlyList<ProductMarkerAssignment>? MarkerAssignments = null,
     string BackgroundStyle = "SocialPost",  // "Realistic" | "SocialPost"
-    bool ShowProductNames = false,
     string? BrandColors = null,  // shop palette, only used when ColorTheme == "Brand Colors"
     CatalogOffer? Offer = null,  // discount / group / bundle deal (non-preserve only)
     string? ImageModel = null,   // "gemini" (default / nano banana) | "openai"

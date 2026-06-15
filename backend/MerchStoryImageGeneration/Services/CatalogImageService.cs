@@ -449,8 +449,6 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
     {
         string symbol = CurrencyFormatter.SymbolFor(r.Currency);
         string nameList = string.Join(", ", r.Products.Select(p => p.Name));
-        string namedWithPrices = string.Join(", ", r.Products.Select(p =>
-            $"{p.Name} ({CurrencyFormatter.Format(p.Price, r.Currency)})"));
         string priceList = string.Join(", ", r.Products.Select(p =>
             CurrencyFormatter.Format(p.Price, r.Currency)));
 
@@ -473,15 +471,13 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
 
         bool hasOffer = r.Offer is not null && r.Offer.Groups.Count > 0;
 
+        // AI-generated catalogs never render product-name labels (the model renders
+        // text poorly); names are only overlaid by the on-wallpaper compositor.
         string productsClause = hasOffer
             ? BuildOfferClause(r)
-            : (r.ShowProductNames, r.ShowPrices) switch
-            {
-                (true, true) => $"Products: {namedWithPrices}. Render each product's name as flat typography near its product. ",
-                (true, false) => $"Products: {nameList}. Render each product's name as flat typography near its product. ",
-                (false, true) => $"Products (in order): {nameList}. Show only the prices ({priceList}) — one price per product, in the same order — and do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
-                (false, false) => $"Products (in order, for context only): {nameList}. Do NOT render any product name labels, captions, or product-name typography anywhere in the image. ",
-            };
+            : r.ShowPrices
+                ? $"Products (in order): {nameList}. Show only the prices ({priceList}) — one price per product, in the same order — and do NOT render any product name labels, captions, or product-name typography anywhere in the image. "
+                : $"Products (in order, for context only): {nameList}. Do NOT render any product name labels, captions, or product-name typography anywhere in the image. ";
 
         string priceClause = r.ShowPrices
             ? $"Display prices prominently using the {r.Currency} currency (symbol: {symbol})."
@@ -733,12 +729,10 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
               "This is essential because the real reference image will be composited over your rendering afterward; any deviation in shape, position, orientation, or aspect ratio will cause a visible misalignment where the composited product stretches, crops, or falls off-center.\n\n"
             : string.Empty;
 
-        string nameSuppression = r.ShowProductNames
-            ? "PRODUCT NAME TEXT — DO render each product's name as flat, clearly readable typography near (but outside the quiet zone of) its corresponding product. " +
-              "One name per product, paired unambiguously with its product. Flat typography only — no decorative outline, frame, or stroke around the name text.\n\n"
-            : "PRODUCT NAME TEXT — DO NOT render any product name labels, captions, headings, or product-name typography in the image. " +
-              "The product silhouettes and the scene speak for themselves; no name text appears anywhere in the rendered output. " +
-              "The product names listed in the marker assignments above are STRUCTURAL only (used to associate each product with its outline color) — they are NOT to appear as visible text.\n\n";
+        string nameSuppression =
+            "PRODUCT NAME TEXT — DO NOT render any product name labels, captions, headings, or product-name typography in the image. " +
+            "The product silhouettes and the scene speak for themselves; no name text appears anywhere in the rendered output. " +
+            "The product names listed in the marker assignments above are STRUCTURAL only (used to associate each product with its outline color) — they are NOT to appear as visible text.\n\n";
 
         return
             $"IMPORTANT!!!!!: " +

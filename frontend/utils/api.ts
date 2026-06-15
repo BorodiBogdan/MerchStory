@@ -407,7 +407,6 @@ export interface GenerateCatalogImageParams {
   colorTheme: string;
   format: string;
   showPrices: boolean;
-  showProductNames?: boolean;
   backgroundStyle?: 'Realistic' | 'SocialPost';
   preserveProductImages?: boolean;
   brandContextFields?: string[];

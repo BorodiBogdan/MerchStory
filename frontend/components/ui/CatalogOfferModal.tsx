@@ -60,6 +60,9 @@ interface CatalogOfferModalProps {
   allowOffer?: boolean;
   /** Settings recap shown on the final "generation options" step. */
   optionsSummary?: OfferOptionSummary[];
+  /** Whether to render the "product names" recap row. Only the on-wallpaper flow
+   *  overlays names; AI-generated catalogs never do, so they hide the row. */
+  showNamesRow?: boolean;
   /** Current "show product names" toggle; the review step renders it (and forces
    *  it off when the offer has a group/bundle). */
   showProductNames?: boolean;
@@ -90,6 +93,7 @@ export function CatalogOfferModal({
   subtitle,
   allowOffer = true,
   optionsSummary = [],
+  showNamesRow = true,
   showProductNames = false,
   generating = false,
   cost,
@@ -922,20 +926,21 @@ export function CatalogOfferModal({
                   {optionsSummary.map((opt, i) =>
                     renderOptionRow(opt, !showDiscountToggle && i === 0)
                   )}
-                  {(() => {
-                    const namesForced = allowOffer && offerHasGrouping(groups);
-                    const namesOn = !namesForced && showProductNames;
-                    return renderOptionRow(
-                      {
-                        label: t('studio.offer.optNames'),
-                        icon: 'text-outline',
-                        value: namesOn ? t('studio.offer.optOn') : t('studio.offer.optOff'),
-                        tone: namesOn ? 'on' : 'off',
-                      },
-                      !showDiscountToggle && optionsSummary.length === 0,
-                      namesForced ? t('studio.offer.namesDisabledNote') : undefined
-                    );
-                  })()}
+                  {showNamesRow &&
+                    (() => {
+                      const namesForced = allowOffer && offerHasGrouping(groups);
+                      const namesOn = !namesForced && showProductNames;
+                      return renderOptionRow(
+                        {
+                          label: t('studio.offer.optNames'),
+                          icon: 'text-outline',
+                          value: namesOn ? t('studio.offer.optOn') : t('studio.offer.optOff'),
+                          tone: namesOn ? 'on' : 'off',
+                        },
+                        !showDiscountToggle && optionsSummary.length === 0,
+                        namesForced ? t('studio.offer.namesDisabledNote') : undefined
+                      );
+                    })()}
                 </View>
               </ScrollView>
 

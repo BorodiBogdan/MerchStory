@@ -61,7 +61,6 @@ import {
   type GenerateImageResponse,
   generateWallpaper,
   InsufficientCreditsError,
-  offerHasGrouping,
   type PlacementZone,
   type ProductItem,
   saveToGallery,
@@ -1645,7 +1644,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [catalogFormat, setCatalogFormat] = useState('Poster');
   const [showPrices, setShowPrices] = useState(true);
   const [showProductNames, setShowProductNames] = useState(true);
-  const [showCatalogProductNames, setShowCatalogProductNames] = useState(false);
   const [backgroundStyle, setBackgroundStyle] = useState<'SocialPost' | 'Realistic'>('SocialPost');
   const [catalogImageModel, setCatalogImageModel] = useState<'gemini' | 'openai'>('openai');
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
@@ -1660,7 +1658,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [preserveProductImages, setPreserveProductImages] = useState(false);
   const [showPreserveHelp, setShowPreserveHelp] = useState(false);
   const [showPricesHelp, setShowPricesHelp] = useState(false);
-  const [showNamesHelp, setShowNamesHelp] = useState(false);
   const [showStockDisclaimer, setShowStockDisclaimer] = useState(false);
   const [showStockDisclaimerHelp, setShowStockDisclaimerHelp] = useState(false);
   // Whether the generated image states the discount % or just old+new price. Off by
@@ -1792,14 +1789,11 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
       // chips, so they are excluded from the catalog's brand-context fields.
       const catalogFields = catalogContextFields.filter((k) => k !== 'brandColors');
       const offer = catalogOfferRef.current ?? undefined;
-      // Product-name labels are hidden whenever the offer has a group or bundle.
-      const namesForcedOff = offer?.isOffer ? offerHasGrouping(offer.groups) : false;
       const result = await generateCatalogImage({
         products: productsWithImages,
         colorTheme,
         format: catalogFormat,
         showPrices,
-        showProductNames: namesForcedOff ? false : showCatalogProductNames,
         backgroundStyle,
         preserveProductImages,
         brandContextFields: catalogFields.length > 0 ? catalogFields : undefined,
@@ -2245,32 +2239,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             </View>
             {showPricesHelp && (
               <Text style={styles.toggleHelper}>{t('studio.showPrices.helper')}</Text>
-            )}
-            <View style={styles.toggleRow}>
-              <View style={styles.toggleLabelRow}>
-                <Text style={styles.toggleLabel}>{t('studio.showProductNames')}</Text>
-                <Pressable
-                  onPress={() => setShowNamesHelp((v) => !v)}
-                  hitSlop={8}
-                  style={styles.infoButton}
-                  accessibilityLabel={t('studio.showProductNames')}
-                >
-                  <Ionicons
-                    name={showNamesHelp ? 'information-circle' : 'information-circle-outline'}
-                    size={18}
-                    color={colors.text.muted}
-                  />
-                </Pressable>
-              </View>
-              <Switch
-                value={showCatalogProductNames}
-                onValueChange={setShowCatalogProductNames}
-                thumbColor={showCatalogProductNames ? colors.accent.primary : colors.text.muted}
-                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
-              />
-            </View>
-            {showNamesHelp && (
-              <Text style={styles.toggleHelper}>{t('studio.showProductNames.helper')}</Text>
             )}
             <View style={styles.toggleRow}>
               <View style={styles.toggleLabelRow}>
@@ -3408,9 +3376,8 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           title={reviewMode === 'wallpaperOn' ? t('studio.placeOnWallpaper') : undefined}
           allowOffer={reviewMode === 'catalog' && !preserveProductImages}
           optionsSummary={reviewMode ? buildOptionsSummary(reviewMode) : []}
-          showProductNames={
-            reviewMode === 'wallpaperOn' ? showProductNames : showCatalogProductNames
-          }
+          showNamesRow={reviewMode === 'wallpaperOn'}
+          showProductNames={reviewMode === 'wallpaperOn' ? showProductNames : false}
           generating={reviewMode === 'wallpaperOn' ? wallpaperOnGenerating : catalogGenerating}
           cost={reviewMode === 'wallpaperOn' ? undefined : 1}
           showDiscountPercentage={showDiscountPercentage}
@@ -3605,36 +3572,6 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     </View>
                     {showPricesHelp && (
                       <Text style={styles.toggleHelper}>{t('studio.showPrices.helper')}</Text>
-                    )}
-                    <View style={styles.toggleRow}>
-                      <View style={styles.toggleLabelRow}>
-                        <Text style={styles.toggleLabel}>{t('studio.showProductNames')}</Text>
-                        <Pressable
-                          onPress={() => setShowNamesHelp((v) => !v)}
-                          hitSlop={8}
-                          style={styles.infoButton}
-                          accessibilityLabel={t('studio.showProductNames')}
-                        >
-                          <Ionicons
-                            name={
-                              showNamesHelp ? 'information-circle' : 'information-circle-outline'
-                            }
-                            size={18}
-                            color={colors.text.muted}
-                          />
-                        </Pressable>
-                      </View>
-                      <Switch
-                        value={showCatalogProductNames}
-                        onValueChange={setShowCatalogProductNames}
-                        thumbColor={
-                          showCatalogProductNames ? colors.accent.primary : colors.text.muted
-                        }
-                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
-                      />
-                    </View>
-                    {showNamesHelp && (
-                      <Text style={styles.toggleHelper}>{t('studio.showProductNames.helper')}</Text>
                     )}
                     <View style={styles.toggleRow}>
                       <View style={styles.toggleLabelRow}>
@@ -4743,7 +4680,8 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         title={reviewMode === 'wallpaperOn' ? t('studio.placeOnWallpaper') : undefined}
         allowOffer={reviewMode === 'catalog' && !preserveProductImages}
         optionsSummary={reviewMode ? buildOptionsSummary(reviewMode) : []}
-        showProductNames={reviewMode === 'wallpaperOn' ? showProductNames : showCatalogProductNames}
+        showNamesRow={reviewMode === 'wallpaperOn'}
+        showProductNames={reviewMode === 'wallpaperOn' ? showProductNames : false}
         generating={reviewMode === 'wallpaperOn' ? wallpaperOnGenerating : catalogGenerating}
         cost={reviewMode === 'wallpaperOn' ? undefined : 1}
         showDiscountPercentage={showDiscountPercentage}
