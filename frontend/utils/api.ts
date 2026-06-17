@@ -418,6 +418,8 @@ export interface GenerateCatalogImageParams {
   showDiscountPercentage?: boolean;
   // When on, the image includes a small "while stocks last" disclaimer. Off by default.
   showStockDisclaimer?: boolean;
+  // When on, a big "OFERTĂ" / "OFFER" headline banner is rendered, catalog-style. Off by default.
+  showOfferBanner?: boolean;
   // Which image model generates the catalog: 'gemini' (nano banana, default) | 'openai'.
   imageModel?: 'gemini' | 'openai';
 }

@@ -699,7 +699,10 @@ const en = {
     'When on, each product is labeled with its name. When off, no name typography is rendered — the products and prices speak for themselves.',
   'studio.showStockDisclaimer': 'Stock disclaimer',
   'studio.showStockDisclaimer.helper':
-    'When on, a small “While stocks last” disclaimer is added somewhere in the image (usually a footer). Off by default.',
+    'When on, a clearly readable “While stocks last” footer line is added along the bottom of the image. Off by default.',
+  'studio.showOfferBanner': 'Offer banner',
+  'studio.showOfferBanner.helper':
+    'When on, a big “OFFER” headline banner is added to the catalog, the way a real retail flyer announces its deals. Off by default.',
   'studio.opt.backgroundStyle': 'Background style',
   'studio.backgroundStyle.socialPost': 'Social post',
   'studio.backgroundStyle.realistic': 'Realistic',

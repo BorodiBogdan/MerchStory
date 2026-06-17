@@ -1660,6 +1660,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [showPricesHelp, setShowPricesHelp] = useState(false);
   const [showStockDisclaimer, setShowStockDisclaimer] = useState(false);
   const [showStockDisclaimerHelp, setShowStockDisclaimerHelp] = useState(false);
+  // When on, the catalog prompt renders a big "OFERTĂ" / "OFFER" headline banner. Off by default.
+  const [showOfferBanner, setShowOfferBanner] = useState(false);
+  const [showOfferBannerHelp, setShowOfferBannerHelp] = useState(false);
   // Whether the generated image states the discount % or just old+new price. Off by
   // default; toggled on the offer modal's review step (only when a discount exists).
   const [showDiscountPercentage, setShowDiscountPercentage] = useState(false);
@@ -1757,6 +1760,16 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         icon: 'lock-closed-outline',
         ...toggle(preserveProductImages),
       },
+      {
+        label: t('studio.showOfferBanner'),
+        icon: 'megaphone-outline',
+        ...toggle(showOfferBanner),
+      },
+      {
+        label: t('studio.showStockDisclaimer'),
+        icon: 'information-circle-outline',
+        ...toggle(showStockDisclaimer),
+      },
     ];
   }
 
@@ -1801,6 +1814,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         offer,
         showDiscountPercentage,
         showStockDisclaimer,
+        showOfferBanner,
         imageModel: catalogImageModel,
       });
       setCatalogResult(result);
@@ -2267,6 +2281,32 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             </View>
             {showStockDisclaimerHelp && (
               <Text style={styles.toggleHelper}>{t('studio.showStockDisclaimer.helper')}</Text>
+            )}
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleLabelRow}>
+                <Text style={styles.toggleLabel}>{t('studio.showOfferBanner')}</Text>
+                <Pressable
+                  onPress={() => setShowOfferBannerHelp((v) => !v)}
+                  hitSlop={8}
+                  style={styles.infoButton}
+                  accessibilityLabel={t('studio.showOfferBanner')}
+                >
+                  <Ionicons
+                    name={showOfferBannerHelp ? 'information-circle' : 'information-circle-outline'}
+                    size={18}
+                    color={colors.text.muted}
+                  />
+                </Pressable>
+              </View>
+              <Switch
+                value={showOfferBanner}
+                onValueChange={setShowOfferBanner}
+                thumbColor={showOfferBanner ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            {showOfferBannerHelp && (
+              <Text style={styles.toggleHelper}>{t('studio.showOfferBanner.helper')}</Text>
             )}
             <View style={styles.toggleLabelRow}>
               <OptionLabel label={t('studio.opt.backgroundStyle')} />
@@ -3604,6 +3644,36 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                       <Text style={styles.toggleHelper}>
                         {t('studio.showStockDisclaimer.helper')}
                       </Text>
+                    )}
+                    <View style={styles.toggleRow}>
+                      <View style={styles.toggleLabelRow}>
+                        <Text style={styles.toggleLabel}>{t('studio.showOfferBanner')}</Text>
+                        <Pressable
+                          onPress={() => setShowOfferBannerHelp((v) => !v)}
+                          hitSlop={8}
+                          style={styles.infoButton}
+                          accessibilityLabel={t('studio.showOfferBanner')}
+                        >
+                          <Ionicons
+                            name={
+                              showOfferBannerHelp
+                                ? 'information-circle'
+                                : 'information-circle-outline'
+                            }
+                            size={18}
+                            color={colors.text.muted}
+                          />
+                        </Pressable>
+                      </View>
+                      <Switch
+                        value={showOfferBanner}
+                        onValueChange={setShowOfferBanner}
+                        thumbColor={showOfferBanner ? colors.accent.primary : colors.text.muted}
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                    {showOfferBannerHelp && (
+                      <Text style={styles.toggleHelper}>{t('studio.showOfferBanner.helper')}</Text>
                     )}
                     <View style={styles.toggleLabelRow}>
                       <OptionLabel label={t('studio.opt.backgroundStyle')} />

@@ -840,7 +840,8 @@ internal sealed record CatalogImageApiRequest(
     CatalogOfferApi? Offer = null,
     string? ImageModel = null,
     bool ShowStockDisclaimer = false,
-    bool ShowDiscountPercentage = true)
+    bool ShowDiscountPercentage = true,
+    bool ShowOfferBanner = false)
 {
     public CatalogImageRequest ToServiceRequest(
         BrandContext? brandContext,
@@ -876,7 +877,8 @@ internal sealed record CatalogImageApiRequest(
             this.BuildOffer(itemById),
             this.ImageModel,
             this.ShowStockDisclaimer,
-            this.ShowDiscountPercentage);
+            this.ShowDiscountPercentage,
+            this.ShowOfferBanner);
     }
 
     // Resolve the wire offer (product GUIDs) into a service offer that carries the

@@ -707,7 +707,10 @@ const ro: Dictionary = {
     'Când este activat, fiecare produs este etichetat cu numele său. Când este dezactivat, nu se afișează niciun text cu nume — produsele și prețurile vorbesc de la sine.',
   'studio.showStockDisclaimer': 'Disclaimer stoc',
   'studio.showStockDisclaimer.helper':
-    'Când este activat, se adaugă undeva în imagine (de obicei în subsol) un mic disclaimer „În limita stocului disponibil”. Dezactivat implicit.',
+    'Când este activat, se adaugă în partea de jos a imaginii un rând „În limita stocului disponibil”, clar lizibil. Dezactivat implicit.',
+  'studio.showOfferBanner': 'Banner ofertă',
+  'studio.showOfferBanner.helper':
+    'Când este activat, se adaugă pe catalog un banner mare cu „OFERTĂ”, așa cum își anunță reducerile un pliant de magazin. Dezactivat implicit.',
   'studio.opt.backgroundStyle': 'Stil fundal',
   'studio.backgroundStyle.socialPost': 'Postare social',
   'studio.backgroundStyle.realistic': 'Realist',
