@@ -37,6 +37,7 @@ import { GalleryImage } from '@/components/ui/GalleryImage';
 import { glassNavRail } from '@/components/ui/GlassNavbar';
 import { InsufficientCreditsModal } from '@/components/ui/InsufficientCreditsModal';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
+import { type AnchorRect, LocationPickerModal } from '@/components/ui/LocationPickerModal';
 import { ModelFab } from '@/components/ui/ModelFab';
 import { ModelPickerModal, type ModelPickerOption } from '@/components/ui/ModelPickerModal';
 import { ModelPickerPopover } from '@/components/ui/ModelPickerPopover';
@@ -631,11 +632,29 @@ function BrandContextSection({
   items,
   selected,
   onToggle,
+  addresses,
+  addressIndices,
+  onAddressPress,
 }: {
   items: ContextItem[];
   selected: string[];
   onToggle: (key: string) => void;
+  // When the shop has more than one address, the "addresses" chip becomes a picker:
+  // tapping it opens a location modal instead of toggling the field directly.
+  addresses?: string[];
+  addressIndices?: number[];
+  // Receives the chip's on-screen rect so the picker can anchor under it on web.
+  onAddressPress?: (anchor: AnchorRect) => void;
 }) {
+  const addressChipRef = useRef<View>(null);
+  const handleAddressPress = () => {
+    const node = addressChipRef.current;
+    if (node && typeof node.measureInWindow === 'function') {
+      node.measureInWindow((x, y, width, height) => onAddressPress?.({ x, y, width, height }));
+    } else {
+      onAddressPress?.({ x: 0, y: 0, width: 0, height: 0 });
+    }
+  };
   const { colors } = useTheme();
   const t = useT();
   const { width: screenWidth } = useWindowDimensions();
@@ -661,13 +680,23 @@ function BrandContextSection({
         }}
       >
         {items.map((item) => {
-          const active = selected.includes(item.key);
+          // The address chip turns into a location picker only when there is more than
+          // one saved address and the caller wired up a picker handler.
+          const isAddressPicker =
+            item.key === 'addresses' && !!onAddressPress && (addresses?.length ?? 0) > 1;
+          const selectedLocations = addressIndices?.length ?? 0;
+          const active = isAddressPicker ? selectedLocations > 0 : selected.includes(item.key);
+          const label =
+            isAddressPicker && selectedLocations > 0
+              ? `${item.label} (${selectedLocations})`
+              : item.label;
           return (
             <Pressable
               key={item.key}
-              onPress={() => onToggle(item.key)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: active }}
+              ref={isAddressPicker ? addressChipRef : undefined}
+              onPress={isAddressPicker ? handleAddressPress : () => onToggle(item.key)}
+              accessibilityRole={isAddressPicker ? 'button' : 'checkbox'}
+              accessibilityState={isAddressPicker ? undefined : { checked: active }}
               style={({ pressed }) => ({
                 flexDirection: 'row' as const,
                 alignItems: 'center' as const,
@@ -685,7 +714,15 @@ function BrandContextSection({
               })}
             >
               <Ionicons
-                name={active ? 'checkmark-circle' : 'ellipse-outline'}
+                name={
+                  isAddressPicker
+                    ? active
+                      ? 'location'
+                      : 'location-outline'
+                    : active
+                      ? 'checkmark-circle'
+                      : 'ellipse-outline'
+                }
                 size={isDesktop ? 13 : 16}
                 color={active ? colors.accent.primary : colors.text.muted}
               />
@@ -696,8 +733,15 @@ function BrandContextSection({
                   fontWeight: active ? D.fontWeight.medium : D.fontWeight.regular,
                 }}
               >
-                {item.label}
+                {label}
               </Text>
+              {isAddressPicker ? (
+                <Ionicons
+                  name="chevron-down"
+                  size={isDesktop ? 12 : 14}
+                  color={active ? colors.accent.primary : colors.text.muted}
+                />
+              ) : null}
             </Pressable>
           );
         })}
@@ -1208,6 +1252,7 @@ function ChooseProductsSection({
   colors,
   styles,
   showProducts,
+  pngOnly,
 }: {
   subtitle: string;
   isDesktop: boolean;
@@ -1219,6 +1264,7 @@ function ChooseProductsSection({
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
   showProducts: boolean;
+  pngOnly?: boolean;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
@@ -1253,6 +1299,7 @@ function ChooseProductsSection({
       selected={selected}
       onToggle={toggleProduct}
       subtitle={subtitle}
+      pngOnly={pngOnly}
     />
   );
 
@@ -1511,6 +1558,12 @@ function ChooseProductsSection({
 // ─── Main canvas ───────────────────────────────────────────────────────────────
 export type StudioCanvasMode = Exclude<StudioTab, 'video'>;
 
+// Only background-removed (PNG) product images are transparent, so they're the
+// only ones the on-wallpaper compositor and "preserve product images" mode can use.
+function isPngProduct(p: ProductItem): boolean {
+  return (p.mimeType ?? '').toLowerCase().includes('png');
+}
+
 export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const { colors } = useTheme();
   const t = useT();
@@ -1555,12 +1608,29 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [catalogMode, setCatalogMode] = useState<CatalogMode>('generate');
   const catalogModeAnim = useRef(new Animated.Value(0)).current;
 
+  // The on-wallpaper compositor pastes the retailer's real product photos, so it
+  // only works with background-removed (PNG) images. The product picker (inline +
+  // modal) is restricted to PNGs while this sub-mode is active.
+  const requirePng = activeTab === 'catalog' && catalogMode === 'on-wallpaper';
+
   function switchCatalogMode(mode: CatalogMode) {
     Animated.timing(catalogModeAnim, {
       toValue: mode === 'generate' ? 0 : 1,
       duration: D.duration.normal,
       useNativeDriver: false,
     }).start();
+    // Drop any non-PNG products carried over from the generate sub-mode so they
+    // aren't fed to the compositor. Items not currently loaded are kept (unknown).
+    if (mode === 'on-wallpaper') {
+      setSelected((prev) => {
+        const next = new Set<string>();
+        for (const id of prev) {
+          const p = products.find((x) => x.id === id);
+          if (!p || isPngProduct(p)) next.add(id);
+        }
+        return next;
+      });
+    }
     setCatalogMode(mode);
     setCatalogResult(null);
     setCatalogError(null);
@@ -1639,6 +1709,12 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const products = productsCacheState.items;
   const loadingProducts = productsCacheState.loading && !productsCacheState.initialized;
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // True when the current selection includes a non-PNG product. Used to block the
+  // "preserve product images" option, which needs transparent images.
+  const selectionHasNonPng = useMemo(
+    () => products.some((p) => selected.has(p.id) && !isPngProduct(p)),
+    [products, selected]
+  );
   const [layout, setLayout] = useState('Showcase');
   const [colorTheme, setColorTheme] = useState('Brand Colors');
   const [catalogFormat, setCatalogFormat] = useState('Poster');
@@ -1660,6 +1736,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [showPricesHelp, setShowPricesHelp] = useState(false);
   const [showStockDisclaimer, setShowStockDisclaimer] = useState(false);
   const [showStockDisclaimerHelp, setShowStockDisclaimerHelp] = useState(false);
+  // When on, the catalog prompt renders a big "OFERTĂ" / "OFFER" headline banner. Off by default.
+  const [showOfferBanner, setShowOfferBanner] = useState(false);
+  const [showOfferBannerHelp, setShowOfferBannerHelp] = useState(false);
   // Whether the generated image states the discount % or just old+new price. Off by
   // default; toggled on the offer modal's review step (only when a discount exists).
   const [showDiscountPercentage, setShowDiscountPercentage] = useState(false);
@@ -1674,17 +1753,26 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [catalogKept, setCatalogKept] = useState(false);
 
+  // Reload the shared products cache PNG-only while the on-wallpaper sub-mode is
+  // active so the inline cards and the picker modal stay consistent. Re-runs when
+  // the user toggles the catalog sub-tab (requirePng flips).
   useFocusEffect(
     useCallback(() => {
-      void productsCache.ensureLoaded({});
-    }, [])
+      void productsCache.ensureLoaded(requirePng ? { pngOnly: true } : {});
+    }, [requirePng])
   );
 
   useEffect(() => {
     if (!shopProfile) return;
-    const allKeys = deriveContextItems(shopProfile, tr).map((i) => i.key);
+    // Locations are opt-in: the user picks which addresses appear per generation, so
+    // "addresses" starts unselected even though every other brand field defaults on.
+    const allKeys = deriveContextItems(shopProfile, tr)
+      .map((i) => i.key)
+      .filter((k) => k !== 'addresses');
     setCatalogContextFields(allKeys);
     setAnnoContextFields(allKeys);
+    setCatalogAddressIndices([]);
+    setAnnoAddressIndices([]);
   }, [shopProfile]);
 
   function toggleProduct(id: string) {
@@ -1719,6 +1807,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   function openCatalogReview() {
     const chosen = products.filter((p) => selected.has(p.id));
     if (!chosen.length) return;
+    // Preserve mode pastes the real product photos, so every selected product must
+    // be a background-removed PNG. Block here so the review modal never opens with
+    // an unusable selection.
+    if (preserveProductImages && chosen.some((p) => !isPngProduct(p))) {
+      setCatalogError(t('studio.preserveProductImages.requiresPng'));
+      return;
+    }
     if (creditBalance < 1) {
       setInsufficientVisible(true);
       return;
@@ -1757,6 +1852,16 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         icon: 'lock-closed-outline',
         ...toggle(preserveProductImages),
       },
+      {
+        label: t('studio.showOfferBanner'),
+        icon: 'megaphone-outline',
+        ...toggle(showOfferBanner),
+      },
+      {
+        label: t('studio.showStockDisclaimer'),
+        icon: 'information-circle-outline',
+        ...toggle(showStockDisclaimer),
+      },
     ];
   }
 
@@ -1769,6 +1874,10 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   async function handleCatalogGenerate() {
     const chosen = products.filter((p) => selected.has(p.id));
     if (!chosen.length) return;
+    if (preserveProductImages && chosen.some((p) => !isPngProduct(p))) {
+      setCatalogError(t('studio.preserveProductImages.requiresPng'));
+      return;
+    }
     if (creditBalance < 1) {
       setInsufficientVisible(true);
       return;
@@ -1797,10 +1906,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         backgroundStyle,
         preserveProductImages,
         brandContextFields: catalogFields.length > 0 ? catalogFields : undefined,
+        selectedAddressIndices:
+          catalogAddressIndices.length > 0 ? catalogAddressIndices : undefined,
         currency: catalogCurrency,
         offer,
         showDiscountPercentage,
         showStockDisclaimer,
+        showOfferBanner,
         imageModel: catalogImageModel,
       });
       setCatalogResult(result);
@@ -1985,6 +2097,21 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   // ── Brand context state ──────────────────────────────────────────────────────
   const [catalogContextFields, setCatalogContextFields] = useState<string[]>([]);
   const [annoContextFields, setAnnoContextFields] = useState<string[]>([]);
+  // Which shop locations (indices into shopProfile.addresses) appear on each generation.
+  const [catalogAddressIndices, setCatalogAddressIndices] = useState<number[]>([]);
+  const [annoAddressIndices, setAnnoAddressIndices] = useState<number[]>([]);
+  // Which flow's location picker modal is open, if any.
+  const [addressPicker, setAddressPicker] = useState<null | 'catalog' | 'anno'>(null);
+  // On web the picker hangs off the chip the user tapped; this holds its screen rect.
+  const [addressAnchor, setAddressAnchor] = useState<AnchorRect | null>(null);
+  const shopAddresses = shopProfile?.addresses ?? [];
+  const openAddressPicker = useCallback(
+    (flow: 'catalog' | 'anno') => (anchor: AnchorRect) => {
+      setAddressAnchor(anchor);
+      setAddressPicker(flow);
+    },
+    []
+  );
 
   // ── Keep-image modal (shared across generators) ──────────────────────────────
   const [pendingKeep, setPendingKeep] = useState<{
@@ -2085,6 +2212,39 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     );
   }, []);
 
+  const toggleCatalogAddress = useCallback((index: number) => {
+    setCatalogAddressIndices((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+    );
+  }, []);
+
+  const toggleAnnoAddress = useCallback((index: number) => {
+    setAnnoAddressIndices((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+    );
+  }, []);
+
+  // Keep the "addresses" brand-context field in sync with the picked locations so the
+  // request includes the address block exactly when at least one location is chosen.
+  const syncAddressField = useCallback(
+    (indices: number[]): ((prev: string[]) => string[]) =>
+      (prev) => {
+        const has = prev.includes('addresses');
+        if (indices.length > 0 && !has) return [...prev, 'addresses'];
+        if (indices.length === 0 && has) return prev.filter((k) => k !== 'addresses');
+        return prev;
+      },
+    []
+  );
+
+  useEffect(() => {
+    setCatalogContextFields(syncAddressField(catalogAddressIndices));
+  }, [catalogAddressIndices, syncAddressField]);
+
+  useEffect(() => {
+    setAnnoContextFields(syncAddressField(annoAddressIndices));
+  }, [annoAddressIndices, syncAddressField]);
+
   const togglePromotionProduct = useCallback((id: string) => {
     setPromotionSelected((prev) => {
       const next = new Set(prev);
@@ -2126,6 +2286,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         tone,
         format: annoFormat,
         brandContextFields: annoContextFields.length > 0 ? annoContextFields : undefined,
+        selectedAddressIndices: annoAddressIndices.length > 0 ? annoAddressIndices : undefined,
         productImageIds: promotionProductImageIds,
         jobTitle: isJobPost ? jobTitle.trim() : undefined,
         jobSchedule: isJobPost ? jobSchedule.trim() : undefined,
@@ -2214,6 +2375,11 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             {showPreserveHelp && (
               <Text style={styles.toggleHelper}>{t('studio.preserveProductImages.helper')}</Text>
             )}
+            {preserveProductImages && selectionHasNonPng && (
+              <Text style={[styles.toggleHelper, { color: colors.text.error }]}>
+                {t('studio.preserveProductImages.requiresPng')}
+              </Text>
+            )}
             <View style={styles.toggleRow}>
               <View style={styles.toggleLabelRow}>
                 <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
@@ -2268,6 +2434,32 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             {showStockDisclaimerHelp && (
               <Text style={styles.toggleHelper}>{t('studio.showStockDisclaimer.helper')}</Text>
             )}
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleLabelRow}>
+                <Text style={styles.toggleLabel}>{t('studio.showOfferBanner')}</Text>
+                <Pressable
+                  onPress={() => setShowOfferBannerHelp((v) => !v)}
+                  hitSlop={8}
+                  style={styles.infoButton}
+                  accessibilityLabel={t('studio.showOfferBanner')}
+                >
+                  <Ionicons
+                    name={showOfferBannerHelp ? 'information-circle' : 'information-circle-outline'}
+                    size={18}
+                    color={colors.text.muted}
+                  />
+                </Pressable>
+              </View>
+              <Switch
+                value={showOfferBanner}
+                onValueChange={setShowOfferBanner}
+                thumbColor={showOfferBanner ? colors.accent.primary : colors.text.muted}
+                trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+              />
+            </View>
+            {showOfferBannerHelp && (
+              <Text style={styles.toggleHelper}>{t('studio.showOfferBanner.helper')}</Text>
+            )}
             <View style={styles.toggleLabelRow}>
               <OptionLabel label={t('studio.opt.backgroundStyle')} />
               <Pressable
@@ -2312,6 +2504,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
               items={catalogContextItems}
               selected={catalogContextFields}
               onToggle={toggleCatalogField}
+              addresses={shopAddresses}
+              addressIndices={catalogAddressIndices}
+              onAddressPress={openAddressPicker('catalog')}
             />
           </>
         ) : (
@@ -2366,6 +2561,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             items={contextItems}
             selected={annoContextFields}
             onToggle={toggleAnnoField}
+            addresses={shopAddresses}
+            addressIndices={annoAddressIndices}
+            onAddressPress={openAddressPicker('anno')}
           />
         </>
       ) : null;
@@ -2427,6 +2625,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                 colors={colors}
                 styles={styles}
                 showProducts
+                pngOnly={requirePng}
               />
 
               {/* Preview */}
@@ -2472,6 +2671,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                 colors={colors}
                 styles={styles}
                 showProducts
+                pngOnly={requirePng}
               />
 
               {/* Wallpaper picker */}
@@ -3390,6 +3590,15 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           }}
         />
 
+        <LocationPickerModal
+          visible={addressPicker !== null}
+          addresses={shopAddresses}
+          anchor={addressAnchor}
+          selected={addressPicker === 'catalog' ? catalogAddressIndices : annoAddressIndices}
+          onToggle={addressPicker === 'catalog' ? toggleCatalogAddress : toggleAnnoAddress}
+          onClose={() => setAddressPicker(null)}
+        />
+
         <ModelPickerPopover
           visible={modelPickerVisible}
           models={IMAGE_MODELS}
@@ -3507,6 +3716,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     colors={colors}
                     styles={styles}
                     showProducts
+                    pngOnly={requirePng}
                   />
 
                   <View style={styles.mobileSection}>
@@ -3543,6 +3753,11 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     {showPreserveHelp && (
                       <Text style={styles.toggleHelper}>
                         {t('studio.preserveProductImages.helper')}
+                      </Text>
+                    )}
+                    {preserveProductImages && selectionHasNonPng && (
+                      <Text style={[styles.toggleHelper, { color: colors.text.error }]}>
+                        {t('studio.preserveProductImages.requiresPng')}
                       </Text>
                     )}
                     <View style={styles.toggleRow}>
@@ -3605,6 +3820,36 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         {t('studio.showStockDisclaimer.helper')}
                       </Text>
                     )}
+                    <View style={styles.toggleRow}>
+                      <View style={styles.toggleLabelRow}>
+                        <Text style={styles.toggleLabel}>{t('studio.showOfferBanner')}</Text>
+                        <Pressable
+                          onPress={() => setShowOfferBannerHelp((v) => !v)}
+                          hitSlop={8}
+                          style={styles.infoButton}
+                          accessibilityLabel={t('studio.showOfferBanner')}
+                        >
+                          <Ionicons
+                            name={
+                              showOfferBannerHelp
+                                ? 'information-circle'
+                                : 'information-circle-outline'
+                            }
+                            size={18}
+                            color={colors.text.muted}
+                          />
+                        </Pressable>
+                      </View>
+                      <Switch
+                        value={showOfferBanner}
+                        onValueChange={setShowOfferBanner}
+                        thumbColor={showOfferBanner ? colors.accent.primary : colors.text.muted}
+                        trackColor={{ false: colors.border.default, true: colors.accent.dim }}
+                      />
+                    </View>
+                    {showOfferBannerHelp && (
+                      <Text style={styles.toggleHelper}>{t('studio.showOfferBanner.helper')}</Text>
+                    )}
                     <View style={styles.toggleLabelRow}>
                       <OptionLabel label={t('studio.opt.backgroundStyle')} />
                       <Pressable
@@ -3658,6 +3903,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         items={catalogContextItems}
                         selected={catalogContextFields}
                         onToggle={toggleCatalogField}
+                        addresses={shopAddresses}
+                        addressIndices={catalogAddressIndices}
+                        onAddressPress={openAddressPicker('catalog')}
                       />
                     </View>
                   )}
@@ -3747,6 +3995,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     colors={colors}
                     styles={styles}
                     showProducts
+                    pngOnly={requirePng}
                   />
 
                   {/* Wallpaper picker */}
@@ -4208,6 +4457,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     items={contextItems}
                     selected={annoContextFields}
                     onToggle={toggleAnnoField}
+                    addresses={shopAddresses}
+                    addressIndices={annoAddressIndices}
+                    onAddressPress={openAddressPicker('anno')}
                   />
                 </View>
               )}
@@ -4692,6 +4944,14 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           catalogOfferRef.current = offer;
           runReviewGeneration(reviewMode);
         }}
+      />
+
+      <LocationPickerModal
+        visible={addressPicker !== null}
+        addresses={shopAddresses}
+        selected={addressPicker === 'catalog' ? catalogAddressIndices : annoAddressIndices}
+        onToggle={addressPicker === 'catalog' ? toggleCatalogAddress : toggleAnnoAddress}
+        onClose={() => setAddressPicker(null)}
       />
 
       <ModelPickerModal

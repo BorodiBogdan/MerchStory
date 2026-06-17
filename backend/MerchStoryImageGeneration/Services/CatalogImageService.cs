@@ -500,6 +500,7 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             priceClause + " " +
             PromoColorGuidance(r.ColorTheme, r.BrandColors, r.BackgroundStyle) +
             BackgroundStyleHint(r.BackgroundStyle) + "\n\n" +
+            (r.ShowOfferBanner ? OfferBannerInstruction.For(r.Language) : string.Empty) +
             (r.ShowStockDisclaimer ? StockDisclaimerInstruction.For(r.Language) : string.Empty) +
             FinalQualityBar();
     }
@@ -858,6 +859,7 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             saturatedThemeNote +
             "FINAL REMINDER: the reserved marker colors (" + reservedHexList + ") appear ONLY as product-silhouette outlines. Anywhere else they appear — text, price, background, decoration — is an error. Check your output before finalizing.\n\n" +
             "Self-check before finalizing: (1) reserved marker colors appear ONLY on product outlines; (2) the quiet zone around every outline is clean, flat scene with no typography, no badges/pills, and no decoration; (3) any price pill/chip/badge sits entirely OUTSIDE the quiet zone of every product outline.\n\n" +
+            (r.ShowOfferBanner ? OfferBannerInstruction.For(r.Language) + "The offer banner must also stay entirely OUTSIDE every product's 80px quiet zone and must NOT use any reserved marker color.\n\n" : string.Empty) +
             (r.ShowStockDisclaimer ? StockDisclaimerInstruction.For(r.Language) : string.Empty) +
             PreserveFinalQualityBar() + " " +
             "Achieve this WITHOUT violating any of the structural rules above — the outline, quiet-zone, clearance, drop-shadow, and reserved-marker-color rules ALWAYS take precedence over aesthetic ambition.";

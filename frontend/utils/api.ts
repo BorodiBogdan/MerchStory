@@ -418,8 +418,13 @@ export interface GenerateCatalogImageParams {
   showDiscountPercentage?: boolean;
   // When on, the image includes a small "while stocks last" disclaimer. Off by default.
   showStockDisclaimer?: boolean;
+  // When on, a big "OFERTĂ" / "OFFER" headline banner is rendered, catalog-style. Off by default.
+  showOfferBanner?: boolean;
   // Which image model generates the catalog: 'gemini' (nano banana, default) | 'openai'.
   imageModel?: 'gemini' | 'openai';
+  // Indices (into the shop profile's addresses array) of the locations to render.
+  // Only used when 'addresses' is among brandContextFields. When omitted, all addresses are used.
+  selectedAddressIndices?: number[];
 }
 
 export interface GenerateAnnouncementImageParams {
@@ -437,6 +442,9 @@ export interface GenerateAnnouncementImageParams {
   jobRequirements?: string[];
   language?: AppLanguage;
   imageModel?: 'gemini' | 'openai';
+  // Indices (into the shop profile's addresses array) of the locations to render.
+  // Only used when 'addresses' is among brandContextFields. When omitted, all addresses are used.
+  selectedAddressIndices?: number[];
 }
 
 async function parseGenerationResponse(response: Response): Promise<GenerateImageResponse> {
@@ -737,6 +745,7 @@ export interface ProductDetail {
   category: string | null;
   createdAt: string;
   updatedAt: string;
+  mimeType?: string;
 }
 
 export interface ProductImageBytes {
@@ -780,6 +789,9 @@ export interface ProductFilters {
   categories?: string[];
   minPrice?: number;
   maxPrice?: number;
+  // When true, only products whose stored image is a PNG (background-removed) are
+  // returned. Used by the catalog "on-wallpaper" picker, which needs transparent images.
+  pngOnly?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -802,6 +814,7 @@ export async function fetchProducts(filters: ProductFilters = {}): Promise<Paged
   if (filters.maxPrice !== undefined && !Number.isNaN(filters.maxPrice)) {
     params.set('maxPrice', String(filters.maxPrice));
   }
+  if (filters.pngOnly) params.set('pngOnly', 'true');
   if (filters.page && filters.page > 0) params.set('page', String(filters.page));
   if (filters.pageSize && filters.pageSize > 0) params.set('pageSize', String(filters.pageSize));
   const qs = params.toString();

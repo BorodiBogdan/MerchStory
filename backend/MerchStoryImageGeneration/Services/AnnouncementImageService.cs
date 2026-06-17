@@ -52,6 +52,7 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
         "Produce clean, modern announcement graphics that communicate news or useful information clearly. " +
         "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
         BrandContextBlock(r.BrandContext) +
+        ContactBlock(r.BrandContext) +
         LogoBlock(r.LogoBase64) +
         $"Create a {r.Tone.ToLowerInvariant()} announcement social media graphic in {FormatPhrase(r.Format)} format. " +
         $"Announcement content: \"{r.Content}\". " +
@@ -175,6 +176,7 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
                "Produce high-impact promotional sale graphics that drive immediate purchases. " +
                "Never add watermarks, placeholders, or generic stock imagery.\n\n" +
                BrandContextBlock(r.BrandContext) +
+               ContactBlock(r.BrandContext) +
                LogoBlock(r.LogoBase64) +
                $"Create a {r.Tone.ToLowerInvariant()} promotional sale graphic in {FormatPhrase(r.Format)} format. " +
                $"Promotion details: \"{r.Content}\". " +
@@ -186,8 +188,14 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
                "a clear CTA (\"Shop Now\", \"Visit Us Today\"); " +
                (hasProductPhotos
                    ? $"{r.ProductImages!.Count} product reference photo(s) are attached — " +
-                     "incorporate the actual product(s) shown as the visual centrepiece of the graphic, " +
-                     "styled attractively; do not invent substitute products; "
+                     "you MUST use the actual product(s) shown as the visual centrepiece of the graphic. " +
+                     "ABSOLUTE RULE: reproduce each attached product pixel-for-pixel, EXACTLY as provided. " +
+                     "Do NOT change, redraw, restyle, recolor, relabel, crop, or reinterpret any product, " +
+                     "and do NOT alter any text, logo, label, packaging, or detail printed on the product " +
+                     "for any reason, including matching the brand colours or the overall image style. " +
+                     "Do not invent substitute products. " +
+                     "You may reposition, scale, or arrange the products and add a background around them, " +
+                     "but the products themselves must remain a faithful, unaltered copy of the photos; "
                    : "no product photos provided — use bold typography, graphic shapes, and brand colours as the visual focus; ") +
                "overall feel: exciting, urgent, impossible to scroll past.";
     }
@@ -197,6 +205,42 @@ internal sealed class AnnouncementImageService : ImageGenerationServiceBase, IAn
         string.Equals(format, "Poster", StringComparison.OrdinalIgnoreCase)
             ? "Poster A4 (1:√2 ≈ 1:1.414, vertical print). Do not add any extra text beyond what was explicitly stated in the request — no taglines, no decorative copy, no filler"
             : format;
+
+    // ── Contact-details block ─────────────────────────────────────────────────────
+    // Forces phone / email / address onto the graphic when the shop provided them.
+    private static string ContactBlock(BrandContext? ctx)
+    {
+        if (ctx is null)
+        {
+            return string.Empty;
+        }
+
+        var contacts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(ctx.PhoneNumber))
+        {
+            contacts.Add($"phone ({ctx.PhoneNumber})");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ctx.Email))
+        {
+            contacts.Add($"email ({ctx.Email})");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ctx.Addresses))
+        {
+            contacts.Add($"address ({ctx.Addresses})");
+        }
+
+        if (contacts.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return "Contact details (IMPORTANT): the following contact information MUST appear on the graphic, " +
+               "rendered clearly and legibly in a footer or contact strip, exactly as written, with no changes: " +
+               string.Join(", ", contacts) + ". " +
+               "Do not omit any of these, and do not invent contact details that are not listed here. ";
+    }
 
     // ── Logo block ────────────────────────────────────────────────────────────────
     private static string LogoBlock(string? logoBase64) =>

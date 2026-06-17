@@ -8,6 +8,7 @@ const ro: Dictionary = {
   'common.save': 'Salvează',
   'common.delete': 'Șterge',
   'common.close': 'Închide',
+  'common.done': 'Gata',
   'common.back': 'Înapoi',
   'common.backButton': '← Înapoi',
   'common.nextStep': 'Pasul următor →',
@@ -476,6 +477,12 @@ const ro: Dictionary = {
   'productPicker.currencyLocked': 'Un catalog folosește o singură monedă — blocat pe',
   'productPicker.currencyMismatch': 'Poți selecta doar produse cu aceeași monedă.',
 
+  // ── Location picker (ce adrese apar pe o generare) ───────────────────────
+  'locationPicker.title': 'Ce locații să apară?',
+  'locationPicker.subtitle': 'Alege adresele care apar pe acest material.',
+  'locationPicker.prompt': 'Apasă o locație ca să o selectezi',
+  'locationPicker.selected': 'selectate',
+
   // ── Gallery filter bar ───────────────────────────────────────────────────
   'galleryFilters.title': 'Filtre',
   'galleryFilters.clearAll': 'Șterge toate',
@@ -707,7 +714,10 @@ const ro: Dictionary = {
     'Când este activat, fiecare produs este etichetat cu numele său. Când este dezactivat, nu se afișează niciun text cu nume — produsele și prețurile vorbesc de la sine.',
   'studio.showStockDisclaimer': 'Disclaimer stoc',
   'studio.showStockDisclaimer.helper':
-    'Când este activat, se adaugă undeva în imagine (de obicei în subsol) un mic disclaimer „În limita stocului disponibil”. Dezactivat implicit.',
+    'Când este activat, se adaugă în partea de jos a imaginii un rând „În limita stocului disponibil”, clar lizibil. Dezactivat implicit.',
+  'studio.showOfferBanner': 'Banner ofertă',
+  'studio.showOfferBanner.helper':
+    'Când este activat, se adaugă pe catalog un banner mare cu „OFERTĂ”, așa cum își anunță reducerile un pliant de magazin. Dezactivat implicit.',
   'studio.opt.backgroundStyle': 'Stil fundal',
   'studio.backgroundStyle.socialPost': 'Postare social',
   'studio.backgroundStyle.realistic': 'Realist',
@@ -718,6 +728,8 @@ const ro: Dictionary = {
     'Când este dezactivat, cataloagele arată adesea mai rafinat și mai cinematic — dar AI-ul poate reinterpreta subtil fotografiile produselor (etichete, forme sau texturi se pot schimba). Activează pentru a păstra fotografiile produselor perfecte, pixel cu pixel, în schimbul unei plasări puțin mai structurate.',
   'studio.preserveProductImages.requiresPhotos':
     'Toate produsele selectate trebuie să aibă o fotografie pentru a folosi această opțiune.',
+  'studio.preserveProductImages.requiresPng':
+    'Modul de păstrare are nevoie de fotografii de produs cu fundal eliminat (PNG). Elimină produsele care nu sunt PNG din selecție sau dezactivează păstrarea.',
   'studio.preserveProductImages.noSafeColors':
     'Culorile brandului tău se suprapun cu marcatorii modului preserve. Dezactivează preserve sau ajustează culorile brandului.',
   'studio.preserveProductImages.warningPartial':

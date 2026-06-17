@@ -64,9 +64,19 @@ function toMetadata(detail: ProductDetail): ProductItem {
     category: detail.category,
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt,
-    mimeType: 'image/png',
+    mimeType: detail.mimeType ?? 'image/png',
     imageUrl: detail.imageUrl,
   };
+}
+
+// Best-effort content type from a URI's extension. Returns null when unknown so
+// callers can fall back to their own default.
+function guessMimeFromUri(uri: string): string | null {
+  const path = uri.split('?')[0].toLowerCase();
+  if (path.endsWith('.png')) return 'image/png';
+  if (path.endsWith('.webp')) return 'image/webp';
+  if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return 'image/jpeg';
+  return null;
 }
 
 const CURRENCY_CHOICES: Currency[] = ['USD', 'EUR', 'RON'];
@@ -142,11 +152,16 @@ export default function ProductsScreen() {
   const [addingNewCategory, setAddingNewCategory] = useState(false);
   const [draftImageUri, setDraftImageUri] = useState<string | null>(null);
   const [draftImageBase64, setDraftImageBase64] = useState<string | null>(null);
+  // Content type of the pending image, so an unprocessed original photo is stored
+  // with its real type (e.g. image/jpeg) instead of being mislabeled as PNG. The
+  // catalog "on-wallpaper" picker relies on this to show only background-removed PNGs.
+  const [draftImageMime, setDraftImageMime] = useState<string | null>(null);
   const [nameError, setNameError] = useState('');
 
   // Image preview / background-removal step (rendered inside the same modal)
   const [showPreview, setShowPreview] = useState(false);
   const [previewOriginalUri, setPreviewOriginalUri] = useState<string | null>(null);
+  const [previewOriginalMime, setPreviewOriginalMime] = useState<string | null>(null);
   const [previewOriginalB64, setPreviewOriginalB64] = useState<string | null>(null);
   const [previewProcessedB64, setPreviewProcessedB64] = useState<string | null>(null);
   const [isRemovingBg, setIsRemovingBg] = useState(false);
@@ -242,6 +257,7 @@ export default function ProductsScreen() {
     setAddingNewCategory(false);
     setDraftImageUri(null);
     setDraftImageBase64(null);
+    setDraftImageMime(null);
     setNameError('');
     setPriceError('');
     setModalVisible(true);
@@ -257,6 +273,9 @@ export default function ProductsScreen() {
     setAddingNewCategory(false);
     setDraftImageUri(null);
     setDraftImageBase64(null);
+    // Keep the existing image's real type so an unchanged image isn't re-uploaded
+    // and silently relabeled as PNG when the user edits other fields.
+    setDraftImageMime(product.mimeType ?? null);
     setNameError('');
     setPriceError('');
     setModalVisible(true);
@@ -290,8 +309,9 @@ export default function ProductsScreen() {
     return FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
   }
 
-  async function openImagePreview(uri: string) {
+  async function openImagePreview(uri: string, mime?: string | null) {
     setPreviewOriginalUri(uri);
+    setPreviewOriginalMime(mime ?? guessMimeFromUri(uri));
     setPreviewOriginalB64(null);
     setPreviewProcessedB64(null);
     setRemoveBgError(null);
@@ -306,7 +326,7 @@ export default function ProductsScreen() {
       quality: 0.8,
     });
     if (result.canceled || !result.assets[0]) return;
-    await openImagePreview(result.assets[0].uri);
+    await openImagePreview(result.assets[0].uri, result.assets[0].mimeType);
   }
 
   async function takePhoto() {
@@ -319,7 +339,7 @@ export default function ProductsScreen() {
       quality: 0.8,
     });
     if (result.canceled || !result.assets[0]) return;
-    await openImagePreview(result.assets[0].uri);
+    await openImagePreview(result.assets[0].uri, result.assets[0].mimeType);
   }
 
   function showPhotoSourcePicker() {
@@ -395,11 +415,15 @@ export default function ProductsScreen() {
       const { imageBase64, mimeType } = await fetchReferenceImageData(ref.id);
       setDraftImageBase64(imageBase64);
       setDraftImageUri(`data:${mimeType};base64,${imageBase64}`);
+      // Reference-library images are treated as cut-out (PNG) sources so they stay
+      // eligible for the on-wallpaper picker; leaving mime null keeps that behavior.
+      setDraftImageMime(null);
     } catch {
       // Couldn't load the bytes — show the blob URL so the user sees something,
       // but leave base64 null (the product can't be saved with this image).
       setDraftImageUri(ref.imageUrl);
       setDraftImageBase64(null);
+      setDraftImageMime(null);
     }
     setShowSimilarModal(false);
     setShowPreview(false);
@@ -409,9 +433,13 @@ export default function ProductsScreen() {
     if (useProcessed && previewProcessedB64) {
       setDraftImageUri(`data:image/png;base64,${previewProcessedB64}`);
       setDraftImageBase64(previewProcessedB64);
+      setDraftImageMime('image/png');
     } else {
       setDraftImageUri(previewOriginalUri);
       setDraftImageBase64(null);
+      // Store the original photo with its real content type so a plain photo with
+      // a background isn't mislabeled as a cut-out PNG.
+      setDraftImageMime(previewOriginalMime);
     }
     setShowPreview(false);
   }
@@ -439,6 +467,7 @@ export default function ProductsScreen() {
     setIsSaving(true);
     try {
       let imageBase64 = draftImageBase64;
+      let imageMime = draftImageMime;
       // Encode a newly picked local image (file:// on native, blob: on web) that
       // the picker left without base64. Skip remote http(s) URLs: those are the
       // unchanged existing image (a SAS URL from the cache). Re-fetching one
@@ -452,6 +481,14 @@ export default function ProductsScreen() {
         !/^https?:\/\//i.test(draftImageUri)
       ) {
         imageBase64 = await uriToBase64(draftImageUri);
+        // A freshly picked original photo: default to JPEG (not PNG) so a photo
+        // with a background isn't treated as a cut-out by the on-wallpaper picker.
+        imageMime = imageMime ?? guessMimeFromUri(draftImageUri) ?? 'image/jpeg';
+      }
+      // Send raw base64 as a data URI so the backend records the true content type.
+      // Without a mime (reference images), it's left raw and stored as PNG.
+      if (imageBase64 && imageMime && !imageBase64.startsWith('data:')) {
+        imageBase64 = `data:${imageMime};base64,${imageBase64}`;
       }
       const trimmedCategory = draftCategory.trim();
       const payload = {

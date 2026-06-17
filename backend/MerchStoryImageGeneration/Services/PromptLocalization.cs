@@ -20,10 +20,33 @@ public static class StockDisclaimerInstruction
         string normalized = (language ?? "EN").Trim().ToUpperInvariant();
         return normalized switch
         {
-            "RO" => "STOCK DISCLAIMER — DO render this exact short disclaimer once, somewhere small and unobtrusive (for example a slim footer strip or a corner): \"În limita stocului disponibil\". " +
-                    "This specific line is explicitly ALLOWED and required — it is an exception to the no-made-up-text rule. Keep it small, flat, and legible; it must never compete with the products or prices.\n\n",
-            _ => "STOCK DISCLAIMER — DO render this exact short disclaimer once, somewhere small and unobtrusive (for example a slim footer strip or a corner): \"While stocks last\". " +
-                 "This specific line is explicitly ALLOWED and required — it is an exception to the no-made-up-text rule. Keep it small, flat, and legible; it must never compete with the products or prices.\n\n",
+            "RO" => "STOCK DISCLAIMER — DO render this exact short disclaimer once, as a footer line along the bottom of the image: \"În limita stocului disponibil\". " +
+                    "It belongs at the bottom, but it MUST be clearly legible: render it at a comfortable, readable fine-print size with strong contrast against its background — like the legal footer line on a real supermarket flyer, NOT tiny, cramped, or squeezed into a corner where it can't be read. " +
+                    "This specific line is explicitly ALLOWED and required — it is an exception to the no-made-up-text rule. Keep it flat and clean; it sits calmly at the bottom and does not compete with the products or prices for the main focus, but it stays easy to read.\n\n",
+            _ => "STOCK DISCLAIMER — DO render this exact short disclaimer once, as a footer line along the bottom of the image: \"While stocks last\". " +
+                 "It belongs at the bottom, but it MUST be clearly legible: render it at a comfortable, readable fine-print size with strong contrast against its background — like the legal footer line on a real supermarket flyer, NOT tiny, cramped, or squeezed into a corner where it can't be read. " +
+                 "This specific line is explicitly ALLOWED and required — it is an exception to the no-made-up-text rule. Keep it flat and clean; it sits calmly at the bottom and does not compete with the products or prices for the main focus, but it stays easy to read.\n\n",
+        };
+    }
+}
+
+public static class OfferBannerInstruction
+{
+    public static string For(string? language)
+    {
+        string normalized = (language ?? "EN").Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "RO" => "OFFER BANNER — DO render a single large, bold headline reading \"OFERTĂ\" (or \"OFERTE\" when several deals are shown) as a prominent banner, the way a real retail catalog announces its deals. " +
+                    "Make it big and confident — a hero band at the top or another prominent empty area — set in a flat solid color block or panel that fits the palette. " +
+                    "This specific headline word is explicitly ALLOWED and required — it is an exception to the no-made-up-text rule — but do NOT add any other invented marketing copy, taglines, or extra words around it. " +
+                    "Make the typography lively and eye-catching the way a real sale banner is — punchy, high-energy, and visually exciting so it instantly reads as a promotion that pulls shoppers in and makes them want to buy, while staying clean and legible. " +
+                    "Place the banner so it never overlaps, crosses, or crowds the products or their prices.\n\n",
+            _ => "OFFER BANNER — DO render a single large, bold headline reading \"OFFER\" (or \"OFFERS\"/\"SPECIAL OFFER\" when it reads better) as a prominent banner, the way a real retail catalog announces its deals. " +
+                 "Make it big and confident — a hero band at the top or another prominent empty area — set in a flat solid color block or panel that fits the palette. " +
+                 "This specific headline word is explicitly ALLOWED and required — it is an exception to the no-made-up-text rule — but do NOT add any other invented marketing copy, taglines, or extra words around it. " +
+                 "Make the typography lively and eye-catching the way a real sale banner is — punchy, high-energy, and visually exciting so it instantly reads as a promotion that pulls shoppers in and makes them want to buy, while staying clean and legible. " +
+                 "Place the banner so it never overlaps, crosses, or crowds the products or their prices.\n\n",
         };
     }
 }

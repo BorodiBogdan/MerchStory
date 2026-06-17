@@ -26,6 +26,7 @@ public static class ProductRoutes
             string? categories,
             decimal? minPrice,
             decimal? maxPrice,
+            bool? pngOnly,
             int? page,
             int? pageSize) =>
         {
@@ -69,6 +70,14 @@ public static class ProductRoutes
             if (maxPrice.HasValue)
             {
                 query = query.Where(p => p.Price <= maxPrice.Value);
+            }
+
+            // The catalog "on-wallpaper" compositor pastes the retailer's real product
+            // photos onto a wallpaper, so it only works with background-removed (PNG)
+            // images. This filter lets that picker request just those.
+            if (pngOnly == true)
+            {
+                query = query.Where(p => p.ImageContentType == "image/png");
             }
 
             int resolvedPage = Math.Max(1, page ?? 1);
@@ -218,7 +227,7 @@ public static class ProductRoutes
             string? url = blobKey is null ? null : blobs.GetReadUrl(blobKey, ProductSasTtl).ToString();
             return Results.Created(
                 $"/products/{product.Id}",
-                new ProductResponse(product.Id, product.Name, product.Price, product.Currency.ToString(), url, product.Category, product.CreatedAt, product.UpdatedAt));
+                new ProductResponse(product.Id, product.Name, product.Price, product.Currency.ToString(), url, product.Category, product.CreatedAt, product.UpdatedAt, product.ImageContentType));
         });
 
         group.MapPut("/{id:guid}", async (
@@ -297,7 +306,7 @@ public static class ProductRoutes
             }
 
             string? url = product.ImageBlobKey is null ? null : blobs.GetReadUrl(product.ImageBlobKey, ProductSasTtl).ToString();
-            return Results.Ok(new ProductResponse(product.Id, product.Name, product.Price, product.Currency.ToString(), url, product.Category, product.CreatedAt, product.UpdatedAt));
+            return Results.Ok(new ProductResponse(product.Id, product.Name, product.Price, product.Currency.ToString(), url, product.Category, product.CreatedAt, product.UpdatedAt, product.ImageContentType));
         });
 
         group.MapDelete("/{id:guid}", async (
@@ -464,7 +473,7 @@ public static class ProductRoutes
 
 internal sealed record ProductRequest(string Name, decimal Price, string? ImageBase64, string? Category, string? Currency = null);
 
-internal sealed record ProductResponse(Guid Id, string Name, decimal Price, string Currency, string? ImageUrl, string? Category, DateTime CreatedAt, DateTime UpdatedAt);
+internal sealed record ProductResponse(Guid Id, string Name, decimal Price, string Currency, string? ImageUrl, string? Category, DateTime CreatedAt, DateTime UpdatedAt, string? MimeType = null);
 
 internal sealed record ProductMetadata(Guid Id, string Name, decimal Price, string Currency, string? Category, DateTime CreatedAt, DateTime UpdatedAt, string MimeType, string? ImageUrl);
 

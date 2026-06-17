@@ -34,7 +34,8 @@ public sealed record CatalogImageRequest(
     CatalogOffer? Offer = null,  // discount / group / bundle deal (non-preserve only)
     string? ImageModel = null,   // "gemini" (default / nano banana) | "openai"
     bool ShowStockDisclaimer = false,  // render an "in limita stocului disponibil" / "while stocks last" line
-    bool ShowDiscountPercentage = true);  // state the discount % (e.g. "25% off"); when false only old+new price show
+    bool ShowDiscountPercentage = true,  // state the discount % (e.g. "25% off"); when false only old+new price show
+    bool ShowOfferBanner = false);  // render a big "OFERTĂ" / "OFFER" headline banner, catalog-style
 
 public sealed record ProductMarkerAssignment(string ProductName, string MarkerHex);
 
