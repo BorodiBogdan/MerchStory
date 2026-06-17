@@ -6,6 +6,7 @@ const en = {
   'common.save': 'Save',
   'common.delete': 'Delete',
   'common.close': 'Close',
+  'common.done': 'Done',
   'common.back': 'Back',
   'common.backButton': '← Back',
   'common.nextStep': 'Next step →',
@@ -467,6 +468,12 @@ const en = {
   'productPicker.currencyLocked': 'Catalogs mix one currency only — locked to',
   'productPicker.currencyMismatch': 'Only matching-currency products can be selected.',
 
+  // ── Location picker (which shop addresses appear on a generation) ─────────
+  'locationPicker.title': 'Which locations should appear?',
+  'locationPicker.subtitle': 'Pick the addresses to print on this graphic.',
+  'locationPicker.prompt': 'Tap a location to select it',
+  'locationPicker.selected': 'selected',
+
   // ── Gallery filter bar ───────────────────────────────────────────────────
   'galleryFilters.title': 'Filters',
   'galleryFilters.clearAll': 'Clear all',
@@ -699,7 +706,10 @@ const en = {
     'When on, each product is labeled with its name. When off, no name typography is rendered — the products and prices speak for themselves.',
   'studio.showStockDisclaimer': 'Stock disclaimer',
   'studio.showStockDisclaimer.helper':
-    'When on, a small “While stocks last” disclaimer is added somewhere in the image (usually a footer). Off by default.',
+    'When on, a clearly readable “While stocks last” footer line is added along the bottom of the image. Off by default.',
+  'studio.showOfferBanner': 'Offer banner',
+  'studio.showOfferBanner.helper':
+    'When on, a big “OFFER” headline banner is added to the catalog, the way a real retail flyer announces its deals. Off by default.',
   'studio.opt.backgroundStyle': 'Background style',
   'studio.backgroundStyle.socialPost': 'Social post',
   'studio.backgroundStyle.realistic': 'Realistic',
@@ -710,6 +720,8 @@ const en = {
     'When off, catalogs often look more polished and cinematic — but AI may subtly reinterpret your product photos (labels, shapes, or textures can shift). Turn this on to keep your product photos pixel-perfect, at the cost of slightly more structured placement.',
   'studio.preserveProductImages.requiresPhotos':
     'All selected products need a photo to use this option.',
+  'studio.preserveProductImages.requiresPng':
+    'Preserve mode needs background-removed (PNG) product photos. Remove the non-PNG products from your selection, or turn off preserve.',
   'studio.preserveProductImages.noSafeColors':
     'Your brand colors overlap with preserve-mode markers. Disable preserve or adjust brand colors.',
   'studio.preserveProductImages.warningPartial':

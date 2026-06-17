@@ -43,6 +43,7 @@ function filtersKey(f: ProductFilters): string {
     categories: [...(f.categories ?? [])].map((c) => c.toLowerCase()).sort(),
     minPrice: f.minPrice ?? '',
     maxPrice: f.maxPrice ?? '',
+    pngOnly: f.pngOnly ?? false,
   });
 }
 

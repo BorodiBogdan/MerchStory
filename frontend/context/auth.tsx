@@ -2,6 +2,19 @@ import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
+import * as galleryCache from '@/utils/galleryCache';
+import * as productImageCache from '@/utils/productImageCache';
+import * as productsCache from '@/utils/productsCache';
+
+// Wipe all in-memory data caches on a session boundary (logout, session expiry,
+// or signing into a different account) so one user's gallery/products/images
+// never bleed into the next session.
+function clearCachedData() {
+  galleryCache.resetCache();
+  productsCache.resetCache();
+  productImageCache.resetCache();
+}
+
 const storage = {
   async getItem(key: string): Promise<string | null> {
     if (Platform.OS === 'web') return localStorage.getItem(key);
@@ -100,6 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signIn(email: string, password: string) {
     const { login } = await import('@/utils/api');
     const data = await login(email, password);
+    clearCachedData();
     const user: AuthUser = {
       email: data.email,
       userName: data.userName,
@@ -127,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signUp(email: string, password: string) {
     const { register } = await import('@/utils/api');
     const data = await register(email, password);
+    clearCachedData();
     const user: AuthUser = {
       email: data.email,
       userName: data.userName,
@@ -164,6 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await storage.deleteItem(TOKEN_KEY);
     await storage.deleteItem(REFRESH_TOKEN_KEY);
     await storage.deleteItem(USER_KEY);
+    clearCachedData();
     setState({
       token: null,
       email: null,

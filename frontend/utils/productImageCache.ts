@@ -125,6 +125,17 @@ export function evict(id: string): void {
   if (had) notify();
 }
 
+export function resetCache(): void {
+  // Drop everything on a session change (logout / switch account) so one user's
+  // product images never leak into another's. In-flight requests are abandoned:
+  // their results still resolve the original promise but won't be re-stored once
+  // their `inflight` entry is gone.
+  entries.clear();
+  errors.clear();
+  inflight.clear();
+  notify();
+}
+
 export function load(id: string): Promise<Entry> {
   const cached = entries.get(id);
   if (cached) {
