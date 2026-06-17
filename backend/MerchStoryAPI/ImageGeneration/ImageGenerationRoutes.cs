@@ -62,7 +62,7 @@ public static class ImageGenerationRoutes
 
             string? logoBase64 = await FetchLogoIfRequestedAsync(db, blobs, userId, request.BrandContextFields);
             List<string>? textFields = StripLogoField(request.BrandContextFields);
-            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
+            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields, request.SelectedAddressIndices);
 
             // The "Brand Colors" color theme is the single place the shop palette is chosen;
             // resolve it here so the prompt can build on the actual hex values.
@@ -293,7 +293,7 @@ public static class ImageGenerationRoutes
 
             string? logoBase64 = await FetchLogoIfRequestedAsync(db, blobs, userId, request.BrandContextFields);
             List<string>? textFields = StripLogoField(request.BrandContextFields);
-            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields);
+            BrandContext? brandContext = await BuildBrandContextAsync(db, userId, textFields, request.SelectedAddressIndices);
             string announcementLanguage = await ResolveLanguageAsync(db, userId, request.Language);
 
             // Promotion posts can include product photos; resolve them from blob storage
@@ -487,7 +487,8 @@ public static class ImageGenerationRoutes
     private static async Task<BrandContext?> BuildBrandContextAsync(
         AppDbContext db,
         string? userId,
-        List<string>? selectedFields)
+        List<string>? selectedFields,
+        List<int>? selectedAddressIndices = null)
     {
         if (userId is null || selectedFields is null || selectedFields.Count == 0)
         {
@@ -521,7 +522,22 @@ public static class ImageGenerationRoutes
             string[]? addrs = JsonSerializer.Deserialize<string[]>(profile.Addresses);
             if (addrs is { Length: > 0 })
             {
-                addresses = string.Join("; ", addrs);
+                // When the client picks a subset of locations, render only those;
+                // otherwise (older clients / no selection) fall back to all addresses.
+                IEnumerable<string> chosen = addrs;
+                if (selectedAddressIndices is { Count: > 0 })
+                {
+                    chosen = selectedAddressIndices
+                        .Where(i => i >= 0 && i < addrs.Length)
+                        .Distinct()
+                        .Select(i => addrs[i]);
+                }
+
+                addresses = string.Join("; ", chosen);
+                if (string.IsNullOrWhiteSpace(addresses))
+                {
+                    addresses = null;
+                }
             }
         }
 
@@ -841,7 +857,8 @@ internal sealed record CatalogImageApiRequest(
     string? ImageModel = null,
     bool ShowStockDisclaimer = false,
     bool ShowDiscountPercentage = true,
-    bool ShowOfferBanner = false)
+    bool ShowOfferBanner = false,
+    List<int>? SelectedAddressIndices = null)
 {
     public CatalogImageRequest ToServiceRequest(
         BrandContext? brandContext,
@@ -965,7 +982,8 @@ internal sealed record AnnouncementImageApiRequest(
     string? JobImageStyle = null,
     List<string>? JobRequirements = null,
     string? Language = null,
-    string? ImageModel = null)
+    string? ImageModel = null,
+    List<int>? SelectedAddressIndices = null)
 {
     public AnnouncementImageRequest ToServiceRequest(
         BrandContext? brandContext,

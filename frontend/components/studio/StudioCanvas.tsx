@@ -37,6 +37,7 @@ import { GalleryImage } from '@/components/ui/GalleryImage';
 import { glassNavRail } from '@/components/ui/GlassNavbar';
 import { InsufficientCreditsModal } from '@/components/ui/InsufficientCreditsModal';
 import { KeepImageModal } from '@/components/ui/KeepImageModal';
+import { type AnchorRect, LocationPickerModal } from '@/components/ui/LocationPickerModal';
 import { ModelFab } from '@/components/ui/ModelFab';
 import { ModelPickerModal, type ModelPickerOption } from '@/components/ui/ModelPickerModal';
 import { ModelPickerPopover } from '@/components/ui/ModelPickerPopover';
@@ -631,11 +632,31 @@ function BrandContextSection({
   items,
   selected,
   onToggle,
+  addresses,
+  addressIndices,
+  onAddressPress,
 }: {
   items: ContextItem[];
   selected: string[];
   onToggle: (key: string) => void;
+  // When the shop has more than one address, the "addresses" chip becomes a picker:
+  // tapping it opens a location modal instead of toggling the field directly.
+  addresses?: string[];
+  addressIndices?: number[];
+  // Receives the chip's on-screen rect so the picker can anchor under it on web.
+  onAddressPress?: (anchor: AnchorRect) => void;
 }) {
+  const addressChipRef = useRef<View>(null);
+  const handleAddressPress = () => {
+    const node = addressChipRef.current;
+    if (node && typeof node.measureInWindow === 'function') {
+      node.measureInWindow((x, y, width, height) =>
+        onAddressPress?.({ x, y, width, height })
+      );
+    } else {
+      onAddressPress?.({ x: 0, y: 0, width: 0, height: 0 });
+    }
+  };
   const { colors } = useTheme();
   const t = useT();
   const { width: screenWidth } = useWindowDimensions();
@@ -661,13 +682,23 @@ function BrandContextSection({
         }}
       >
         {items.map((item) => {
-          const active = selected.includes(item.key);
+          // The address chip turns into a location picker only when there is more than
+          // one saved address and the caller wired up a picker handler.
+          const isAddressPicker =
+            item.key === 'addresses' && !!onAddressPress && (addresses?.length ?? 0) > 1;
+          const selectedLocations = addressIndices?.length ?? 0;
+          const active = isAddressPicker ? selectedLocations > 0 : selected.includes(item.key);
+          const label =
+            isAddressPicker && selectedLocations > 0
+              ? `${item.label} (${selectedLocations})`
+              : item.label;
           return (
             <Pressable
               key={item.key}
-              onPress={() => onToggle(item.key)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: active }}
+              ref={isAddressPicker ? addressChipRef : undefined}
+              onPress={isAddressPicker ? handleAddressPress : () => onToggle(item.key)}
+              accessibilityRole={isAddressPicker ? 'button' : 'checkbox'}
+              accessibilityState={isAddressPicker ? undefined : { checked: active }}
               style={({ pressed }) => ({
                 flexDirection: 'row' as const,
                 alignItems: 'center' as const,
@@ -685,7 +716,15 @@ function BrandContextSection({
               })}
             >
               <Ionicons
-                name={active ? 'checkmark-circle' : 'ellipse-outline'}
+                name={
+                  isAddressPicker
+                    ? active
+                      ? 'location'
+                      : 'location-outline'
+                    : active
+                      ? 'checkmark-circle'
+                      : 'ellipse-outline'
+                }
                 size={isDesktop ? 13 : 16}
                 color={active ? colors.accent.primary : colors.text.muted}
               />
@@ -696,8 +735,15 @@ function BrandContextSection({
                   fontWeight: active ? D.fontWeight.medium : D.fontWeight.regular,
                 }}
               >
-                {item.label}
+                {label}
               </Text>
+              {isAddressPicker ? (
+                <Ionicons
+                  name="chevron-down"
+                  size={isDesktop ? 12 : 14}
+                  color={active ? colors.accent.primary : colors.text.muted}
+                />
+              ) : null}
             </Pressable>
           );
         })}
@@ -1685,9 +1731,15 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
 
   useEffect(() => {
     if (!shopProfile) return;
-    const allKeys = deriveContextItems(shopProfile, tr).map((i) => i.key);
+    // Locations are opt-in: the user picks which addresses appear per generation, so
+    // "addresses" starts unselected even though every other brand field defaults on.
+    const allKeys = deriveContextItems(shopProfile, tr)
+      .map((i) => i.key)
+      .filter((k) => k !== 'addresses');
     setCatalogContextFields(allKeys);
     setAnnoContextFields(allKeys);
+    setCatalogAddressIndices([]);
+    setAnnoAddressIndices([]);
   }, [shopProfile]);
 
   function toggleProduct(id: string) {
@@ -1810,6 +1862,8 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         backgroundStyle,
         preserveProductImages,
         brandContextFields: catalogFields.length > 0 ? catalogFields : undefined,
+        selectedAddressIndices:
+          catalogAddressIndices.length > 0 ? catalogAddressIndices : undefined,
         currency: catalogCurrency,
         offer,
         showDiscountPercentage,
@@ -1999,6 +2053,21 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   // ── Brand context state ──────────────────────────────────────────────────────
   const [catalogContextFields, setCatalogContextFields] = useState<string[]>([]);
   const [annoContextFields, setAnnoContextFields] = useState<string[]>([]);
+  // Which shop locations (indices into shopProfile.addresses) appear on each generation.
+  const [catalogAddressIndices, setCatalogAddressIndices] = useState<number[]>([]);
+  const [annoAddressIndices, setAnnoAddressIndices] = useState<number[]>([]);
+  // Which flow's location picker modal is open, if any.
+  const [addressPicker, setAddressPicker] = useState<null | 'catalog' | 'anno'>(null);
+  // On web the picker hangs off the chip the user tapped; this holds its screen rect.
+  const [addressAnchor, setAddressAnchor] = useState<AnchorRect | null>(null);
+  const shopAddresses = shopProfile?.addresses ?? [];
+  const openAddressPicker = useCallback(
+    (flow: 'catalog' | 'anno') => (anchor: AnchorRect) => {
+      setAddressAnchor(anchor);
+      setAddressPicker(flow);
+    },
+    []
+  );
 
   // ── Keep-image modal (shared across generators) ──────────────────────────────
   const [pendingKeep, setPendingKeep] = useState<{
@@ -2099,6 +2168,39 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
     );
   }, []);
 
+  const toggleCatalogAddress = useCallback((index: number) => {
+    setCatalogAddressIndices((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+    );
+  }, []);
+
+  const toggleAnnoAddress = useCallback((index: number) => {
+    setAnnoAddressIndices((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+    );
+  }, []);
+
+  // Keep the "addresses" brand-context field in sync with the picked locations so the
+  // request includes the address block exactly when at least one location is chosen.
+  const syncAddressField = useCallback(
+    (indices: number[]): ((prev: string[]) => string[]) =>
+      (prev) => {
+        const has = prev.includes('addresses');
+        if (indices.length > 0 && !has) return [...prev, 'addresses'];
+        if (indices.length === 0 && has) return prev.filter((k) => k !== 'addresses');
+        return prev;
+      },
+    []
+  );
+
+  useEffect(() => {
+    setCatalogContextFields(syncAddressField(catalogAddressIndices));
+  }, [catalogAddressIndices, syncAddressField]);
+
+  useEffect(() => {
+    setAnnoContextFields(syncAddressField(annoAddressIndices));
+  }, [annoAddressIndices, syncAddressField]);
+
   const togglePromotionProduct = useCallback((id: string) => {
     setPromotionSelected((prev) => {
       const next = new Set(prev);
@@ -2140,6 +2242,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
         tone,
         format: annoFormat,
         brandContextFields: annoContextFields.length > 0 ? annoContextFields : undefined,
+        selectedAddressIndices: annoAddressIndices.length > 0 ? annoAddressIndices : undefined,
         productImageIds: promotionProductImageIds,
         jobTitle: isJobPost ? jobTitle.trim() : undefined,
         jobSchedule: isJobPost ? jobSchedule.trim() : undefined,
@@ -2352,6 +2455,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
               items={catalogContextItems}
               selected={catalogContextFields}
               onToggle={toggleCatalogField}
+              addresses={shopAddresses}
+              addressIndices={catalogAddressIndices}
+              onAddressPress={openAddressPicker('catalog')}
             />
           </>
         ) : (
@@ -2406,6 +2512,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             items={contextItems}
             selected={annoContextFields}
             onToggle={toggleAnnoField}
+            addresses={shopAddresses}
+            addressIndices={annoAddressIndices}
+            onAddressPress={openAddressPicker('anno')}
           />
         </>
       ) : null;
@@ -3430,6 +3539,15 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           }}
         />
 
+        <LocationPickerModal
+          visible={addressPicker !== null}
+          addresses={shopAddresses}
+          anchor={addressAnchor}
+          selected={addressPicker === 'catalog' ? catalogAddressIndices : annoAddressIndices}
+          onToggle={addressPicker === 'catalog' ? toggleCatalogAddress : toggleAnnoAddress}
+          onClose={() => setAddressPicker(null)}
+        />
+
         <ModelPickerPopover
           visible={modelPickerVisible}
           models={IMAGE_MODELS}
@@ -3728,6 +3846,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         items={catalogContextItems}
                         selected={catalogContextFields}
                         onToggle={toggleCatalogField}
+                        addresses={shopAddresses}
+                        addressIndices={catalogAddressIndices}
+                        onAddressPress={openAddressPicker('catalog')}
                       />
                     </View>
                   )}
@@ -4278,6 +4399,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     items={contextItems}
                     selected={annoContextFields}
                     onToggle={toggleAnnoField}
+                    addresses={shopAddresses}
+                    addressIndices={annoAddressIndices}
+                    onAddressPress={openAddressPicker('anno')}
                   />
                 </View>
               )}
@@ -4762,6 +4886,14 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
           catalogOfferRef.current = offer;
           runReviewGeneration(reviewMode);
         }}
+      />
+
+      <LocationPickerModal
+        visible={addressPicker !== null}
+        addresses={shopAddresses}
+        selected={addressPicker === 'catalog' ? catalogAddressIndices : annoAddressIndices}
+        onToggle={addressPicker === 'catalog' ? toggleCatalogAddress : toggleAnnoAddress}
+        onClose={() => setAddressPicker(null)}
       />
 
       <ModelPickerModal

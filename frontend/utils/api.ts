@@ -422,6 +422,9 @@ export interface GenerateCatalogImageParams {
   showOfferBanner?: boolean;
   // Which image model generates the catalog: 'gemini' (nano banana, default) | 'openai'.
   imageModel?: 'gemini' | 'openai';
+  // Indices (into the shop profile's addresses array) of the locations to render.
+  // Only used when 'addresses' is among brandContextFields. When omitted, all addresses are used.
+  selectedAddressIndices?: number[];
 }
 
 export interface GenerateAnnouncementImageParams {
@@ -439,6 +442,9 @@ export interface GenerateAnnouncementImageParams {
   jobRequirements?: string[];
   language?: AppLanguage;
   imageModel?: 'gemini' | 'openai';
+  // Indices (into the shop profile's addresses array) of the locations to render.
+  // Only used when 'addresses' is among brandContextFields. When omitted, all addresses are used.
+  selectedAddressIndices?: number[];
 }
 
 async function parseGenerationResponse(response: Response): Promise<GenerateImageResponse> {

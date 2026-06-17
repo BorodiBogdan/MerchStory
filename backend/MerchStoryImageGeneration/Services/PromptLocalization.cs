@@ -40,11 +40,13 @@ public static class OfferBannerInstruction
             "RO" => "OFFER BANNER — DO render a single large, bold headline reading \"OFERTĂ\" (or \"OFERTE\" when several deals are shown) as a prominent banner, the way a real retail catalog announces its deals. " +
                     "Make it big and confident — a hero band at the top or another prominent empty area — set in a flat solid color block or panel that fits the palette. " +
                     "This specific headline word is explicitly ALLOWED and required — it is an exception to the no-made-up-text rule — but do NOT add any other invented marketing copy, taglines, or extra words around it. " +
-                    "Keep the typography flat and crisp, and place the banner so it never overlaps, crosses, or crowds the products or their prices.\n\n",
+                    "Make the typography lively and eye-catching the way a real sale banner is — punchy, high-energy, and visually exciting so it instantly reads as a promotion that pulls shoppers in and makes them want to buy, while staying clean and legible. " +
+                    "Place the banner so it never overlaps, crosses, or crowds the products or their prices.\n\n",
             _ => "OFFER BANNER — DO render a single large, bold headline reading \"OFFER\" (or \"OFFERS\"/\"SPECIAL OFFER\" when it reads better) as a prominent banner, the way a real retail catalog announces its deals. " +
                  "Make it big and confident — a hero band at the top or another prominent empty area — set in a flat solid color block or panel that fits the palette. " +
                  "This specific headline word is explicitly ALLOWED and required — it is an exception to the no-made-up-text rule — but do NOT add any other invented marketing copy, taglines, or extra words around it. " +
-                 "Keep the typography flat and crisp, and place the banner so it never overlaps, crosses, or crowds the products or their prices.\n\n",
+                 "Make the typography lively and eye-catching the way a real sale banner is — punchy, high-energy, and visually exciting so it instantly reads as a promotion that pulls shoppers in and makes them want to buy, while staying clean and legible. " +
+                 "Place the banner so it never overlaps, crosses, or crowds the products or their prices.\n\n",
         };
     }
 }

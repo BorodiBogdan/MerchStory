@@ -6,6 +6,7 @@ const en = {
   'common.save': 'Save',
   'common.delete': 'Delete',
   'common.close': 'Close',
+  'common.done': 'Done',
   'common.back': 'Back',
   'common.backButton': '← Back',
   'common.nextStep': 'Next step →',
@@ -466,6 +467,12 @@ const en = {
   'productPicker.filteredEmpty': 'No products match these filters.',
   'productPicker.currencyLocked': 'Catalogs mix one currency only — locked to',
   'productPicker.currencyMismatch': 'Only matching-currency products can be selected.',
+
+  // ── Location picker (which shop addresses appear on a generation) ─────────
+  'locationPicker.title': 'Which locations should appear?',
+  'locationPicker.subtitle': 'Pick the addresses to print on this graphic.',
+  'locationPicker.prompt': 'Tap a location to select it',
+  'locationPicker.selected': 'selected',
 
   // ── Gallery filter bar ───────────────────────────────────────────────────
   'galleryFilters.title': 'Filters',

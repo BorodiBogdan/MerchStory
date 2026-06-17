@@ -8,6 +8,7 @@ const ro: Dictionary = {
   'common.save': 'Salvează',
   'common.delete': 'Șterge',
   'common.close': 'Închide',
+  'common.done': 'Gata',
   'common.back': 'Înapoi',
   'common.backButton': '← Înapoi',
   'common.nextStep': 'Pasul următor →',
@@ -475,6 +476,12 @@ const ro: Dictionary = {
   'productPicker.filteredEmpty': 'Nu corespunde niciun produs acestor filtre.',
   'productPicker.currencyLocked': 'Un catalog folosește o singură monedă — blocat pe',
   'productPicker.currencyMismatch': 'Poți selecta doar produse cu aceeași monedă.',
+
+  // ── Location picker (ce adrese apar pe o generare) ───────────────────────
+  'locationPicker.title': 'Ce locații să apară?',
+  'locationPicker.subtitle': 'Alege adresele care apar pe acest material.',
+  'locationPicker.prompt': 'Apasă o locație ca să o selectezi',
+  'locationPicker.selected': 'selectate',
 
   // ── Gallery filter bar ───────────────────────────────────────────────────
   'galleryFilters.title': 'Filtre',
