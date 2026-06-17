@@ -745,6 +745,7 @@ export interface ProductDetail {
   category: string | null;
   createdAt: string;
   updatedAt: string;
+  mimeType?: string;
 }
 
 export interface ProductImageBytes {
@@ -788,6 +789,9 @@ export interface ProductFilters {
   categories?: string[];
   minPrice?: number;
   maxPrice?: number;
+  // When true, only products whose stored image is a PNG (background-removed) are
+  // returned. Used by the catalog "on-wallpaper" picker, which needs transparent images.
+  pngOnly?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -810,6 +814,7 @@ export async function fetchProducts(filters: ProductFilters = {}): Promise<Paged
   if (filters.maxPrice !== undefined && !Number.isNaN(filters.maxPrice)) {
     params.set('maxPrice', String(filters.maxPrice));
   }
+  if (filters.pngOnly) params.set('pngOnly', 'true');
   if (filters.page && filters.page > 0) params.set('page', String(filters.page));
   if (filters.pageSize && filters.pageSize > 0) params.set('pageSize', String(filters.pageSize));
   const qs = params.toString();

@@ -728,6 +728,8 @@ const ro: Dictionary = {
     'Când este dezactivat, cataloagele arată adesea mai rafinat și mai cinematic — dar AI-ul poate reinterpreta subtil fotografiile produselor (etichete, forme sau texturi se pot schimba). Activează pentru a păstra fotografiile produselor perfecte, pixel cu pixel, în schimbul unei plasări puțin mai structurate.',
   'studio.preserveProductImages.requiresPhotos':
     'Toate produsele selectate trebuie să aibă o fotografie pentru a folosi această opțiune.',
+  'studio.preserveProductImages.requiresPng':
+    'Modul de păstrare are nevoie de fotografii de produs cu fundal eliminat (PNG). Elimină produsele care nu sunt PNG din selecție sau dezactivează păstrarea.',
   'studio.preserveProductImages.noSafeColors':
     'Culorile brandului tău se suprapun cu marcatorii modului preserve. Dezactivează preserve sau ajustează culorile brandului.',
   'studio.preserveProductImages.warningPartial':

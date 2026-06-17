@@ -720,6 +720,8 @@ const en = {
     'When off, catalogs often look more polished and cinematic — but AI may subtly reinterpret your product photos (labels, shapes, or textures can shift). Turn this on to keep your product photos pixel-perfect, at the cost of slightly more structured placement.',
   'studio.preserveProductImages.requiresPhotos':
     'All selected products need a photo to use this option.',
+  'studio.preserveProductImages.requiresPng':
+    'Preserve mode needs background-removed (PNG) product photos. Remove the non-PNG products from your selection, or turn off preserve.',
   'studio.preserveProductImages.noSafeColors':
     'Your brand colors overlap with preserve-mode markers. Disable preserve or adjust brand colors.',
   'studio.preserveProductImages.warningPartial':

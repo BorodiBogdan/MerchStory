@@ -650,9 +650,7 @@ function BrandContextSection({
   const handleAddressPress = () => {
     const node = addressChipRef.current;
     if (node && typeof node.measureInWindow === 'function') {
-      node.measureInWindow((x, y, width, height) =>
-        onAddressPress?.({ x, y, width, height })
-      );
+      node.measureInWindow((x, y, width, height) => onAddressPress?.({ x, y, width, height }));
     } else {
       onAddressPress?.({ x: 0, y: 0, width: 0, height: 0 });
     }
@@ -1254,6 +1252,7 @@ function ChooseProductsSection({
   colors,
   styles,
   showProducts,
+  pngOnly,
 }: {
   subtitle: string;
   isDesktop: boolean;
@@ -1265,6 +1264,7 @@ function ChooseProductsSection({
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
   showProducts: boolean;
+  pngOnly?: boolean;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
@@ -1299,6 +1299,7 @@ function ChooseProductsSection({
       selected={selected}
       onToggle={toggleProduct}
       subtitle={subtitle}
+      pngOnly={pngOnly}
     />
   );
 
@@ -1557,6 +1558,12 @@ function ChooseProductsSection({
 // ─── Main canvas ───────────────────────────────────────────────────────────────
 export type StudioCanvasMode = Exclude<StudioTab, 'video'>;
 
+// Only background-removed (PNG) product images are transparent, so they're the
+// only ones the on-wallpaper compositor and "preserve product images" mode can use.
+function isPngProduct(p: ProductItem): boolean {
+  return (p.mimeType ?? '').toLowerCase().includes('png');
+}
+
 export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const { colors } = useTheme();
   const t = useT();
@@ -1601,12 +1608,29 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [catalogMode, setCatalogMode] = useState<CatalogMode>('generate');
   const catalogModeAnim = useRef(new Animated.Value(0)).current;
 
+  // The on-wallpaper compositor pastes the retailer's real product photos, so it
+  // only works with background-removed (PNG) images. The product picker (inline +
+  // modal) is restricted to PNGs while this sub-mode is active.
+  const requirePng = activeTab === 'catalog' && catalogMode === 'on-wallpaper';
+
   function switchCatalogMode(mode: CatalogMode) {
     Animated.timing(catalogModeAnim, {
       toValue: mode === 'generate' ? 0 : 1,
       duration: D.duration.normal,
       useNativeDriver: false,
     }).start();
+    // Drop any non-PNG products carried over from the generate sub-mode so they
+    // aren't fed to the compositor. Items not currently loaded are kept (unknown).
+    if (mode === 'on-wallpaper') {
+      setSelected((prev) => {
+        const next = new Set<string>();
+        for (const id of prev) {
+          const p = products.find((x) => x.id === id);
+          if (!p || isPngProduct(p)) next.add(id);
+        }
+        return next;
+      });
+    }
     setCatalogMode(mode);
     setCatalogResult(null);
     setCatalogError(null);
@@ -1685,6 +1709,12 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const products = productsCacheState.items;
   const loadingProducts = productsCacheState.loading && !productsCacheState.initialized;
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // True when the current selection includes a non-PNG product. Used to block the
+  // "preserve product images" option, which needs transparent images.
+  const selectionHasNonPng = useMemo(
+    () => products.some((p) => selected.has(p.id) && !isPngProduct(p)),
+    [products, selected]
+  );
   const [layout, setLayout] = useState('Showcase');
   const [colorTheme, setColorTheme] = useState('Brand Colors');
   const [catalogFormat, setCatalogFormat] = useState('Poster');
@@ -1723,10 +1753,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [catalogKept, setCatalogKept] = useState(false);
 
+  // Reload the shared products cache PNG-only while the on-wallpaper sub-mode is
+  // active so the inline cards and the picker modal stay consistent. Re-runs when
+  // the user toggles the catalog sub-tab (requirePng flips).
   useFocusEffect(
     useCallback(() => {
-      void productsCache.ensureLoaded({});
-    }, [])
+      void productsCache.ensureLoaded(requirePng ? { pngOnly: true } : {});
+    }, [requirePng])
   );
 
   useEffect(() => {
@@ -1774,6 +1807,13 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   function openCatalogReview() {
     const chosen = products.filter((p) => selected.has(p.id));
     if (!chosen.length) return;
+    // Preserve mode pastes the real product photos, so every selected product must
+    // be a background-removed PNG. Block here so the review modal never opens with
+    // an unusable selection.
+    if (preserveProductImages && chosen.some((p) => !isPngProduct(p))) {
+      setCatalogError(t('studio.preserveProductImages.requiresPng'));
+      return;
+    }
     if (creditBalance < 1) {
       setInsufficientVisible(true);
       return;
@@ -1834,6 +1874,10 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
   async function handleCatalogGenerate() {
     const chosen = products.filter((p) => selected.has(p.id));
     if (!chosen.length) return;
+    if (preserveProductImages && chosen.some((p) => !isPngProduct(p))) {
+      setCatalogError(t('studio.preserveProductImages.requiresPng'));
+      return;
+    }
     if (creditBalance < 1) {
       setInsufficientVisible(true);
       return;
@@ -2331,6 +2375,11 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
             {showPreserveHelp && (
               <Text style={styles.toggleHelper}>{t('studio.preserveProductImages.helper')}</Text>
             )}
+            {preserveProductImages && selectionHasNonPng && (
+              <Text style={[styles.toggleHelper, { color: colors.text.error }]}>
+                {t('studio.preserveProductImages.requiresPng')}
+              </Text>
+            )}
             <View style={styles.toggleRow}>
               <View style={styles.toggleLabelRow}>
                 <Text style={styles.toggleLabel}>{t('studio.showPrices')}</Text>
@@ -2576,6 +2625,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                 colors={colors}
                 styles={styles}
                 showProducts
+                pngOnly={requirePng}
               />
 
               {/* Preview */}
@@ -2621,6 +2671,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                 colors={colors}
                 styles={styles}
                 showProducts
+                pngOnly={requirePng}
               />
 
               {/* Wallpaper picker */}
@@ -3665,6 +3716,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     colors={colors}
                     styles={styles}
                     showProducts
+                    pngOnly={requirePng}
                   />
 
                   <View style={styles.mobileSection}>
@@ -3701,6 +3753,11 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     {showPreserveHelp && (
                       <Text style={styles.toggleHelper}>
                         {t('studio.preserveProductImages.helper')}
+                      </Text>
+                    )}
+                    {preserveProductImages && selectionHasNonPng && (
+                      <Text style={[styles.toggleHelper, { color: colors.text.error }]}>
+                        {t('studio.preserveProductImages.requiresPng')}
                       </Text>
                     )}
                     <View style={styles.toggleRow}>
@@ -3938,6 +3995,7 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                     colors={colors}
                     styles={styles}
                     showProducts
+                    pngOnly={requirePng}
                   />
 
                   {/* Wallpaper picker */}

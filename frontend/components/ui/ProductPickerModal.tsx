@@ -31,6 +31,9 @@ interface ProductPickerModalProps {
   title?: string;
   subtitle?: string;
   onProductsLoaded?: (products: ProductItem[]) => void;
+  // When true, only background-removed (PNG) products are listed. Used by the
+  // catalog "on-wallpaper" compositor, which needs transparent product images.
+  pngOnly?: boolean;
 }
 
 const DESKTOP_BREAKPOINT = 900;
@@ -64,6 +67,7 @@ export function ProductPickerModal({
   title,
   subtitle,
   onProductsLoaded,
+  pngOnly,
 }: ProductPickerModalProps) {
   const { colors } = useTheme();
   const t = useT();
@@ -81,8 +85,8 @@ export function ProductPickerModal({
 
   useEffect(() => {
     if (!visible) return;
-    void productsCache.setFiltersAndReload(toApiFilters(filters));
-  }, [visible, filters]);
+    void productsCache.setFiltersAndReload({ ...toApiFilters(filters), pngOnly });
+  }, [visible, filters, pngOnly]);
 
   useEffect(() => {
     if (!visible) setFilters(EMPTY_FILTERS);
