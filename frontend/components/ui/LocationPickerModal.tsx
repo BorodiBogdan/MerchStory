@@ -106,7 +106,10 @@ export function LocationPickerModal({
               color={isSel ? colors.accent.primary : colors.text.muted}
             />
             <Text
-              style={[styles.rowText, { color: isSel ? colors.text.primary : colors.text.secondary }]}
+              style={[
+                styles.rowText,
+                { color: isSel ? colors.text.primary : colors.text.secondary },
+              ]}
             >
               {addr}
             </Text>
