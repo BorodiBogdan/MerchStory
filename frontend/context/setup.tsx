@@ -49,7 +49,7 @@ const defaultData: SetupData = {
   brandColors: [{ hex: '#6366F1', percentage: 100 }],
   slogan: '',
   currency: 'USD',
-  generationLanguage: 'EN',
+  generationLanguage: 'RO',
   businessDomain: '',
   otherDomain: '',
   targetAudience: '',

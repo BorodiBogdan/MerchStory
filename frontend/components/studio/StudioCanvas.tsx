@@ -2372,6 +2372,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                 trackColor={{ false: colors.border.default, true: colors.accent.dim }}
               />
             </View>
+            <Text style={[styles.toggleHelper, { color: colors.text.error }]}>
+              {t('studio.preserveProductImages.betaWarning')}
+            </Text>
             {showPreserveHelp && (
               <Text style={styles.toggleHelper}>{t('studio.preserveProductImages.helper')}</Text>
             )}
@@ -3750,6 +3753,9 @@ export function StudioCanvas({ mode }: { mode: StudioCanvasMode }) {
                         trackColor={{ false: colors.border.default, true: colors.accent.dim }}
                       />
                     </View>
+                    <Text style={[styles.toggleHelper, { color: colors.text.error }]}>
+                      {t('studio.preserveProductImages.betaWarning')}
+                    </Text>
                     {showPreserveHelp && (
                       <Text style={styles.toggleHelper}>
                         {t('studio.preserveProductImages.helper')}

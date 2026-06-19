@@ -716,6 +716,8 @@ const en = {
   'studio.backgroundStyle.helper':
     'Social post: a flat, graphic-design backdrop — solid colors, gradients, geometric shapes, like a polished Instagram post. Realistic: an in-context retail or lifestyle scene — store shelf, counter, or natural environment.',
   'studio.preserveProductImages.label': 'Preserve product images',
+  'studio.preserveProductImages.betaWarning':
+    'Still in beta. Not recommended if you want your ads to look their best.',
   'studio.preserveProductImages.helper':
     'When off, catalogs often look more polished and cinematic — but AI may subtly reinterpret your product photos (labels, shapes, or textures can shift). Turn this on to keep your product photos pixel-perfect, at the cost of slightly more structured placement.',
   'studio.preserveProductImages.requiresPhotos':
