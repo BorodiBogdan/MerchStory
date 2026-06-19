@@ -106,7 +106,7 @@ export function ProductFilterBar({
     <View style={styles.searchWrapper}>
       <Ionicons name="search-outline" size={16} color={colors.text.muted} />
       <TextInput
-        style={styles.searchInput as any}
+        style={styles.searchInput}
         placeholder={t('filters.searchPlaceholder')}
         placeholderTextColor={colors.text.muted}
         value={searchLocal}
@@ -226,7 +226,7 @@ export function ProductFilterBar({
         <Text style={styles.priceLabel}>{t('filters.min')}</Text>
         <Text style={styles.priceCurrency}>$</Text>
         <TextInput
-          style={styles.priceInput as any}
+          style={styles.priceInput}
           placeholder="0"
           placeholderTextColor={colors.text.muted}
           value={value.minPrice}
@@ -240,7 +240,7 @@ export function ProductFilterBar({
         <Text style={styles.priceLabel}>{t('filters.max')}</Text>
         <Text style={styles.priceCurrency}>$</Text>
         <TextInput
-          style={styles.priceInput as any}
+          style={styles.priceInput}
           placeholder="∞"
           placeholderTextColor={colors.text.muted}
           value={value.maxPrice}
@@ -445,7 +445,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flex: 1,
       color: colors.text.primary,
       fontSize: D.fontSize.sm,
-      ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
+      ...(Platform.OS === 'web' ? { outlineStyle: 'none' as never } : {}),
     },
     filterToggle: {
       flexDirection: 'row',
@@ -626,7 +626,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.text.primary,
       fontSize: D.fontSize.sm,
       paddingVertical: 0,
-      ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
+      ...(Platform.OS === 'web' ? { outlineStyle: 'none' as never } : {}),
     },
     priceDash: { width: 8, height: 1, backgroundColor: colors.border.default },
     clearBtn: {

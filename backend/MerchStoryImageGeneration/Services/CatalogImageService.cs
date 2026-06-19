@@ -205,7 +205,7 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
     // harmonizes with the scene and background, pleasing to the eye. Vibrant and Pop Art stay bold
     // within their own palettes. Monochrome and Dark return restrained on-theme text so their looks
     // are preserved. The color lives in a flat chip/tag/panel (or the flat figures); type stays flat.
-    private static string PromoColorGuidance(string theme, string? brandColors, string backgroundStyle)
+    private static string PromoColorGuidance(string theme, string? brandColors, string backgroundStyle, bool hasDiscount)
     {
         const string bans =
             "Keep this colorful WITHOUT any banned decoration: a solid flat color chip, tag, or panel with crisp flat type on top, " +
@@ -227,6 +227,16 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
                    "set the figures in the theme's warm off-white or muted gold against a deep tonal chip or panel (charcoal, espresso, " +
                    "oxblood, near-black), exactly like the rest of the dark typography. Do NOT introduce bright or random accent colors; " +
                    "the warm off-white or gold on dark IS the accent. Get the pop from strong light-on-dark contrast and confident scale. " + bans + "\n\n";
+        }
+
+        if (hasDiscount)
+        {
+            return "PROMO LOCKUP COLOR (discount catalogue): this catalogue has real markdowns, so render them like a proper discount flyer. " +
+                   "For each discounted offer the NEW price is the loud hero — a bold, high-contrast price badge (a strong saturated color works great here; " +
+                   "red is the classic discount color when it fits the palette) — with the ORIGINAL price shown smaller and clearly struck through right next to " +
+                   "or above it, and, where a discount percentage is given, a punchy percent-off flash. " +
+                   "Make the markdown obvious and exciting the way a real supermarket deal flyer does, while staying clean and legible. " +
+                   "The type itself stays FLAT and crisp. " + bans + "\n\n";
         }
 
         string accentSource;
@@ -262,6 +272,33 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
                sceneNote +
                $"Build each lockup on {accentSource}, with the figures set in a clean, legible, high-contrast flat color, and keep the whole " +
                "lockup understated and confident. The type itself stays FLAT and crisp. " + bans + "\n\n";
+    }
+
+    // Layout direction for the fully-generative path (BuildPrompt). When there are several
+    // catalogue ENTRIES this turns the editorial single-hero composition into a real
+    // supermarket-style CATALOGUE GRID — clean product cards laid out in tidy rows, each card
+    // carrying one priced offer — and overrides the "negative space / one hero / never cram"
+    // direction in CreativeDirectionBlock for this multi-entry case.
+    // An "entry" is one catalogue cell: an individual product, a bundle, or an offer group all
+    // count as a single entry (e.g. a bundle of 3 products is one entry). For 1-2 entries the
+    // editorial look is kept.
+    private static string CatalogLayoutGuidance(int entryCount)
+    {
+        if (entryCount < 3)
+        {
+            return string.Empty;
+        }
+
+        return "🗂 CATALOGUE GRID LAYOUT — there are several products, so lay them out like a real supermarket promo CATALOGUE, not a single-hero editorial poster:\n" +
+               "Arrange the offers in a clean, regular GRID of roughly equal cells in tidy rows and columns " +
+               "(for example 2x2, 2x3, or 3x3 — pick a balanced arrangement that fits the product count and the format). " +
+               "A cell holds ONE catalogue entry: a bundle, an offer group, or an individual product. " +
+               "The items of a bundle or of an offer group all share the SAME cell together; each standalone individual product gets its OWN cell. " +
+               "Render each cell as a clean light card (white or near-white) sitting on a bold flat colored background that frames the whole grid, separated by even gutters, every card the same treatment so the grid reads as one uniform set of offers. " +
+               "Inside each card, keep its product(s) grouped with that card's price (and name, when shown) as one tidy unit, so it is unmistakable which price covers which product(s); the price is the loud, eye-catching hero of its card. " +
+               "Keep the cards consistent and uniform — same rhythm, aligned edges, balanced even spacing across the whole grid.\n" +
+               "FOR THIS MULTI-PRODUCT CATALOGUE THE GRID IS THE COMPOSITION: apply the negative-space, single-focal-hero, and rule-of-thirds direction WITHIN each card, not to the whole canvas. " +
+               "A full, organized grid of equally-weighted offers is the intended result here and is NOT 'cramming the canvas' — that earlier guidance is overridden for this catalogue layout.\n\n";
     }
 
     private static string FinalQualityBar() =>
@@ -471,6 +508,25 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
 
         bool hasOffer = r.Offer is not null && r.Offer.Groups.Count > 0;
 
+        // A real markdown exists when any offer group carries a discount percentage; this is what
+        // drives the crossed-out original price in BuildOfferClause, so it also flips the price
+        // lockups into the bold discount-flyer treatment (see PromoColorGuidance).
+        bool hasDiscount = hasOffer && r.Offer!.Groups.Any(g => g.Percent > 0);
+
+        // Number of catalogue ENTRIES (one grid cell each): every offer group/bundle counts as a
+        // single entry, plus one entry per product not folded into a group. With no offer, every
+        // product is its own entry. Drives whether the grid layout kicks in (see CatalogLayoutGuidance).
+        int entryCount;
+        if (hasOffer)
+        {
+            var grouped = new HashSet<CatalogProductItem>(r.Offer!.Groups.SelectMany(g => g.Items));
+            entryCount = r.Offer.Groups.Count + r.Products.Count(p => !grouped.Contains(p));
+        }
+        else
+        {
+            entryCount = r.Products.Count;
+        }
+
         // AI-generated catalogs never render product-name labels (the model renders
         // text poorly); names are only overlaid by the on-wallpaper compositor.
         string productsClause = hasOffer
@@ -495,10 +551,11 @@ internal sealed class CatalogImageService : ImageGenerationServiceBase, ICatalog
             FormatGuidance(r.Format) +
             ColorThemeGuidance(r.ColorTheme, r.BrandColors, r.BackgroundStyle) +
             CreativeDirectionBlock() +
+            CatalogLayoutGuidance(entryCount) +
             productsClause +
             imageNote +
             priceClause + " " +
-            PromoColorGuidance(r.ColorTheme, r.BrandColors, r.BackgroundStyle) +
+            PromoColorGuidance(r.ColorTheme, r.BrandColors, r.BackgroundStyle, hasDiscount) +
             BackgroundStyleHint(r.BackgroundStyle) + "\n\n" +
             (r.ShowOfferBanner ? OfferBannerInstruction.For(r.Language) : string.Empty) +
             (r.ShowStockDisclaimer ? StockDisclaimerInstruction.For(r.Language) : string.Empty) +
