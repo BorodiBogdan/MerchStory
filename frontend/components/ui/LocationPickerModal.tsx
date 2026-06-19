@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
 import {
-  DimensionValue,
   Modal,
   Pressable,
   ScrollView,
