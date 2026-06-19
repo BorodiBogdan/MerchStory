@@ -20,7 +20,7 @@ interface I18nContextValue {
 }
 
 const I18nContext = createContext<I18nContextValue>({
-  language: 'EN',
+  language: 'RO',
   setLanguage: async () => {},
   t: (key) => key,
 });
@@ -62,7 +62,7 @@ async function writeStoredLanguage(lang: AppLanguage): Promise<void> {
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<AppLanguage>('EN');
+  const [language, setLanguageState] = useState<AppLanguage>('RO');
 
   useEffect(() => {
     void readStoredLanguage().then((stored) => {

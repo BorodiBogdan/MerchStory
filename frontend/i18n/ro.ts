@@ -724,6 +724,8 @@ const ro: Dictionary = {
   'studio.backgroundStyle.helper':
     'Postare social: un fundal grafic plat — culori solide, gradienți, forme geometrice, ca o postare Instagram rafinată. Realist: o scenă de magazin sau de viață reală — raft, tejghea sau ambient natural.',
   'studio.preserveProductImages.label': 'Păstrează imaginile produselor',
+  'studio.preserveProductImages.betaWarning':
+    'Încă în beta. Nu este recomandat dacă vrei ca reclamele să arate cât mai bine.',
   'studio.preserveProductImages.helper':
     'Când este dezactivat, cataloagele arată adesea mai rafinat și mai cinematic — dar AI-ul poate reinterpreta subtil fotografiile produselor (etichete, forme sau texturi se pot schimba). Activează pentru a păstra fotografiile produselor perfecte, pixel cu pixel, în schimbul unei plasări puțin mai structurate.',
   'studio.preserveProductImages.requiresPhotos':
