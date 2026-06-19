@@ -169,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function applyServerLanguage(lang: string | undefined) {
     try {
       const { applyLanguageFromServer } = await import('@/i18n');
-      await applyLanguageFromServer((lang ?? 'EN') as 'EN' | 'RO');
+      await applyLanguageFromServer((lang ?? 'RO') as 'EN' | 'RO');
     } catch {
       // best-effort
     }
